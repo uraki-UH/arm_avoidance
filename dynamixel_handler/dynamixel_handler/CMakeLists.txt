@@ -117,6 +117,13 @@ target_link_libraries(
   dynamixel_communicator
 )
 
+# 実測姿勢専用の読取りノード
+add_executable(dynamixel_state_reader src/dynamixel_state_reader.cpp)
+target_compile_features(dynamixel_state_reader PUBLIC cxx_std_17)
+target_link_libraries(dynamixel_state_reader dynamixel_communicator)
+ament_target_dependencies(dynamixel_state_reader rclcpp dynamixel_handler_msgs)
+install(TARGETS dynamixel_state_reader DESTINATION lib/${PROJECT_NAME})
+
 install(
   TARGETS ${PROJECT_NAME}
   DESTINATION lib/${PROJECT_NAME}

@@ -245,6 +245,7 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 install(PROGRAMS
   scripts/start_gazebo_physics.py
   scripts/dual_arm_gng_lidar_demo.py
+  scripts/external_pointcloud_bridge.py
   scripts/dual_arm_avoidance_demo.py
   scripts/joint_command_output.py
   scripts/dual_arm_gazebo_demo.py

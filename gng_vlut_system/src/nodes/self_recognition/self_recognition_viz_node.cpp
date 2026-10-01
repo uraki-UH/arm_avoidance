@@ -225,7 +225,10 @@ static std::string resolveFrameWithNamespace(
     if (frame.empty()) {
         return {};
     }
-    if (frame == "world" || frame[0] == '/') {
+    if (frame[0] == '/') {
+        return frame.substr(1);
+    }
+    if (frame == "world") {
         return frame;
     }
     std::string ns = node.get_namespace();
@@ -250,6 +253,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("resource_root_dir", "");
     declare_parameter("mesh_root_dir", "");
     declare_parameter("joint_topic", "joint_states");
+    max_joint_state_age_sec_ = declare_parameter("max_joint_state_age_sec", 0.0);
     declare_parameter("robot.voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter("update_hz", 50.0); 
@@ -485,8 +489,14 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     const auto update_joint_state =
         [this](const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
+            const auto stamp_ns = rclcpp::Time(msg->header.stamp).nanoseconds();
+            if (max_joint_state_age_sec_ > 0.0 && stamp_ns <= last_joint_stamp_ns_) {
+                return;
+            }
             chain_->updateJointValuesByName(msg->name, msg->position);
             current_joints_ = chain_->getJointValues();
+            last_joint_stamp_ns_ = stamp_ns;
+            joint_received_at_ = std::chrono::steady_clock::now();
         };
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         joint_topic, rclcpp::QoS(10).reliable(), update_joint_state);
@@ -527,6 +537,10 @@ void SelfRecognitionVizNode::updateAndPublish() {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Waiting for joint states on topic: %s", joint_sub_->get_topic_name());
         return;
     }
+    if (max_joint_state_age_sec_ > 0.0 && std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - joint_received_at_).count() > max_joint_state_age_sec_) {
+        return;
+    }
 
     try {
         // 1. 関節角度の更新と順運動学 (FK)
@@ -554,6 +568,8 @@ void SelfRecognitionVizNode::updateAndPublish() {
                 RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, 
                                    "TF lookup failed! target_frame='%s', root_link='%s'. Error: %s", 
                                    target_frame.c_str(), root_link_.c_str(), ex.what());
+                // 変換欠落時の単位変換への代替による誤除去の防止
+                return;
             }
         }
 

@@ -50,7 +50,8 @@ def launch_setup(context):
         enable_auto_start = (auto_arg or str(avoidance_config['enable_auto_start'])).lower() == 'true'
     run_dir = Path(tempfile.mkdtemp(prefix='dual_arm_gazebo_demo_'))
     helper = load_module(package_share/'launch/robot_gazebo_spawn.launch.py')
-    temporary_urdf = Path(helper.write_gazebo_urdf(str(urdf_path), params['mesh_root_dir'], False, 'base_footprint'))
+    root_link = avoidance_config.get('root_link', 'base_footprint') if avoidance_config else 'base_footprint'
+    temporary_urdf = Path(helper.write_gazebo_urdf(str(urdf_path), params['mesh_root_dir'], False, root_link))
     root = ET.parse(temporary_urdf).getroot()
     temporary_urdf.unlink()
     control = ET.SubElement(root, 'ros2_control', name='GazeboSystem', type='system')
@@ -119,30 +120,31 @@ def launch_setup(context):
         state_ros = ET.SubElement(state_plugin, 'ros')
         ET.SubElement(state_ros, 'namespace').text = '/avoidance_demo'
         ET.SubElement(state_plugin, 'update_rate').text = '30.0'
-        human = ET.SubElement(world, 'model', name='human_forearm')
-        ET.SubElement(human, 'static').text = 'true'
-        sign = 1 if avoidance_config['sides'][0] == 'left' else -1
-        ET.SubElement(human, 'pose').text = '{} {} {} 0 0 0'.format(
-            avoidance_config['hand_far_x'], sign*avoidance_config['hand_y'], avoidance_config['hand_z'])
-        human_link = ET.SubElement(human, 'link', name='forearm')
-        length, radius = avoidance_config['arm_length'], avoidance_config['arm_radius']
-        for name, shape, pose in [('hand', 'sphere', '0 0 0 0 0 0'),
-                                  ('elbow', 'sphere', f'{length} 0 0 0 0 0'),
-                                  ('arm', 'cylinder', f'{length/2} 0 0 0 1.5707963267948966 0')]:
-            for kind in ('collision', 'visual'):
-                item = ET.SubElement(human_link, kind, name=name)
-                ET.SubElement(item, 'pose').text = pose
-                geometry = ET.SubElement(ET.SubElement(item, 'geometry'), shape)
-                ET.SubElement(geometry, 'radius').text = str(radius)
-                if shape == 'cylinder':
-                    ET.SubElement(geometry, 'length').text = str(length)
-                if kind == 'visual':
-                    material = ET.SubElement(item, 'material')
-                    ET.SubElement(material, 'ambient').text = '1 0.5 0.1 1'
-                    ET.SubElement(material, 'diffuse').text = '1 0.5 0.1 1'
+        if not avoidance_config.get('enable_live_obstacles', False):
+            human = ET.SubElement(world, 'model', name='human_forearm')
+            ET.SubElement(human, 'static').text = 'true'
+            sign = 1 if avoidance_config['sides'][0] == 'left' else -1
+            ET.SubElement(human, 'pose').text = '{} {} {} 0 0 0'.format(
+                avoidance_config['hand_far_x'], sign*avoidance_config['hand_y'], avoidance_config['hand_z'])
+            human_link = ET.SubElement(human, 'link', name='forearm')
+            length, radius = avoidance_config['arm_length'], avoidance_config['arm_radius']
+            for name, shape, pose in [('hand', 'sphere', '0 0 0 0 0 0'),
+                                      ('elbow', 'sphere', f'{length} 0 0 0 0 0'),
+                                      ('arm', 'cylinder', f'{length/2} 0 0 0 1.5707963267948966 0')]:
+                for kind in ('collision', 'visual'):
+                    item = ET.SubElement(human_link, kind, name=name)
+                    ET.SubElement(item, 'pose').text = pose
+                    geometry = ET.SubElement(ET.SubElement(item, 'geometry'), shape)
+                    ET.SubElement(geometry, 'radius').text = str(radius)
+                    if shape == 'cylinder':
+                        ET.SubElement(geometry, 'length').text = str(length)
+                    if kind == 'visual':
+                        material = ET.SubElement(item, 'material')
+                        ET.SubElement(material, 'ambient').text = '1 0.5 0.1 1'
+                        ET.SubElement(material, 'diffuse').text = '1 0.5 0.1 1'
         if avoidance_config.get('enable_gng_vlut', False):
             sensor_helper = load_module(package_share/'launch/dual_arm_lidar_setup.py')
-            sensor_helper.add_lidar(world, namespace)
+            sensor_helper.add_lidar(world, namespace, avoidance_config)
         world_path = run_dir/'avoidance.world'
         ET.ElementTree(world_root).write(world_path, encoding='unicode')
 
@@ -234,7 +236,7 @@ def launch_setup(context):
         actions.append(Node(package='gng_vlut_system', executable='robot_viewer_bridge_node',
             name='robot_viewer_bridge_node', namespace=namespace, parameters=[str(params_path), {
                 'use_sim_time': True, 'robot_name': namespace,
-                'joint_state_topic': f'/{namespace}/joint_states', 'frame_id': 'base_link',
+                'joint_state_topic': f'/{namespace}/joint_states', 'frame_id': root_link,
                 'stream_topic': '/viewer/internal/stream/robot'}]))
     if avoidance_config is not None and avoidance_config.get('enable_gng_vlut', False):
         actions.extend(sensor_helper.pipeline_nodes(params_path, params, namespace, avoidance_config))

@@ -5,6 +5,7 @@
 #include <voxel_msgs/msg/voxel.hpp>
 
 #include <memory>
+#include <chrono>
 #include <mutex>
 #include <vector>
 
@@ -41,6 +42,10 @@ private:
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     std::vector<double> current_joints_;
+    // 実測更新が停止した自己形状の再配信抑止
+    double max_joint_state_age_sec_{0.0};
+    std::chrono::steady_clock::time_point joint_received_at_;
+    int64_t last_joint_stamp_ns_{-1};
     std::mutex mutex_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr latched_joint_sub_;

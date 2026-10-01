@@ -1,0 +1,6 @@
+# URDFのカメラリンクとRealSense本体の取付変換
+# ゼロ補正はURDFと同じ位置・向きというユーザー確認に基づく設定。測量による校正は未実施
+parent_frame: ToPoDualArm/camera_link
+child_frame: camera_link
+# 親座標系でのxyz [m]、roll・pitch・yaw [rad]
+camera_mount_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

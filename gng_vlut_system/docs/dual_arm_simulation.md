@@ -1,5 +1,38 @@
 # 双腕シミュレーションの制御・物理設定
 
+機体設定を切り替えてGazebo点群・自己除去・GNG/VLUT回避を起動する構成は[共通点群回避](pointcloud_avoidance.md)を参照。ToPoDualArmの保存済み左腕データにも対応。
+
+## ToPoDualArmの統合回避デモ
+
+対象: `urdf/dual_arm_urdf/dual_arm_robot.urdf`の既存ToPoDualArm。選択引数: `robot:=topodualarm`。名前空間: `/sim_ToPoDualArm`。
+
+```bash
+docker exec -it gng_cpu_container bash
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/local_setup.bash
+ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=topodualarm
+```
+
+操作: 起動後はホールド。Aで回避開始／ホールド復帰、Spaceでソフト停止、停止後のLで解除後ホールド、Ctrl+Cで終了。Lのリーダー追従開始には新鮮な`/leader/joint_states`が必要。USBドライバの自動起動なし。
+
+- 回避方式: URDF外接球と左右の模擬前腕カプセルによる幾何探索。Gazebo状態による入力で、実センサー点群・GNG/VLUT回避とは別方式。
+- 既定設定: `ToPoDualArm.yaml`、`topodualarm_gazebo_demo.yaml`、`topodualarm_avoidance_demo.yaml`。ToPoDualArmの寸法・直動グリッパーに対応。max系の既定GNG/VLUTデモは維持。
+- 保存済みGNG: `ToPoDualArm10000`は左腕用。14関節角を必要とする双腕GNGデモへの流用なし。
+- 物理設定: ODE quick、有限力／有限トルクの位置追従。直動関節の`effort`は軸方向力 [N]、回転関節はトルク [N m]。
+- 計画時の余裕: `min_planning_clearance_th: 0.01` [m]。自己・床・台への物理追従誤差の吸収用。実測監視の停止判定は既存の0.005 mを維持。
+- 停止確認: 回転速度0.01 rad/s、直動速度0.001 m/sを各判定値とする0.25秒の継続静止。`safety/status`の`max_velocity_rad_sec`と`max_linear_velocity_m_sec`に分離。
+- Viewer表示名: `sim_ToPoDualArm`。既存Viewerサーバーへの配信。実機実測表示とは別系統。
+- 実機UDP: 未対応。`robot:=topodualarm`での`udp_config`指定は拒否。Dynamixelへの駆動指令なし。
+- 起動依存: Dockerfile記載の`gazebo_ros2_control`、`controller_manager`、`joint_state_broadcaster`、`joint_trajectory_controller`。古いコンテナでは追加導入と`gng_vlut_system`の再ビルドが必要。
+
+通し試験コマンド（コンテナ内、未使用の出力先を指定）:
+
+```bash
+ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 ROS2CLI_NO_DAEMON=1 \
+  python3 /ros2_ws/src/gng_vlut_system/test/check_topodualarm_avoidance.py \
+  --output /ros2_ws/src/artifacts/topodualarm_trial
+```
+
 ## 2026-10-01: max実機追従・Viewer・回避の作業計画
 
 - 対象: `topo_dual_arm_max`、別実機のリーダー、UDP接続のフォロワー

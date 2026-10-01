@@ -1,5 +1,44 @@
 # 実施済み作業の記録
 
+## 2026-10-01: 通常ViewerのROI生成と固定腰TF
+
+- 原因・修正: ROI配信元なし・腰TF欠落を修正。再起動後に実点群の自己除去後ROIを受信し、続く占有・危険ボクセル変換の未接続を確認して通常Viewerへ追加。腰はユーザー確認済みの固定0°を配信。
+- 検証: 光学座標の試験点群によるROI・継続TF・21関節変換に加え、障害物追加・除去でTmap_staticの全10,801ノードの状態変化と復帰を確認。実点群でも6秒間に状態更新33件を受信。所有試験終了、終了処理中の既存TFノード異常終了も記録。[条件・結果・起動方法](releases/2026-10-01_viewer_roi.md)。
+
+## 2026-10-01: Dynamixel実測現在姿勢の読取り専用表示
+
+- 実装・検証: 読取り専用入力と現在姿勢用launchを追加。2パッケージのビルド、疑似18台→20関節、欠測停止・復帰、Viewer姿勢JSON一致、書込み命令なしを確認。[初回失敗・修正・起動方法](releases/2026-10-01_dynamixel_ids_31_52.md#実測現在姿勢の読取り専用表示)。
+- 通常Viewerへの組込み: 再起動後の関節変換ノード不在・ゼロ姿勢表示を実測し、ToPoDualArmの通常Viewer launchに実測変換を追加。隔離domainで関節変化・Viewer姿勢JSON一致・首70度の非丸め表示・カメラTF接続を確認。実機の表示切替・校正は未実施、既存ノード保持。[検証・起動方法](releases/2026-10-01_dynamixel_ids_31_52.md#通常viewer起動への組込み)。
+
+## 2026-10-01: RealSenseの頭部取付TF
+
+- 追加・検証: URDFと同じ位置・向きというユーザー確認に基づく補正ゼロの取付TF launchと、ToPoDualArmの通常Viewerからの同時起動を追加。ビルド・隔離domainでのTF受信・同時起動設定3条件に成功。試験終了後のDDS残留を再確認し、所有プロセス終了・domain空を確認。既存Viewerには再起動時から反映。[条件・起動方法・制限](releases/2026-10-01_realsense_mount_tf.md)。
+
+## 2026-10-01: ToPoDualArmの新Dynamixel ID設定
+
+- 追加・検証: 旧設定を保持し、31〜38・41〜48・51・52用の別YAMLを追加。対応配列・旧版との差分検査に成功。実機での軸対応・校正は未検証、ROSノード起動なし。[設定・起動方法](releases/2026-10-01_dynamixel_ids_31_52.md)。
+- Viewer入力調査: 初回の探索範囲0〜30によるサーボ未検出終了を確認し、31〜52探索用差分YAMLを追加。ユーザー再起動後は18個のIDとViewerの非ゼロ関節値を受信。首ピッチの実測・表示差、腰実測欠落、RealSenseとロボットのTF未接続を確認。診断ノード終了・既存プロセス維持。[根拠・起動方法・未解決事項](releases/2026-10-01_dynamixel_ids_31_52.md)。
+
+## 2026-10-01: RealSense実点群によるGazebo継続回避
+
+- 追加・訂正: 実点群の仮想配置・Gazebo時刻変換と継続回避。初期実装の自己除去省略を撤去し、実機全関節による自己マスクと自己除去後ボクセルを常設。[設定・起動手順](realsense_gazebo.md)。
+- 検証: 回帰410件、試験点群による自己除去・Gazebo退避復帰・実機役関節欠測停止・点群欠測停止に成功。実RealSense変換受信は修正前に確認、常設自己除去を含む実入力試験は全実測関節未接続のため未実施。試験プロセス終了、表示用デモはユーザー操作で終了、既存RealSense・Viewerは維持。[結果・初回失敗・制限](releases/2026-10-01_realsense_gazebo.md)。
+
+## 2026-10-01: RealSense点群とViewerの座標接続調査
+
+- 実測: `/camera/camera/depth/color/points`のframeは`camera_depth_optical_frame`。`camera_link`までのTF取得成功、`world`と`sim_ToPoDualArm/camera_link`へのTF取得失敗。Viewer WebSocketでも光学座標変換を受信、取付位置を結ぶTFは欠落。ToPoDualArm頭部取付・首腰の非ゼロ姿勢はユーザー確認済み。ホスト・コンテナとも`/dev/serial/by-id`・`ttyUSB0`・`ttyACM0`なし。取付外部パラメータ・実機関節姿勢の補正は未実施。
+- 調査プロセス: コンテナ内`python3 -`による6秒限定の`realsense_frame_probe`とホスト側WebSocket読取り、いずれも終了済み。既存RealSense・Viewerと、ユーザー表示用Gazeboは稼働維持。
+
+## 2026-10-01: 機体設定による共通点群回避
+
+- 追加: 共通launch、機体YAML3種、任意関節名・関節数の計画グループ、設定可能なLiDAR・ROI、GNG次元の起動前検査。[仕様・追加手順](pointcloud_avoidance.md)。
+- 検証: ToPoDualArm左腕で実点群・GNG経路・退避復帰・入力欠測停止に成功。最小推定余裕0.052301 m、所有試験プロセス終了・専用ROSドメイン空・端末復元を確認。max系は学習データ未配置。[結果・初回失敗・制限](releases/2026-10-01_common_pointcloud_avoidance.md)。
+
+## 2026-10-01: ToPoDualArmの統合回避デモ
+
+- 追加・修正: `robot:=topodualarm`、機体別の幾何回避設定、直動関節の力・停止速度の扱い、計画時の内部形状余裕。[仕様・起動手順](dual_arm_simulation.md#topodualarmの統合回避デモ)。
+- 検証: Releaseビルド・install、Python回帰、C++停止ラッチ、Gazebo左右退避・復帰・A保持・Space実測停止に成功。最小推定余裕0.052258 m、既定設定でViewer姿勢67メッセージ受信。成功試験の所有プロセス終了・端末復元・専用ROSドメイン空を確認。実機出力なし。[失敗条件・結果・制限](releases/2026-10-01_topodualarm_demo.md)。
+
 ## 2026-10-01: max実機追従・Viewer・回避の作業計画
 
 - 文書化: リーダー直接描画／実機追従＋フォロワー実測描画の両要件、表示選択と制御の分離、現状・作業順・起動方法・試験条件を[既存の双腕操作文書](dual_arm_simulation.md#2026-10-01-max実機追従viewer回避の作業計画)へ集約。今回は文書更新のみ、実機送信・Gazebo追加試験なし。

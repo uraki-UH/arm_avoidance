@@ -38,7 +38,7 @@ def mesh_vertices(path):
 class robot_geometry:
     """外接球列による保守的なリンク形状。隣接・初期重複球を除いた自己干渉監視。"""
 
-    def __init__(self, urdf_path):
+    def __init__(self, urdf_path, planning_groups=None):
         path = Path(urdf_path)
         root = ET.parse(path).getroot()
         self.joints = []
@@ -81,6 +81,17 @@ class robot_geometry:
                         raise ValueError(f'直方体寸法の不正: {name}')
                     # 回転・平行移動後の直方体全体を覆うAABB球列への入力
                     vertices = np.asarray(list(product((-1, 1), repeat=3))) * size / 2
+                elif shape.find('geometry/sphere') is not None:
+                    radius = float(shape.find('geometry/sphere').get('radius'))
+                    if not np.isfinite(radius) or radius <= 0:
+                        raise ValueError(f'球寸法の不正: {name}')
+                    vertices = np.asarray(list(product((-1, 1), repeat=3))) * radius
+                elif shape.find('geometry/cylinder') is not None:
+                    cylinder = shape.find('geometry/cylinder')
+                    radius, length = float(cylinder.get('radius')), float(cylinder.get('length'))
+                    if not np.all(np.isfinite([radius, length])) or min(radius, length) <= 0:
+                        raise ValueError(f'円柱寸法の不正: {name}')
+                    vertices = np.asarray(list(product((-1, 1), repeat=3))) * [radius, radius, length / 2]
                 else:
                     raise ValueError(f'未対応の形状: {name}')
                 transform = origin(shape.find('origin'))
@@ -97,7 +108,11 @@ class robot_geometry:
                     point[axis] = lower[axis]+spacing*(part+0.5)
                     self.spheres.append((name, point, radius))
         # 木構造・軸行列・形状添字の事前展開
-        link_indices = {'base_footprint': 0}
+        roots = {link.get('name') for link in root.findall('link')} - set(self.parents)
+        if len(roots) != 1:
+            raise ValueError('URDFのルートリンクが一意ではありません')
+        self.root_link = roots.pop()
+        link_indices = {self.root_link: 0}
         self.operations = []
         remaining = list(self.joints)
         while remaining:
@@ -120,11 +135,17 @@ class robot_geometry:
             if len(pending) == len(remaining):
                 raise ValueError('URDFの接続を解決できません')
             remaining = pending
+        self.link_indices = link_indices
         self.sphere_links = np.array([link_indices[name] for name, _, _ in self.spheres])
         self.sphere_points = np.array([point for _, point, _ in self.spheres])
         self.radii = np.array([entry[2] for entry in self.spheres])
         self.is_arm = np.array([name.startswith(('L_', 'R_')) and 'shoulder' not in name
                                 for name, _, _ in self.spheres])
+        link_groups = None
+        if planning_groups is not None:
+            link_groups = {name: group['name'] for group in planning_groups for name in group['link_names']}
+            self.is_arm = np.array([name in link_groups for name, _, _ in self.spheres])
+            self.arm_indices = [self.joint_names.index(name) for group in planning_groups for name in group['joint_names']]
         self.self_pairs = np.empty((0, 2), dtype=int)
         centers = self.centers(np.zeros(len(self.joint_names)))
         def nearby(first, second):
@@ -152,10 +173,11 @@ class robot_geometry:
         self.inter_arm_pairs = np.asarray([
             (first, second) for first, second in pairs
             if self.is_arm[first] and self.is_arm[second]
-            and {self.spheres[first][0][0], self.spheres[second][0][0]} == {'L', 'R'}
+            and (link_groups[self.spheres[first][0]] != link_groups[self.spheres[second][0]] if link_groups is not None
+                 else {self.spheres[first][0][0], self.spheres[second][0][0]} == {'L', 'R'})
         ], dtype=int).reshape(-1, 2)
 
-    def centers(self, positions):
+    def link_transforms(self, positions):
         transforms = np.empty((len(self.operations)+1, 4, 4))
         transforms[0] = np.eye(4)
         for parent, child, kind, fixed, axis, idx, multiplier, offset, cross, square in self.operations:
@@ -169,7 +191,10 @@ class robot_geometry:
             elif kind == 'prismatic':
                 motion[:3, 3] = axis*value
             transforms[child] = transforms[parent]@fixed@motion
-        selected = transforms[self.sphere_links]
+        return transforms
+
+    def centers(self, positions):
+        selected = self.link_transforms(positions)[self.sphere_links]
         return np.einsum('nij,nj->ni', selected[:, :3, :3], self.sphere_points)+selected[:, :3, 3]
 
     def clearance(self, positions, hand, elbow, radius):
@@ -186,26 +211,27 @@ class robot_geometry:
         return not np.any(np.linalg.norm(centers[first]-centers[second], axis=1)
                           -self.radii[first]-self.radii[second] < 0.005)
 
-    def has_internal_clearance(self, centers):
+    def has_internal_clearance(self, centers, min_clearance_th=0.005):
         first, second = self.self_pairs.T
-        if np.any(np.linalg.norm(centers[first]-centers[second], axis=1)-self.radii[first]-self.radii[second] < 0.005):
+        if np.any(np.linalg.norm(centers[first]-centers[second], axis=1)-self.radii[first]-self.radii[second] < min_clearance_th):
             return False
-        if np.any(centers[self.is_arm, 2]-self.radii[self.is_arm] < 0.005):
+        if np.any(centers[self.is_arm, 2]-self.radii[self.is_arm] < min_clearance_th):
             return False
         # Gazebo作業台の外接箱
         delta = np.maximum(np.abs(centers-np.array([0.70, 0, 0.20]))-np.array([0.175, 0.4, 0.2]), 0)
-        return not np.any(np.linalg.norm(delta[self.is_arm], axis=1)-self.radii[self.is_arm] < 0.005)
+        return not np.any(np.linalg.norm(delta[self.is_arm], axis=1)-self.radii[self.is_arm] < min_clearance_th)
 
-    def choose_step(self, positions, home, hand, elbow, radius, min_clearance, max_step):
+    def choose_step(self, positions, home, hand, elbow, radius, min_clearance, max_step,
+                    min_internal_clearance_th=0.005):
         current_gap, _, _, _ = self.clearance(positions, hand, elbow, radius)
         def evaluate(candidate, max_cost=float('inf')):
             gap, centers, _, _ = self.clearance(candidate, hand, elbow, radius)
             cost = 200*max(0.0, min_clearance-gap)**2 + 0.003*float(np.sum((candidate-home)**2))
-            if cost >= max_cost or not self.has_internal_clearance(centers):
+            if cost >= max_cost or not self.has_internal_clearance(centers, min_internal_clearance_th):
                 return float('inf'), gap
             # 現姿勢から候補までの中間姿勢を含む余裕確認
             middle_gap, middle, _, _ = self.clearance((positions+candidate)/2, hand, elbow, radius)
-            if not self.has_internal_clearance(middle) or min(gap, middle_gap) < min(current_gap, min_clearance)-0.0002:
+            if not self.has_internal_clearance(middle, min_internal_clearance_th) or min(gap, middle_gap) < min(current_gap, min_clearance)-0.0002:
                 return float('inf'), gap
             return cost, gap
         best = positions.copy()

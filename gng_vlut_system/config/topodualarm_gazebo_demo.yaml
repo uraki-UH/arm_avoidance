@@ -1,0 +1,28 @@
+dual_arm_gazebo_demo:
+  # 実機入力から独立したシミュレーション名前空間
+  namespace: sim_ToPoDualArm
+  enable_gui: true
+  enable_auto_start: false
+  enable_loop: false
+  enable_viewer: true
+  segment_duration_sec: 4.0
+  pause_duration_sec: 0.5
+  max_joint_velocity: 0.15
+  max_state_age_sec: 1.0
+  goal_position_th: 0.04
+  motor_position_gain: 60.0
+  motor_limit_scale: 0.95
+  # 回転関節 [rad]、直動グリッパー [m]。未指定関節はゼロ姿勢
+  poses:
+    - name: left_arm
+      joints: {L_joint2: 0.15, L_joint4: 0.25}
+    - name: home
+      joints: {}
+    - name: right_arm
+      joints: {R_joint2: -0.15, R_joint4: 0.25}
+    - name: home
+      joints: {}
+    - name: grippers_open
+      joints: {L_gripper_joint: 0.02, R_gripper_joint: 0.02}
+    - name: home
+      joints: {}

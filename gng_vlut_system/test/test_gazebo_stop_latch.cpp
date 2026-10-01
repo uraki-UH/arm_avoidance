@@ -119,4 +119,17 @@ TEST(gazebo_stop_latch, activation_after_stop_race_prevents_reset_until_deactiva
   EXPECT_FALSE(is_active);
   EXPECT_TRUE(latch.reset(10.25, is_active));
 }
+TEST(gazebo_stop_latch, prismatic_motion_prevents_stop_confirmation) {
+  gazebo_stop_latch latch;
+  confirm_stop(latch);
+  latch.observe(1.3, 10.3, 0.0, true, 0.002);
+  EXPECT_FALSE(latch.is_stopped(10.3));
+  EXPECT_DOUBLE_EQ(latch.max_velocity_rad_sec(), 0.0);
+  EXPECT_DOUBLE_EQ(latch.max_linear_velocity_m_sec(), 0.002);
+  latch.observe(1.4, 10.4, 0.0, true, 0.0005);
+  latch.observe(1.65, 10.65, 0.0, true, 0.0005);
+  EXPECT_TRUE(latch.is_stopped(10.65));
+  latch.observe(1.7, 10.7, 0.0, true, std::numeric_limits<double>::quiet_NaN());
+  EXPECT_FALSE(latch.is_stopped(10.7));
+}
 }  // 無名名前空間

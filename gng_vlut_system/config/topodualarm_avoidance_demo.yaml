@@ -1,0 +1,27 @@
+dual_arm_avoidance_demo:
+  enable_auto_start: false
+  # ToPoDualArm寸法に対応する左右の模擬前腕接近。GNG/VLUT不使用
+  enable_gng_vlut: false
+  physics_solver: quick
+  sides: [left, right]
+  hand_far_x: 0.40
+  hand_near_x: 0.01
+  hand_y: 0.18
+  hand_z: 0.25
+  arm_length: 0.35
+  arm_radius: 0.035
+  # シミュレーション時刻での接近・保持・後退・復帰待機 [s]
+  approach_sec: 24.0
+  hold_sec: 3.0
+  withdraw_sec: 12.0
+  settle_sec: 12.0
+  # 外接形状間の目標余裕 [m]
+  target_clearance: 0.10
+  # デモ停止判定用の形状間距離 [m]
+  min_clearance_th: 0.035
+  # 物理追従のずれに対する計画時の自己・床・台の形状間距離 [m]
+  min_planning_clearance_th: 0.01
+  max_state_age_sec: 1.0
+  # 回転関節の補間指令速度 [rad/s]
+  max_joint_velocity: 0.45
+  control_period_sec: 0.15

@@ -1,0 +1,16 @@
+# 実カメラ点群によるGazebo継続回避。実機への出力なし
+enable_live_obstacles: true
+pipeline:
+  enable_lidar: false
+  points_topic: external_points
+  external_cloud:
+    input_topic: /camera/camera/depth/color/points
+    source_frame: camera_depth_optical_frame
+    camera_frame: camera_link
+    real_joint_topic: /ToPoDualArm/joint_states
+    robot_camera_link: camera_link
+    # URDFカメラリンクからRealSense本体への取付補正xyz [m]・rpy [rad]
+    camera_mount_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    # 仮想空間のルート基準のカメラ位置xyz [m]・姿勢rpy [rad]。起動時指定必須
+    camera_pose: []
+    max_input_age_sec: 1.0

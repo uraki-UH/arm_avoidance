@@ -1,0 +1,112 @@
+# ToPoDualArmのID 31〜38・41〜48・51・52用設定
+# 31〜37: 右腕1〜7軸、38: 右グリッパーとmimic
+# 41〜47: 左腕1〜7軸、48: 左グリッパーとmimic
+# 51: neck_pan_joint、52: neck_tilt_joint（旧版の関節順序を継承）
+# 首のURDF軸はヨー・ピッチ。実機の回転軸・ID順序は未検証
+# 各軸の符号・ゼロ点・グリッパー換算は旧版を継承。新ID機体での校正は未検証
+# waist_jointはユーザー確認済みの固定0姿勢
+/**:
+  ros__parameters:
+    input_topic: /dynamixel/state/present
+    output_topic: joint_states
+    command_output_topic: dynamixel_joint_states
+    control_claim_topic: control_claims
+    control_claim_priority: 100
+    # 既知の固定関節位置。回転関節はrad、直動関節はm
+    fixed_joint_names: [waist_joint]
+    fixed_joint_positions: [0.0]
+
+    joint_ids:
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+
+      - 38
+      - 38
+
+      - 41
+      - 42
+      - 43
+      - 44
+      - 45
+      - 46
+      - 47
+
+      - 48
+      - 48
+
+      - 51
+      - 52
+
+    joint_names:
+      - R_joint1
+      - R_joint2
+      - R_joint3
+      - R_joint4
+      - R_joint5
+      - R_joint6
+      - R_joint7
+      - R_gripper_joint
+      - R_gripper_mimic
+
+      - L_joint1
+      - L_joint2
+      - L_joint3
+      - L_joint4
+      - L_joint5
+      - L_joint6
+      - L_joint7
+      - L_gripper_joint
+      - L_gripper_mimic
+
+      - neck_pan_joint
+      - neck_tilt_joint
+    joint_scales:
+      - -1.0
+      - 1.0
+      - -1.0
+      - -1.0
+      - -1.0
+      - -1.0
+      - -1.0
+      - -0.08
+      - 0.08
+
+      - 1.0
+      - 1.0
+      - -1.0
+      - 1.0
+      - -1.0
+      - 1.0
+      - -1.0
+      - -0.08
+      - 0.08
+
+      - 1.0
+      - -1.0
+
+    joint_offsets_deg:
+      - 0.0
+      - -90.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 90.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0

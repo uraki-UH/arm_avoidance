@@ -59,9 +59,11 @@
   <exec_depend>action_msgs</exec_depend>
   <exec_depend>trajectory_msgs</exec_depend>
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>rosgraph_msgs</exec_depend>
   <exec_depend>builtin_interfaces</exec_depend>
   <exec_depend>dynamixel_handler_msgs</exec_depend>
   <exec_depend>dynamixel_joint_state_bridge</exec_depend>
+  <exec_depend>dynamixel_handler</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>python3-opencv</exec_depend>

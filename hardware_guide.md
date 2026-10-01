@@ -30,13 +30,15 @@ ros2 launch realsense2_camera rs_launch.py \
 
 ros2 launch realsense2_camera rs_launch.py   align_depth.enable:=true   pointcloud.enable:=true   pointcloud.ordered_pc:=true
 
-
 ##　dynamixel handlerの起動（使えない可能性が高い）
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
 USB の番号が変わる環境では、こちらのラッパーの方が安定。
 ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
 
 ##　dynamixelの/dynamixel/state/present　トピックをjoint_statesに変換
+
+実測現在姿勢の表示専用構成: [読取り専用入力・Viewer接続手順](gng_vlut_system/docs/releases/2026-10-01_dynamixel_ids_31_52.md#実測現在姿勢の読取り専用表示)。既存表示launchとの切替、実機指令出力なし。
+
 ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py namespace:=/ToPoDualArm
 
 ros2 launch dynamixel_joint_state_bridge \

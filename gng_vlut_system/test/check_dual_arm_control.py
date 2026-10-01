@@ -100,7 +100,7 @@ class control_trial:
         self.rclpy, self.joint_type = rclpy, JointState
         self.args, self.report, self.launch = args, report, launch
         self.begin, self.cancel_state = begin, cancel_state
-        self.namespace = '/sim_topo_dual_arm_' + args.robot
+        self.namespace = '/sim_ToPoDualArm' if args.robot == 'topodualarm' else '/sim_topo_dual_arm_' + args.robot
         self.node = rclpy.create_node('dual_arm_control_check_' + str(os.getpid()))
         self.joint_names = joint_names
         self.positions, self.velocities = {}, {}
@@ -409,9 +409,10 @@ def run(args, trial_factory=control_trial):
         import rclpy
         from rclpy.signals import SignalHandlerOptions
         package = Path(__file__).resolve().parents[1]
-        params_file = args.params_file or package / ('config/topo_dual_arm_' + args.robot + '.yaml')
+        robot_name = 'ToPoDualArm' if args.robot == 'topodualarm' else 'topo_dual_arm_' + args.robot
+        params_file = args.params_file or package / 'config' / (robot_name + '.yaml')
         params = yaml.safe_load(params_file.read_text())['/**']['ros__parameters']
-        if params['robot_name'] != 'topo_dual_arm_' + args.robot:
+        if params['robot_name'] != robot_name:
             raise ValueError('robotとparams-fileの機種不一致')
         root = element_tree.parse(params['urdf_path']).getroot()
         joints = [item.get('name') for item in root.findall('joint') if item.get('type') != 'fixed']
@@ -419,7 +420,8 @@ def run(args, trial_factory=control_trial):
         min_position, max_position = float(target.find('limit').get('lower')), float(target.find('limit').get('upper'))
         if not min_position < 0 < 0.06 < max_position:
             raise ValueError('検証用小角度の可動域不足')
-        demo = yaml.safe_load((package / 'config/dual_arm_gazebo_demo.yaml').read_text())
+        demo_filename = 'topodualarm_gazebo_demo.yaml' if args.robot == 'topodualarm' else 'dual_arm_gazebo_demo.yaml'
+        demo = yaml.safe_load((package / 'config' / demo_filename).read_text())
         demo['dual_arm_gazebo_demo'].update(enable_viewer=False, enable_gui=False, enable_auto_start=False)
         demo_path = args.output / 'demo_config.yaml'
         demo_path.write_text(yaml.safe_dump(demo, allow_unicode=True), encoding='utf-8')
@@ -488,7 +490,7 @@ def run(args, trial_factory=control_trial):
 
 def main():
     parser = argparse.ArgumentParser(description='単一PTYのGazebo統合操作試験。実機driver・指令なし')
-    parser.add_argument('--robot', choices=('max', 'max_long'), default='max')
+    parser.add_argument('--robot', choices=('max', 'max_long', 'topodualarm'), default='max')
     parser.add_argument('--params-file', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--timeout-sec', type=float, default=180)

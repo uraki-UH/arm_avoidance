@@ -16,6 +16,8 @@ constexpr bool is_command_active_after_switch(
 class gazebo_stop_latch {
 public:
   static constexpr double max_stop_velocity_th = 0.01;
+  // 直動関節の停止判定速度 [m/s]
+  static constexpr double max_stop_linear_velocity_th = 0.001;
   static constexpr double min_stop_confirm_sec = 0.25;
   static constexpr double max_state_age_sec = 0.5;
 
@@ -38,18 +40,22 @@ public:
   }
 
   void observe(double sim_sec, double wall_sec, double max_velocity_rad_sec,
-               bool has_finite_state) {
+               bool has_finite_state, double max_linear_velocity_m_sec = 0.0) {
     const bool has_fresh_previous = std::isfinite(last_read_wall_sec_) &&
       wall_sec >= last_read_wall_sec_ && wall_sec - last_read_wall_sec_ <= max_state_age_sec;
     const bool has_advanced = !std::isfinite(last_read_sim_sec_) || sim_sec > last_read_sim_sec_;
     has_finite_state_ = has_finite_state && std::isfinite(sim_sec) && std::isfinite(wall_sec) &&
-      std::isfinite(max_velocity_rad_sec) && max_velocity_rad_sec >= 0 && has_advanced;
+      std::isfinite(max_velocity_rad_sec) && max_velocity_rad_sec >= 0 && has_advanced &&
+      std::isfinite(max_linear_velocity_m_sec) && max_linear_velocity_m_sec >= 0;
     max_velocity_rad_sec_ = has_finite_state_ ? max_velocity_rad_sec : invalid_time();
+    max_linear_velocity_m_sec_ = has_finite_state_ ? max_linear_velocity_m_sec : invalid_time();
+    const bool is_low_velocity = max_velocity_rad_sec <= max_stop_velocity_th &&
+      max_linear_velocity_m_sec <= max_stop_linear_velocity_th;
     if (!has_fresh_previous || !has_finite_state_ || !is_stop_applied_ ||
-        max_velocity_rad_sec > max_stop_velocity_th) {
+        !is_low_velocity) {
       low_velocity_since_sim_sec_ = invalid_time();
     }
-    if (is_stop_applied_ && has_finite_state_ && max_velocity_rad_sec <= max_stop_velocity_th &&
+    if (is_stop_applied_ && has_finite_state_ && is_low_velocity &&
         !std::isfinite(low_velocity_since_sim_sec_)) {
       low_velocity_since_sim_sec_ = sim_sec;
     }
@@ -85,6 +91,7 @@ public:
   bool is_stop_latched() const { return is_stop_latched_; }
   bool is_stop_applied() const { return is_stop_applied_; }
   double max_velocity_rad_sec() const { return max_velocity_rad_sec_; }
+  double max_linear_velocity_m_sec() const { return max_linear_velocity_m_sec_; }
 
 private:
   static double invalid_time() { return std::numeric_limits<double>::quiet_NaN(); }
@@ -95,6 +102,7 @@ private:
   double last_read_sim_sec_ = invalid_time();
   double low_velocity_since_sim_sec_ = invalid_time();
   double max_velocity_rad_sec_ = invalid_time();
+  double max_linear_velocity_m_sec_ = invalid_time();
 };
 
 }  // robot_sim名前空間

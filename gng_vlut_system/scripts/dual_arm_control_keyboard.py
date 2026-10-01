@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from gazebo_stop_keyboard import is_fresh_age, status_label, stop_request, terminal_input
+from gazebo_stop_keyboard import is_fresh_age, simulation_namespace, status_label, stop_request, terminal_input
 
 
 def control_key_action(key):
@@ -155,8 +155,7 @@ def main(argv=None):
 
     ros_arguments = list(sys.argv if argv is None else ['dual_arm_control_keyboard.py', *argv])
     parser = argparse.ArgumentParser(description='統合操作: A 回避・保持 / L 追従・保持・停止解除 / Space 停止 / Ctrl-C 終了 / H UDP')
-    parser.add_argument('--namespace', required=True,
-                        choices=('sim_topo_dual_arm_max', 'sim_topo_dual_arm_max_long'))
+    parser.add_argument('--namespace', required=True, type=simulation_namespace)
     parser.add_argument('--tty-path', required=True, help='親launch端末のTTYパス')
     args = parser.parse_args(remove_ros_args(args=ros_arguments)[1:])
     descriptor = None

@@ -46,11 +46,15 @@ class avoidance_demo(Node):
                 raise ValueError(f'{key}は有限値が必要です')
         if self.config['min_clearance_th'] >= self.config['target_clearance']:
             raise ValueError('停止距離は目標余裕より小さい値が必要です')
+        # 物理追従のずれに対する、計画段階の内部形状余裕 [m]
+        self.min_planning_clearance_th = self.config.get('min_planning_clearance_th', 0.005)
+        if not np.isfinite(self.min_planning_clearance_th) or self.min_planning_clearance_th < 0.005:
+            raise ValueError('計画時の内部形状余裕は停止判定の0.005 mを確保する値が必要です')
         if self.config['hand_far_x'] <= self.config['hand_near_x']:
             raise ValueError('接近開始位置と終点の順序が逆です')
         if not self.config['sides'] or any(side not in ('left', 'right') for side in self.config['sides']):
             raise ValueError('接近側はleft/rightの非空リストが必要です')
-        self.geometry = robot_geometry(self.get_parameter('urdf_path').value)
+        self.geometry = robot_geometry(self.get_parameter('urdf_path').value, self.config.get('planning_groups'))
         self.joint_limits = {joint.get('name'): {key: float(joint.find('limit').get(key))
                              for key in ('velocity', 'effort')}
                              for joint in ET.parse(self.get_parameter('urdf_path').value).getroot().findall('joint')
@@ -73,7 +77,7 @@ class avoidance_demo(Node):
         self.min_observed_clearance = float('inf')
         self.min_home_clearance = float('inf')
         self.max_excursion = 0.0
-        self.trails = {'L_link7': [], 'R_link7': []}
+        self.trails = {name: [] for name in self.config.get('trail_links', ['L_link7', 'R_link7'])}
         self.last_visual = None
         self.pending_set = None
         self.has_sent_hold = False
@@ -81,10 +85,12 @@ class avoidance_demo(Node):
         self.status = self.create_publisher(String, 'avoidance/status', 1)
         self.markers = self.create_publisher(MarkerArray, 'avoidance/markers', 1)
         self.create_subscription(JointState, 'joint_states', self.on_joints, 1)
-        self.create_subscription(ModelStates, '/avoidance_demo/model_states', self.on_obstacle, qos_profile_sensor_data)
+        if not self.config.get('enable_live_obstacles', False):
+            self.create_subscription(ModelStates, '/avoidance_demo/model_states', self.on_obstacle, qos_profile_sensor_data)
         self.create_subscription(Bool, 'safety/is_stop_latched', self.on_safety_stop,
                                  QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
-        self.set_state = self.create_client(SetEntityState, '/avoidance_demo/set_entity_state')
+        self.set_state = (None if self.config.get('enable_live_obstacles', False) else
+                          self.create_client(SetEntityState, '/avoidance_demo/set_entity_state'))
         self.create_service(Trigger, 'avoidance/start', self.on_start)
         self.create_service(Trigger, 'avoidance/stop', self.on_stop)
         self.timer = self.create_timer(self.config['control_period_sec'], self.tick,
@@ -124,10 +130,15 @@ class avoidance_demo(Node):
 
     def is_fresh(self):
         now = time.monotonic()
-        return (self.positions is not None and self.hand is not None and
+        has_obstacle = (self.config.get('enable_live_obstacles', False) or
+                        (self.hand is not None and now-self.obstacle_time < self.config['max_state_age_sec']))
+        return (self.positions is not None and has_obstacle and
                 now-self.joint_time < self.config['max_state_age_sec'] and
-                now-self.obstacle_time < self.config['max_state_age_sec'] and
                 self.command.get_subscription_count() > 0)
+
+    def observe_clearance(self):
+        return self.geometry.clearance(self.positions, self.hand,
+            self.hand+np.array([self.config['arm_length'], 0, 0]), self.config['arm_radius'])
 
     def on_start(self, _request, response):
         if not self.has_safety_state or self.is_stop_latched:
@@ -142,8 +153,7 @@ class avoidance_demo(Node):
             response.success = False
             response.message = '関節・障害物の実測更新と初期姿勢の余裕が必要です'
             return response
-        gap = self.geometry.clearance(self.positions, self.hand,
-                                     self.hand+np.array([self.config['arm_length'], 0, 0]), self.config['arm_radius'])[0]
+        gap = self.observe_clearance()[0]
         if gap <= self.config['min_clearance_th']:
             response.success = False
             response.message = '開始時の障害物距離が不足しています'
@@ -157,7 +167,7 @@ class avoidance_demo(Node):
         self.min_home_clearance = float('inf')
         self.max_excursion = 0.0
         self.has_sent_hold = False
-        self.trails = {'L_link7': [], 'R_link7': []}
+        self.trails = {name: [] for name in self.trails}
         response.success, response.message = True, '接近・退避デモ開始'
         return response
 
@@ -199,6 +209,8 @@ class avoidance_demo(Node):
         self.command.publish(message)
 
     def update_obstacle(self, desired):
+        if self.config.get('enable_live_obstacles', False):
+            return
         if self.pending_set is not None and self.pending_set.done():
             try:
                 if not self.pending_set.result().success:
@@ -244,7 +256,7 @@ class avoidance_demo(Node):
 
     def select_target(self, hand, elbow, step):
         return self.geometry.choose_step(self.positions, self.home, hand, elbow,
-            self.config['arm_radius'], self.config['target_clearance'], step)
+            self.config['arm_radius'], self.config['target_clearance'], step, self.min_planning_clearance_th)
 
     def tick(self):
         began = time.monotonic()
@@ -257,25 +269,29 @@ class avoidance_demo(Node):
         if self.state == 'running' and not self.is_fresh():
             self.fail('実測関節または障害物情報の失効')
         if self.is_fresh():
-            elbow = self.hand+np.array([self.config['arm_length'], 0, 0])
-            gap, centers, idx, closest = self.geometry.clearance(self.positions, self.hand, elbow, self.config['arm_radius'])
+            is_live = self.config.get('enable_live_obstacles', False)
+            gap, centers, idx, closest = self.observe_clearance()
             if self.state == 'running':
                 self.min_observed_clearance = min(self.min_observed_clearance, gap)
-                self.min_home_clearance = min(self.min_home_clearance,
-                    self.geometry.clearance(self.home, self.hand, elbow, self.config['arm_radius'])[0])
+                if not is_live:
+                    elbow = self.hand+np.array([self.config['arm_length'], 0, 0])
+                    self.min_home_clearance = min(self.min_home_clearance,
+                        self.geometry.clearance(self.home, self.hand, elbow, self.config['arm_radius'])[0])
                 self.max_excursion = max(self.max_excursion, float(np.max(np.abs(self.positions-self.home))))
                 if gap < self.config['min_clearance_th']:
                     self.fail('デモ停止距離に到達')
                 elif not self.geometry.has_internal_clearance(centers):
                     self.fail('自己干渉・床・作業台の外接形状余裕不足')
                 else:
-                    desired = self.scenario()
+                    desired = None if is_live else self.scenario()
+                    if is_live:
+                        self.phase = 'live_pointcloud'
                     now_sec = self.get_clock().now().nanoseconds*1e-9
                     if self.state == 'running' and now_sec >= self.next_control_sec:
                         self.next_control_sec = now_sec+self.config['control_period_sec']
                         # 障害物の次更新位置も含む保守的な接近先での評価
-                        predicted_hand = desired if desired[0] < self.hand[0] else self.hand
-                        predicted_elbow = predicted_hand+np.array([self.config['arm_length'], 0, 0])
+                        predicted_hand = None if is_live else (desired if desired[0] < self.hand[0] else self.hand)
+                        predicted_elbow = None if is_live else predicted_hand+np.array([self.config['arm_length'], 0, 0])
                         step = quintic_max_step(self.config['max_joint_velocity'], self.config['control_period_sec'])
                         target, has_candidate = self.select_target(predicted_hand, predicted_elbow, step)
                         if not has_candidate:
@@ -284,7 +300,10 @@ class avoidance_demo(Node):
                             self.publish_target(target)
                             self.update_obstacle(desired)
             for name, trail in self.trails.items():
-                point = centers[[i for i, shape in enumerate(self.geometry.spheres) if shape[0] == name]].mean(axis=0)
+                points = centers[[i for i, shape in enumerate(self.geometry.spheres) if shape[0] == name]]
+                if not len(points):
+                    continue
+                point = points.mean(axis=0)
                 if not trail or np.linalg.norm(point-trail[-1]) > .003:
                     trail.append(point)
                     del trail[:-250]
@@ -321,11 +340,14 @@ class avoidance_demo(Node):
             return item
         radius, length = self.config['arm_radius'], self.config['arm_length']
         color = [1.0, 0.5, 0.1, 0.9]
-        for idx, point in enumerate((self.hand, self.hand+np.array([length, 0, 0]))):
-            marker(idx, Marker.SPHERE, point, [2*radius]*3, color)
-        item = marker(2, Marker.CYLINDER, self.hand+np.array([length/2, 0, 0]), [2*radius, 2*radius, length], color)
-        item.pose.orientation.y = np.sqrt(0.5)
-        item.pose.orientation.w = np.sqrt(0.5)
+        if not self.config.get('enable_live_obstacles', False):
+            for idx, point in enumerate((self.hand, self.hand+np.array([length, 0, 0]))):
+                marker(idx, Marker.SPHERE, point, [2*radius]*3, color)
+            item = marker(2, Marker.CYLINDER, self.hand+np.array([length/2, 0, 0]), [2*radius, 2*radius, length], color)
+            item.pose.orientation.y = np.sqrt(0.5)
+            item.pose.orientation.w = np.sqrt(0.5)
+        else:
+            radius = self.cell_radius
         color = [1, 0, 0, 1] if is_stale or gap < self.config['target_clearance'] else [0, 1, 1, 1]
         item = marker(3, Marker.LINE_LIST, [0, 0, 0], [.006, 0, 0], color)
         direction = human_point-robot_point

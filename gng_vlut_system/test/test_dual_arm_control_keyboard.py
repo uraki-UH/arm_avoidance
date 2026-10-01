@@ -328,6 +328,12 @@ class console_fixture:
 
 
 class test_console_main(unittest.TestCase):
+    def test_topodualarm_namespace_and_terminal_cleanup(self):
+        fixture = console_fixture([b'\x03'])
+        self.assertEqual(fixture.run(['--namespace', 'sim_ToPoDualArm']), 0)
+        self.assertIn('/sim_ToPoDualArm', ''.join(fixture.messages))
+        self.assert_clean_exit(fixture)
+
     def test_stopped_leader_key_is_labelled_hold_reset_not_following(self):
         fixture = console_fixture([b'l', b'\x03'], control_mode='stopped')
         self.assertEqual(fixture.run(), 0)

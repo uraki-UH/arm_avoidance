@@ -1,0 +1,47 @@
+# 固定基台ロボットのGazebo点群・自己除去・VLUT・GNG回避の共通設定
+enable_auto_start: false
+enable_gng_vlut: true
+enable_local_refinement: true
+physics_solver: quick
+max_plan_sec: 1.5
+danger_inflation: 0.12
+min_retreat_dist_th: 0.30
+min_cloud_clearance_th: 0.015
+min_planning_clearance_th: 0.01
+max_bridge_step: 0.08
+max_entry_candidates: 40
+sides: [left, right]
+hand_far_x: 0.45
+hand_near_x: 0.03
+hand_y: 0.36
+hand_z: 0.38
+arm_length: 0.35
+arm_radius: 0.045
+approach_sec: 24.0
+hold_sec: 3.0
+withdraw_sec: 12.0
+settle_sec: 20.0
+target_clearance: 0.12
+min_clearance_th: 0.035
+max_state_age_sec: 1.0
+max_joint_velocity: 0.45
+control_period_sec: 0.15
+pipeline:
+  # 機体名前空間内の入力トピック。絶対名で外部点群の接続も可能
+  points_topic: lidar_points
+  enable_lidar: true
+  voxel_size: 0.02
+  publish_hz: 10.0
+  roi_min: [-0.6, -0.9, 0.04]
+  roi_max: [0.9, 0.9, 1.0]
+  lidar:
+    # world座標系のxyz [m]・rpy [rad]
+    pose: [0.85, 0.0, 0.75, 0.0, 0.4, 3.141592653589793]
+    update_hz: 10.0
+    horizontal_samples: 180
+    vertical_samples: 72
+    horizontal_angle: 1.0
+    vertical_angle: 0.6
+    min_range: 0.07
+    max_range: 2.5
+    range_resolution: 0.005

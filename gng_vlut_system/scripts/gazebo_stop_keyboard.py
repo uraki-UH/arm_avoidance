@@ -6,11 +6,19 @@ from contextlib import contextmanager
 import json
 import math
 import os
+import re
 import select
 import signal
 import sys
 import termios
 import time
+
+
+def simulation_namespace(value):
+    """実機名前空間への誤送信を防ぐsim_形式の検査。"""
+    if not re.fullmatch(r'sim_[A-Za-z][A-Za-z0-9_]*', value):
+        raise argparse.ArgumentTypeError('sim_で始まる単一のGazebo名前空間が必要です')
+    return value
 
 
 def key_action(key):
@@ -113,8 +121,7 @@ def emit(message):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Gazebo専用キーボード停止。Space/S: 停止、Q/Ctrl-C: 停止要求後に終了')
-    parser.add_argument('--namespace', required=True,
-                        choices=('sim_topo_dual_arm_max', 'sim_topo_dual_arm_max_long'))
+    parser.add_argument('--namespace', required=True, type=simulation_namespace)
     args = parser.parse_args(argv)
     if not sys.stdin.isatty():
         parser.error('対話端末が必要です。Dockerでは docker exec -it を使用してください')

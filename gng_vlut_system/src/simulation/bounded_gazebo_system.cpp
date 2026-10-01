@@ -25,6 +25,7 @@ class bounded_gazebo_system : public gazebo_ros2_control::GazeboSystemInterface 
     double position_gain = 20, multiplier = 1;
     double hold_position = 0;
     bool is_command_active = false;
+    bool is_prismatic = false;
     bool has_pending_hold_capture = false;
     int mimic_idx = -1;
   };
@@ -58,12 +59,13 @@ class bounded_gazebo_system : public gazebo_ros2_control::GazeboSystemInterface 
     std_msgs::msg::String status_message;
     std::string state;
     bool is_stop_applied, is_stopped, has_active;
-    double age_sec, max_velocity_rad_sec;
+    double age_sec, max_velocity_rad_sec, max_linear_velocity_m_sec;
     {
       std::lock_guard<std::mutex> lock(stop_mutex_);
       const double now_wall_sec = wall_sec();
       age_sec = stop_latch_.state_age_sec(now_wall_sec);
       max_velocity_rad_sec = stop_latch_.max_velocity_rad_sec();
+      max_linear_velocity_m_sec = stop_latch_.max_linear_velocity_m_sec();
       latch_message.data = stop_latch_.is_stop_latched();
       state = stop_latch_.state(now_wall_sec);
       is_stop_applied = stop_latch_.is_stop_applied();
@@ -77,6 +79,8 @@ class bounded_gazebo_system : public gazebo_ros2_control::GazeboSystemInterface 
       {"has_active_commands", has_active},
       {"max_velocity_rad_sec", std::isfinite(max_velocity_rad_sec)
         ? nlohmann::json(max_velocity_rad_sec) : nlohmann::json(nullptr)},
+      {"max_linear_velocity_m_sec", std::isfinite(max_linear_velocity_m_sec)
+        ? nlohmann::json(max_linear_velocity_m_sec) : nlohmann::json(nullptr)},
       {"state_age_sec", std::isfinite(age_sec) ? nlohmann::json(age_sec) : nlohmann::json(nullptr)}
     };
     status_message.data = status.dump();
@@ -98,6 +102,7 @@ public:
       data.name = item.name;
       data.joint = model->GetJoint(item.name);
       if (!data.joint || data.joint->DOF() != 1) return false;
+      data.is_prismatic = data.joint->HasType(gazebo::physics::Base::SLIDER_JOINT);
       const double motor_limit_scale = std::stod(item.parameters.at("motor_limit_scale"));
       if (!std::isfinite(motor_limit_scale) || motor_limit_scale <= 0 || motor_limit_scale > 1) return false;
       // 数値積分と反力測定のずれに対するURDF上限内の駆動余裕
@@ -231,17 +236,24 @@ public:
   hardware_interface::return_type read(const rclcpp::Time & time, const rclcpp::Duration &) override {
     std::lock_guard<std::mutex> lock(stop_mutex_);
     double max_velocity_rad_sec = 0;
+    double max_linear_velocity_m_sec = 0;
     bool has_finite_state = !joints_.empty();
     for (auto & data : joints_) {
       data.position = data.joint->Position(0);
       data.velocity = data.joint->GetVelocity(0);
-      // 子リンク座標系の関節反力トルクを回転軸へ射影。ストッパ反力を含む測定値
+      // 子リンク座標系の関節反力の軸方向成分。直動は力 [N]、回転はトルク [N m]
       const auto axis = data.joint->GetChild()->WorldPose().Rot().RotateVectorReverse(data.joint->GlobalAxis(0));
-      data.effort = -data.joint->GetForceTorque(0).body2Torque.Dot(axis);
+      const auto reaction = data.joint->GetForceTorque(0);
+      data.effort = -(data.is_prismatic ? reaction.body2Force : reaction.body2Torque).Dot(axis);
       has_finite_state = has_finite_state && std::isfinite(data.position) && std::isfinite(data.velocity);
-      max_velocity_rad_sec = std::max(max_velocity_rad_sec, std::abs(data.velocity));
+      if (data.is_prismatic) {
+        max_linear_velocity_m_sec = std::max(max_linear_velocity_m_sec, std::abs(data.velocity));
+      } else {
+        max_velocity_rad_sec = std::max(max_velocity_rad_sec, std::abs(data.velocity));
+      }
     }
-    stop_latch_.observe(time.seconds(), wall_sec(), max_velocity_rad_sec, has_finite_state);
+    stop_latch_.observe(time.seconds(), wall_sec(), max_velocity_rad_sec, has_finite_state,
+                       max_linear_velocity_m_sec);
     return hardware_interface::return_type::OK;
   }
 

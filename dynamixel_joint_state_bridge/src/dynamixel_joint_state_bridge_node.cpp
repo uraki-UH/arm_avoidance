@@ -1,9 +1,12 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -44,6 +47,8 @@ public:
     declare_parameter<std::vector<std::string>>("joint_names", {});
     declare_parameter<std::vector<double>>("joint_scales", {});
     declare_parameter<std::vector<double>>("joint_offsets_deg", {});
+    declare_parameter<std::vector<std::string>>("fixed_joint_names", std::vector<std::string>{});
+    declare_parameter<std::vector<double>>("fixed_joint_positions", std::vector<double>{});
 
     input_topic_ = get_parameter("input_topic").as_string();
     output_topic_ = get_parameter("output_topic").as_string();
@@ -54,6 +59,18 @@ public:
     joint_names_ = get_parameter("joint_names").as_string_array();
     joint_scales_ = get_parameter("joint_scales").as_double_array();
     joint_offsets_deg_ = get_parameter("joint_offsets_deg").as_double_array();
+    fixed_joint_names_ = get_parameter("fixed_joint_names").as_string_array();
+    fixed_joint_positions_ = get_parameter("fixed_joint_positions").as_double_array();
+    if (fixed_joint_names_.size() != fixed_joint_positions_.size()) {
+      throw std::invalid_argument("固定関節名と固定位置の要素数の不一致");
+    }
+    std::unordered_set<std::string> configured_names(joint_names_.begin(), joint_names_.end());
+    for (size_t idx = 0; idx < fixed_joint_names_.size(); ++idx) {
+      if (fixed_joint_names_[idx].empty() || !std::isfinite(fixed_joint_positions_[idx]) ||
+          !configured_names.insert(fixed_joint_names_[idx]).second) {
+        throw std::invalid_argument("固定関節の名前重複・空文字列・位置の非有限値");
+      }
+    }
 
     joint_ids_.reserve(joint_ids_raw.size());
     for (const auto id : joint_ids_raw) {
@@ -170,6 +187,15 @@ private:
       }
     }
 
+    // ユーザー確認済みの固定関節。サーボ欠測の代用・過去値補完とは別の明示設定
+    for (size_t idx = 0; idx < fixed_joint_names_.size(); ++idx) {
+      if (std::find(joint_names.begin(), joint_names.end(), fixed_joint_names_[idx]) != joint_names.end()) {
+        RCLCPP_ERROR(get_logger(), "受信関節と固定関節の名前重複: %s", fixed_joint_names_[idx].c_str());
+        return;
+      }
+      joint_names.push_back(fixed_joint_names_[idx]);
+      joint_positions.push_back(fixed_joint_positions_[idx]);
+    }
     sensor_msgs::msg::JointState out;
     out.header.stamp = now();
     out.name = std::move(joint_names);
@@ -230,6 +256,8 @@ private:
   std::vector<std::string> joint_names_;
   std::vector<double> joint_scales_;
   std::vector<double> joint_offsets_deg_;
+  std::vector<std::string> fixed_joint_names_;
+  std::vector<double> fixed_joint_positions_;
   std::vector<std::string> claimed_joint_names_;
   rclcpp::Subscription<dynamixel_handler_msgs::msg::DynamixelPresent>::SharedPtr subscription_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr state_publisher_;

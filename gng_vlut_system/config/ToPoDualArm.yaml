@@ -13,6 +13,14 @@
     mesh_root_dir: "/ros2_ws/src/urdf/dual_arm_urdf/meshes"
     # Viewer起動直後の初回関節姿勢配信
     enable_joint_state_publisher: true
+    # 既存Dynamixel入力からの実測姿勢表示。シリアル通信ノードは別起動
+    enable_dynamixel_current_pose: true
+    dynamixel_mapping_file: "package://dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_ids_31_52.yaml"
+    # URDFカメラリンクとRealSense本体の取付TFの同時起動
+    enable_realsense_mount_tf: true
+    realsense_mount_config: "package://gng_vlut_system/config/realsense_mount.yaml"
+    # Viewer起動時の実点群ROI生成。自己除去前トピックへの配信
+    enable_environment_voxelization: true
 
     # --- GNG & Safety Settings ---
     gng:

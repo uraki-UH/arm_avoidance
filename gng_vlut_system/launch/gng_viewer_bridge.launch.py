@@ -118,6 +118,13 @@ def launch_setup(context, *args, **kwargs):
     yaml_enable_self_recognition_viz = False
     yaml_enable_environment_self_filter = False
     yaml_enable_joint_state_publisher = True
+    yaml_enable_dynamixel_current_pose = False
+    yaml_enable_environment_voxelization = False
+    yaml_environment_voxelization = {}
+    yaml_voxel_idx = {}
+    yaml_dynamixel_mapping_file = ""
+    yaml_enable_realsense_mount_tf = False
+    yaml_realsense_mount_config = "package://gng_vlut_system/config/realsense_mount.yaml"
     yaml_vlut_resolution = 0.0
     if params_file and os.path.exists(params_file):
         try:
@@ -150,6 +157,21 @@ def launch_setup(context, *args, **kwargs):
                     break
 
             if isinstance(root_ros_params, dict):
+                yaml_enable_environment_voxelization = safe_bool(
+                    root_ros_params.get('enable_environment_voxelization'), False
+                )
+                yaml_environment_voxelization = root_ros_params.get('environment_voxelization', {})
+                yaml_voxel_idx = root_ros_params.get('voxel_idx_shift', {})
+                yaml_enable_dynamixel_current_pose = safe_bool(
+                    root_ros_params.get('enable_dynamixel_current_pose'), False
+                )
+                yaml_dynamixel_mapping_file = root_ros_params.get('dynamixel_mapping_file', '')
+                yaml_enable_realsense_mount_tf = safe_bool(
+                    root_ros_params.get('enable_realsense_mount_tf'), False
+                )
+                yaml_realsense_mount_config = root_ros_params.get(
+                    'realsense_mount_config', yaml_realsense_mount_config
+                )
                 gng_ns = root_ros_params.get('gng', {}) if isinstance(root_ros_params.get('gng', {}), dict) else {}
                 yaml_data_dir = gng_ns.get('data_directory', yaml_data_dir)
                 yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
@@ -236,6 +258,10 @@ def launch_setup(context, *args, **kwargs):
     enable_joint_state_publisher = (
         safe_bool(enable_joint_state_publisher_arg, yaml_enable_joint_state_publisher)
         if enable_joint_state_publisher_arg else yaml_enable_joint_state_publisher
+    )
+    enable_dynamixel_current_pose = joint_control_backend == 'viewer' and safe_bool(
+        LaunchConfiguration('enable_dynamixel_current_pose').perform(context),
+        yaml_enable_dynamixel_current_pose,
     )
     if not urdf_path:
         raise FileNotFoundError(
@@ -350,7 +376,7 @@ def launch_setup(context, *args, **kwargs):
         # 関節単位の指令統合と選択した出力先への接続
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "joint_control.launch.py")),
-            condition=IfCondition(str(joint_control_backend != "external").lower()),
+            condition=IfCondition(str(joint_control_backend != "external" and not enable_dynamixel_current_pose).lower()),
             launch_arguments={
                 "params_file": params_file,
                 "urdf_path": urdf_path,
@@ -523,6 +549,78 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
+    enable_environment_voxelization = safe_bool(
+        LaunchConfiguration('enable_environment_voxelization').perform(context),
+        yaml_enable_environment_voxelization,
+    )
+    if enable_environment_voxelization:
+        if not enable_self_recognition_viz or not yaml_enable_environment_self_filter:
+            raise ValueError('Viewerの環境ROIには自己認識と自己除去の有効化が必要です')
+        environment = yaml_environment_voxelization
+        base_frame = str(environment.get('base_frame', 'base_link')).lstrip('/')
+        target_frame = base_frame if base_frame.startswith(robot_name + '/') else robot_name + '/' + base_frame
+        # world座標の仮定なし。ロボット基準へのTF変換後の直接ROI生成
+        roi_params = {
+            'input_topic': environment.get('input_topic', '/camera/camera/depth/color/points'),
+            'output_topic': self_recognition_ns.get('raw_environment_voxel_topic', 'roi_voxels'),
+            'source_frame_id': environment.get('source_frame_id', ''),
+            'target_frame_id': target_frame, 'world_frame_id': target_frame,
+            'enable_world_index': False, 'enable_roi_query': False,
+            'enable_world_bucket_publish': False, 'allow_unconnected_source_as_world': False,
+            'voxel_size': self_recognition_resolution,
+            'enable_reachability_filter': True,
+            'reachability_map_topic': environment.get('reachability_map_topic', 'Tmap_static'),
+        }
+        for key, default in (('x_shift', 42), ('y_shift', 21), ('z_shift', 0), ('offset', 1000000)):
+            roi_params[key] = int(yaml_voxel_idx.get(key, default))
+        for axis in 'xyz':
+            for direction, default in (('min', -0.1 if axis == 'x' else -1.0), ('max', 0.5 if axis == 'x' else 1.0)):
+                key = direction + '_reachability_' + axis
+                roi_params[key] = float(environment.get(key, gng_ns.get(direction + '_' + axis, default)))
+            key = 'reachability_margin_' + axis
+            roi_params[key] = float(environment.get(key, 0.2))
+        actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
+                            name='viewer_environment_voxelization', namespace=robot_name,
+                            parameters=[roi_params], output='screen'))
+        danger_source = str(environment.get('danger_source', 'environment_inflation'))
+        if danger_source not in ('environment_inflation', 'vlut_distance'):
+            raise ValueError('danger_sourceにはenvironment_inflationまたはvlut_distanceが必要です')
+        # 自己除去後のROIをGNG状態更新の占有・危険入力へ接続
+        actions.append(Node(package='gng_vlut_system', executable='voxel_to_vlut_node',
+                            name='viewer_voxel_to_vlut', namespace=robot_name, output='screen',
+                            parameters=[{
+                                'input_topic': self_recognition_ns.get('filtered_environment_voxel_topic', 'self_filter_roi_voxels'),
+                                'occupied_voxels_topic': 'occupied_voxels', 'danger_voxels_topic': 'danger_voxels',
+                                'target_frame_id': target_frame, 'output_voxel_size': self_recognition_resolution,
+                                'danger_inflation': (float(environment.get('danger_inflation', 0.05))
+                                                     if danger_source == 'environment_inflation' else 0.0),
+                                'publish_hz': float(environment.get('publish_hz', 30.0)),
+                            }]))
+    if enable_dynamixel_current_pose:
+        mapping_file = LaunchConfiguration('dynamixel_mapping_file').perform(context).strip()
+        mapping_file = resolve_package_uri(mapping_file or yaml_dynamixel_mapping_file)
+        if not mapping_file or not os.path.isfile(mapping_file):
+            raise FileNotFoundError('実測表示用のDynamixel関節対応設定が必要です: ' + mapping_file)
+        # 実測表示専用の既存launchを利用。Viewerの再帰起動・USBの二重オープンの回避
+        actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, 'launch', 'dynamixel_current_pose.launch.py')),
+            launch_arguments={
+                'params_file': params_file, 'mapping_file': mapping_file,
+                'input_topic': LaunchConfiguration('dynamixel_input_topic').perform(context),
+                'enable_reader': 'false', 'enable_viewer': 'false',
+            }.items(),
+        ))
+    enable_realsense_mount_tf = safe_bool(
+        LaunchConfiguration('enable_realsense_mount_tf').perform(context),
+        yaml_enable_realsense_mount_tf,
+    )
+    if enable_realsense_mount_tf:
+        mount_config = LaunchConfiguration('realsense_mount_config').perform(context).strip()
+        mount_config = resolve_package_uri(mount_config or yaml_realsense_mount_config)
+        actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, 'launch', 'realsense_mount_tf.launch.py')),
+            launch_arguments={'mount_config': mount_config}.items(),
+        ))
     return actions
 
 def generate_launch_description():
@@ -542,8 +640,16 @@ def generate_launch_description():
         DeclareLaunchArgument("joint_control_backend", default_value="viewer",
                               description="関節出力先。viewer・dynamixel・external"),
         DeclareLaunchArgument("dynamixel_mapping_file", default_value=""),
+        DeclareLaunchArgument('enable_dynamixel_current_pose', default_value='',
+                              description='Dynamixel実測姿勢の表示。未指定時は機体YAMLを使用'),
+        DeclareLaunchArgument('enable_environment_voxelization', default_value='',
+                              description='環境点群のROI生成。未指定時は機体YAMLを使用'),
         DeclareLaunchArgument("enable_dynamixel_input", default_value=""),
         DeclareLaunchArgument("dynamixel_input_topic", default_value="/dynamixel/state/present"),
+        DeclareLaunchArgument('enable_realsense_mount_tf', default_value='',
+                              description='取付TFの同時起動。未指定時は機体YAMLを使用'),
+        DeclareLaunchArgument('realsense_mount_config', default_value='',
+                              description='取付TF設定YAMLの上書き'),
         DeclareLaunchArgument(
             "direct_joint_tracking",
             default_value="true",

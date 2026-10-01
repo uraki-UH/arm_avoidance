@@ -28,25 +28,34 @@ class gng_path_search:
 
     def select_active_arms(self):
         centers = self.geometry.centers(self.positions)
-        active_sides = []
-        for side in ('L', 'R'):
+        groups = getattr(self, 'planning_groups', None)
+        if groups is None:
+            # 旧maxデモの設定との互換。共通構成では任意名のグループを指定
+            groups = [{'name': side, 'joint_names': [name for name in self.arm_names if name.startswith(side+'_')],
+                       'link_names': [name for name, _, _ in self.geometry.spheres if name.startswith(side+'_')]}
+                      for side in ('L', 'R')]
+        active_groups = []
+        for group in groups:
             is_side = self.geometry.is_arm & np.array([
-                name.startswith(side+'_') for name, _, _ in self.geometry.spheres])
+                name in group['link_names'] for name, _, _ in self.geometry.spheres])
+            if not np.any(is_side):
+                continue
             gap = np.min(self.cloud_tree.query(centers[is_side])[0]
                          -self.geometry.radii[is_side]-self.cell_radius)
             if gap < self.config['min_retreat_dist_th']:
-                active_sides.append(side)
-        if not active_sides:
+                active_groups.append(group)
+        if not active_groups:
             # 退避経路の完了まで対象腕を維持。復帰は片腕ずつの実行
             if self.path:
                 return self.active_angle_indices.copy()
-            for side_idx, side in enumerate(('L', 'R')):
-                indices = self.arm_indices[side_idx*7:(side_idx+1)*7]
+            for group in groups:
+                indices = [self.arm_indices[self.arm_names.index(name)] for name in group['joint_names']]
                 if np.max(np.abs(self.positions[indices]-self.home[indices])) > 1e-5:
-                    active_sides = [side]
+                    active_groups = [group]
                     break
+        active_names = {name for group in active_groups for name in group['joint_names']}
         requested_indices = np.array([idx for idx, name in enumerate(self.arm_names)
-                                      if name[0] in active_sides], dtype=int)
+                                      if name in active_names], dtype=int)
         if self.path and np.array_equal(requested_indices, self.coordination_source_indices):
             return self.active_angle_indices.copy()
         return requested_indices
@@ -63,11 +72,16 @@ class gng_path_search:
             gap, centers = self.cloud_clearance(first+(second-first)*ratio)
             if gap < min_gap:
                 return False
-            if not self.geometry.has_internal_clearance(centers):
+            if not self.has_planning_clearance(centers):
                 if not self.geometry.has_inter_arm_clearance(centers):
                     self.has_inter_arm_rejection = True
                 return False
         return True
+
+    def has_planning_clearance(self, centers):
+        if 'min_planning_clearance_th' in self.config:
+            return self.geometry.has_internal_clearance(centers, self.config['min_planning_clearance_th'])
+        return self.geometry.has_internal_clearance(centers)
 
     def plan_with_coordination(self, current_gap):
         source_indices = self.active_angle_indices.copy()
@@ -163,14 +177,19 @@ class gng_lidar_demo(avoidance_demo, gng_path_search):
                 raise ValueError(f'{key}は有限の正数が必要です')
         if not isinstance(self.config['max_entry_candidates'], int):
             raise ValueError('max_entry_candidatesは整数が必要です')
-        self.arm_names = [f'{side}_joint{idx}' for side in ('L', 'R') for idx in range(1, 8)]
+        self.planning_groups = self.config.get('planning_groups')
+        self.arm_names = ([name for group in self.planning_groups for name in group['joint_names']]
+                          if self.planning_groups is not None else
+                          [f'{side}_joint{idx}' for side in ('L', 'R') for idx in range(1, 8)])
         self.arm_indices = [self.geometry.joint_names.index(name) for name in self.arm_names]
         self.active_angle_indices = np.array([], dtype=int)
         self.coordination_source_indices = np.array([], dtype=int)
         self.diag = self.create_publisher(String, 'avoidance/gng_status', 1)
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.path_pub = self.create_publisher(TopologicalMap, 'plan_Tmap', qos)
-        self.create_subscription(PointCloud2, 'lidar_points', self.on_cloud, qos_profile_sensor_data)
+        pipeline = self.config.get('pipeline', {})
+        self.voxel_frame = self.get_namespace().strip('/') + '/' + pipeline.get('base_frame', 'base_link')
+        self.create_subscription(PointCloud2, pipeline.get('points_topic', 'lidar_points'), self.on_cloud, qos_profile_sensor_data)
         self.create_subscription(Voxel, 'self_filter_roi_voxels', self.on_voxels, qos)
         self.graph_sub = self.create_subscription(TopologicalMap, 'Tmap_static', self.on_graph, qos)
         self.create_subscription(UInt16MultiArray, 'gng_node_states', self.on_states, qos)
@@ -206,7 +225,7 @@ class gng_lidar_demo(avoidance_demo, gng_path_search):
             self.num_cloud += 1
 
     def on_voxels(self, message):
-        if message.header.frame_id != self.get_namespace().strip('/')+'/base_link':
+        if message.header.frame_id != self.voxel_frame:
             return
         stamp = message.header.stamp.sec*1000000000+message.header.stamp.nanosec
         if stamp <= self.last_voxel_stamp:
@@ -226,11 +245,14 @@ class gng_lidar_demo(avoidance_demo, gng_path_search):
         self.num_voxels = len(ids)
 
     def on_features(self, message):
+        if any(len(feature.weight_angle) != len(self.arm_names) or not np.all(np.isfinite(feature.weight_angle))
+               for feature in message.features):
+            self.fail(f'GNG角度配列と計画関節の不一致: 期待関節数 {len(self.arm_names)}')
+            return
         for feature in message.features:
             if feature.node_id in self.angles:
                 continue
-            if len(feature.weight_angle) == 14 and np.all(np.isfinite(feature.weight_angle)):
-                self.angles[feature.node_id] = np.asarray(feature.weight_angle)
+            self.angles[feature.node_id] = np.asarray(feature.weight_angle)
         # 起動時固定の学習済み関節角。初回完全取得後の反復受信を停止
         if self.feature_sub is not None and message.features and len(self.angles) == len(message.features):
             self.destroy_subscription(self.feature_sub)
@@ -270,6 +292,17 @@ class gng_lidar_demo(avoidance_demo, gng_path_search):
                 all(now-stamp < self.config['max_state_age_sec'] for stamp in
                     (self.cloud_time, self.voxel_time, self.graph_time)))
 
+    def observe_clearance(self):
+        if not self.config.get('enable_live_obstacles', False):
+            return super().observe_clearance()
+        centers = self.geometry.centers(self.positions)
+        indices = np.flatnonzero(self.geometry.is_arm)
+        distances, nearest = self.cloud_tree.query(centers[indices])
+        gaps = distances-self.geometry.radii[indices]-self.cell_radius
+        idx = int(np.argmin(gaps))
+        self.obstacle_time = self.voxel_time
+        return float(gaps[idx]), centers, int(indices[idx]), self.cloud_tree.data[nearest[idx]]
+
     def refine_target(self, step):
         if not self.config['enable_local_refinement']:
             return self.positions.copy(), False
@@ -285,7 +318,7 @@ class gng_lidar_demo(avoidance_demo, gng_path_search):
                 candidates.append(candidate)
         for candidate in candidates:
             gap, centers = self.cloud_clearance(candidate)
-            if gap < self.cloud_gap-.0002 or not self.geometry.has_internal_clearance(centers):
+            if gap < self.cloud_gap-.0002 or not self.has_planning_clearance(centers):
                 continue
             cost = 200*max(0, self.config['target_clearance']-gap)**2+.003*float(np.sum((candidate-self.home)**2))
             if cost < best_cost and self.can_bridge(self.positions, candidate, self.config['min_cloud_clearance_th']):
@@ -298,6 +331,12 @@ class gng_lidar_demo(avoidance_demo, gng_path_search):
         is_gng_target = False
         self.cloud_gap, _ = self.cloud_clearance(self.positions)
         if self.cloud_gap < self.config['min_cloud_clearance_th']:
+            centers = self.geometry.centers(self.positions)
+            indices = np.flatnonzero(self.geometry.is_arm)
+            distances, nearest = self.cloud_tree.query(centers[indices])
+            idx = int(np.argmin(distances-self.geometry.radii[indices]-self.cell_radius))
+            self.get_logger().error(f'点群クリアランス不足: link={self.geometry.spheres[indices[idx]][0]}, '
+                                    f'gap={self.cloud_gap:.6f}, point={self.cloud_tree.data[nearest[idx]].tolist()}')
             return self.positions.copy(), False
         active_angle_indices = self.select_active_arms()
         if not np.array_equal(active_angle_indices, self.active_angle_indices):

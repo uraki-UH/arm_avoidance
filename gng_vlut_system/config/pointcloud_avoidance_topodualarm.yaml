@@ -1,0 +1,14 @@
+params_file: ToPoDualArm.yaml
+# 保存済みGNGの角度配列と同じ順序。既存データの対象は左腕のみ
+planning_groups:
+  - name: left_arm
+    joint_names: [L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7]
+    link_names: [L_link1, L_link2, L_link3, L_link4, L_link5, L_link6, L_link7, L_gripper_base, L_finger_left, L_finger_right]
+overrides:
+  sides: [left]
+  hand_far_x: 0.40
+  hand_near_x: 0.01
+  hand_y: 0.18
+  hand_z: 0.25
+  arm_radius: 0.035
+  target_clearance: 0.10

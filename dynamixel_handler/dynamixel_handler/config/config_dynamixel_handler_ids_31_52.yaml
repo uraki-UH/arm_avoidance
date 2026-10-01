@@ -1,0 +1,6 @@
+# 既存config_dynamixel_handler.yamlの後に読み込む新ID用差分設定
+# ToPoDualArmの右腕31〜38・左腕41〜48・首51〜52を含む探索範囲
+/**:
+  ros__parameters:
+    init/servo_auto_search.min_id: 31
+    init/servo_auto_search.max_id: 52

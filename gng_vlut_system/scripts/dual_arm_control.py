@@ -27,14 +27,16 @@ from gazebo_stop_keyboard import status_label
 class dual_arm_control(Node):
     def __init__(self):
         super().__init__('dual_arm_control')
-        if self.get_namespace() not in ('/sim_topo_dual_arm_max', '/sim_topo_dual_arm_max_long'):
-            raise ValueError('max系のGazebo専用名前空間が必要です')
+        if not self.get_namespace().startswith('/sim_') or '/' in self.get_namespace()[1:]:
+            raise ValueError('対応機種のGazebo専用名前空間が必要です')
         if not self.get_parameter('use_sim_time').value:
             raise ValueError('Gazeboのuse_sim_timeが必要です')
         urdf_path = self.declare_parameter('urdf_path', '').value
         max_velocity = self.declare_parameter('max_leader_velocity', 0.3).value
         self.model = mode_model(urdf_path, max_joint_velocity=max_velocity)
         udp_config = self.declare_parameter('udp_config', '').value
+        if self.get_namespace() not in ('/sim_topo_dual_arm_max', '/sim_topo_dual_arm_max_long') and udp_config:
+            raise ValueError('この機種の実機UDP仕様は未検証です')
         allow_remote_udp = self.declare_parameter('allow_remote_udp', False).value
         self.udp = None
         if udp_config:
