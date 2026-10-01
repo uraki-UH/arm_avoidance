@@ -74,6 +74,13 @@ def launch_setup(context):
     namespace = config.get('namespace') or 'sim_' + params['robot_name']
     if not namespace.startswith('sim_') or '/' in namespace:
         raise ValueError('デモの名前空間はsim_で始まる単一名が必要です')
+    point_cloud_source = LaunchConfiguration('point_cloud_source').perform(context)
+    sensor_helper = load_module(package_share/'launch/dual_arm_lidar_setup.py')
+    point_cloud_topic = sensor_helper.point_cloud_topic(point_cloud_source)
+    depth_helper = depth_config = None
+    if point_cloud_source == 'head_depth':
+        depth_helper = load_module(package_share/'launch/dual_arm_depth_camera_setup.py')
+        depth_config = depth_helper.load_config(LaunchConfiguration('depth_camera_config').perform(context))
     urdf_path = Path(params['urdf_path'])
     if not urdf_path.is_file():
         raise FileNotFoundError(urdf_path)
@@ -90,6 +97,8 @@ def launch_setup(context):
     root = ET.parse(temporary_urdf).getroot()
     temporary_urdf.unlink()
     initial_positions = initial_joint_positions(root, config.get('initial_joint_positions', {}))
+    if depth_helper is not None:
+        depth_helper.add_depth_camera(root, namespace, depth_config)
     control = ET.SubElement(root, 'ros2_control', name='GazeboSystem', type='system')
     hardware = ET.SubElement(control, 'hardware')
     ET.SubElement(hardware, 'plugin').text = 'gng_vlut_system/bounded_gazebo_system'
@@ -179,8 +188,8 @@ def launch_setup(context):
                         ET.SubElement(material, 'ambient').text = '1 0.5 0.1 1'
                         ET.SubElement(material, 'diffuse').text = '1 0.5 0.1 1'
         if avoidance_config.get('enable_gng_vlut', False):
-            sensor_helper = load_module(package_share/'launch/dual_arm_lidar_setup.py')
-            sensor_helper.add_lidar(world, namespace, avoidance_config)
+            if point_cloud_source == 'external_lidar':
+                sensor_helper.add_lidar(world, namespace, avoidance_config)
         world_path = run_dir/'avoidance.world'
         ET.ElementTree(world_root).write(world_path, encoding='unicode')
 
@@ -203,7 +212,8 @@ def launch_setup(context):
                         'urdf_path': str(urdf_path),
                         'enable_auto_start': False if enable_integrated_control else enable_auto_start,
                         'enable_stamped_commands': enable_integrated_control}],
-                    remappings=([('dual_arm_controller/joint_trajectory', 'control/avoidance_trajectory')]
+                    remappings=[('lidar_points', point_cloud_topic)] +
+                               ([('dual_arm_controller/joint_trajectory', 'control/avoidance_trajectory')]
                                 if enable_integrated_control else []))
 
     physics_start = Node(package='gng_vlut_system', executable='start_gazebo_physics.py',
@@ -275,7 +285,7 @@ def launch_setup(context):
                 'joint_state_topic': f'/{namespace}/joint_states', 'frame_id': root_link,
                 'stream_topic': '/viewer/internal/stream/robot'}]))
     if avoidance_config is not None and avoidance_config.get('enable_gng_vlut', False):
-        actions.extend(sensor_helper.pipeline_nodes(params_path, params, namespace, avoidance_config))
+        actions.extend(sensor_helper.pipeline_nodes(params_path, params, namespace, avoidance_config, point_cloud_source))
         if avoidance_config.get('enable_native_planner', False):
             source = avoidance_config.get('pipeline', {}).get('external_environment', {})
             actions.append(Node(package='gng_vlut_system', executable='topological_map_avoidance_node',
@@ -301,6 +311,8 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file', default_value=str(package_share/'config/topo_dual_arm_max.yaml')),
         DeclareLaunchArgument('demo_config', default_value=str(package_share/'config/dual_arm_gazebo_demo.yaml')),
         DeclareLaunchArgument('avoidance_config', default_value=''),
+        DeclareLaunchArgument('point_cloud_source', default_value='external_lidar'),
+        DeclareLaunchArgument('depth_camera_config', default_value=str(package_share/'config/dual_arm_depth_camera.yaml')),
         DeclareLaunchArgument('enable_external_control', default_value='false'),
         DeclareLaunchArgument('enable_integrated_control', default_value='false'),
         DeclareLaunchArgument('leader_joint_state_topic', default_value='/leader/joint_states'),

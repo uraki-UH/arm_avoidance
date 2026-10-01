@@ -116,6 +116,10 @@ header stampは0、positionsのみ、time_from_startは正の厳密増加、最�
 移動配置を使った従来VM・AIタブとの統合は未検証です。この座標整合の検証対象は独立ROS 2送信タブです。
 回帰試験：ROS環境で `python3 -m unittest discover -s integrations/ros2 -p test_robot_exchange.py`。
 
+2026-10-01までの検証は標準モデル・ROS Humble。3種の点群の実受信、848×480全画素の深度・XYZ対応と共通時刻、移動配置（XYZ=(0.3,-0.2,0.1) m、yaw=25 deg）での点群・TF整合を確認。ROS軌道→ブラウザ首Yaw 0.1 rad→ROS関節状態の往復、未知関節・過速度・範囲外の拒否、停止操作を確認し、Python回帰15件が成功しています。
+
+Longの実送信・軌道往復、持続送信レート、大規模車両メッシュの性能、実RealSense購読アプリとの互換性、GNG/VLUTとの統合運転、実機動作は未検証です。
+
 ## 含めたもの / 別途必要なもの
 
 |同梱コード|用途|

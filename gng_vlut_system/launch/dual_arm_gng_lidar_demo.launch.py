@@ -13,6 +13,8 @@ def generate_launch_description():
         'params_file': str(share/'config/topo_dual_arm_max.yaml'),
         'demo_config': str(share/'config/dual_arm_gazebo_demo.yaml'),
         'avoidance_config': str(share/'config/dual_arm_gng_lidar_demo.yaml'),
+        'point_cloud_source': 'external_lidar',
+        'depth_camera_config': str(share/'config/dual_arm_depth_camera.yaml'),
         'gui': '',
         'enable_external_control': 'false',
         'enable_dynamixel_leader': 'false',

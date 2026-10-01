@@ -32,6 +32,8 @@ def make_context(robot, **overrides):
         'robot': robot, 'params_file': '', 'demo_config': '', 'avoidance_config': '',
         'leader_topic': '/leader/joint_states', 'enable_keyboard': 'false',
         'udp_config': '', 'gui': 'false', 'allow_remote_udp': 'false',
+        'point_cloud_source': 'external_lidar',
+        'depth_camera_config': str(share/'config/dual_arm_depth_camera.yaml'),
         'gazebo_master_uri': 'http://127.0.0.1:11355', 'leader_mapping_file': '',
         **overrides})
     return context

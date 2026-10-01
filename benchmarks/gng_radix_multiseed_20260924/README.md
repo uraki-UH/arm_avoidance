@@ -56,4 +56,4 @@ python3 /ros2_ws/src/benchmarks/gng_radix_multiseed_20260924/summarize.py
 - 本番にはソート・作業バッファ・テストを追加。検証用のシード固定、時刻固定、学習点保存、代表点切替、計測APIの追加なし。公開APIとYAML変更なし。入力上限20万点で作業バッファ約1.6 MB。
 - 実時間・非固定乱数のインストール済みライブラリで、観測・重点入力・統計・イベント・差分有効の30フレームが成功。
 
-[集計JSON](summary.json)、[リリース記録](../../gng_vlut_system/docs/releases/2026-09-24_gng_radix_multiseed.md)を参照。認識正解率、別のbag、ROS配送・Viewer描画の性能は今回の比較対象外。
+[集計JSON](summary.json)を参照。認識正解率、別のbag、ROS配送・Viewer描画の性能は今回の比較対象外。

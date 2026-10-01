@@ -51,7 +51,7 @@ ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 ROS2CLI_NO_DAEMON=1 \
 | Gazebo → 実機 | 補間済み目標のUDP送信あり、既定OFF | 受信機仕様、独立19関節の順序・符号・原点、停止・watchdog |
 | Gazebo → Viewer | `/sim_topo_dual_arm_max/joint_states`の表示あり | 現行URDFでの追従・更新の通し確認 |
 | 実機 → Viewer | UDP応答の内部保持のみ、ROS配信なし | 実測JointState配信、表示元の分離、未受信・失効表示 |
-| 回避 | Gazebo LiDAR・GNG/VLUTの接続あり | 現行URDFでの回避・停止試験。実センサーによる実機回避は未統合 |
+| 回避 | Gazebo外置きLiDAR／[頭部深度カメラ](#頭部深度カメラ)とGNG/VLUTの接続あり | 現行URDFでの回避・停止試験。実センサーによる実機回避は未統合 |
 
 ### 必須の描画経路
 
@@ -132,6 +132,56 @@ ros2 topic echo --once /sim_topo_dual_arm_max/avoidance/status
 
 記録項目: 使用URDF・GNG/VLUT・設定、実行コマンド、入力/実測topic、指令角・実測角・受信時刻、姿勢偏差［rad］、表示遅延［ms、測定可能範囲のみ］、最小距離［m］、停止要求・停止確認の時刻、成功/失敗/未検証、起動プロセスの終了確認。
 合格基準未定の項目は測定結果のみ。パケット送信成功と実機停止成功の混同なし。
+
+## 頭部深度カメラ
+
+対象: max / max_longのURDF上のRealSense取付位置。`camera_link`配下に仮想深度センサーを追加し、首・腰の関節運動に追従。元URDFの変更なし。
+入力選択: `point_cloud_source:=head_depth`。未指定時は従来の`external_lidar`、両センサーの同時起動なし。
+
+既存のROS環境を読み込んだ対話端末で起動:
+
+```bash
+ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max \
+  point_cloud_source:=head_depth
+```
+
+max_longは`robot:=max_long`。既存のA/L/Space/H操作は変更なし、UDP設定未指定時の実機送信なし。
+`dual_arm_gng_lidar_demo.launch.py`でも同じ引数を使用可能。自動開始を避ける場合は`enable_auto_start:=false`。
+深度描画にはOpenGL描画環境が必要。`gui:=false`でもレンダリングは必要で、確認環境の`DISPLAY`は`:0`。
+
+| 名前空間内の出力 | 型・内容 |
+| --- | --- |
+| `camera/color/image_raw` / `camera/color/camera_info` | RGB画像 / 内部パラメータ |
+| `camera/depth/image_raw` / `camera/depth/camera_info` | 32FC1深度［m］ / 内部パラメータ |
+| `camera/depth/points` | `PointCloud2`、光学座標系のXYZ・RGB |
+
+名前空間: `/sim_topo_dual_arm_max`または`/sim_topo_dual_arm_max_long`。光学座標系: `<名前空間>/head_depth_optical_frame`（X右・Y下・Z前方、先頭の`/`なし）。
+Viewerの点群入力も上表の`camera/depth/points`を選択。深度モードに`lidar_points`配信なし。
+回避入力: 深度点群 → 取得時刻のTF → ROIボクセル → 自己除去 → VLUT/GNG。頭部モードは`allow_latest_transform=false`で、時刻不明・取得時刻のTF欠落時の最新TF代替なし。入力失効の停止条件は維持。
+
+設定: [dual_arm_depth_camera.yaml](../config/dual_arm_depth_camera.yaml)。差替えは`depth_camera_config:=<YAMLの絶対パス>`。
+
+- 画像サイズ: 320 × 240 px
+- 取得頻度: 10 Hz（シミュレーション時間基準）
+- 水平画角: 87 deg（YAMLはrad）
+- 有効深度: 0.1–3.0 m
+- 光学中心・向きの補正: `xyz`［m］ / `rpy`［rad］、`camera_link`基準。既定値は両方0
+
+上記は仮設定で、実機RealSenseの機種別校正値ではない。実機固有の深度ノイズ・欠損・RGB/深度間の視差は未再現。視野外・腕の遮蔽による未観測領域を、安全領域として保証する機能なし。
+確認済み: 両機種の画像・点群の時刻／深度値一致、光学軸、既知物体の座標照合、首運動への追従、自己除去・GNGへの入力。回避運動の完遂・実機・Viewer目視は本試験の対象外。既知の統合停止確認の制限も継続。
+
+再現試験（各機種1回、実機接続なし、出力先は未使用のパス）:
+
+```bash
+docker exec gng_cpu_container bash -lc '
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/local_setup.bash
+cd /ros2_ws/src
+python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_depth_camera_cases.json --output artifacts/dual_arm_depth_camera_20261002/first --repeats 1 --timeout-sec 215 --max-total-sec 460 --estimate-sec 90 --continue-on-error
+'
+```
+
+試験launch・引数・終了確認: 各試行の`command.json` / `report.json`。専用ROS domain 96・Gazebo port 11369、所有プロセスのみの終了処理。今回の試験プロセスは全終了済み。
 
 ## 1. 要約
 

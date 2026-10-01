@@ -1,6 +1,6 @@
 # 最小GNGのボクセル・ツリー比較
 
-[実装仕様](../../ais_gng_cpu/experimental/gng_minimal_comparison/README.md)、[検証記録](../../gng_vlut_system/docs/releases/2026-09-24_gng_minimal_comparison.md)。
+[実装仕様](../../ais_gng_cpu/experimental/gng_minimal_comparison/README.md)。
 
 ## 条件
 

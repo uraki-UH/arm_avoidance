@@ -72,7 +72,7 @@ CPUの学習配分と追加条件の評価は[共通サンプラー](docs/sampli
 
 ## CPU GNGの実行時間ボトルネック
 
-本番CPU版は、最小空きノードIDの探索開始位置を保持し、入力voxelの区間確定と重心計算を一度の走査に統合。既存の入力順・加算順・学習回数・全点照合を保持。基数ソートは独立実験版でのみ採用。[変更と出力一致検証](../gng_vlut_system/docs/releases/2026-09-24_gng_production_efficiency.md)。
+本番CPU版は、最小空きノードIDの探索開始位置を保持し、入力voxelの区間確定と重心計算を一度の走査に統合。既存の入力順・加算順・学習回数・全点照合を保持。これらの[変更と出力一致検証](../benchmarks/gng_production_efficiency_20260924/README.md)の後、基数ソートも本番CPU版へ採用。[複数シードでの評価と制限](../benchmarks/gng_radix_multiseed_20260924/README.md)。
 
 当時計測の処理時間内訳、全ボクセル近傍照合の役割、設定変更比較、二乗メモリ、未検証の改善候補は[ボトルネック調査報告](../gng_vlut_system/docs/designs/gng_runtime_cost_20260923.md)を参照。通常CPU版の条件付き実測であり、現在の設定やSpatialTree実験版の性能とは区別。
 

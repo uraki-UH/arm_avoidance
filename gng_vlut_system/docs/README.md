@@ -23,7 +23,7 @@
 - [RELATED_WORK.md](./RELATED_WORK.md)
 - [IDEA_NOTES.md](./IDEA_NOTES.md)
 - [RELEASE_NOTE_TEMPLATE.md](./RELEASE_NOTE_TEMPLATE.md)
-- [releases/2026-07-29_documentation_workflow.md](./releases/2026-07-29_documentation_workflow.md)
+- [文書更新規約](../../AGENTS.md)
 - [旧グラフ縮約案（置換済み）](./releases/2026-08-03_graph_coarsening_visualization.md)
 - [designs/2026-08-14_grasp_contact_activation_lookup.md](./designs/2026-08-14_grasp_contact_activation_lookup.md)
 
@@ -32,11 +32,11 @@
 1. 実際に進める順序がある作業は `TASK_LIST.md` に置く。
 2. まだ決め切っていない候補は `TASK_CANDIDATES.md` に置く。
 3. 仕様として固定した内容は `TECHNICAL_SPEC.md` に置く。
-4. 報告は[短い書式](RELEASE_NOTE_TEMPLATE.md)で「項目名: 値」を基本とし、補足は体言止め。節・表は必要時のみ。同じ作業の続報は既存ノートへ統合する。
+4. 作業報告の新規作成は明示依頼時のみ。[短い書式](RELEASE_NOTE_TEMPLATE.md)を使い、同じ作業の続報は既存文書へ統合する。編集・実験ごとの報告は作成しない。
 5. 仕様書の変数一覧、トピック一覧、フローチャートは実装と一致させる。
-6. 変更の影響が launch 引数、topic、service、message field に及ぶ場合は、必ず仕様書も更新する。
+6. 採用済み変更で launch 引数、topic、service、message field などの仕様・利用手順が古くなる場合は、該当する正本文書を更新する。
 7. 先行研究を調べたら `RELATED_WORK.md` に「手法 / 本プロジェクトとの差分 / 引用する場面」で追記する。
 8. 着想レベルで流用できる技術は `IDEA_NOTES.md` に 1 件ずつ短く登録する。
-9. 実施済みの事実と検証結果は `progress.md`、不採用・採用見送りの判断は `reject.md` に分離する。進捗には予定を書かず、不採用記録には判断根拠と再検討条件を残す。
+9. `progress.md` は明示依頼または引継ぎに必要な確定結果がある場合のみ更新。`reject.md` は長期的な判断に必要な不採用理由と再検討条件のみ。README更新や一時的な失敗は逐次記録しない。
 10. 詳細な記録先の選択は [作業記録スキル](../../skills/maintain-project-docs/SKILL.md) を参照する。
 11. 取り組む意向はあるが今は進めない作業は `pending.md` に置く。理由・完了済み範囲・再開条件・次の一手を残し、再開決定時に `TASK_LIST.md` へ移管する。本文の二重管理や既存タスクの自動的な保留扱いはしない。

@@ -79,7 +79,7 @@ flowchart TD
 
 特徴量受信時に16bit IDから特徴量への参照表、map受信時にIDから全該当ノード添字への参照表を更新。選択周期内での特徴量hash表再構築と、出力ノード抽出の全ノード走査を廃止。重複特徴量IDは最後の値を優先し、選択IDに対応する全ノードを元配列順で出力。参照表と入力スナップショットが不一致の場合は従来処理へフォールバック。18,729ノード・64bit環境では参照表の配列は約1.14 MiB。索引・出力バッファ・ROSメッセージのメモリは別。
 
-索引再利用の導入は[2026-09-15の記録](releases/2026-09-15_static_spatial_index.md)、移行時の比較は[初回bsp3d記録](releases/2026-09-24_bsp3d_migration.md)、差分更新・全体走査削減・同一プロセス比較は[追加高速化記録](releases/2026-09-24_goal_selection_efficiency.md)を参照。
+索引再利用の導入は[2026-09-15の記録](releases/2026-09-15_static_spatial_index.md)、移行時の比較は[初回bsp3d記録](../../benchmarks/bsp3d_migration_20260924/README.md)、差分更新・全体走査削減・同一プロセス比較は[追加高速化記録](../../benchmarks/goal_selection_efficiency_20260924/README.md)を参照。
 
 | 変数 | 型 | デフォルト | 用途 |
 |---|---:|---|---|

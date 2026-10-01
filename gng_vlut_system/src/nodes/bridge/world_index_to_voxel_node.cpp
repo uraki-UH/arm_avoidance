@@ -75,6 +75,8 @@ public:
     declare_parameter<std::string>("world_frame_id", "world");
     declare_parameter<std::string>("target_frame_id", "world");
     declare_parameter<bool>("allow_unconnected_source_as_world", false);
+    // 移動センサーの取得時刻不整合を避けるための最新TF代替許可
+    declare_parameter<bool>("allow_latest_transform", true);
     declare_parameter<bool>("enable_world_index", true);
     declare_parameter<bool>("enable_roi_query", true);
     declare_parameter<std::string>("world_bucket_topic", "/world_index/buckets");
@@ -323,6 +325,9 @@ private:
     }
     const bool has_cloud_stamp =
       msg.header.stamp.sec != 0 || msg.header.stamp.nanosec != 0;
+    if (!has_cloud_stamp && !get_parameter("allow_latest_transform").as_bool()) {
+      return false;
+    }
     try {
       const geometry_msgs::msg::TransformStamped transform = has_cloud_stamp
         ? tf_buffer_->lookupTransform(
@@ -331,7 +336,7 @@ private:
       source_to_target = tf2::transformToEigen(transform.transform);
       return true;
     } catch (const tf2::TransformException &) {
-      if (!has_cloud_stamp) {
+      if (!has_cloud_stamp || !get_parameter("allow_latest_transform").as_bool()) {
         return false;
       }
       try {

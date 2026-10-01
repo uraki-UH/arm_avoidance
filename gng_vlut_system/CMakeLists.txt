@@ -167,6 +167,7 @@ if(BUILD_TESTING)
   endif()
 
   ament_add_pytest_test(test_dual_arm_collision_geometry test/test_dual_arm_collision_geometry.py)
+  ament_add_pytest_test(test_dual_arm_depth_camera test/test_dual_arm_depth_camera.py)
   ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
   ament_add_pytest_test(test_gazebo_stop_keyboard test/test_gazebo_stop_keyboard.py)
   ament_add_pytest_test(test_dual_arm_mode_model test/test_dual_arm_mode_model.py)
