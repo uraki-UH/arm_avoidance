@@ -1,9 +1,17 @@
 /**:
   ros__parameters:
-    # 対象はID51・52固定。最小電流の試験用出力許可、実機安定性は未検証
+    # 対象はID51・52固定。実機の支持・独立停止手段が必要、安定性は未検証
     allow_hardware_output: true
     driver_namespace: /dynamixel
-    # 電流指令の絶対値上限 [mA]。順序はID51・52、機器の指令1刻み
+    # 合成電流指令の絶対値上限 [mA]。順序はID51・52、ユーザー設定値
     max_current_ma: [200.0,  200.0]
-    # 速度に対する抵抗電流係数 [mA/(rad/s)]。0.1 rad/s付近で指令1刻みの試験設定
+    # 速度に対する抵抗電流係数 [mA/(rad/s)]。順序はID51・52
     damping_gain: [50, 50]
+    # 実機の補償係数未測定につき無効。静止時支持には係数設定後の有効化が必要
+    enable_gravity_compensation: false
+    # モータ角度q [rad]に対する支持電流 [mA]: cos係数*cos(q) + sin係数*sin(q)
+    # 順序はID51・52、符号を含む実機校正値。URDF関節角度とは別のモータ座標
+    gravity_cos_ma: [0.0, 0.0]
+    gravity_sin_ma: [0.0, 0.0]
+    # ON報告後の重力補償立上げ時間 [sec]。減衰項・終了時OFFは対象外
+    gravity_ramp_sec: 1.0

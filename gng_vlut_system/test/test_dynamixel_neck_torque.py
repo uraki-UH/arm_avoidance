@@ -22,11 +22,14 @@ def rig(monkeypatch):
     node.driver = '/dynamixel'
     node.state, node.stage_sec, node.has_owned_output = 'waiting', 100., False
     node.max_current, node.gains = [20., 30.], [10., 20.]
+    node.enable_gravity_compensation = False
+    node.gravity_cos_ma, node.gravity_sin_ma = [0., 0.], [0., 0.]
+    node.gravity_ramp_sec = 1.
     node.status = {motor_id: (False, False, True, 'current') for motor_id in node.ids}
     node.extra = {motor_id: (1020, False, False) for motor_id in node.ids}
     node.goals = {motor_id: (3000.,) for motor_id in node.ids}
     node.status_sec = node.extra_sec = node.goal_sec = 100.
-    node.joints = {motor_id: (100_000_000_000, 0.) for motor_id in node.ids}
+    node.joints = {motor_id: (100_000_000_000, 0., 0.) for motor_id in node.ids}
     node.goal_pub, node.torque_pub = Mock(), Mock()
     node.goal_pub.get_subscription_count.return_value = 1
     node.torque_pub.get_subscription_count.return_value = 1
@@ -48,16 +51,53 @@ def test_current_is_dissipative_quantized_and_bounded(velocity, limit):
 
 
 @pytest.mark.parametrize('velocity', [-.2, -.05, 0., .05, .2])
-def test_min_current_trial_yaml(velocity):
-    """配備用試験設定の指令1刻み制限と低速時ゼロ電流。"""
+def test_configured_damping_current(velocity):
+    """ユーザー調整値に依存しない合成上限・減衰方向の確認。"""
     path = Path(__file__).resolve().parents[1] / 'config/dynamixel_neck_torque.yaml'
     config = yaml.safe_load(path.read_text())['/**']['ros__parameters']
-    assert config['allow_hardware_output'] is True
-    assert config['max_current_ma'] == [2.69, 2.69]
-    assert config['damping_gain'] == [26.9, 26.9]
-    for gain, limit in zip(config['damping_gain'], config['max_current_ma']):
+    gains = module.numeric_pair(config['damping_gain'], 'damping_gain')
+    limits = module.numeric_pair(config['max_current_ma'], 'max_current_ma')
+    for gain, limit in zip(gains, limits):
         value = module.damping_current(velocity, gain, limit)
-        assert value == (0. if abs(velocity) < .1 else math.copysign(2.69, -velocity))
+        assert abs(value) <= limit and value * velocity <= 0.
+        if velocity == 0:
+            assert value == 0.
+
+
+@pytest.mark.parametrize('values', [[50, 50], [50., 50.], [50, 50.]])
+def test_numeric_pair_accepts_integer_and_float(values):
+    assert module.numeric_pair(values, 'test') == [50., 50.]
+
+
+@pytest.mark.parametrize('values', [[True, True], ['50', '50'], [math.nan, 0], [0, math.inf], [1], 50])
+def test_numeric_pair_rejects_invalid(values):
+    with pytest.raises(ValueError):
+        module.numeric_pair(values, 'test')
+
+
+def test_gravity_at_rest_ramp_angle_and_no_return_target(rig):
+    node, _ = rig
+    node.enable_gravity_compensation = True
+    node.gravity_cos_ma = [10.76, 0.]
+    node.gravity_sin_ma = [0., -21.52]
+    node.joints[52] = (100_000_000_000, 0., math.pi / 2)
+    assert node.control_currents(100.) == [0., 0.]
+    assert node.control_currents(100.5) == [5.38, -10.76]
+    assert node.control_currents(101.) == [10.76, -21.52]
+    node.joints[51] = (100_000_000_000, 0., math.pi)
+    assert node.control_currents(101.)[0] == -10.76
+    # 同じ実測角度・速度での履歴非依存。元姿勢への復帰目標なし
+    node.joints[51] = (100_000_000_000, 0., 0.)
+    assert node.control_currents(102.) == [10.76, -21.52]
+
+
+def test_gravity_and_damping_share_current_limit(rig):
+    node, _ = rig
+    node.enable_gravity_compensation = True
+    node.gravity_cos_ma = [20., -30.]
+    node.joints = {51: (100_000_000_000, -100., 0.), 52: (100_000_000_000, 100., 0.)}
+    values = node.control_currents(102.)
+    assert 0 < values[0] <= 20. and -30. <= values[1] < 0
 
 
 def test_zero_readback_before_torque_on_and_no_position_command(rig):
@@ -76,7 +116,7 @@ def test_zero_readback_before_torque_on_and_no_position_command(rig):
     clock.now = node.status_sec = 100.1
     node.step()
     assert node.state == 'running'
-    node.joints = {51: (100_100_000_000, 1.), 52: (100_100_000_000, -2.)}
+    node.joints = {51: (100_100_000_000, 1., 0.), 52: (100_100_000_000, -2., 0.)}
     node.step()
     values = node.goal_pub.publish.call_args.args[0].current_ma
     assert values[0] < 0 < values[1]

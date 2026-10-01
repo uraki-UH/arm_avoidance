@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ID51・52専用の電流制限付き粘性抵抗と、終了時のトルクOFF要求。"""
+"""ID51・52専用の電流制限付き重力補償・粘性抵抗と終了時OFF要求。"""
 import ctypes
 import math
 import os
@@ -15,9 +15,18 @@ from dynamixel_handler_msgs.msg import DynamixelExtra, DynamixelGoal, DynamixelS
 from sensor_msgs.msg import JointState
 
 
-def damping_current(velocity, gain, max_current):
-    """モータ座標速度と逆向きの電流[mA]。2.69 mA刻み・絶対値切捨て。"""
-    value = max(-max_current, min(max_current, -gain * velocity))
+def numeric_pair(values, name):
+    """整数・小数配列の共通化。ID51・52の有限な数値2要素。"""
+    if (not hasattr(values, '__len__') or len(values) != 2
+            or any(isinstance(v, bool) or not isinstance(v, (int, float))
+                   or not math.isfinite(v) for v in values)):
+        raise ValueError(f'{name}: ID51・52の有限な数値2要素が必要です')
+    return [float(v) for v in values]
+
+
+def damping_current(velocity, gain, max_current, gravity_current=0.):
+    """補償と減衰の合成電流[mA]。2.69 mA刻み・絶対値切捨て。"""
+    value = max(-max_current, min(max_current, gravity_current - gain * velocity))
     return math.copysign(math.floor(abs(value) / 2.69) * 2.69, value)
 
 
@@ -28,10 +37,20 @@ class neck_torque(Node):
         super().__init__('dynamixel_neck_torque')
         # 起動時の設定固定。パラメータ表示だけ変更された状態の防止
         fixed = ParameterDescriptor(read_only=True)
+        numeric = ParameterDescriptor(read_only=True, dynamic_typing=True)
         self.driver = self.declare_parameter('driver_namespace', '/dynamixel', fixed).value.rstrip('/')
         allow_output = self.declare_parameter('allow_hardware_output', False, fixed).value
-        self.max_current = self.declare_parameter('max_current_ma', [0.0, 0.0], fixed).value
-        self.gains = self.declare_parameter('damping_gain', [0.0, 0.0], fixed).value
+        def pair(name):
+            return numeric_pair(self.declare_parameter(name, [0.0, 0.0], numeric).value, name)
+        self.max_current = pair('max_current_ma')
+        self.gains = pair('damping_gain')
+        self.enable_gravity_compensation = self.declare_parameter('enable_gravity_compensation', False, fixed).value
+        self.gravity_cos_ma = pair('gravity_cos_ma')
+        self.gravity_sin_ma = pair('gravity_sin_ma')
+        self.gravity_ramp_sec = self.declare_parameter('gravity_ramp_sec', 1.0, numeric).value
+        if (isinstance(self.gravity_ramp_sec, bool) or not isinstance(self.gravity_ramp_sec, (int, float))
+                or not math.isfinite(self.gravity_ramp_sec) or self.gravity_ramp_sec <= 0):
+            raise ValueError('gravity_ramp_sec: 正の有限値が必要です')
         if self.get_parameter('use_sim_time').value:
             raise ValueError('実機監視にはuse_sim_time=falseが必要です')
         if not allow_output:
@@ -40,6 +59,10 @@ class neck_torque(Node):
                 or any(not math.isfinite(v) or v < 2.69 for v in self.max_current)
                 or any(not math.isfinite(v) or v <= 0 for v in self.gains)):
             raise ValueError('ID51・52それぞれのmax_current_maとdamping_gainの設定が必要です')
+        if self.enable_gravity_compensation:
+            amplitudes = [math.hypot(c, s) for c, s in zip(self.gravity_cos_ma, self.gravity_sin_ma)]
+            if not any(amplitudes) or any(a > limit for a, limit in zip(amplitudes, self.max_current)):
+                raise ValueError('重力補償係数が未設定、または補償振幅がmax_current_maを超えています')
         if not self.driver.startswith('/') or self.driver == '':
             raise ValueError('driver_namespaceには絶対名前空間が必要です')
         self.state = 'waiting'
@@ -67,7 +90,7 @@ class neck_torque(Node):
                 continue
             motor_id = int(name)
             if stamp > self.joints.get(motor_id, (-1, 0.))[0]:
-                self.joints[motor_id] = (stamp, velocity)
+                self.joints[motor_id] = (stamp, velocity, position)
 
     def read_rows(self, ids, *columns):
         if len(set(ids)) != len(ids) or any(len(column) != len(ids) for column in columns):
@@ -109,7 +132,7 @@ class neck_torque(Node):
             torque, error, ping, mode = self.status[motor_id]
             model, auto_torque, reverse = self.extra[motor_id]
             if error or not ping or mode != 'current':
-                raise ValueError(f'ID{motor_id}: エラーなし・通信正常・currentモードが必要（モードの自動変更なし）')
+                raise ValueError(f'ID{motor_id}: mode={mode}, error={error}, ping={ping}（必要: current・エラーなし・通信正常）')
             if model != 1020 or auto_torque or reverse:
                 raise ValueError(f'ID{motor_id}: XM430-W350・Goal更新時自動ON無効・Reverse無効が必要')
         for topic, _ in self.get_topic_names_and_types():
@@ -156,8 +179,9 @@ class neck_torque(Node):
                 raise ValueError('トルクON準備中のゼロ電流目標の逸脱')
             self.send_current([0., 0.])
             if self.status_sec > self.stage_sec and all(self.status[motor_id][0] for motor_id in self.ids):
-                self.state = 'running'
-                self.get_logger().info('ID51・52: 電流抵抗ON | Ctrl+C: トルクOFF | 重力保持なし')
+                self.state, self.stage_sec = 'running', now
+                mode = '重力補償＋減衰' if self.enable_gravity_compensation else '減衰のみ（静止時0 mA）'
+                self.get_logger().info(f'ID51・52: {mode} | Ctrl+C: トルクOFF')
             elif now - self.stage_sec > 3.:
                 raise ValueError('トルクON報告の待機時間超過')
             return
@@ -166,8 +190,20 @@ class neck_torque(Node):
                 raise ValueError('運転中のトルクOFF。自動再開なし')
             if any(abs(self.goals[motor_id][0]) > limit + .01 for motor_id, limit in zip(self.ids, self.max_current)):
                 raise ValueError('電流目標の上限逸脱')
-            self.send_current([damping_current(self.joints[motor_id][1], gain, limit)
-                               for motor_id, gain, limit in zip(self.ids, self.gains, self.max_current)])
+            self.send_current(self.control_currents(now))
+
+    def control_currents(self, now):
+        """モータ角度の重力項と減衰。目標姿勢・積分・自動増量なし。"""
+        ramp = min(1., max(0., (now - self.stage_sec) / self.gravity_ramp_sec))
+        values = []
+        for idx, motor_id in enumerate(self.ids):
+            _, velocity, position = self.joints[motor_id]
+            gravity = 0.
+            if self.enable_gravity_compensation:
+                gravity = ramp * (self.gravity_cos_ma[idx] * math.cos(position)
+                                  + self.gravity_sin_ma[idx] * math.sin(position))
+            values.append(damping_current(velocity, self.gains[idx], self.max_current[idx], gravity))
+        return values
 
     def stop_output(self):
         """通常・異常終了時のゼロ電流とOFFの再送。状態報告は機器キャッシュを含む。"""
@@ -219,7 +255,7 @@ def main():
                 node.step()
                 next_tick = time.monotonic() + .02
     except Exception as error:
-        print('首トルク停止: ' + str(error), flush=True)
+        rclpy.logging.get_logger('dynamixel_neck_torque').error('首トルク停止: ' + str(error))
         result = 1
     finally:
         try:

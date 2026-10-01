@@ -1,4 +1,4 @@
-"""ID51・52専用の電流抵抗。終了時のゼロ電流・トルクOFF要求。"""
+"""ID51・52専用の重力補償・減衰。終了時のゼロ電流・トルクOFF要求。"""
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
@@ -13,7 +13,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     config = Path(get_package_share_directory('gng_vlut_system')) / 'config/dynamixel_neck_torque.yaml'
     node = Node(package='gng_vlut_system', executable='dynamixel_neck_torque.py',
-                output='screen', parameters=[LaunchConfiguration('config_file'), {'use_sim_time': False}],
+                output='both', parameters=[LaunchConfiguration('config_file'), {'use_sim_time': False}],
                 sigterm_timeout='5', sigkill_timeout='5')
     return LaunchDescription([
         DeclareLaunchArgument('config_file', default_value=str(config)),
