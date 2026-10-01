@@ -42,7 +42,13 @@ Gazebo開始姿勢: 左肩`L_joint1 = −π/4 rad`（−45°）、ほかの独�
 
 停止マージンの設定箇所: [pointcloud_avoidance_common.yaml](../config/pointcloud_avoidance_common.yaml)の`clearance_margins`。点群の開始・停止・経路下限を`min_clearance_th`へ統一。自己干渉・床・作業台の停止余裕は`min_internal_clearance_th`、計画時の内部余裕は`min_planning_clearance_th`。現在値は順に10・5・10 mm。[適用範囲と移行方法](pointcloud_avoidance.md)。
 
-実環境入力設定の点群待機: `viewer_environment_gazebo_input.yaml`は`enable_obstacle_auto_resume: true`。実行中の点群余裕不足では`obstacle_wait`へ移行し、その時点の姿勢を保持。点群余裕50 mmとGNG最寄り・直接隣接の安全が`resume_clear_sec: 0.3`秒継続後、B・Aの再操作なしで同じ回避実行を再開。復帰先は当初Aで保存した姿勢。端末表示は`回避=障害物待ち（離れたら自動再開）`。Space・入力失効・自己干渉・関節異常は従来の停止ラッチ対象、B解除後にAで明示再開。開始時点での距離不足は引き続き拒否。既存の`software_stop`の自動解除はなく、変更反映はGazebo launch再起動後。
+回避実行中の点群接近: `obstacle_wait`で接近時の姿勢保持。自動再開設定によらず、距離不足だけでは`software_stop`への移行なし。
+
+- 自動再開ON: `viewer_environment_gazebo_input.yaml`の`enable_obstacle_auto_resume: true`。点群余裕50 mm・GNG最寄りと直接隣接の安全が0.3秒継続後、同じ回避実行の再開。復帰先は当初Aで保存した姿勢
+- 自動再開OFF: 保持継続。Aでホールド→点群余裕の回復→Aで新規回避開始。Bによる停止解除は不要
+- Space・入力失効・自己干渉・関節異常: 停止ラッチの維持。B解除後、Aで明示再開
+
+開始時の距離不足: 引き続き拒否。既存停止ラッチの自動解除なし。変更反映: Gazebo launchの再起動。
 
 現時点の制限: 隣接安全ラベルと実測点群の近接が一致しない試験ケースあり。固定距離条件の修正だけで回避・復帰の通し成功を保証する状態ではない。[失敗条件・速度測定](releases/2026-10-01_avoidance_latency.md)。
 

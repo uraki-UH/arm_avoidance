@@ -11,7 +11,8 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
-from dual_arm_gng_lidar_demo import gng_path_search, gng_lidar_demo
+from dual_arm_gng_lidar_demo import gng_lidar_demo
+from gng_avoidance_planner import gng_avoidance_policy
 from dual_arm_avoidance_geometry import robot_geometry
 from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
 from std_msgs.msg import UInt16MultiArray
@@ -79,9 +80,9 @@ class test_gng_lidar_path(unittest.TestCase):
         self.assertEqual(search.plan(.2), [])
 
     def make_search(self):
-        search = gng_path_search()
-        search.enable_native_planner = False
+        search = gng_avoidance_policy()
         search.geometry = test_geometry()
+        search.max_home_error_th = .015
         search.home = np.zeros(1)
         search.positions = np.array([-1.])
         search.arm_indices = [0]
@@ -179,7 +180,7 @@ class test_gng_lidar_path(unittest.TestCase):
             search.has_inter_arm_rejection = True
             return False
         search.can_bridge = reject_after_deadline
-        with patch('dual_arm_gng_lidar_demo.time.monotonic', side_effect=lambda: elapsed[0]):
+        with patch('gng_avoidance_planner.time.monotonic', side_effect=lambda: elapsed[0]):
             result = search.plan_with_coordination(.9)
         self.assertTrue(search.has_timed_out)
         np.testing.assert_array_equal(result['active_angle_indices'], [0])

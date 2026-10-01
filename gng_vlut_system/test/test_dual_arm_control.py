@@ -246,6 +246,24 @@ def test_external_stop_overrides_mode_operation(control):
     assert control.future is not None
 
 
+def test_obstacle_wait_does_not_request_software_stop(control):
+    control.model.mode = 'avoidance'
+    control.on_demo(String(data='{"state":"running","phase":"obstacle_wait","run_generation":1}'))
+    control.tick()
+    assert control.model.mode == 'avoidance' and control.phase == 'idle'
+    assert not control.is_stop_required
+    control.service_clients['safety/stop'].call_async.assert_not_called()
+
+
+def test_fault_during_obstacle_wait_still_requests_software_stop(control):
+    control.model.mode = 'avoidance'
+    control.on_demo(String(data='{"state":"fault","phase":"obstacle_wait","run_generation":1,"error":"入力失効"}'))
+    control.tick()
+    assert control.model.mode == 'stopped' and control.is_stop_required
+    assert '入力失効' in control.detail
+    control.service_clients['safety/stop'].call_async.assert_called_once()
+
+
 @pytest.mark.parametrize('phase', ['idle', 'switch_stop_demo', 'switch_settle',
                                   'switch_start_demo', 'switch_wait_running'])
 def test_safety_expiry_blocks_hold_and_pending_mode_switch(control, phase):

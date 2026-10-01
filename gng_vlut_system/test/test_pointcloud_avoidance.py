@@ -15,7 +15,8 @@ sys.path.insert(0, str(share / 'scripts'))
 sys.path.insert(0, str(share / 'launch'))
 from pointcloud_avoidance_config import load_config, gng_angle_num, resolve_clearance_margins
 from dual_arm_avoidance_geometry import robot_geometry
-from dual_arm_gng_lidar_demo import gng_path_search, gng_lidar_demo
+from dual_arm_gng_lidar_demo import gng_lidar_demo
+from gng_avoidance_planner import gng_path_search
 import dual_arm_lidar_setup as lidar_setup
 
 

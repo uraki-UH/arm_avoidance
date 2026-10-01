@@ -67,9 +67,9 @@ class avoidance_demo(Node):
                 raise ValueError(f'{key}は有限値が必要です')
         if self.config['min_clearance_th'] >= self.config['target_clearance']:
             raise ValueError('停止距離は目標余裕より小さい値が必要です')
-        self.enable_obstacle_auto_resume = self.config.get('enable_obstacle_auto_resume', False)
+        enable_obstacle_auto_resume = self.config.get('enable_obstacle_auto_resume', False)
         self.resume_clear_sec = self.config.get('resume_clear_sec', .3)
-        if type(self.enable_obstacle_auto_resume) is not bool or not np.isfinite(self.resume_clear_sec) or self.resume_clear_sec <= 0:
+        if type(enable_obstacle_auto_resume) is not bool or not np.isfinite(self.resume_clear_sec) or self.resume_clear_sec <= 0:
             raise ValueError('点群待機の自動再開には真偽値と有限正数の安全継続時間が必要です')
         self.obstacle_hold_positions = None
         self.clear_since_sec = None
@@ -220,17 +220,24 @@ class avoidance_demo(Node):
         """点群距離と入力鮮度以外の再開条件。派生クラスでのGNG照合用。"""
         return True
 
+    @property
+    def enable_obstacle_auto_resume(self):
+        """ライブ点群入力でのみ有効な自動再開設定。"""
+        return (self.config.get('enable_live_obstacles', False)
+                and self.config.get('enable_obstacle_auto_resume', False))
+
     def wait_for_obstacle(self, gap, centers, idx, closest):
-        """点群接近だけを対象とする固定姿勢保持と、余裕回復後の自動再開。"""
+        """障害物接近時の固定姿勢保持。ライブ入力・設定有効時だけの自動再開。"""
+        if self.phase != 'obstacle_wait' and gap >= self.config['min_clearance_th']:
+            return False
         if self.phase != 'obstacle_wait':
-            if gap >= self.config['min_clearance_th']:
-                return False
             self.phase = 'obstacle_wait'
             self.obstacle_hold_positions = self.positions.copy()
             self.clear_since_sec = None
             self.stop_clearance = clearance_snapshot(self, gap, centers, idx, closest, 'obstacle_wait')
         now = time.monotonic()
-        if gap >= self.config['target_clearance'] and self.can_resume_obstacle():
+        if (self.enable_obstacle_auto_resume
+                and gap >= self.config['target_clearance'] and self.can_resume_obstacle()):
             if self.clear_since_sec is None:
                 self.clear_since_sec = now
             if now-self.clear_since_sec >= self.resume_clear_sec:
@@ -331,6 +338,49 @@ class avoidance_demo(Node):
         return self.geometry.choose_step(self.positions, self.home, hand, elbow,
             self.config['arm_radius'], self.config['target_clearance'], step, self.min_planning_clearance_th)
 
+    def update_motion(self, gap, centers, idx, closest):
+        """実行中の安全確認・接近待機・周期軌道生成。異常・待機時の後続処理なし。"""
+        is_live = self.config.get('enable_live_obstacles', False)
+        self.min_observed_clearance = min(self.min_observed_clearance, gap)
+        if not is_live:
+            elbow = self.hand+np.array([self.config['arm_length'], 0, 0])
+            self.min_home_clearance = min(self.min_home_clearance,
+                self.geometry.clearance(self.home, self.hand, elbow, self.config['arm_radius'])[0])
+        self.max_excursion = max(self.max_excursion, float(np.max(np.abs(self.positions-self.home))))
+        if not self.geometry.has_internal_clearance(centers, self.config.get('min_internal_clearance_th', 0.005)):
+            self.fail('自己干渉・床・作業台の外接形状余裕不足')
+            return
+        if self.wait_for_obstacle(gap, centers, idx, closest):
+            return
+        desired = None if is_live else self.scenario()
+        now_sec = self.get_clock().now().nanoseconds*1e-9
+        if self.state != 'running' or now_sec < self.next_control_sec:
+            return
+        self.next_control_sec = next_control_time(now_sec, self.next_control_sec, self.config['control_period_sec'])
+        # 障害物の次更新位置も含む保守的な接近先での評価
+        predicted_hand = None if is_live else (desired if desired[0] < self.hand[0] else self.hand)
+        predicted_elbow = None if is_live else predicted_hand+np.array([self.config['arm_length'], 0, 0])
+        step = quintic_max_step(self.config['max_joint_velocity'], self.config['control_period_sec'])
+        target, has_candidate = self.select_target(predicted_hand, predicted_elbow, step)
+        if not has_candidate:
+            self.fail('退避候補なし')
+            return
+        self.publish_target(target)
+        self.update_obstacle(desired)
+
+    def update_visualization(self, gap, centers, idx, closest):
+        """実測軌跡と最接近マーカーの更新。停止中も含む観測結果の表示。"""
+        for name, trail in self.trails.items():
+            points = centers[[i for i, shape in enumerate(self.geometry.spheres) if shape[0] == name]]
+            if not len(points):
+                continue
+            point = points.mean(axis=0)
+            if not trail or np.linalg.norm(point-trail[-1]) > .003:
+                trail.append(point)
+                del trail[:-250]
+        self.last_visual = (gap, centers[idx], closest, self.geometry.radii[idx])
+        self.publish_markers(*self.last_visual)
+
     def tick(self):
         began = time.monotonic()
         self.update_obstacle(None)
@@ -342,62 +392,23 @@ class avoidance_demo(Node):
         if self.state == 'running' and not self.is_fresh():
             self.fail('実測関節または障害物情報の失効: '+self.freshness_detail())
         if self.is_fresh():
-            is_live = self.config.get('enable_live_obstacles', False)
             gap, centers, idx, closest = self.observe_clearance()
             if self.state == 'running':
-                self.min_observed_clearance = min(self.min_observed_clearance, gap)
-                if not is_live:
-                    elbow = self.hand+np.array([self.config['arm_length'], 0, 0])
-                    self.min_home_clearance = min(self.min_home_clearance,
-                        self.geometry.clearance(self.home, self.hand, elbow, self.config['arm_radius'])[0])
-                self.max_excursion = max(self.max_excursion, float(np.max(np.abs(self.positions-self.home))))
-                if not self.geometry.has_internal_clearance(centers, self.config.get('min_internal_clearance_th', 0.005)):
-                    self.fail('自己干渉・床・作業台の外接形状余裕不足')
-                elif (is_live and self.config.get('enable_obstacle_auto_resume', False)
-                      and self.wait_for_obstacle(gap, centers, idx, closest)):
-                    pass
-                elif gap < self.config['min_clearance_th']:
-                    # 停止後の入力更新とは独立した、停止瞬間の最接近情報
-                    link = self.geometry.spheres[idx][0]
-                    self.stop_clearance = clearance_snapshot(self, gap, centers, idx, closest, 'running_stop')
-                    self.fail(f'点群との停止距離に到達: {link} {gap*1000:.1f} mm '
-                              f'(基準 {self.config["min_clearance_th"]*1000:.1f} mm)')
-                else:
-                    desired = None if is_live else self.scenario()
-                    if is_live and not self.config.get('enable_native_planner', False):
-                        self.phase = 'live_pointcloud'
-                    now_sec = self.get_clock().now().nanoseconds*1e-9
-                    if self.state == 'running' and now_sec >= self.next_control_sec:
-                        self.next_control_sec = next_control_time(
-                            now_sec, self.next_control_sec, self.config['control_period_sec'])
-                        # 障害物の次更新位置も含む保守的な接近先での評価
-                        predicted_hand = None if is_live else (desired if desired[0] < self.hand[0] else self.hand)
-                        predicted_elbow = None if is_live else predicted_hand+np.array([self.config['arm_length'], 0, 0])
-                        step = quintic_max_step(self.config['max_joint_velocity'], self.config['control_period_sec'])
-                        target, has_candidate = self.select_target(predicted_hand, predicted_elbow, step)
-                        if not has_candidate:
-                            self.fail('退避候補なし')
-                        else:
-                            self.publish_target(target)
-                            self.update_obstacle(desired)
-            for name, trail in self.trails.items():
-                points = centers[[i for i, shape in enumerate(self.geometry.spheres) if shape[0] == name]]
-                if not len(points):
-                    continue
-                point = points.mean(axis=0)
-                if not trail or np.linalg.norm(point-trail[-1]) > .003:
-                    trail.append(point)
-                    del trail[:-250]
-            self.last_visual = (gap, centers[idx], closest, self.geometry.radii[idx])
-            self.publish_markers(*self.last_visual)
+                self.update_motion(gap, centers, idx, closest)
+            self.update_visualization(gap, centers, idx, closest)
         elif self.last_visual is not None:
             self.publish_markers(*self.last_visual, is_stale=True)
+        self.publish_status(gap, began)
+
+    def publish_status(self, gap, began):
+        """実行状態・停止時形状・入力鮮度の周期通知。"""
         def finite(value):
             return float(value) if np.isfinite(value) else None
         self.status.publish(String(data=json.dumps({
             'state': self.state, 'phase': self.phase, 'error': self.error,
             'run_generation': self.run_generation, 'run_start_stamp_sec': self.run_start_stamp_sec,
             'is_stop_latched': self.is_stop_latched,
+            'enable_obstacle_auto_resume': self.enable_obstacle_auto_resume,
             'side': self.config['sides'][min(self.side_idx, len(self.config['sides'])-1)],
             'clearance_m': gap, 'min_clearance_m': finite(self.min_observed_clearance),
             'stop_clearance': self.stop_clearance,

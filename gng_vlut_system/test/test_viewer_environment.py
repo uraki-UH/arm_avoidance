@@ -134,129 +134,24 @@ def test_stamped_states_preserve_freshness_and_topology(receiver):
         assert receiver.graph_time == received and receiver.labels == {9: 2, 12: 3}
 
 
-def test_native_target_validation_and_joint_order(receiver):
-    receiver.arm_names, receiver.arm_indices = ['neck', 'waist'], [1, 0]
-    receiver.geometry.limits = np.array([[-1., 1.], [-2., 2.]])
-    receiver.native_target_stamp, receiver.native_target_time = -1, 0.
-    receiver.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=time.time_ns()))
-    message = stamp(JointState(name=['waist', 'neck'], position=[.2, .7]))
-    receiver.on_native_target(message)
-    np.testing.assert_allclose(receiver.native_target, [.7, .2])
-    received = receiver.native_target_time
-    receiver.on_native_target(stamp(message, 2.))
-    assert receiver.native_target_time == received
-    for names, values in [(['neck'], [.7]), (['neck', 'waist'], [float('nan'), .2]),
-                          (['neck', 'waist'], [.7, 1.1]), (['neck', 'neck'], [.7, .8])]:
-        receiver.on_native_target(stamp(JointState(name=names, position=values)))
-        assert receiver.native_target is None
-
-
-def test_native_target_step_limit_and_collision_fallback():
-    target = SimpleNamespace(positions=np.zeros(3), home=np.zeros(3), native_target=np.array([.8]),
-        arm_indices=[1], config={'min_cloud_clearance_th': .015, 'min_retreat_dist_th': .3, 'target_clearance': .1},
-        select_active_arms=lambda: np.array([0]), cloud_clearance=lambda value: (.05+value[1], None),
-        can_bridge=lambda *args: True, num_selected_gng=0, native_node_path=[1, 2],
-        has_safe_first_neighbors=lambda: False,
-        refine_target=lambda step: (np.array([0., -step, 0.]), True))
-    value, has_target = gng_lidar_demo.select_native_target(target, .032)
-    assert has_target and target.num_selected_gng == 1
-    np.testing.assert_allclose(value, [0., .032, 0.])
-    target.can_bridge = lambda *args: False
-    value, has_target = gng_lidar_demo.select_native_target(target, .032)
-    assert has_target
-    np.testing.assert_allclose(value, [0., -.032, 0.])
-    target.can_bridge = lambda *args: True
-    target.native_target = np.array([.0001])
-    value, has_target = gng_lidar_demo.select_native_target(target, .032)
-    assert has_target
-    np.testing.assert_allclose(value, [0., .0001, 0.])
-    target.has_safe_first_neighbors = lambda: True
-    value, has_target = gng_lidar_demo.select_native_target(target, .032)
-    assert has_target
-    np.testing.assert_allclose(value, [0., -.032, 0.])
-
-
-@pytest.mark.parametrize('label', [2, 3])
-@pytest.mark.parametrize('gap', [.07, .4])
-def test_neighbor_risk_drives_motion_without_cloud_clearance_increase(label, gap):
-    labels = {1: 1, 2: label}
-    target = SimpleNamespace(positions=np.array([.3, .2]), home=np.zeros(2),
-        native_target=np.array([.8, .7]), arm_indices=[0, 1], native_node_path=[2, 3], num_selected_gng=0,
-        max_home_error_th=.015,
-        config={'min_cloud_clearance_th': .015, 'min_clearance_th': .035, 'target_clearance': .1},
-        select_active_arms=lambda: np.array([0]), can_bridge=lambda *args: True,
-        cloud_clearance=lambda _: (gap, None),
-        has_safe_first_neighbors=lambda: all(value == 1 for value in labels.values()),
-        refine_target=lambda step: (np.array([.3, .2]), True))
-    value, is_valid = gng_lidar_demo.select_native_target(target, .032)
-    assert is_valid and target.phase == 'avoiding'
-    np.testing.assert_allclose(value, [.332, .232])
-    # 隣接危険であっても、経路の停止余裕不足は許可対象外
-    target.can_bridge = lambda *args: False
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    np.testing.assert_allclose(value, [.3, .2])
-
-
-def test_native_avoid_wait_return_and_monitor_cycle():
-    gaps = {'current': .07, 'home': .03}
-    labels = {1: 1, 2: 3}
-    target = SimpleNamespace(positions=np.array([.3]), home=np.array([0.]),
-        native_target=np.array([.8]), arm_indices=[0], native_node_path=[2, 3], num_selected_gng=0,
-        max_home_error_th=.015,
-        config={'min_cloud_clearance_th': .015, 'min_clearance_th': .035, 'target_clearance': .1,
-                'return_clear_sec': 0.},
-        select_active_arms=lambda: np.array([0]), can_bridge=lambda *args: gaps['home'] > .035,
-        has_safe_first_neighbors=lambda: all(label == 1 for label in labels.values()),
-        refine_target=lambda step: (np.array([.3+step]), True))
-    target.cloud_clearance = lambda value: (
-        gaps['home'] if np.allclose(value, target.home) else gaps['current']+.2*(value[0]-target.positions[0]), None)
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'avoiding' and value[0] > .3
-    gaps.update(current=.15, home=.06)
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'avoiding' and value[0] > .3
-    labels[2] = 1
-    gaps['home'] = .03
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'waiting_for_clearance' and value[0] == .3
-    gaps['home'] = .06
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'returning' and value[0] == pytest.approx(.268)
-    gaps['current'] = .07
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'returning' and value[0] == pytest.approx(.268)
-    target.positions[:] = 0.
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'monitoring' and value[0] == 0.
-    gaps.update(current=.07, home=.07)
-    labels[2] = 2
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'avoiding' and value[0] > 0.
-    # 点群距離による対象腕なしの場合も、隣接危険からの退避を継続
-    target.select_active_arms = lambda: np.array([], dtype=int)
-    gaps.update(current=.4, home=.4)
-    value, _ = gng_lidar_demo.select_native_target(target, .032)
-    assert target.phase == 'avoiding' and value[0] > 0.
-
-
 def test_first_neighbors_use_measured_angles_and_reject_unknown_labels():
     from scipy.spatial import cKDTree
     target = SimpleNamespace(positions=np.array([.01]), arm_indices=[0],
         angle_tree=cKDTree([[0.], [1.], [2.]]), angle_node_ids=(10, 20, 30),
         adjacency={10: [20], 20: [10, 30], 30: [20]}, labels={10: 1, 20: 1, 30: 3})
-    assert gng_lidar_demo.has_safe_first_neighbors(target)
+    assert gng_lidar_demo.has_safe_measured_neighbors(target)
     assert target.current_node_id == 10
     target.positions[:] = .95
-    assert not gng_lidar_demo.has_safe_first_neighbors(target)
+    assert not gng_lidar_demo.has_safe_measured_neighbors(target)
     target.labels[30] = 1
-    assert gng_lidar_demo.has_safe_first_neighbors(target)
+    assert gng_lidar_demo.has_safe_measured_neighbors(target)
     for label in (2, 3, 0):
         target.labels[10] = label
-        assert not gng_lidar_demo.has_safe_first_neighbors(target)
+        assert not gng_lidar_demo.has_safe_measured_neighbors(target)
     del target.labels[10]
-    assert not gng_lidar_demo.has_safe_first_neighbors(target)
+    assert not gng_lidar_demo.has_safe_measured_neighbors(target)
     target.labels.update({10: 1, 20: 2})
-    assert not gng_lidar_demo.has_safe_first_neighbors(target)
+    assert not gng_lidar_demo.has_safe_measured_neighbors(target)
 
 
 def test_real_pose_requires_all_joints_and_fresh_measurements(receiver):

@@ -37,7 +37,9 @@ def gazebo_status_label(latest, received, now):
         state = {'waiting': '準備中', 'idle': '開始待ち', 'running': '実行中',
                  'completed': '完了', 'stopped': '開始待ち', 'fault': '異常'}.get(state, state or '不明')
         if latest.get('demo', {}).get('state') == 'running' and latest['demo'].get('phase') == 'obstacle_wait':
-            state = '障害物待ち（離れたら自動再開）'
+            state = ('障害物待ち（離れたら自動再開）'
+                     if latest['demo'].get('enable_obstacle_auto_resume') is True
+                     else '障害物待ち（Aで保持へ）')
     label = ' | '.join(part for part in (f'gazebo | mode={mode}', safety, f'回避={state}') if part)
     if mode == 'stop':
         # 停止理由も同じ状態行へ集約。改行を含む詳細ログの端末展開なし

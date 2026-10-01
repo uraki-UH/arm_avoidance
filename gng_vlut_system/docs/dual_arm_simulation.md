@@ -234,6 +234,10 @@ longもmaxと同じ質量・慣性値を持つため、寸法変更に応じた�
 
 ## Gazeboのソフト停止
 
+回避実行中の障害物接近: `obstacle_wait`で接近時の姿勢保持。距離不足だけでは`safety/stop`・`software_stop`への移行なし。
+自動再開: ライブ点群入力かつ`enable_obstacle_auto_resume: true`の場合のみ、目標余裕・GNG安全条件の継続確認後に再開。それ以外はAでホールド→障害物を離す→Aで回避再開。人カプセルの自動接近デモは障害物移動も停止。
+Space・入力失効・自己干渉・関節異常: 停止ラッチの維持。以下は接近待機とは別の手動・異常停止API。
+
 対象: `bounded_gazebo_system`を使用するmax / max_longのシミュレーション。実機ドライバへの接続なし。
 検証状態: maxの保持中速度逸脱と通常回避デモの入力失効が未解決。[検証結果・制限](releases/2026-10-01_gazebo_software_stop.md)。
 

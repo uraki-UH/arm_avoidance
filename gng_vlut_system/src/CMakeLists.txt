@@ -133,14 +133,11 @@ add_executable(initial_joint_state_publisher_node nodes/self_recognition/initial
 add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_voxel_filter_node nodes/self_recognition/self_voxel_filter_node.cpp)
-# モデル・候補評価の共通実装と、計画専用／実行系の独立した起動入口
+# モデル・候補評価と把持用の計画専用入口
 add_library(topological_map_planning SHARED nodes/planning/topological_map_planning_node.cpp)
 target_link_libraries(topological_map_planning ${LIBS_ALL_CORE} ${EXTRA_LIBS} tinyxml2)
 ament_target_dependencies(topological_map_planning ${DEPS_ROS})
 install(TARGETS topological_map_planning DESTINATION lib)
-rclcpp_components_register_node(topological_map_planning
-  PLUGIN "robot_sim::planning::TopologicalMapAvoidanceNode"
-  EXECUTABLE topological_map_avoidance_node)
 rclcpp_components_register_node(topological_map_planning
   PLUGIN "robot_sim::planning::TopologicalMapPathPlannerNode"
   EXECUTABLE topological_map_path_planner_node)

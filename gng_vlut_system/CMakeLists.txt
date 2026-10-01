@@ -252,6 +252,8 @@ install(PROGRAMS
   scripts/dynamixel_sim_output.py
   scripts/dynamixel_sim_keyboard.py
   scripts/start_gazebo_physics.py
+  scripts/avoidance_motion.py
+  scripts/gng_avoidance_planner.py
   scripts/dual_arm_gng_lidar_demo.py
   scripts/external_pointcloud_bridge.py
   scripts/dual_arm_avoidance_demo.py

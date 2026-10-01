@@ -286,22 +286,6 @@ def launch_setup(context):
                 'stream_topic': '/viewer/internal/stream/robot'}]))
     if avoidance_config is not None and avoidance_config.get('enable_gng_vlut', False):
         actions.extend(sensor_helper.pipeline_nodes(params_path, params, namespace, avoidance_config, point_cloud_source))
-        if avoidance_config.get('enable_native_planner', False):
-            source = avoidance_config.get('pipeline', {}).get('external_environment', {})
-            actions.append(Node(package='gng_vlut_system', executable='topological_map_avoidance_node',
-                namespace=namespace, output='screen', parameters=[str(params_path), {
-                    'use_sim_time': True, 'joint_topic': '/'+namespace+'/joint_states',
-                    'topological_map_topic': source.get('graph_topic', '/'+namespace+'/Tmap_static'),
-                    'target_topic': '/'+namespace+'/native_avoidance_target',
-                    'trajectory_topic': '/'+namespace+'/plan_Tmap',
-                    'candidate_trajectory_topic': '/'+namespace+'/cand_Tmap',
-                    'candidate_metrics_topic': '/'+namespace+'/candidate_metrics',
-                    'goal_candidate_ids_topic': '/'+namespace+'/avoidance_goal_ids',
-                    'max_retreat_candidates': 32, 'robot_base_frame': namespace+'/'+root_link,
-                    'enable_safety_penalty': False,
-                    'publish_hz': 20.0, 'allow_zero_initial_joint_state': False,
-                    'publish_candidate_robot_preview': False, 'control_claim_enabled': False,
-                    'trial_mode': False, 'avoid_danger': True, 'allow_danger_goal': False}]))
     return actions
 
 

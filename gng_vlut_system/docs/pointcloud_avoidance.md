@@ -63,12 +63,13 @@ overrides:
 - `overrides`: 共通設定への辞書単位の上書き。模擬前腕の位置・寸法・接近時間、計画余裕、LiDAR位置・視野・解像度、ROIなどを機体寸法に合わせて指定。`sides`は障害物を置くY方向の符号で、関節グループ名とは独立。
 - ROI: 指定範囲に追加余白なし。床は既定ROIの外側で、形状による床・作業台との干渉検査を併用。
 - 退避条件: 点群の接近、または現在姿勢の最寄りGNGノード自身・直接隣接の危険／衝突。隣接安全を確認できない場合も保持・復帰への移行は禁止。グラフ側の危険に対する退避は計画対象関節全体で追従し、距離だけによる対象腕の縮小なし。各ステップの点群余裕増加は必須条件から除外、経路の最低余裕・自己干渉・関節制限の検査は継続。
-- 自律退避先: 自身と辺で直接つながる全隣接ノードが安全な候補へ限定。二次隣接は対象外。C++では安全条件で絞ってから候補数を制限し、移動中の退避先の隣接悪化は再選定。Pythonグラフ探索でも終点へ同条件を適用。安全な終点への脱出経路を確保するため、中間ノードには自身の安全を要求し、隣接までの安全は要求しない。
-- 回避・復帰のチャタリング抑制: 共通YAMLの`return_clear_sec: 0.5`で復帰条件の継続時間を指定（実時間の秒、0で待機無効）。C++計画接続では隣接安全・退避目標余裕・復帰経路の安全確認中は`waiting_for_clearance`で保持、継続成立後に復帰。Python単独計画にも既存復帰条件の継続確認を適用。危険再検出時の回避は待機なし。条件不成立・確認間隔の入力期限超過・停止・再開始で計測を初期化。`obstacle_wait`からの再開確認`resume_clear_sec`とは別設定。設定反映はGazebo launch再起動後。
+- 自律退避先: 自身と辺で直接つながる全隣接ノードが安全な候補へ限定。二次隣接は対象外。グラフ探索の終点へ同条件を適用し、移動中の退避先の隣接悪化は再選定。安全な終点への脱出経路を確保するため、中間ノードには自身の安全を要求し、隣接までの安全は要求しない。
+- 回避・復帰のチャタリング抑制: 共通YAMLの`return_clear_sec: 0.5`で復帰条件の継続時間を指定（実時間の秒、0で待機無効）。隣接安全・退避目標余裕・復帰経路の安全確認中は`waiting_for_clearance`で保持、継続成立後に復帰。復帰中の距離変化だけによる退避への反転なし。危険再検出時の回避は待機なし。条件不成立・確認間隔の入力期限超過・停止・再開始で計測を初期化。`obstacle_wait`からの再開確認`resume_clear_sec`とは別設定。設定反映はGazebo launch再起動後。
 - 停止マージンの正本: `config/pointcloud_avoidance_common.yaml`の`clearance_margins`。`min_clearance_th`は点群の開始・停止・待機・経路検査・QP下限（0.01 m）、`min_internal_clearance_th`は自己干渉・床・作業台の開始・停止余裕（0.005 m）、`min_planning_clearance_th`は計画・QP時の内部形状余裕（0.01 m）。計画余裕は内部停止余裕を確保する値、各値は有限正数。点群の経路下限`min_cloud_clearance_th`は自動導出、独立設定なし。`target_clearance`は退避目標・自動再開条件として別設定。
 - 設定移行: 新共通設定で旧トップレベルの距離項目を併記すると起動拒否。機体・入力固有の上書きも`clearance_margins`内に記載。共通launch以外の旧デモ設定は従来互換。変更反映はGazebo launch再起動後、稼働中への動的反映なし。
-- 点群経路検査: 指定の計画余裕と`min_clearance_th`の大きい方を区間サンプルの下限として使用。距離は外接球とボクセル外接球の間の保守的な余裕で、実物表面間の測距値とは別。距離不足による開始拒否・停止時は`avoidance/status.stop_clearance`へ事象・リンク・URDFルート座標の最接近点・距離・球半径・関節位置を保存。後続入力で上書きせず、次の回避開始成功時に初期化。開始拒否の事象は`start_rejected`、実行中の距離停止は`running_stop`。
-- 点群待機の自動再開: `enable_live_obstacles`と`enable_obstacle_auto_resume`の両方が有効な場合、点群距離不足を`obstacle_wait`で保持。`target_clearance`とGNG隣接安全の`resume_clear_sec`秒継続後に同じ実行を再開。共通既定はOFF、通常Viewerの実環境入力設定でON。手動停止・入力欠測・内部干渉・関節異常の解除は対象外。自己除去後ROIが空の場合も既存の入力待ち・欠測停止扱いを維持。
+- 点群経路検査: 指定の計画余裕と`min_clearance_th`の大きい方を区間サンプルの下限として使用。距離は外接球とボクセル外接球の間の保守的な余裕で、実物表面間の測距値とは別。距離不足による開始拒否・待機時は`avoidance/status.stop_clearance`へ事象・リンク・URDFルート座標の最接近点・距離・球半径・関節位置を保存。待機中の後続入力による上書きなし。次の待機移行時に再記録、回避開始成功時に初期化。事象は開始拒否が`start_rejected`、実行中の接近待機が`obstacle_wait`（旧`running_stop`から変更）。
+- 回避実行中の接近停止: 自動再開設定によらず`obstacle_wait`で固定姿勢保持。距離不足だけでは`fault`・`software_stop`への移行なし。`avoidance/status.enable_obstacle_auto_resume`で実効再開設定の確認。
+- 点群待機の自動再開: `enable_live_obstacles`と`enable_obstacle_auto_resume`の両方が有効な場合のみ、`target_clearance`とGNG隣接安全の`resume_clear_sec`秒継続後に同じ実行を再開。共通既定はOFF、通常Viewerの実環境入力設定でON。OFF時はAでホールド→余裕回復→Aで新規回避開始。手動停止・入力欠測・内部干渉・関節異常の解除は対象外。自己除去後ROIが空の場合も既存の入力待ち・欠測停止扱いを維持。
 
 実時間のRealSense点群による継続回避は[RealSense実点群を使うGazebo回避](realsense_gazebo.md)を参照。以下はシミュレーション時刻で既に配信されている外部点群の接続設定:
 
@@ -81,9 +82,37 @@ overrides:
 
 この場合、仮想LiDARとその固定TFの生成なし。外部配信側でPointCloud2のframeから`sim_<robot_name>/<root_link>`へのTF、シミュレーション時刻に整合する更新stampが必要。空点群・入力失効・探索失敗は停止扱い。
 
+## 回避の判定と動作部品
+
+| 管理場所 | 責務 |
+| --- | --- |
+| `scripts/avoidance_motion.py` | `motion_flags`、`select_motion`による優先順位、`motion_components`による動作差替え |
+| `scripts/gng_avoidance_planner.py` | GNG探索、対象腕選択、復帰継続時間、速度制限・区間安全検査 |
+| `scripts/dual_arm_gng_lidar_demo.py` | ROS入力・鮮度管理・探索プロセス・軌道出力・診断 |
+| `scripts/dual_arm_avoidance_demo.py` | 開始・停止ラッチ・異常停止・接近待機・実行監視 |
+
+判定フラグは毎回の観測から生成する読み取り専用値。設定ON/OFFの追加なし。
+`select_motion`は停止要求 → 入力不成立 → 対象関節なしの保持 → 退避 → 復帰待ち → 復帰／初期姿勢保持の順で選択。
+`motion_phase`は障害物シナリオの表示状態とは独立。診断トピック`avoidance/gng_status`に動作と判定フラグを出力。
+
+動作差替えはPythonコード上で`motion_components`へ関数を渡して構成。関数の引数は状態・対象関節だけを初期姿勢に戻した目標・最大関節ステップ、戻り値は目標姿勢・候補有無・GNG経路使用の3値。
+
+```python
+from dataclasses import replace
+
+controller.motion_components = replace(controller.motion_components, returning=my_return_target)
+```
+
+差替え口: `retreat`（退避）、`returning`（復帰）、`hold`（監視・復帰待ち）、`stop`（方策への停止要求）。部品は対象関節以外を実測姿勢に固定した目標を返す契約。目標生成後の形状・有限値検査、非対象関節固定、速度制限・経路安全検査は共通段。
+実行側のソフト停止ラッチは駆動側保持に委任し、目標生成部品から解除不可。入力失効・自己干渉の異常停止と`obstacle_wait`も実行監視側が優先。停止・復帰待ちへの移行時に旧経路と未採用探索結果を破棄。
+
+旧`topological_map_avoidance_node`・`topological_map_avoidance.launch.py`・`enable_native_planner`は廃止。Gazebo回避は共通Python方策へ統一。把持候補用`topological_map_path_planner_node`は計画専用として継続。既存installに残る旧ノードのリンクは、増分ビルドでは自動削除されないため注意。
+
+検証: パッケージビルド、動作選択・部品差替え・安全継続・停止復帰・環境入力の単体試験。変更後のGazebo通し動作は未検証。
+
 ## 局所QPによる出力補正（試験機能）
 
-実装: OSQP 1.0.4。GNG/V-LUTまたは既存C++の経路・目標選択を維持し、Gazebo軌道の出力直前に関節変位を補正。実機出力の許可設定・電流制限とは別機能。
+実装: OSQP 1.0.4。GNG/V-LUTの経路・目標選択を維持し、Gazebo軌道の出力直前に関節変位を補正。実機出力の許可設定・電流制限とは別機能。
 
 設定先: `pointcloud_avoidance_common.yaml`の`local_qp`。既定OFF。機体YAMLの`overrides.local_qp`または入力YAML直下の`local_qp`で上書き可能。通常のlaunch引数追加なし。
 

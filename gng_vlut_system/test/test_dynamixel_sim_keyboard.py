@@ -63,11 +63,19 @@ def test_stopped_demo_after_reset_means_start_wait():
 
 def test_obstacle_wait_is_distinct_from_manual_stop():
     latest = {'sim': {'mode': 'avoidance'}, 'safety': {'is_stop_latched': False},
-              'demo': {'state': 'running', 'phase': 'obstacle_wait'}}
+              'demo': {'state': 'running', 'phase': 'obstacle_wait', 'enable_obstacle_auto_resume': True}}
     label = gazebo_status_label(latest, dict.fromkeys(latest, 10.), 10.1)
     assert '回避=障害物待ち（離れたら自動再開）' in label
     assert '停止解除待ち' not in label
     assert '障害物待ち' not in gazebo_status_label(latest, dict.fromkeys(latest, 10.), 11.)
+
+
+def test_obstacle_wait_without_auto_resume_shows_hold_key():
+    latest = {'sim': {'mode': 'avoidance'}, 'safety': {'is_stop_latched': False},
+              'demo': {'state': 'running', 'phase': 'obstacle_wait', 'enable_obstacle_auto_resume': False}}
+    label = gazebo_status_label(latest, dict.fromkeys(latest, 10.), 10.1)
+    assert '回避=障害物待ち（Aで保持へ）' in label
+    assert '自動再開' not in label and '停止解除待ち' not in label
 
 
 def test_waiting_for_reset_is_visible_even_if_demo_is_stopped():
