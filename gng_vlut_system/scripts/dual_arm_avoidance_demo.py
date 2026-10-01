@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Gazebo実測姿勢と前腕カプセルによる局所退避・可視化デモ。"""
 import json
+import math
 from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
@@ -22,6 +23,26 @@ from visualization_msgs.msg import Marker, MarkerArray
 import yaml
 
 from dual_arm_avoidance_geometry import robot_geometry
+
+
+def clearance_snapshot(state, gap, centers, idx, closest, event):
+    """開始拒否・実行停止の瞬間の幾何情報。後続入力とは独立した値の保存。"""
+    return {
+        'event': event, 'link': state.geometry.spheres[idx][0], 'frame': state.geometry.root_link,
+        'clearance_m': float(gap), 'min_clearance_th': state.config['min_clearance_th'],
+        'robot_point': centers[idx].tolist(), 'obstacle_point': closest.tolist(),
+        'robot_radius_m': float(state.geometry.radii[idx]),
+        'joint_positions': dict(zip(state.geometry.joint_names, state.positions.tolist())),
+    }
+
+
+def next_control_time(now_sec, scheduled_sec, period_sec):
+    """絶対周期を維持した次回時刻。遅延区間のまとめ実行なし。"""
+    if scheduled_sec <= 0:
+        return now_sec+period_sec
+    if now_sec < scheduled_sec:
+        return scheduled_sec
+    return scheduled_sec+(math.floor((now_sec-scheduled_sec)/period_sec)+1)*period_sec
 
 
 class avoidance_demo(Node):
@@ -46,10 +67,19 @@ class avoidance_demo(Node):
                 raise ValueError(f'{key}は有限値が必要です')
         if self.config['min_clearance_th'] >= self.config['target_clearance']:
             raise ValueError('停止距離は目標余裕より小さい値が必要です')
+        self.enable_obstacle_auto_resume = self.config.get('enable_obstacle_auto_resume', False)
+        self.resume_clear_sec = self.config.get('resume_clear_sec', .3)
+        if type(self.enable_obstacle_auto_resume) is not bool or not np.isfinite(self.resume_clear_sec) or self.resume_clear_sec <= 0:
+            raise ValueError('点群待機の自動再開には真偽値と有限正数の安全継続時間が必要です')
+        self.obstacle_hold_positions = None
+        self.clear_since_sec = None
         # 物理追従のずれに対する、計画段階の内部形状余裕 [m]
         self.min_planning_clearance_th = self.config.get('min_planning_clearance_th', 0.005)
-        if not np.isfinite(self.min_planning_clearance_th) or self.min_planning_clearance_th < 0.005:
-            raise ValueError('計画時の内部形状余裕は停止判定の0.005 mを確保する値が必要です')
+        min_internal_clearance_th = self.config.get('min_internal_clearance_th', 0.005)
+        if not np.isfinite(min_internal_clearance_th) or min_internal_clearance_th <= 0:
+            raise ValueError('内部停止余裕には有限の正数が必要です')
+        if not np.isfinite(self.min_planning_clearance_th) or self.min_planning_clearance_th < min_internal_clearance_th:
+            raise ValueError('計画時の内部形状余裕は内部停止余裕を確保する値が必要です')
         if self.config['hand_far_x'] <= self.config['hand_near_x']:
             raise ValueError('接近開始位置と終点の順序が逆です')
         if not self.config['sides'] or any(side not in ('left', 'right') for side in self.config['sides']):
@@ -75,6 +105,7 @@ class avoidance_demo(Node):
         self.run_start_stamp_sec = 0.0
         self.next_control_sec = 0.0
         self.min_observed_clearance = float('inf')
+        self.stop_clearance = None
         self.min_home_clearance = float('inf')
         self.max_excursion = 0.0
         self.trails = {name: [] for name in self.config.get('trail_links', ['L_link7', 'R_link7'])}
@@ -149,21 +180,30 @@ class avoidance_demo(Node):
             response.success = False
             response.message = '実行中です'
             return response
-        if self.has_joint_limit_violation or not self.is_fresh() or not self.geometry.has_internal_clearance(self.geometry.centers(self.positions)):
+        if self.has_joint_limit_violation or not self.is_fresh() or not self.geometry.has_internal_clearance(
+                self.geometry.centers(self.positions), self.config.get('min_internal_clearance_th', 0.005)):
             response.success = False
             response.message = '関節・障害物の実測更新と初期姿勢の余裕が必要です'
             return response
-        gap = self.observe_clearance()[0]
+        gap, centers, idx, closest = self.observe_clearance()
         if gap <= self.config['min_clearance_th']:
+            self.stop_clearance = clearance_snapshot(self, gap, centers, idx, closest, 'start_rejected')
             response.success = False
-            response.message = '開始時の障害物距離が不足しています'
+            response.message = (f'開始時の点群余裕不足: {gap*1000:.1f} mm '
+                                f'(必要: {self.config["min_clearance_th"]*1000:.1f} mm超) '
+                                f'部位={self.geometry.spheres[idx][0]}')
             return response
         self.home = self.positions.copy()
+        self.obstacle_hold_positions = None
+        self.clear_since_sec = None
         self.state, self.error, self.side_idx = 'running', '', 0
+        self.phase = 'starting'
         self.run_generation += 1
         self.run_start_stamp_sec = self.last_ros_time * 1e-9
         self.start_sec = self.get_clock().now().nanoseconds*1e-9
+        self.next_control_sec = self.start_sec
         self.min_observed_clearance = float('inf')
+        self.stop_clearance = None
         self.min_home_clearance = float('inf')
         self.max_excursion = 0.0
         self.has_sent_hold = False
@@ -176,13 +216,41 @@ class avoidance_demo(Node):
             self.publish_target(self.positions)
             self.has_sent_hold = True
 
+    def can_resume_obstacle(self):
+        """点群距離と入力鮮度以外の再開条件。派生クラスでのGNG照合用。"""
+        return True
+
+    def wait_for_obstacle(self, gap, centers, idx, closest):
+        """点群接近だけを対象とする固定姿勢保持と、余裕回復後の自動再開。"""
+        if self.phase != 'obstacle_wait':
+            if gap >= self.config['min_clearance_th']:
+                return False
+            self.phase = 'obstacle_wait'
+            self.obstacle_hold_positions = self.positions.copy()
+            self.clear_since_sec = None
+            self.stop_clearance = clearance_snapshot(self, gap, centers, idx, closest, 'obstacle_wait')
+        now = time.monotonic()
+        if gap >= self.config['target_clearance'] and self.can_resume_obstacle():
+            if self.clear_since_sec is None:
+                self.clear_since_sec = now
+            if now-self.clear_since_sec >= self.resume_clear_sec:
+                self.phase = 'avoiding'
+                self.obstacle_hold_positions = None
+                self.clear_since_sec = None
+                return False
+        else:
+            self.clear_since_sec = None
+        # 停止位置の周期送信による回避指令監視の維持。近接時のQP退避指令への差替えなし
+        avoidance_demo.publish_target(self, self.obstacle_hold_positions)
+        return True
+
     def on_safety_stop(self, message):
         self.has_safety_state = True
         self.is_stop_latched = bool(message.data)
         if self.is_stop_latched:
             # 駆動側保持への委任。解除後も明示開始までのデモ停止維持
             self.enable_auto_start = False
-            self.state, self.phase, self.error = 'stopped', 'software_stop', ''
+            self.state, self.phase = 'stopped', 'software_stop'
 
     def on_stop(self, _request, response):
         if self.is_stop_latched:
@@ -198,6 +266,11 @@ class avoidance_demo(Node):
             self.get_logger().error(error)
         self.state, self.error = 'fault', error
         self.hold()
+
+    def freshness_detail(self):
+        now = time.monotonic()
+        return json.dumps({'joint_age_sec': now-self.joint_time,
+                           'obstacle_age_sec': now-self.obstacle_time}, ensure_ascii=False)
 
     def publish_target(self, target):
         if self.is_stop_latched:
@@ -267,7 +340,7 @@ class avoidance_demo(Node):
                 self.on_start(None, Trigger.Response())
         gap = None
         if self.state == 'running' and not self.is_fresh():
-            self.fail('実測関節または障害物情報の失効')
+            self.fail('実測関節または障害物情報の失効: '+self.freshness_detail())
         if self.is_fresh():
             is_live = self.config.get('enable_live_obstacles', False)
             gap, centers, idx, closest = self.observe_clearance()
@@ -278,17 +351,25 @@ class avoidance_demo(Node):
                     self.min_home_clearance = min(self.min_home_clearance,
                         self.geometry.clearance(self.home, self.hand, elbow, self.config['arm_radius'])[0])
                 self.max_excursion = max(self.max_excursion, float(np.max(np.abs(self.positions-self.home))))
-                if gap < self.config['min_clearance_th']:
-                    self.fail('デモ停止距離に到達')
-                elif not self.geometry.has_internal_clearance(centers):
+                if not self.geometry.has_internal_clearance(centers, self.config.get('min_internal_clearance_th', 0.005)):
                     self.fail('自己干渉・床・作業台の外接形状余裕不足')
+                elif (is_live and self.config.get('enable_obstacle_auto_resume', False)
+                      and self.wait_for_obstacle(gap, centers, idx, closest)):
+                    pass
+                elif gap < self.config['min_clearance_th']:
+                    # 停止後の入力更新とは独立した、停止瞬間の最接近情報
+                    link = self.geometry.spheres[idx][0]
+                    self.stop_clearance = clearance_snapshot(self, gap, centers, idx, closest, 'running_stop')
+                    self.fail(f'点群との停止距離に到達: {link} {gap*1000:.1f} mm '
+                              f'(基準 {self.config["min_clearance_th"]*1000:.1f} mm)')
                 else:
                     desired = None if is_live else self.scenario()
-                    if is_live:
+                    if is_live and not self.config.get('enable_native_planner', False):
                         self.phase = 'live_pointcloud'
                     now_sec = self.get_clock().now().nanoseconds*1e-9
                     if self.state == 'running' and now_sec >= self.next_control_sec:
-                        self.next_control_sec = now_sec+self.config['control_period_sec']
+                        self.next_control_sec = next_control_time(
+                            now_sec, self.next_control_sec, self.config['control_period_sec'])
                         # 障害物の次更新位置も含む保守的な接近先での評価
                         predicted_hand = None if is_live else (desired if desired[0] < self.hand[0] else self.hand)
                         predicted_elbow = None if is_live else predicted_hand+np.array([self.config['arm_length'], 0, 0])
@@ -319,6 +400,7 @@ class avoidance_demo(Node):
             'is_stop_latched': self.is_stop_latched,
             'side': self.config['sides'][min(self.side_idx, len(self.config['sides'])-1)],
             'clearance_m': gap, 'min_clearance_m': finite(self.min_observed_clearance),
+            'stop_clearance': self.stop_clearance,
             'min_home_clearance_m': finite(self.min_home_clearance), 'max_excursion_rad': self.max_excursion,
             'joint_age_sec': time.monotonic()-self.joint_time,
             'obstacle_age_sec': time.monotonic()-self.obstacle_time,

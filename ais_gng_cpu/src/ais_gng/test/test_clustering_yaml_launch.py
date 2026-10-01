@@ -105,6 +105,15 @@ class test_clustering_yaml(unittest.TestCase):
                 self.assertEqual(params[0]['input.topic_names'], ['/lidar_points'])
                 self.assertEqual(params[1]['point_cloud_topic'], '/lidar_points')
 
+    def test_graspnet_uses_timestamped_robot_base_frame(self):
+        # 実YAMLから展開後の座標変換設定と長期記憶無効化の確認
+        params = self.resolve_parameters({}, arguments={'lidar': 'graspnet.yaml'})[0]
+        self.assertEqual(params['input.base_frame_id'], 'ToPoDualArm/base_link')
+        self.assertFalse(params['input.local_coordinates'])
+        self.assertTrue(params['input.enable_strict_transform'])
+        self.assertEqual(params['node.static.age_min'], -1)
+        self.assertEqual(params['node.interval'], [0.4, 0.2, 0.1, 0.015])
+
     def test_input_topics_without_argument(self):
         topics = ['/yaml_test/front', '/yaml_test/rear']
         params = self.resolve_parameters({'input.topic_names': topics})

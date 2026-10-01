@@ -2,12 +2,29 @@
 enable_auto_start: false
 enable_gng_vlut: true
 enable_local_refinement: true
-physics_solver: quick
+# 点群接近による保持からの自動再開。手動停止・入力異常は解除対象外
+enable_obstacle_auto_resume: false
+# 再開前の点群余裕・GNG安全状態の継続時間 [s]
+resume_clear_sec: 0.3
+# 回避から復帰へ移る前の安全状態の継続時間 [s]。0で待機無効
+return_clear_sec: 0.5
+local_qp:
+  enable_qp: false
+  # 静止端点間の5次補間に対する関節加速度上限 [rad/s²、直動関節はm/s²]
+  max_joint_acceleration: 3.0
+  # OSQPの求解時間上限 [s]
+  max_solve_sec: 0.02
+physics_solver: world
 max_plan_sec: 1.5
-danger_inflation: 0.12
+danger_inflation: 0.10
 min_retreat_dist_th: 0.30
-min_cloud_clearance_th: 0.015
-min_planning_clearance_th: 0.01
+# 停止・開始・経路検査の距離余裕 [m]。点群の停止距離と経路下限は同一値
+clearance_margins:
+  min_clearance_th: 0.002
+  # 自己干渉・床・作業台の停止余裕 [m]
+  min_internal_clearance_th: 0.002
+  # 物理追従のずれを見込む、計画時の内部形状余裕 [m]
+  min_planning_clearance_th: 0.01
 max_bridge_step: 0.08
 max_entry_candidates: 40
 sides: [left, right]
@@ -16,15 +33,14 @@ hand_near_x: 0.03
 hand_y: 0.36
 hand_z: 0.38
 arm_length: 0.35
-arm_radius: 0.045
+arm_radius: 0.04
 approach_sec: 24.0
 hold_sec: 3.0
-withdraw_sec: 12.0
+withdraw_sec: 10.0
 settle_sec: 20.0
-target_clearance: 0.12
-min_clearance_th: 0.035
+target_clearance: 0.070
 max_state_age_sec: 1.0
-max_joint_velocity: 0.45
+max_joint_velocity: 1.2
 control_period_sec: 0.15
 pipeline:
   # 機体名前空間内の入力トピック。絶対名で外部点群の接続も可能

@@ -131,6 +131,8 @@ rclcpp_components_register_nodes(world_index_to_voxel_component "robot_sim::brid
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_gtest(test_viewer_status test/test_viewer_status.cpp)
+  ament_target_dependencies(test_viewer_status rclcpp std_msgs)
   foreach(test_name test_gng_nearest_index test_gng_nearest_training)
     ament_add_gtest(${test_name} test/${test_name}.cpp)
     target_include_directories(${test_name} PRIVATE src/core)
@@ -172,6 +174,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_dual_arm_control_keyboard test/test_dual_arm_control_keyboard.py)
   ament_add_pytest_test(test_dual_arm_udp_output test/test_dual_arm_udp_output.py)
   ament_add_pytest_test(test_dual_arm_control_udp test/test_dual_arm_control_udp.py)
+  ament_add_pytest_test(test_dynamixel_neck_torque test/test_dynamixel_neck_torque.py)
   ament_add_gtest(test_goal_tasks test/test_goal_tasks.cpp)
   target_include_directories(test_goal_tasks PRIVATE src)
   ament_add_gtest(test_joint_command_mux test/test_joint_command_mux.cpp)
@@ -236,6 +239,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/urdf")
 endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
+  scripts/local_qp.py
   scripts/joint_command_model.py
   scripts/dual_arm_mode_model.py
   scripts/dual_arm_udp_output.py
@@ -243,6 +247,9 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 )
 
 install(PROGRAMS
+  scripts/dynamixel_neck_torque.py
+  scripts/dynamixel_sim_output.py
+  scripts/dynamixel_sim_keyboard.py
   scripts/start_gazebo_physics.py
   scripts/dual_arm_gng_lidar_demo.py
   scripts/external_pointcloud_bridge.py

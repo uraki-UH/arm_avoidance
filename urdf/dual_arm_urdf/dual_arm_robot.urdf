@@ -105,9 +105,10 @@
       <geometry><mesh filename="meshes/camera_link.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="gray"><color rgba="0.55 0.55 0.55 1.0"/></material>
     </visual>
+    <!-- 開いたカメラ表面メッシュ全体を含む衝突用直方体 -->
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="meshes/camera_link.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="-0.0082262434959411625 4.2556762695312306e-05 -4.2438507080050369e-08" rpy="0 0 0"/>
+      <geometry><box size="0.025052487373352052 0.089856307983398442 0.025000000953674318"/></geometry>
     </collision>
     <inertial>
       <mass value="0.05"/>

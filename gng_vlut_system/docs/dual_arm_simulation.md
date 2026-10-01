@@ -23,6 +23,7 @@ ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=topodualarm
 - 停止確認: 回転速度0.01 rad/s、直動速度0.001 m/sを各判定値とする0.25秒の継続静止。`safety/status`の`max_velocity_rad_sec`と`max_linear_velocity_m_sec`に分離。
 - Viewer表示名: `sim_ToPoDualArm`。既存Viewerサーバーへの配信。実機実測表示とは別系統。
 - 実機UDP: 未対応。`robot:=topodualarm`での`udp_config`指定は拒否。Dynamixelへの駆動指令なし。
+- ToPoDualArmの別起動: [Dynamixel小動作・Gazebo指令転送](dynamixel_sim_control.md)。左腕ID41〜47、実機出力は既定OFF。既存UDP経路への変更なし。
 - 起動依存: Dockerfile記載の`gazebo_ros2_control`、`controller_manager`、`joint_state_broadcaster`、`joint_trajectory_controller`。古いコンテナでは追加導入と`gng_vlut_system`の再ビルドが必要。
 
 通し試験コマンド（コンテナ内、未使用の出力先を指定）:
@@ -260,7 +261,7 @@ python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/
 
 ### Gazebo目標のUDP出力
 
-入力: `dual_arm_controller/state`の`desired.positions`。Gazeboコントローラの補間済み目標であり、実測角や軌道終点の直接転送ではない。
+入力: `dual_arm_controller/controller_state`の`reference.positions`。Gazeboコントローラの補間済み目標であり、実測角や軌道終点の直接転送ではない。
 指定順の独立19関節をCSV化し、各値は`round((rad × 180 / π × scale + offset_deg) × 10)`の整数、末尾カンマ付き。
 旧UDP実装の整数切捨てとは最大1カウントの差。関節不足・未知名・mimic・非有限値・URDF範囲外は拒否、ゼロ補完なし。
 

@@ -200,6 +200,8 @@ public:
     declare_parameter("goal_task_components",
                       std::vector<std::string>{"requested_goal", "safe_retreat"}, component_descriptor);
     declare_parameter("avoid_collisions", true);
+    // 隣接危険ノード数の経路コスト加算。衝突・危険ノードへの進入判定とは独立
+    declare_parameter("enable_safety_penalty", enable_execution_);
     declare_parameter("avoid_danger", true);
     declare_parameter("allow_danger_goal", true);
     declare_parameter("strict_goal_collision_check", false);
@@ -207,6 +209,8 @@ public:
     declare_parameter("allow_zero_initial_joint_state", true);
     declare_parameter("publish_target_joint_states", enable_execution_);
     declare_parameter("allow_safe_goal_fallback", enable_execution_);
+    // 自律退避時の関節距離順候補数。0は従来の全候補
+    declare_parameter("max_retreat_candidates", 0);
     declare_parameter("trial_mode", false);
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
@@ -363,7 +367,7 @@ public:
     graph_planner_options planner_options;
     planner_options.enable_collision_check = get_parameter("avoid_collisions").as_bool();
     planner_options.enable_danger_check = avoid_danger_;
-    planner_options.enable_safety_penalty = enable_execution_;
+    planner_options.enable_safety_penalty = get_parameter("enable_safety_penalty").as_bool();
     planner_options.enable_strict_goal_check = get_parameter("strict_goal_collision_check").as_bool();
     planner_options.enable_static_graph = !enable_execution_;
     planner_ = make_graph_planner<Eigen::VectorXf, Eigen::Vector3f, GNGType>(
@@ -827,19 +831,17 @@ private:
 
     if (trajectory_.valid) {
       const bool local_neighborhood_blocked =
-          replan_on_path_collision_ && nodeHasUnsafeNeighborLocked(start_id);
+          replan_on_path_collision_ && !is_retreat_trajectory_ && nodeHasUnsafeNeighborLocked(start_id);
+      // 退避中の始点付近の危険は再計画理由から除外。退避先の隣接悪化は再選定
+      const bool is_retreat_goal_blocked = is_retreat_trajectory_ &&
+          !topological_map_avoidance::has_safe_retreat_neighbors(*gng_, trajectory_.goal_id);
       if (trajectory_.waypoint_index >= trajectory_.node_path.size()) {
         clearActiveTrajectoryLocked();
       } else {
         const bool trajectory_blocked =
             replan_on_path_collision_ &&
             trajectoryHasUnsafeNodeLocked(trajectory_.waypoint_index);
-        if (trajectory_blocked || local_neighborhood_blocked) {
-          RCLCPP_INFO(
-              get_logger(),
-              "Trajectory blocked: start=%d goal=%d wp_idx=%zu path_len=%zu local_block=%d. Requesting immediate replan to the same goal.",
-              start_id, trajectory_.goal_id, trajectory_.waypoint_index,
-              trajectory_.node_path.size(), local_neighborhood_blocked ? 1 : 0);
+        if (trajectory_blocked || local_neighborhood_blocked || is_retreat_goal_blocked) {
           if (trial_mode_) {
             requestReplanCurrentTrialGoalLocked();
           } else {
@@ -927,13 +929,30 @@ private:
         }
       } else {
         const auto goal_candidates = selectedGoalCandidatesLocked(start_id);
+        auto retreat_candidates = cached_safe_goal_ids_;
+        // 距離順の候補数制限より先に、自身と一次隣接の安全で絞込み
+        retreat_candidates.erase(std::remove_if(retreat_candidates.begin(), retreat_candidates.end(),
+            [this](int id) { return !topological_map_avoidance::has_safe_retreat_neighbors(*gng_, id); }),
+            retreat_candidates.end());
+        const auto max_retreat_candidates = get_parameter("max_retreat_candidates").as_int();
+        if (max_retreat_candidates > 0 && goal_candidates.empty()) {
+          const auto num_candidates = std::min(retreat_candidates.size(),
+              static_cast<std::size_t>(max_retreat_candidates));
+          std::partial_sort(retreat_candidates.begin(), retreat_candidates.begin()+num_candidates,
+              retreat_candidates.end(), [this, &current_q](int first, int second) {
+                return (gng_->nodeAt(first).weight_angle-current_q).squaredNorm() <
+                       (gng_->nodeAt(second).weight_angle-current_q).squaredNorm();
+              });
+          retreat_candidates.resize(num_candidates);
+        }
         const auto request = goal_tasks_.select({
-            goal_candidates, cached_safe_goal_ids_,
-            start_node.status.is_colliding || (avoid_danger_ && start_node.status.is_danger),
+            goal_candidates, retreat_candidates,
+            start_node.status.is_colliding || (avoid_danger_ && start_node.status.is_danger) ||
+                nodeHasUnsafeNeighborLocked(start_id),
             allow_safe_goal_fallback_});
         if (request && !latchTrajectoryFromCandidatesLocked(
                 current_q, start_id, request->goal_ids, false,
-                request->label.c_str(), request->label.c_str())) {
+                request->label.c_str(), request->label.c_str(), request->is_retreat)) {
           RCLCPP_WARN_THROTTLE(
               get_logger(), *get_clock(), 5000,
               "%s: planner returned empty path start=%d goal_candidates=%zu",
@@ -995,6 +1014,7 @@ private:
   std::shared_ptr<GNGType> gng_;
   std::unique_ptr<graph_planner<GNGType>> planner_;
   tasks::goal_task_pipeline goal_tasks_{std::vector<std::unique_ptr<tasks::goal_task>>{}};
+  bool is_retreat_trajectory_ = false;
 
   std::string target_topic_;
   std::string control_claim_topic_;
@@ -1210,7 +1230,7 @@ private:
   bool latchTrajectoryFromCandidatesLocked(
       const Eigen::VectorXf &current_q, int start_id,
       const std::vector<int> &goal_candidates, bool build_goal_bridge,
-      const char *latched_label, const char *empty_label) {
+      const char *latched_label, const char *empty_label, bool is_retreat = false) {
     if (!gng_ || goal_candidates.empty()) {
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 5000,
@@ -1294,16 +1314,12 @@ private:
 
     trajectory_.waypoint_index = trajectory_.node_path.size() >= 2 ? 1U : 0U;
     trajectory_.valid = !trajectory_.node_path.empty();
+    is_retreat_trajectory_ = is_retreat;
     trajectory_.update_requested = !trajectory_.valid;
     if (!trajectory_.valid) {
       return false;
     }
 
-    RCLCPP_INFO(
-        get_logger(),
-        "%s: path latched start=%d goal=%d len=%zu candidate_count=%zu",
-        latched_label, start_id, trajectory_.goal_id, trajectory_.node_path.size(),
-        goal_candidates.size());
     return true;
   }
 
@@ -1556,6 +1572,7 @@ private:
   void clearActiveTrajectoryLocked(bool keep_goal_id = false)
   {
     trajectory_.clear(keep_goal_id);
+    is_retreat_trajectory_ = false;
   }
 
   void publishEmptyCandidateTrajectoryLocked()

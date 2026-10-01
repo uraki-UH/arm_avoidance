@@ -194,7 +194,7 @@ class stop_trial:
             self.node.create_subscription(Bool, self.namespace + '/safety/is_stop_latched', self.on_latch, latch_qos),
             self.node.create_subscription(String, self.namespace + '/avoidance/status', self.on_demo, 10),
             self.node.create_subscription(String, self.namespace + '/avoidance/gng_status', self.on_gng_status, 10),
-            self.node.create_subscription(JointTrajectoryControllerState, self.namespace + '/dual_arm_controller/state', self.on_controller_sample, 10),
+            self.node.create_subscription(JointTrajectoryControllerState, self.namespace + '/dual_arm_controller/controller_state', self.on_controller_sample, 10),
             self.node.create_subscription(JointTrajectory, self.namespace + '/dual_arm_controller/joint_trajectory', self.on_command, 10),
         ]
         self.command = self.node.create_publisher(JointTrajectory, self.namespace + '/dual_arm_controller/joint_trajectory', 10)
@@ -248,8 +248,8 @@ class stop_trial:
     def on_controller_sample(self, message):
         self.controller_sample = {
             'sim_sec': message.header.stamp.sec + message.header.stamp.nanosec * 1e-9,
-            'desired_positions': dict(zip(message.joint_names, message.desired.positions)),
-            'actual_positions': dict(zip(message.joint_names, message.actual.positions)),
+            'desired_positions': dict(zip(message.joint_names, message.reference.positions)),
+            'actual_positions': dict(zip(message.joint_names, message.feedback.positions)),
         }
 
     def on_joint(self, message):

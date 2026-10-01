@@ -65,6 +65,40 @@ TEST(candidate_path_planning, safety_constraints_without_repulsion)
   EXPECT_TRUE(planner.planToAnyNode(0, {3}, graph, true).second.empty());
 }
 
+TEST(candidate_path_planning, retreat_goal_requires_direct_safe_neighbors)
+{
+  using robot_sim::planning::topological_map_avoidance::has_safe_retreat_neighbors;
+  planning_graph graph;
+  // 自身は安全でも隣接4が衝突中の候補1は除外。二次隣接だけの候補3は許可
+  EXPECT_FALSE(has_safe_retreat_neighbors(graph, 1));
+  EXPECT_TRUE(has_safe_retreat_neighbors(graph, 3));
+  std::vector<int> goals{1, 3};
+  goals.erase(std::remove_if(goals.begin(), goals.end(), [&](int id) {
+    return !has_safe_retreat_neighbors(graph, id);
+  }), goals.end());
+  planning::GngDijkstraPlanner<Eigen::VectorXf, Eigen::Vector3f, planning_graph> planner;
+  planner.setCostEvaluator(std::make_shared<planning::JointLInfCost<Eigen::VectorXf, Eigen::Vector3f>>());
+  planner.setAvoidCollisions(true);
+  planner.setAvoidDanger(true);
+  planner.setStrictGoalCollisionCheck(true);
+  planner.set_enable_safety_penalty(false);
+  // 中間ノード1の隣接まで禁止せず、安全なノード3への退避経路を維持
+  EXPECT_EQ(planner.planToAnyNode(0, goals, graph).second, std::vector<int>({0, 1, 3}));
+  graph.nodes[2].status.is_danger = true;
+  EXPECT_FALSE(has_safe_retreat_neighbors(graph, 3));
+  graph.nodes[2].status.is_danger = false;
+  EXPECT_TRUE(has_safe_retreat_neighbors(graph, 3));
+  graph.nodes[2].status.active = false;
+  EXPECT_FALSE(has_safe_retreat_neighbors(graph, 3));
+  graph.nodes[2].status.active = true;
+  graph.nodes[3].status.is_danger = true;
+  EXPECT_FALSE(has_safe_retreat_neighbors(graph, 3));
+  graph.nodes[3].status.is_danger = false;
+  graph.neighbors[3].push_back(99);
+  EXPECT_FALSE(has_safe_retreat_neighbors(graph, 3));
+  EXPECT_FALSE(has_safe_retreat_neighbors(graph, -1));
+}
+
 TEST(candidate_metric_availability, provisional_metrics_remain_invalid)
 {
   using namespace robot_sim::planning::topological_map_avoidance;

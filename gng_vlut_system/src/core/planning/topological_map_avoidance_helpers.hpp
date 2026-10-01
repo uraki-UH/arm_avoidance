@@ -36,6 +36,22 @@ namespace robot_sim::planning::topological_map_avoidance {
 using GNGType = ::GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>;
 using graph_planner_type = robot_sim::planning::graph_planner<GNGType>;
 
+// 退避完了候補の自身・直接隣接の安全確認。経路途中のノードとは別条件
+template <typename graph_type>
+static inline bool has_safe_retreat_neighbors(const graph_type &graph, int node_id) {
+  const auto is_safe = [&graph](int id) {
+    if (id < 0 || id >= static_cast<int>(graph.getMaxNodeNum())) return false;
+    const auto &node = graph.nodeAt(id);
+    return node.id == id && node.status.active && node.status.self_collision_free &&
+           !node.status.is_colliding && !node.status.is_danger;
+  };
+  if (!is_safe(node_id)) return false;
+  for (int neighbor_id : graph.getNeighborsAngle(node_id)) {
+    if (!is_safe(neighbor_id)) return false;
+  }
+  return true;
+}
+
 static inline uint8_t pathLabelFromStatus(const ::GNG::Status &status) {
   if (status.is_colliding) {
     return 2;

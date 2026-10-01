@@ -44,6 +44,7 @@ def control(monkeypatch):
     node.expected_run_generation = 1
     node.stop_deadline = 0.0
     node.command, node.status = Mock(), Mock()
+    node.last_position_goal = None
     node.service_clients = {}
     for name in ('avoidance/start', 'avoidance/stop', 'safety/stop', 'safety/reset', 'switch'):
         client = Mock()
@@ -54,6 +55,18 @@ def control(monkeypatch):
     node.get_clock = Mock(return_value=SimpleNamespace(
         now=lambda: SimpleNamespace(nanoseconds=12_000_000_000)))
     return node
+
+
+def test_hold_goal_not_restarted_and_republished_after_stop(control):
+    control.model.model.independent_names = ['shoulder']
+    control.publish_positions({'shoulder': -1.57})
+    control.publish_positions({'shoulder': -1.57})
+    assert control.command.publish.call_count == 1
+    control.publish_positions({'shoulder': -1.56})
+    assert control.command.publish.call_count == 2
+    control.stop('停止キー')
+    control.publish_positions({'shoulder': -1.56})
+    assert control.command.publish.call_count == 3
 
 
 def stopped_safety(control):
@@ -182,10 +195,11 @@ def test_reset_requires_stationary_fresh_joint_state(control):
 
 def test_failed_operation_never_publishes_command(control):
     control.future = Future()
-    control.future.set_result(Trigger.Response(success=False))
+    control.future.set_result(Trigger.Response(success=False, message='開始時の点群余裕不足: 31.5 mm'))
     control.phase = 'switch_start_demo'
     control.tick()
     assert control.phase == 'stopped'
+    assert '開始時の点群余裕不足: 31.5 mm' in control.detail
     control.command.publish.assert_not_called()
 
 
@@ -439,6 +453,18 @@ def test_leader_key_never_bypasses_reset_conditions(control, condition):
     assert not response.success
     control.service_clients['avoidance/stop'].call_async.assert_not_called()
     control.model.enter.assert_not_called()
+
+
+def test_reset_reports_unconfirmed_stop_and_preserves_original_reason(control):
+    stopped_safety(control)
+    control.detail = 'ソフト停止要求'
+    control.safety.update(state='stop_unconfirmed', is_stopped=False)
+    response = control.on_reset(None, Trigger.Response())
+    assert not response.success
+    assert 'Gazeboの実測停止未確認' in response.message
+    assert control.detail == 'ソフト停止要求'
+    control.service_clients['avoidance/stop'].call_async.assert_not_called()
+    control.service_clients['safety/reset'].call_async.assert_not_called()
 
 
 def test_reset_waits_for_active_state_before_entering_hold(control):

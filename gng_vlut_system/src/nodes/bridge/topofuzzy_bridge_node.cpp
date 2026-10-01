@@ -8,6 +8,7 @@
 #include <ais_gng_msgs/msg/topological_cluster.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_msgs/msg/topological_node.hpp>
+#include <ais_gng_msgs/msg/topological_node_states.hpp>
 #include <ais_gng_feature_msgs/msg/topological_node_feature_array.hpp>
 #include <gng_control_msgs/msg/grasp_state.hpp>
 #include <geometry_msgs/msg/point32.hpp>
@@ -25,6 +26,7 @@
 #include "core/safety_engine/runtime/safety_system_loader.hpp"
 #include "metrics/graph_topology_analyzer.hpp"
 #include "core/common/constants.hpp"
+#include "core/common/viewer_status.hpp"
 #include "core/common/topological_map_message_builder.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include "robot_model/robot_model.hpp"
@@ -113,7 +115,7 @@ bool sameGraspDefinition(const gng_control_msgs::msg::GraspState &lhs,
 
 class TopoFuzzyBridgeNode : public rclcpp::Node {
 public:
-  TopoFuzzyBridgeNode() : Node("topofuzzy_bridge_node") {
+  TopoFuzzyBridgeNode() : Node("topofuzzy_bridge_node"), status_reporter_(*this, "emap") {
     declare_parameter("gng_model_path", "");
     declare_parameter("vlut_path", "");
     declare_parameter("publish_hz", ::robot_sim::common::Constants::DEFAULT_UPDATE_HZ);
@@ -129,6 +131,7 @@ public:
     declare_parameter("grasp.applied_state_topic", "grasp_state_applied");
     declare_parameter("node_feature_topic", "topological_node_features");
     declare_parameter("node_state_topic", "");
+    declare_parameter("stamped_node_state_topic", "");
     declare_parameter("gng.data_directory", "gng_results");
     declare_parameter("gng.experiment_id", "standard_train");
     declare_parameter("gng.gng_model_filename", "gng.bin");
@@ -216,8 +219,11 @@ public:
         prefix_frame(source_frame_id_);
     }
 
-    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
-    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    // 同一座標系ではTF購読不要。別系統のシミュレーション時刻後退の混入防止
+    if (frame_id_ != source_frame_id_) {
+      tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+      tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    }
 
     occupied_voxels_topic_ = get_parameter("occupied_voxels_topic").as_string();
     occupied_voxels_topic_relative_ = occupied_voxels_topic_.rfind('/') == 0
@@ -273,6 +279,11 @@ public:
     if (!node_state_topic.empty()) {
       node_state_pub_ = create_publisher<std_msgs::msg::UInt16MultiArray>(
           node_state_topic, rclcpp::QoS(1).reliable().transient_local());
+    }
+    const auto stamped_node_state_topic = get_parameter("stamped_node_state_topic").as_string();
+    if (!stamped_node_state_topic.empty()) {
+      stamped_node_state_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalNodeStates>(
+          stamped_node_state_topic, rclcpp::QoS(1).reliable().transient_local());
     }
 
     const int layer_count = context_->gng->getCoordLayerCount();
@@ -602,7 +613,10 @@ private:
       } 
     }
 
-    RCLCPP_INFO_THROTTLE(
+    status_reporter_.report({static_cast<double>(safe_nodes),
+        static_cast<double>(collision_nodes), static_cast<double>(danger_nodes),
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count()});
+    RCLCPP_DEBUG_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "VLUT update = %.3f ms | voxels: occ=%zu dan=%zu | "
         "nodes: safe=%zu col=%zu dan=%zu",
@@ -913,7 +927,9 @@ private:
         hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(topological_map_pub_);
     const bool has_state_consumer = node_state_pub_ && (force_publish ||
         hasSubscribers<std_msgs::msg::UInt16MultiArray>(node_state_pub_));
-    if (has_graph_consumer || has_state_consumer) {
+    const bool has_stamped_state_consumer = stamped_node_state_pub_ && (force_publish ||
+        hasSubscribers<ais_gng_msgs::msg::TopologicalNodeStates>(stamped_node_state_pub_));
+    if (has_graph_consumer || has_state_consumer || has_stamped_state_consumer) {
       const auto graph = buildGraphMessage();
       if (has_graph_consumer) {
         topological_map_pub_->publish(graph);
@@ -927,6 +943,24 @@ private:
           states.data.push_back(node.label);
         }
         node_state_pub_->publish(states);
+      }
+      if (has_stamped_state_consumer) {
+        // 全グラフのPython復号を避ける、時刻付き安全状態と固定トポロジーの照合値
+        ais_gng_msgs::msg::TopologicalNodeStates states;
+        states.header = graph.header;
+        states.topology_hash = 14695981039346656037ULL;
+        const auto append_hash = [&](uint64_t value) {
+          states.topology_hash = (states.topology_hash ^ value) * 1099511628211ULL;
+        };
+        append_hash(graph.nodes.size());
+        for (const auto & node : graph.nodes) {
+          states.node_ids.push_back(node.id);
+          states.labels.push_back(node.label);
+          append_hash(node.id);
+        }
+        append_hash(graph.edges.size());
+        for (const auto edge : graph.edges) append_hash(edge);
+        stamped_node_state_pub_->publish(states);
       }
     }
     if (force_publish ||
@@ -1033,6 +1067,7 @@ private:
   }
 
 private:
+  robot_sim::common::viewer_status_reporter status_reporter_;
   struct VisualizationLayer {
     int layer = 0;
     robot_sim::visualization::VisualizationGngModel model;
@@ -1065,6 +1100,7 @@ private:
   rclcpp::Publisher<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>::SharedPtr
       node_feature_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt16MultiArray>::SharedPtr node_state_pub_;
+  rclcpp::Publisher<ais_gng_msgs::msg::TopologicalNodeStates>::SharedPtr stamped_node_state_pub_;
   std::vector<rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> layer_pubs_;
   std::vector<VisualizationLayer> visualization_layers_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr

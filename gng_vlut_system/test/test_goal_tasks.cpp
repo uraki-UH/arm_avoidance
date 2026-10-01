@@ -11,9 +11,11 @@ TEST(goal_tasks, default_selection_preserves_fallback_conditions) {
   ASSERT_TRUE(request);
   EXPECT_EQ(request->goal_ids, requested);
   EXPECT_EQ(request->label, "GoalPlanning");
+  EXPECT_FALSE(request->is_retreat);
   request = pipeline.select({empty, safe, true, true});
   ASSERT_TRUE(request);
   EXPECT_EQ(request->goal_ids, safe);
+  EXPECT_TRUE(request->is_retreat);
   EXPECT_FALSE(pipeline.select({empty, safe, false, true}));
   EXPECT_FALSE(pipeline.select({empty, safe, true, false}));
   EXPECT_FALSE(pipeline.select({empty, empty, true, true}));

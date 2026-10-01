@@ -70,6 +70,9 @@
 | `std` | standard deviation | 共分散楕円体の軸標準偏差 | `standard_deviation`、`stddev` |
 | `rms` | root mean square | 入力残差の二乗平均平方根 | `root_mean_square` |
 | `Tmap` | topological map | 環境入力`/topological_map`以外のグラフトピック名 | トピック名内の`topological_map` |
+| `pc` | point cloud | Viewer内部統計の点群段階、表示名`PCl` | — |
+| `vxl` | voxel | Viewer内部統計の自己除去段階、表示名`Vxl` | — |
+| `emap` | environment map | Viewer内部統計の環境状態更新段階、表示名`Emap` | — |
 | `sec` | second | 時刻・時間の秒単位 | `second`（時間単位） |
 | `ms` | millisecond | 実行時間のミリ秒単位 | `millisecond` |
 | `nm` | newton metre | 関節トルクの単位（N m） | `newton_meter` |

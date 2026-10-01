@@ -12,7 +12,7 @@ dual_arm_avoidance_demo:
   # 経路探索開始の観測点群余裕 [m]
   min_retreat_dist_th: 0.30
   # 中間姿勢の観測点群余裕 [m]
-  min_cloud_clearance_th: 0.015
+  min_cloud_clearance_th: 0.01
   # 姿勢間の検査刻み [rad]
   max_bridge_step: 0.08
   max_entry_candidates: 40
@@ -31,7 +31,7 @@ dual_arm_avoidance_demo:
   settle_sec: 20.0
   # 外接形状間の目標余裕とデモ停止判定距離 [m]
   target_clearance: 0.12
-  min_clearance_th: 0.035
+  min_clearance_th: 0.02
   max_state_age_sec: 1.0
   # 補間指令の関節速度制限 [rad/s]
   max_joint_velocity: 2.5

@@ -1,0 +1,9 @@
+# 通常Viewerの実点群・実機自己除去・Tmap更新を利用するGazebo入力
+enable_live_obstacles: true
+enable_obstacle_auto_resume: true
+pipeline:
+  enable_lidar: false
+  external_environment:
+    # 接続先は機体YAMLのrobot_name・frame_id・点群入力からの導出
+    # 自己除去後ROIと実測関節の両方を必須とする入力期限 [s]
+    max_input_age_sec: 1.0

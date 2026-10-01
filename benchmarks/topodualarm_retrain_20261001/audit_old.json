@@ -1,0 +1,11 @@
+{
+  "urdf": "/ros2_ws/src/urdf/dual_arm_urdf/dual_arm_robot.urdf",
+  "resource_root": "/ros2_ws/src/urdf/dual_arm_urdf",
+  "mesh_root": "/ros2_ws/src/urdf/dual_arm_urdf/meshes",
+  "root": "L_shoulder_mount", "eef": "L_tcp",
+  "voxel_size": 0.001,
+  "exclusions": [["L_finger_left", "L_finger_right"], ["R_finger_left", "R_finger_right"]],
+  "gng_path": "/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gng.bin",
+  "output": "/ros2_ws/src/artifacts/topodualarm_retrain_20261001/old_audit.json",
+  "enable_edges": false
+}

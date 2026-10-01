@@ -7,6 +7,8 @@ import struct
 import xml.etree.ElementTree as et
 
 import yaml
+import numpy as np
+from scipy.spatial.transform import Rotation
 
 
 def merge_config(base, override):
@@ -36,6 +38,28 @@ def gng_angle_num(path):
     return rows
 
 
+def resolve_clearance_margins(config):
+    """一箇所の距離設定から各判定への展開。旧共通設定のみの読込みは従来互換。"""
+    if 'clearance_margins' not in config:
+        return
+    margins = config['clearance_margins']
+    keys = {'min_clearance_th', 'min_internal_clearance_th', 'min_planning_clearance_th'}
+    if not isinstance(margins, dict) or set(margins) != keys:
+        raise ValueError('clearance_marginsには点群・内部停止・内部計画の3項目が必要です')
+    if any(key in config for key in keys | {'min_cloud_clearance_th'}):
+        raise ValueError('距離余裕の重複設定です。旧トップレベル項目をclearance_marginsへ移してください')
+    for key, value in margins.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f'clearance_margins.{key}には有限の正数が必要です')
+    if margins['min_planning_clearance_th'] < margins['min_internal_clearance_th']:
+        raise ValueError('計画時の内部形状余裕は内部停止余裕を確保する値が必要です')
+    if margins['min_clearance_th'] >= config['target_clearance']:
+        raise ValueError('停止距離は目標余裕より小さい値が必要です')
+    config.update(margins)
+    # 点群の経路下限と開始・停止距離の共通化
+    config['min_cloud_clearance_th'] = margins['min_clearance_th']
+
+
 def load_config(robot_config, input_config=None, camera_pose=None):
     path = Path(robot_config).resolve()
     robot = yaml.safe_load(path.read_text())
@@ -43,6 +67,11 @@ def load_config(robot_config, input_config=None, camera_pose=None):
     config = merge_config(yaml.safe_load(common_path.read_text()), robot.get('overrides', {}))
     if input_config:
         config = merge_config(config, yaml.safe_load(Path(input_config).read_text()))
+    resolve_clearance_margins(config)
+    return_clear_sec = config.get('return_clear_sec', .5)
+    if (isinstance(return_clear_sec, bool) or not isinstance(return_clear_sec, (int, float))
+            or not math.isfinite(return_clear_sec) or return_clear_sec < 0):
+        raise ValueError('return_clear_secには有限の非負数が必要です')
     if camera_pose is not None:
         config['pipeline']['external_cloud']['camera_pose'] = camera_pose
     params_path = (path.parent / robot['params_file']).resolve()
@@ -90,6 +119,44 @@ def load_config(robot_config, input_config=None, camera_pose=None):
     pipeline['base_frame'] = root_link
     if not pipeline.get('enable_self_filter', True):
         raise ValueError('共通回避では自己除去の省略はできません')
+    if 'external_environment' in pipeline:
+        external = pipeline['external_environment']
+        if pipeline['enable_lidar'] or 'external_cloud' in pipeline or not config.get('enable_live_obstacles', False):
+            raise ValueError('既存環境入力にはLiDAR無効・継続回避モードと単一入力が必要です')
+        max_age = external.get('max_input_age_sec', 1.0)
+        if not math.isfinite(max_age) or max_age <= 0:
+            raise ValueError('環境入力期限には有限の正数が必要です')
+        source_namespace = '/' + external.get('source_namespace', params['robot_name']).strip('/')
+        source_link = params.get('frame_id', root_link).strip('/')
+        # 実機ルートとGazeboルートを同じ配置として扱うための固定リンク変換
+        transform = np.eye(4)
+        child_joints = {item.find('child').get('link'): item for item in joints.values()}
+        link = source_link
+        visited = set()
+        while link != root_link:
+            if link in visited or link not in child_joints or child_joints[link].get('type') != 'fixed':
+                raise ValueError('環境frame_idにはURDFルートまたは固定リンクだけで接続されたリンクが必要です')
+            visited.add(link)
+            joint = child_joints[link]
+            origin = joint.find('origin')
+            step = np.eye(4)
+            if origin is not None:
+                step[:3, 3] = list(map(float, origin.get('xyz', '0 0 0').split()))
+                step[:3, :3] = Rotation.from_euler('xyz', list(map(float, origin.get('rpy', '0 0 0').split()))).as_matrix()
+            transform = step @ transform
+            link = joint.find('parent').get('link')
+        if not np.isfinite(transform).all():
+            raise ValueError('環境座標系の固定変換に非有限値があります')
+        external.update(source_namespace=source_namespace, source_frame=source_namespace.strip('/')+'/'+source_link,
+                        root_from_source=transform.tolist(), max_input_age_sec=float(max_age))
+        external.setdefault('points_topic', params.get('environment_voxelization', {}).get('input_topic', ''))
+        if not isinstance(external['points_topic'], str) or not external['points_topic'].startswith('/'):
+            raise ValueError('既存環境の元点群には絶対トピック名が必要です')
+        # 任意の未処理ROIへの差替えを避ける固定の自己除去出力名
+        for key, suffix in [('voxel_topic', 'self_filter_roi_voxels'), ('graph_topic', 'Tmap_static'),
+                            ('state_topic', 'gng_node_states_stamped'),
+                            ('feature_topic', 'topological_node_features'), ('joint_topic', 'joint_states')]:
+            external[key] = source_namespace+'/'+suffix
     if 'external_cloud' in pipeline:
         external = pipeline['external_cloud']
         if pipeline['enable_lidar'] or not config.get('enable_live_obstacles', False):

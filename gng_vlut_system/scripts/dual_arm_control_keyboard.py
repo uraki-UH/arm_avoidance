@@ -25,10 +25,11 @@ def control_key_action(key):
 class terminal_key_decoder:
     """矢印・機能キーの末尾や貼付文字列による、意図しないモード変更の抑制。"""
 
-    def __init__(self):
+    def __init__(self, key_actions=None):
         self.escape = b''
         self.is_paste = False
         self.paste_tail = b''
+        self.key_actions = key_actions
 
     def read_action(self, key):
         action = control_key_action(key)
@@ -56,7 +57,7 @@ class terminal_key_decoder:
         if self.escape:
             self.escape = b''
             return None
-        return control_key_action(key)
+        return self.key_actions.get(key.lower()) if self.key_actions is not None else control_key_action(key)
 
 
 def control_status_label(status, receive_age_sec):

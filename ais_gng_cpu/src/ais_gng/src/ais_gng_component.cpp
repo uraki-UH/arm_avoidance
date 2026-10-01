@@ -606,6 +606,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("input.voxel_grid_unit", 0.02);                         // ボクセルグリッドのサイズ(m) (cpu/gpu)
     this->declare_parameter("input.visualize", true);                              // 位置フィルタの可視化 (cpu/gpu)
     this->declare_parameter("input.local_coordinates", false);                     // ローカル座標系を使用するか (cpu/gpu)
+    this->declare_parameter("input.enable_strict_transform", false);                // 取得時刻のTF必須化。未取得入力の学習・配信抑止
     this->declare_parameter("input.x_min", -20.);                                  // 位置フィルタの最小 x (cpu/gpu)
     this->declare_parameter("input.x_max", 20.);                                   // 位置フィルタの最大 x (cpu/gpu)
     this->declare_parameter("input.y_min", -20.);                                  // 位置フィルタの最小 y (cpu/gpu)
@@ -842,6 +843,9 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         } else if (name == "input.local_coordinates") {
             local_coordinates_ = p.as_bool();
             success = true;
+        } else if (name == "input.enable_strict_transform") {
+            enable_strict_transform_ = p.as_bool();
+            success = true;
         } else if (name == "semantic.handle_label_value") {
             semantic_handle_label_value_ = static_cast<uint32_t>(std::max<int64_t>(0, p.as_int()));
             success = true;
@@ -981,6 +985,17 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     last_process_start_ = start;
     has_last_process_start_ = true;
 
+    // 全入力の座標変換成立後の学習開始。複数入力の途中失敗による部分投入の防止
+    std::vector<LiDAR_Config> cloud_transforms;
+    if (enable_strict_transform_) {
+        cloud_transforms.reserve(clouds.size());
+        for (const auto &cloud : clouds) {
+            cloud_transforms.push_back(getBase2LidarFrame(cloud));
+            if (!has_input_transform_) {return;}
+        }
+    }
+    std::size_t cloud_idx = 0;
+
     // 入力点群のセット
     auto &semantic_labels = semantic_label_buffer_;
     auto &source_point_indices = source_point_index_buffer_;
@@ -1081,7 +1096,9 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             }
         }
 
-        auto lidar_config = getBase2LidarFrame(gng_input_msg);
+        auto lidar_config = enable_strict_transform_
+            ? cloud_transforms[cloud_idx++] : getBase2LidarFrame(gng_input_msg);
+        lidar_config.point_step = gng_input_msg->point_step;
         gng_setPointCloud(
             gng_input_msg->data.data(),
             gng_input_msg->width * gng_input_msg->height,
@@ -1979,6 +1996,7 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
     lidar_config.quat.z = 0;
     lidar_config.quat.w = 1;
     lidar_config.point_step = msg->point_step;
+    has_input_transform_ = true;
 #if defined(AIS_GNG_BACKEND_CPU)
     has_observation_cloud_transform_ = true;
 #endif
@@ -1987,6 +2005,14 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
     }
     try {
         geometry_msgs::msg::TransformStamped tf_msg;
+        if (enable_strict_transform_) {
+            if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
+                has_input_transform_ = false;
+                return lidar_config;
+            }
+            tf_msg = tf_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id,
+                rclcpp::Time(msg->header.stamp), rclcpp::Duration::from_seconds(0.05));
+        } else
 #if defined(AIS_GNG_BACKEND_CPU)
         if (enable_observation_support_) {
             if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
@@ -2011,6 +2037,7 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
         lidar_config.quat.z = q.z;
         lidar_config.quat.w = q.w;
     } catch (const tf2::TransformException &ex) {
+        has_input_transform_ = false;
 #if defined(AIS_GNG_BACKEND_CPU)
         has_observation_cloud_transform_ = false;
 #endif

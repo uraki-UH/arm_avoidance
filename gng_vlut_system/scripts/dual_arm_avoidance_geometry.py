@@ -206,20 +206,23 @@ class robot_geometry:
         idx = int(np.argmin(gap))
         return float(gap[idx]), centers, idx, closest[idx]
 
-    def has_inter_arm_clearance(self, centers):
+    def has_inter_arm_clearance(self, centers, min_clearance_th=0.005):
         first, second = self.inter_arm_pairs.T
         return not np.any(np.linalg.norm(centers[first]-centers[second], axis=1)
-                          -self.radii[first]-self.radii[second] < 0.005)
+                          -self.radii[first]-self.radii[second] < min_clearance_th)
 
-    def has_internal_clearance(self, centers, min_clearance_th=0.005):
+    def internal_clearances(self, centers):
+        """自己干渉ペア・床・作業台の外接球表面間距離 [m]。"""
         first, second = self.self_pairs.T
-        if np.any(np.linalg.norm(centers[first]-centers[second], axis=1)-self.radii[first]-self.radii[second] < min_clearance_th):
-            return False
-        if np.any(centers[self.is_arm, 2]-self.radii[self.is_arm] < min_clearance_th):
-            return False
+        self_gaps = np.linalg.norm(centers[first]-centers[second], axis=1)-self.radii[first]-self.radii[second]
+        floor_gaps = centers[self.is_arm, 2]-self.radii[self.is_arm]
         # Gazebo作業台の外接箱
         delta = np.maximum(np.abs(centers-np.array([0.70, 0, 0.20]))-np.array([0.175, 0.4, 0.2]), 0)
-        return not np.any(np.linalg.norm(delta[self.is_arm], axis=1)-self.radii[self.is_arm] < min_clearance_th)
+        table_gaps = np.linalg.norm(delta[self.is_arm], axis=1)-self.radii[self.is_arm]
+        return np.concatenate((self_gaps, floor_gaps, table_gaps))
+
+    def has_internal_clearance(self, centers, min_clearance_th=0.005):
+        return not np.any(self.internal_clearances(centers) < min_clearance_th)
 
     def choose_step(self, positions, home, hand, elbow, radius, min_clearance, max_step,
                     min_internal_clearance_th=0.005):

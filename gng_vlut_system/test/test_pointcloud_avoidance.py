@@ -13,7 +13,7 @@ import yaml
 share = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(share / 'scripts'))
 sys.path.insert(0, str(share / 'launch'))
-from pointcloud_avoidance_config import load_config, gng_angle_num
+from pointcloud_avoidance_config import load_config, gng_angle_num, resolve_clearance_margins
 from dual_arm_avoidance_geometry import robot_geometry
 from dual_arm_gng_lidar_demo import gng_path_search, gng_lidar_demo
 import dual_arm_lidar_setup as lidar_setup
@@ -38,7 +38,11 @@ def robot_config(tmp_path):
       <joint name="cover_fixed" type="fixed"><parent link="tool"/><child link="cover"/></joint>
       <joint name="slide" type="prismatic"><parent link="mount"/><child link="slider"/>
         <origin xyz="0 -0.3 0.4"/><axis xyz="1 0 0"/><limit lower="0" upper="0.2"/></joint></robot>''')
-    (tmp_path / 'pointcloud_avoidance_common.yaml').write_text((share / 'config/pointcloud_avoidance_common.yaml').read_text())
+    common = yaml.safe_load((share / 'config/pointcloud_avoidance_common.yaml').read_text())
+    # 手動調整中の実機設定に依存しない、試験用の有効な距離余裕
+    common['clearance_margins'] = {'min_clearance_th': .01, 'min_internal_clearance_th': .005,
+                                 'min_planning_clearance_th': .01}
+    (tmp_path / 'pointcloud_avoidance_common.yaml').write_text(yaml.safe_dump(common))
     write_gng(tmp_path / 'gng.bin', 3)
     (tmp_path / 'vlut.bin').write_bytes(b'fixture')
     params = {'robot_name': 'example_robot', 'urdf_path': str(urdf),
@@ -63,6 +67,45 @@ def test_arbitrary_root_order_and_descendants(robot_config):
     assert geometry.arm_indices == [1, 0, 2]
     assert geometry.is_arm.all()
     assert np.isfinite(geometry.centers(np.zeros(3))).all()
+
+
+def test_single_cloud_margin_after_robot_and_input_overrides(robot_config, tmp_path):
+    path, value = robot_config
+    value['overrides'] = {'clearance_margins': {'min_clearance_th': .025}}
+    path.write_text(yaml.safe_dump(value))
+    overlay = tmp_path/'input.yaml'
+    overlay.write_text(yaml.safe_dump({'clearance_margins': {'min_clearance_th': .03}}))
+    _, _, config = load_config(path, overlay)
+    assert config['min_clearance_th'] == config['min_cloud_clearance_th'] == .03
+    assert config['min_internal_clearance_th'] == .005
+    assert config['min_planning_clearance_th'] == .01
+
+
+@pytest.mark.parametrize('value', [0, -.01, float('nan'), float('inf'), True, '0.01'])
+def test_invalid_margin_rejected(value):
+    config = {'target_clearance': .05, 'clearance_margins': {
+        'min_clearance_th': value, 'min_internal_clearance_th': .005, 'min_planning_clearance_th': .01}}
+    with pytest.raises(ValueError, match='有限の正数'):
+        resolve_clearance_margins(config)
+
+
+@pytest.mark.parametrize('override', [
+    {'min_clearance_th': .06}, {'min_internal_clearance_th': .02}, {'unknown_margin': .01},
+])
+def test_inconsistent_margins_rejected(override):
+    config = {'target_clearance': .05, 'clearance_margins': {
+        'min_clearance_th': .01, 'min_internal_clearance_th': .005, 'min_planning_clearance_th': .01}}
+    config['clearance_margins'].update(override)
+    with pytest.raises(ValueError):
+        resolve_clearance_margins(config)
+
+
+def test_legacy_duplicate_margin_in_overlay_rejected(robot_config, tmp_path):
+    path, _ = robot_config
+    overlay = tmp_path/'input.yaml'
+    overlay.write_text('min_cloud_clearance_th: 0.04\n')
+    with pytest.raises(ValueError, match='重複設定'):
+        load_config(path, overlay)
 
 
 @pytest.mark.parametrize('kind', ['unknown', 'duplicate', 'fixed', 'overlap', 'dimension', 'missing', 'roi', 'pose', 'samples'])
@@ -188,6 +231,12 @@ def test_real_cloud_config_requires_pose_and_real_self_filter(robot_config, monk
     assert settings['joint_topic'] == '/sim_fixture/real_joint_states'
     assert settings['self_recognition.target_frame_id'] == '/sim_fixture/mount'
     assert settings['max_joint_state_age_sec'] == .5
+    assert settings['self_recognition.mask_topic'] == '/sim_fixture/real/self_voxel'
+    simulated = next(node for node in nodes if node['executable'] == 'self_recognition_viz_node' and node['namespace'] == 'sim_fixture')
+    assert simulated['parameters'][-1]['joint_topic'] == '/sim_fixture/joint_states'
+    assert simulated['parameters'][-1]['self_recognition.mask_topic'] == '/sim_fixture/self_voxel'
+    filtering = next(node for node in nodes if node['executable'] == 'self_voxel_filter_node')
+    assert filtering['parameters'][-1]['self_recognition.mask_topic'] == '/sim_fixture/real/self_voxel'
     bridge = next(node for node in nodes if node['executable'] == 'external_pointcloud_bridge.py')
     assert bridge['parameters'][-1]['use_sim_time'] is False
     voxel = next(node for node in nodes if node['executable'] == 'world_index_to_voxel_node')['parameters'][-1]

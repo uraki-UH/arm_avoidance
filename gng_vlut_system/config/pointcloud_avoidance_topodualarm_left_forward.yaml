@@ -1,0 +1,25 @@
+params_file: ToPoDualArm.yaml
+# 左腕を前方斜め下45度へ伸ばしたGazebo専用設定。旧ゼロ姿勢設定は別ファイルで保持
+planning_groups:
+  - name: left_arm
+    joint_names: [L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7]
+    link_names: [L_link1, L_link2, L_link3, L_link4, L_link5, L_link6, L_link7, L_gripper_base, L_finger_left, L_finger_right]
+overrides:
+  sides: [left]
+  # Gazebo回避の関節速度上限[rad/s]と再評価周期[s]
+  max_joint_velocity: 1.2
+  control_period_sec: 0.05
+  # 既存C++回避ノードによる退避目標の生成
+  enable_native_planner: true
+  # 物理開始前の初期位置[rad]。未指定関節は0、回避開始時の実測姿勢が復帰先
+  initial_joint_positions:
+    L_joint1: -0.7853981633974483
+  # 合成障害物の接近位置[m]。外部点群使用時は実入力が対象
+  hand_far_x: 0.85
+  hand_near_x: 0.32
+  hand_y: 0.139
+  hand_z: 0.487
+  arm_radius: 0.035
+  target_clearance: 0.07
+  # 開始姿勢への復帰完了判定用の関節誤差 [rad]
+  max_home_error_th: 0.015

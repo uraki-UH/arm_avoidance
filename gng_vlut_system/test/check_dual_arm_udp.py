@@ -39,7 +39,7 @@ class udp_trial(control_trial):
         self.packet_log = (args.output / 'udp_packets.jsonl').open('w', encoding='utf-8')
         self.desired_log = (args.output / 'controller_desired.jsonl').open('w', encoding='utf-8')
         self.node.create_subscription(JointTrajectoryControllerState,
-            self.namespace + '/dual_arm_controller/state', self.on_controller_state, qos_profile_sensor_data)
+            self.namespace + '/dual_arm_controller/controller_state', self.on_controller_state, qos_profile_sensor_data)
 
     def prepare_command(self, command):
         """loopback限定の2ポート予約と、試験固有の関節対応設定。"""
@@ -94,11 +94,11 @@ class udp_trial(control_trial):
         stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
         self.desired_log.write(json.dumps({'wall_sec': now - self.begin, 'sim_sec': stamp,
             'stage': self.stage, 'joint_names': list(message.joint_names),
-            'desired_positions': list(message.desired.positions)}, allow_nan=False) + '\n')
+            'desired_positions': list(message.reference.positions)}, allow_nan=False) + '\n')
         self.desired_log.flush()
         if not self.independent_names:
             return
-        positions = message.desired.positions
+        positions = message.reference.positions
         if len(message.joint_names) != len(positions) or len(set(message.joint_names)) != len(positions):
             self.callback_error = 'controller desiredの関節名・角度配列不整合'
             return

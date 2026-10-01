@@ -1,5 +1,10 @@
 ais_gng_node:
   ros__parameters:
+    plane_clustering: true
+    curve_clustering: false #平面クラスタリングfalseでは実行できない
+    # 元平面に接続する候補への曲面探索限定。
+    surface_model.enable_plane_local_search: true
+
     node.num_max: 5000
     node.learning_num: 5000
     node.unknown_learning_rate: 0.8
@@ -9,10 +14,10 @@ ais_gng_node:
     # 古い接続の削除年齢
     edge.age_max: 100
     node.s1_reset_range: 0.1
-    node.s1_age_max: [6, 12, 12, 4] # [標準, 安全, 壁面, unknown]
-    node.clusted_s1_age: [20, 30, 30, 10] # [標準, 安全, 壁面, unknown]
-    node.interval: [0.1, 0.2, 0.1, 0.01] # [標準, 安全, 壁面, unknown]
-    node.static.age_min: 250 # 長期記憶の年齢
+    node.s1_age_max: [6, 6, 6, 3] # [標準, 安全, 壁面, unknown]
+    node.clusted_s1_age: [10, 20, 20, 20] # [標準, 安全, 壁面, unknown]
+    node.interval: [0.4, 0.2, 0.1, 0.015] # [標準, 安全, 壁面, unknown]
+    node.static.age_min: -1 # 長期記憶の年齢
 
     ds.transformed: true
     ds.range_max: 0.2
@@ -46,10 +51,12 @@ ais_gng_node:
 
     input.point_cloud_num: 100000
     input.sampling_mode: "uniform"
-    input.base_frame_id: "map"
+    input.base_frame_id: "ToPoDualArm/base_link"
     input.voxel_grid_unit: 0.02
     input.visualize: true
-    input.local_coordinates: true
+    input.local_coordinates: false
+    # 頭部RealSenseの取得時刻TFによるベース座標変換。TF欠測時の入力破棄
+    input.enable_strict_transform: true
     input.x_min: -10.
     input.x_max: 10.
     input.y_min: -10.

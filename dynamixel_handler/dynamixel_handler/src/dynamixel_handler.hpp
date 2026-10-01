@@ -2,6 +2,7 @@
 #define DYNAMIXEL_HANDLER_H
 
 #include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 
 #include "dynamixel_communicator.h"
 #include <memory>
@@ -132,6 +133,8 @@ class DynamixelHandler : public rclcpp::Node {
         //* ROS publisher subscriber instance
         rclcpp::PublisherBase::SharedPtr  pub_status_;
         rclcpp::PublisherBase::SharedPtr  pub_present_;
+        // 今回の通信で位置・速度を取得できた実サーボだけの実測
+        rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_fresh_joints_;
         rclcpp::PublisherBase::SharedPtr  pub_goal_;
         rclcpp::PublisherBase::SharedPtr  pub_gain_;
         rclcpp::PublisherBase::SharedPtr  pub_limit_;

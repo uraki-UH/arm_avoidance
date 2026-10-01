@@ -66,16 +66,18 @@ void write_edges(std::ofstream &output, const std::vector<edge_type> &edges) {
   }
 }
 
-// 正規 load 経路用の3ノード・角度1層・座標2層の GNG v9 フィクスチャ。
-void write_fixture(const std::string &path, bool has_angle_collision_edge = true) {
+// 正規load経路用の角度1層・座標2層のGNG v9。中間ノード欠落時の不正参照も検証対象。
+void write_fixture(const std::string &path, bool has_angle_collision_edge = true,
+                   bool has_middle_node = true) {
   static_assert(sizeof(bool) == 1 && sizeof(int) == sizeof(std::int32_t));
   std::ofstream output(path, std::ios::binary);
   if (!output) throw std::runtime_error("Fixture file creation failed");
   write_scalar(output, std::uint32_t{9});
   write_scalar(output, std::int32_t{2});
-  write_scalar(output, std::int32_t{3});
+  write_scalar(output, std::int32_t{has_middle_node ? 3 : 2});
   const std::array<float, 3> angles{0.0f, 0.16f, 0.24f};
   for (std::int32_t idx = 0; idx < 3; ++idx) {
+    if (idx == 1 && !has_middle_node) continue;
     write_scalar(output, idx);
     write_scalar(output, 0.0f);
     write_scalar(output, 0.0f);
@@ -162,6 +164,42 @@ void expect_only_safe_edge(const gng_type &graph) {
 }
 
 }  // 無名名前空間の終端
+
+TEST(gng_collision_filter, removing_node_erases_reverse_angle_edges) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  graph.setNodeActive(1, false);
+  graph.removeInactiveElements();
+  ASSERT_EQ(graph.getActiveIndices().size(), 2U);
+  for (int id : {0, 2}) {
+    EXPECT_TRUE(graph.getNeighborsAngle(id).empty());
+    EXPECT_FALSE(graph.isEdgeActive(id, 1));
+    for (int layer_idx = 0; layer_idx < 2; ++layer_idx)
+      EXPECT_TRUE(graph.getNeighborsCoord(id, layer_idx).empty());
+  }
+  ASSERT_TRUE(graph.save(files.path("filtered.bin")));
+  gng_type reloaded(1, 3, &chain);
+  ASSERT_TRUE(reloaded.load(files.path("filtered.bin")));
+  EXPECT_FALSE(reloaded.isEdgeActive(0, 1));
+  EXPECT_FALSE(reloaded.isEdgeActive(2, 1));
+}
+
+TEST(gng_collision_filter, missing_endpoint_does_not_create_hidden_edges_on_load) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"), true, false);
+  auto chain = make_chain();
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  ASSERT_EQ(graph.getActiveIndices().size(), 2U);
+  for (int id : {0, 2}) {
+    EXPECT_TRUE(graph.getNeighborsAngle(id).empty());
+    EXPECT_FALSE(graph.isEdgeActive(id, 1, 0));
+    EXPECT_FALSE(graph.isEdgeActive(id, 1, 1));
+  }
+}
 
 TEST(gng_collision_filter, interior_collision_removes_edges_from_all_layers) {
   temporary_files files;

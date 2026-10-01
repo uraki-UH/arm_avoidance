@@ -18,6 +18,7 @@
 
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
+#include "core/common/viewer_status.hpp"
 
 namespace robot_sim {
 namespace bridge {
@@ -27,6 +28,7 @@ public:
     explicit RobotViewerBridgeNode(const rclcpp::NodeOptions & options);
 
 private:
+    robot_sim::common::viewer_status_summary status_summary_;
     bool loadRobotDescription(std::string& out_text, const std::string& source_path) const;
     static std::vector<std::string> splitCommaSeparated(const std::string &text);
     std::vector<std::string> inferLeafLinkNames() const;

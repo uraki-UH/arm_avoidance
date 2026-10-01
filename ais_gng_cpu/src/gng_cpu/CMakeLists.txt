@@ -198,6 +198,9 @@ ament_export_dependencies(Boost OpenSSL)
 
 if(GNG_BUILD_BENCHMARKS)
   enable_testing()
+  add_executable(gng_fixed_frame_api_test test/gng_fixed_frame_api_test.cpp)
+  target_link_libraries(gng_fixed_frame_api_test PRIVATE gng_cpu)
+  add_test(NAME gng_fixed_frame_api_test COMMAND gng_fixed_frame_api_test)
   add_executable(node_insertion_test test/node_insertion_test.cpp src/cpu/cugng.cpp src/cpu/voxel_grid.cpp
     src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
   target_include_directories(node_insertion_test PRIVATE src include)

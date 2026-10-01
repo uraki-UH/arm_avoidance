@@ -1,0 +1,27 @@
+/**:
+  ros__parameters:
+    # 初回回避の対象は左腕ID41〜47。単関節試験はlaunch引数でL_joint7を選択
+    joint_names: [L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7]
+    driver_namespace: /dynamixel
+    sim_namespace: /sim_ToPoDualArm
+    allow_hardware_output: false
+    allow_sim_follow: false
+    # 通常動作の許容電流 [mA]。0は未設定・有効化拒否。出力許可時のEによるトルクOFFは利用可能
+    max_current_ma: 0.0
+    # 小動作の目標変化 [rad]
+    jog_step: 0.017453292519943295
+    # 有効化時姿勢を基準とした試験範囲 [rad]
+    max_excursion: 0.08726646259971647
+    # 実機目標の速度 [rad/s]・profile加速度 [rad/s²]
+    max_velocity: 0.03490658503988659
+    max_acceleration: 0.5235987755982988
+    # Gazebo開始姿勢差・実機追従偏差 [rad]
+    max_start_dev_th: 0.017453292519943295
+    max_follow_dev_th: 0.05235987755982989
+    # 実測停止の速度 [rad/s]・継続時間 [s]
+    max_stop_velocity_th: 0.008726646259971648
+    min_stop_duration_sec: 0.3
+    max_state_age_sec: 0.3
+    max_status_age_sec: 1.5
+    max_command_age_sec: 0.3
+    max_heartbeat_age_sec: 0.4

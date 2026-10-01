@@ -67,6 +67,9 @@ RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.o
 # YOLO人物検出
 RUN pip3 install --no-cache-dir "numpy<2" "ultralytics>=8.3,<9"
 
+# 局所回避の二次計画ソルバー
+RUN pip3 install --no-cache-dir "osqp==1.0.4"
+
 # PCL RGB-D人物検出用HOG+SVM
 RUN mkdir -p /opt/pcl_people \
  && curl -L --fail --silent --show-error \

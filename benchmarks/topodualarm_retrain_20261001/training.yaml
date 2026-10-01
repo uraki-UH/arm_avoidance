@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    # 元binを残す再学習専用の保存先
+    gng:
+      experiment_id: ToPoDualArm10000_selfchecked_20261001
+      profile_names: left_arm
+      vlut_only: false
+      use_voxel_collision: true
+    collision:
+      skip_checks: false
+      enable_self_collision: true
+      voxel_size: 0.001
+    # 既存約1万ノード版と同じ探索・補充規模
+    gng_params:
+      max_node_num: 11000
+      max_iterations: 2200000
+      refine_iterations: 600000

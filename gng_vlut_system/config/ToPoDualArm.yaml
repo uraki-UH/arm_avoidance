@@ -97,7 +97,8 @@
       # ROI範囲の基準マップ。全ノードのBBoxと各軸の余白。空文字列で従来の固定範囲
       reachability_map_topic: "Tmap_static"
       # BBoxの各面から外側への余白 [m]
-      reachability_margin_x: 0.1
+      # 前方伸展時の接近検知余裕を含むX方向ROI余白 [m]
+      reachability_margin_x: 0.4
       reachability_margin_y: 0.1
       reachability_margin_z: 0.1
 

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "core/common/constants.hpp"
+#include "core/common/viewer_status.hpp"
 #include "safety_engine/vlut/voxel_processor.hpp"
 
 namespace robot_sim::self_recognition {
@@ -36,6 +37,7 @@ class SelfVoxelFilterNode : public rclcpp::Node {
 public:
   SelfVoxelFilterNode()
   : Node("self_voxel_filter_node"),
+    status_reporter_(*this, "vxl"),
     processor_(::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE) {
     declare_parameter<std::string>(
         "self_recognition.raw_environment_voxel_topic", "roi_voxels");
@@ -149,6 +151,7 @@ private:
   }
 
   void environmentVoxelCallback(const voxel_msgs::msg::Voxel::SharedPtr msg) {
+    const auto processing_start = std::chrono::steady_clock::now();
     std::shared_ptr<const MaskSnapshot> mask;
     {
       std::lock_guard<std::mutex> lock(mask_mutex_);
@@ -202,12 +205,19 @@ private:
     }
     filtered_pub_->publish(filtered);
 
-    RCLCPP_INFO_THROTTLE(
+    const double processing_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - processing_start).count();
+    status_reporter_.report({static_cast<double>(msg->data.size()),
+        static_cast<double>(mask->excluded_ids.size()),
+        static_cast<double>(msg->data.size() - filtered.data.size()), processing_ms});
+
+    RCLCPP_DEBUG_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "環境自己ボクセル除外: input=%zu output=%zu removed=%zu",
         msg->data.size(), filtered.data.size(), msg->data.size() - filtered.data.size());
   }
 
+  robot_sim::common::viewer_status_reporter status_reporter_;
   std::string raw_environment_voxel_topic_;
   std::string filtered_environment_voxel_topic_;
   std::string self_voxel_topic_;

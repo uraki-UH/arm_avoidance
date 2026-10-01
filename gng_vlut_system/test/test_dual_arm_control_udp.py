@@ -26,8 +26,8 @@ def controller_state(sec=12, nanosec=0):
     message = JointTrajectoryControllerState()
     message.header.stamp.sec, message.header.stamp.nanosec = sec, nanosec
     message.joint_names = ['L_joint1', 'R_joint1']
-    message.desired.positions = [0.1, -0.2]
-    message.actual.positions = [1.0, -1.0]
+    message.reference.positions = [0.1, -0.2]
+    message.feedback.positions = [1.0, -1.0]
     return message
 
 
@@ -187,7 +187,7 @@ def test_reset_completion_keeps_udp_disabled_until_new_hardware_request(udp_cont
     udp_control.udp.enable.assert_not_called()
 
 
-def test_controller_desired_is_forwarded_without_actual_position(udp_control):
+def test_controller_reference_is_forwarded_without_feedback_position(udp_control):
     message = controller_state()
     udp_control.on_controller_state(message)
     udp_control.udp.update_target.assert_called_once()

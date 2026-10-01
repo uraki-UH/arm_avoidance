@@ -411,9 +411,24 @@ template <typename Addr> tuple<double, uint8_t> DynamixelHandler::SyncReadPresen
         default: /*ここに来たらエラ-*/ ROS_STOP("Unknown PresentIndex");
     }
     // SyncReadでまとめて読み込み
+    const auto sample_stamp = now();
     const auto id_st_vec_map = SyncRead_log(state_addr_list, target_id_list, verbose_["r_present"], verbose_["r_present_err"]);
     const int N_total = target_id_list.size();
     const int N_suc   = id_st_vec_map.size();
+    // 同一応答内の位置・速度だけの配信。キャッシュ・ダミー・欠測IDの混入防止
+    if (*start <= PRESENT_VELOCITY && *end >= PRESENT_POSITION && !id_st_vec_map.empty()) {
+        sensor_msgs::msg::JointState measured;
+        measured.header.stamp = sample_stamp;
+        measured.header.frame_id = "dynamixel_motor";
+        const auto velocity_idx = PRESENT_VELOCITY - *start;
+        const auto position_idx = PRESENT_POSITION - *start;
+        for (const auto& [id, data] : id_st_vec_map) {
+            measured.name.push_back(std::to_string(id));
+            measured.position.push_back(state_addr_list[position_idx].pulse2val(data[position_idx], model_[id]));
+            measured.velocity.push_back(state_addr_list[velocity_idx].pulse2val(data[velocity_idx], model_[id]));
+        }
+        pub_fresh_joints_->publish(measured);
+    }
     //* present_r_に反映
     const unsigned int num_state_now  = *end-*start+1;
     { StateLock lock(mutex_state_);

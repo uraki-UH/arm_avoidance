@@ -73,7 +73,7 @@ public:
     graph_timer_ = create_wall_timer(
         std::chrono::seconds(2),
         [this]() {
-          RCLCPP_INFO(
+          RCLCPP_DEBUG(
               get_logger(),
               "Topic graph: input pubs=%zu occupied pubs=%zu danger pubs=%zu",
               count_publishers(input_topic_),
@@ -199,7 +199,7 @@ private:
     latest_danger_ = computeDangerShell(latest_occupied_);
     has_new_data_ = true;
 
-    RCLCPP_INFO_THROTTLE(
+    RCLCPP_DEBUG_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "Mask received: input_voxel_size=%.4f input=%zu occupied=%zu danger=%zu source_frame=%s target_frame=%s voxel_id_reuse=%s",
         input_voxel_size, msg->data.size(), latest_occupied_.size(),

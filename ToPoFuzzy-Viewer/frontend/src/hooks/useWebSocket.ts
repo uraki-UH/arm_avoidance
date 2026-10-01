@@ -1195,7 +1195,9 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             }
                         },
                         'stream.robot.delete': (p) => {
-                            if (typeof p.tag === 'string') setRobotData(prev => {
+                            if (typeof p.tag !== 'string') return;
+                            pendingRobotPoseUpdatesRef.current.delete(p.tag);
+                            setRobotData(prev => {
                                 const next = { ...prev };
                                 delete next[p.tag];
                                 return next;

@@ -57,6 +57,7 @@ class dual_arm_control(Node):
         self.has_initialized_mode = False
         self.stop_deadline = 0.0
         self.command = self.create_publisher(JointTrajectory, 'dual_arm_controller/joint_trajectory', 1)
+        self.last_position_goal = None
         self.status = self.create_publisher(String, 'control/status', 1)
         self.create_subscription(JointState, 'joint_states', self.on_state, qos_profile_sensor_data)
         self.create_subscription(JointState, 'leader_joint_states', self.on_leader, qos_profile_sensor_data)
@@ -65,7 +66,7 @@ class dual_arm_control(Node):
         self.create_subscription(String, 'avoidance/status', self.on_demo, 1)
         self.create_subscription(Empty, 'control/heartbeat', self.on_heartbeat, 1)
         if self.udp is not None:
-            self.create_subscription(JointTrajectoryControllerState, 'dual_arm_controller/state',
+            self.create_subscription(JointTrajectoryControllerState, 'dual_arm_controller/controller_state',
                                      self.on_controller_state, qos_profile_sensor_data)
         self.service_clients = {name: self.create_client(Trigger, name) for name in
                         ('avoidance/start', 'avoidance/stop', 'safety/stop', 'safety/reset')}
@@ -116,7 +117,7 @@ class dual_arm_control(Node):
         try:
             if not -0.1 <= self.joint_stamp - stamp <= 0.5:
                 raise ValueError('UDP元のcontroller目標時刻が失効しています')
-            self.udp.update_target(message.joint_names, message.desired.positions, stamp, time.monotonic())
+            self.udp.update_target(message.joint_names, message.reference.positions, stamp, time.monotonic())
         except (ValueError, OSError) as error:
             if is_enabled:
                 self.stop('UDP目標異常: ' + str(error))
@@ -217,6 +218,7 @@ class dual_arm_control(Node):
         return response
 
     def stop(self, detail):
+        self.last_position_goal = None
         self.model.stop()
         self.phase, self.detail, self.is_stop_required = 'stopped', detail, True
         if self.udp is not None:
@@ -233,11 +235,22 @@ class dual_arm_control(Node):
 
     def on_reset(self, _request, response):
         now = time.monotonic()
-        if (self.phase != 'stopped' or self.future is not None or self.stop_future is not None
-                or self.has_unconfirmed_operation
-                or status_label(self.safety, now - self.safety_sec) != '実測停止: 確認済み'
-                or not self.model.is_stationary(now) or now - self.heartbeat_sec > 0.5):
-            response.success, response.message = False, '新鮮な実測停止確認と未処理要求の完了が必要です'
+        reason = ''
+        if self.phase != 'stopped':
+            reason = '停止解除可能な状態ではありません: '+self.phase
+        elif self.has_unconfirmed_operation:
+            reason = '以前の切替操作の応答未確認。制御ノードの再起動が必要です'
+        elif self.future is not None or self.stop_future is not None:
+            reason = '停止・切替要求の応答待ち'
+        elif now - self.heartbeat_sec > 0.5:
+            reason = '操作端末の更新失効'
+        elif status_label(self.safety, now - self.safety_sec) != '実測停止: 確認済み':
+            reason = 'Gazeboの実測停止未確認。全関節の静止継続または状態更新を待っています'
+        elif not self.model.is_stationary(now):
+            reason = '制御側の関節静止・更新を未確認'
+        if reason:
+            response.success, response.message = False, reason
+            # 元の停止原因の保持。解除拒否は操作端末側の状態行へ表示
             return response
         try:
             self.is_stop_required = False
@@ -271,7 +284,8 @@ class dual_arm_control(Node):
                 return
             response = future.result()
             if response is None or not getattr(response, 'success', getattr(response, 'ok', False)):
-                raise RuntimeError('切替操作の拒否: ' + self.phase)
+                reason = getattr(response, 'message', '')
+                raise RuntimeError('切替操作の拒否: ' + self.phase + (' / '+reason if reason else ''))
             if self.phase == 'switch_stop_demo':
                 self.phase, self.deadline = 'switch_settle', now + 5
             elif self.phase == 'switch_start_demo':
@@ -360,11 +374,16 @@ class dual_arm_control(Node):
             self.last_avoidance_stamp, self.avoidance_sec = stamp, now
             # 生成時刻は旧モードの入力除外用。controllerへの区間実行は受信時起点
             message.header.stamp = Time()
+            self.last_position_goal = None
             self.command.publish(message)
         except ValueError as error:
             self.stop(str(error))
 
     def publish_positions(self, positions):
+        goal = tuple(positions[name] for name in self.model.model.independent_names)
+        # 同じ保持目標の再送による補間の再開始・微振動の抑制
+        if goal == self.last_position_goal:
+            return
         message = JointTrajectory()
         message.joint_names = list(self.model.model.independent_names)
         point = JointTrajectoryPoint()
@@ -372,6 +391,7 @@ class dual_arm_control(Node):
         point.time_from_start.nanosec = 50_000_000
         message.points = [point]
         self.command.publish(message)
+        self.last_position_goal = goal
 
     def tick(self):
         now = time.monotonic()

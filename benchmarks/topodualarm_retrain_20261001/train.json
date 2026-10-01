@@ -1,0 +1,1 @@
+{"cases":[{"name":"train","argv":["ros2","run","gng_vlut_system","offline_urdf_trainer","--ros-args","--params-file","/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml","--params-file","/ros2_ws/src/benchmarks/topodualarm_retrain_20261001/training.yaml"],"env":{"ROS_DOMAIN_ID":"218","ROS_LOCALHOST_ONLY":"1","ROS_LOG_DIR":"/tmp/topodualarm_retrain_20261001_logs"}}]}

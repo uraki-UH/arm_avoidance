@@ -149,6 +149,8 @@ class AiSGNGComponent : public rclcpp::Node {
 
     std::string base_frame_id_;
     bool local_coordinates_{false};
+    bool enable_strict_transform_{false};
+    bool has_input_transform_{false};
     uint32_t input_point_cloud_num_{20000};
     PointSamplingMode input_sampling_mode_{PointSamplingMode::Head};
     PC2::SharedPtr sampled_cloud_buffer_{std::make_shared<PC2>()};

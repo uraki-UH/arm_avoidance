@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import sys
+import xml.etree.ElementTree as et
 
 from launch import LaunchContext
 from launch.actions import IncludeLaunchDescription
@@ -66,6 +67,31 @@ def test_prismatic_gripper_poses():
     values = dict(poses)['grippers_open']
     assert values[names.index('L_gripper_joint')] == 0.02
     assert values[names.index('R_gripper_joint')] == 0.02
+
+
+def test_left_forward_initial_pose_and_invalid_positions():
+    spec = importlib.util.spec_from_file_location('gazebo_demo_launch', share / 'launch/dual_arm_gazebo_demo.launch.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    urdf_path = workspace / 'urdf/dual_arm_urdf/dual_arm_robot.urdf'
+    root = et.parse(urdf_path).getroot()
+    config = yaml.safe_load((share / 'config/pointcloud_avoidance_topodualarm_left_forward.yaml').read_text())['overrides']
+    positions = module.initial_joint_positions(root, config['initial_joint_positions'])
+    geometry = robot_geometry(urdf_path)
+    values = np.array([positions[name] for name in geometry.joint_names])
+    transforms = geometry.link_transforms(values)
+    elbow = transforms[geometry.link_indices['L_link4'], :3, 3]
+    hand = transforms[geometry.link_indices['L_gripper_base'], :3, 3]
+    assert positions['L_joint1'] == pytest.approx(-np.pi/4)
+    assert hand[0] > .2
+    assert hand[1] == pytest.approx(elbow[1])
+    assert np.arctan2(hand[2]-elbow[2], hand[0]-elbow[0]) == pytest.approx(-np.pi/4)
+    assert geometry.has_internal_clearance(geometry.centers(values))
+    assert all(value == 0 for name, value in positions.items() if name != 'L_joint1')
+    for invalid in [{'missing': 0}, {'L_joint1': float('nan')}, {'L_joint1': 3}, {'camera_fixed': 0}]:
+        with pytest.raises(ValueError):
+            module.initial_joint_positions(root, invalid)
+    assert all(value == 0 for value in module.initial_joint_positions(root, {}).values())
 
 
 @pytest.mark.parametrize('sign', [1, -1])

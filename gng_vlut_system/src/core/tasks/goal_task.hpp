@@ -19,6 +19,7 @@ struct goal_task_context {
 struct goal_task_request {
   std::vector<int> goal_ids;
   std::string label;
+  bool is_retreat = false;
 };
 
 // 目標選択のみを担当するタスク部品。実行状態と安全監視は所有しない境界
@@ -42,7 +43,7 @@ public:
   std::optional<goal_task_request> select(const goal_task_context &context) const override {
     if (!context.requested_goals.empty() || !context.allow_safe_goal_fallback ||
         !context.is_start_unsafe || context.safe_goals.empty()) return std::nullopt;
-    return goal_task_request{context.safe_goals, "Avoidance"};
+    return goal_task_request{context.safe_goals, "Avoidance", true};
   }
 };
 

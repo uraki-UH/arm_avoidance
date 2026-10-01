@@ -35,6 +35,16 @@ RPC・stream・ROS topicの追加なし。[操作と範囲](../doc/MESH_MODELS.m
 
 ## Events
 
+### Robot Lifecycle
+
+`stream.robot.description`の`tag`ごとにROS配信元のGIDを保持。1秒周期の生存確認で該当配信元の消失を検出した場合、descriptionキャッシュの削除と`stream.robot.delete`の通知。他ロボットの配信継続による削除抑止なし。静止・Gazebo一時停止は配信元消失として扱わない。
+
+```json
+{ "type": "stream.robot.delete", "tag": "sim_ToPoDualArm" }
+```
+
+削除対象: 該当ロボットの描画データと未描画の姿勢更新。表示設定のリセットなし。同じ`tag`の新しいdescriptionによる再表示。ROS発見情報の反映遅延あり。
+
 ### Point Cloud Metadata
 ```json
 { "type": "stream.pointcloud.meta", "topic": "/points", "tag": "/points", "frameId": "lidar_link" }

@@ -18,7 +18,7 @@ dual_arm_avoidance_demo:
   # 外接形状間の目標余裕 [m]
   target_clearance: 0.10
   # デモ停止判定用の形状間距離 [m]
-  min_clearance_th: 0.035
+  min_clearance_th: 0.002
   # 物理追従のずれに対する計画時の自己・床・台の形状間距離 [m]
   min_planning_clearance_th: 0.01
   max_state_age_sec: 1.0

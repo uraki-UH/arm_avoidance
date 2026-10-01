@@ -62,6 +62,13 @@ overrides:
 - 基準座標: URDFの一意なルートリンク。world原点への固定基台。GNG/VLUTも同じ基準での生成が必要。
 - `overrides`: 共通設定への辞書単位の上書き。模擬前腕の位置・寸法・接近時間、計画余裕、LiDAR位置・視野・解像度、ROIなどを機体寸法に合わせて指定。`sides`は障害物を置くY方向の符号で、関節グループ名とは独立。
 - ROI: 指定範囲に追加余白なし。床は既定ROIの外側で、形状による床・作業台との干渉検査を併用。
+- 退避条件: 点群の接近、または現在姿勢の最寄りGNGノード自身・直接隣接の危険／衝突。隣接安全を確認できない場合も保持・復帰への移行は禁止。グラフ側の危険に対する退避は計画対象関節全体で追従し、距離だけによる対象腕の縮小なし。各ステップの点群余裕増加は必須条件から除外、経路の最低余裕・自己干渉・関節制限の検査は継続。
+- 自律退避先: 自身と辺で直接つながる全隣接ノードが安全な候補へ限定。二次隣接は対象外。C++では安全条件で絞ってから候補数を制限し、移動中の退避先の隣接悪化は再選定。Pythonグラフ探索でも終点へ同条件を適用。安全な終点への脱出経路を確保するため、中間ノードには自身の安全を要求し、隣接までの安全は要求しない。
+- 回避・復帰のチャタリング抑制: 共通YAMLの`return_clear_sec: 0.5`で復帰条件の継続時間を指定（実時間の秒、0で待機無効）。C++計画接続では隣接安全・退避目標余裕・復帰経路の安全確認中は`waiting_for_clearance`で保持、継続成立後に復帰。Python単独計画にも既存復帰条件の継続確認を適用。危険再検出時の回避は待機なし。条件不成立・確認間隔の入力期限超過・停止・再開始で計測を初期化。`obstacle_wait`からの再開確認`resume_clear_sec`とは別設定。設定反映はGazebo launch再起動後。
+- 停止マージンの正本: `config/pointcloud_avoidance_common.yaml`の`clearance_margins`。`min_clearance_th`は点群の開始・停止・待機・経路検査・QP下限（0.01 m）、`min_internal_clearance_th`は自己干渉・床・作業台の開始・停止余裕（0.005 m）、`min_planning_clearance_th`は計画・QP時の内部形状余裕（0.01 m）。計画余裕は内部停止余裕を確保する値、各値は有限正数。点群の経路下限`min_cloud_clearance_th`は自動導出、独立設定なし。`target_clearance`は退避目標・自動再開条件として別設定。
+- 設定移行: 新共通設定で旧トップレベルの距離項目を併記すると起動拒否。機体・入力固有の上書きも`clearance_margins`内に記載。共通launch以外の旧デモ設定は従来互換。変更反映はGazebo launch再起動後、稼働中への動的反映なし。
+- 点群経路検査: 指定の計画余裕と`min_clearance_th`の大きい方を区間サンプルの下限として使用。距離は外接球とボクセル外接球の間の保守的な余裕で、実物表面間の測距値とは別。距離不足による開始拒否・停止時は`avoidance/status.stop_clearance`へ事象・リンク・URDFルート座標の最接近点・距離・球半径・関節位置を保存。後続入力で上書きせず、次の回避開始成功時に初期化。開始拒否の事象は`start_rejected`、実行中の距離停止は`running_stop`。
+- 点群待機の自動再開: `enable_live_obstacles`と`enable_obstacle_auto_resume`の両方が有効な場合、点群距離不足を`obstacle_wait`で保持。`target_clearance`とGNG隣接安全の`resume_clear_sec`秒継続後に同じ実行を再開。共通既定はOFF、通常Viewerの実環境入力設定でON。手動停止・入力欠測・内部干渉・関節異常の解除は対象外。自己除去後ROIが空の場合も既存の入力待ち・欠測停止扱いを維持。
 
 実時間のRealSense点群による継続回避は[RealSense実点群を使うGazebo回避](realsense_gazebo.md)を参照。以下はシミュレーション時刻で既に配信されている外部点群の接続設定:
 
@@ -73,6 +80,32 @@ overrides:
 ```
 
 この場合、仮想LiDARとその固定TFの生成なし。外部配信側でPointCloud2のframeから`sim_<robot_name>/<root_link>`へのTF、シミュレーション時刻に整合する更新stampが必要。空点群・入力失効・探索失敗は停止扱い。
+
+## 局所QPによる出力補正（試験機能）
+
+実装: OSQP 1.0.4。GNG/V-LUTまたは既存C++の経路・目標選択を維持し、Gazebo軌道の出力直前に関節変位を補正。実機出力の許可設定・電流制限とは別機能。
+
+設定先: `pointcloud_avoidance_common.yaml`の`local_qp`。既定OFF。機体YAMLの`overrides.local_qp`または入力YAML直下の`local_qp`で上書き可能。通常のlaunch引数追加なし。
+
+```yaml
+local_qp:
+  enable_qp: true
+  max_joint_acceleration: 3.0
+  max_solve_sec: 0.02
+```
+
+上記はGazeboでの比較用初期値。加速度単位は回転関節rad/s²・直動関節m/s²、時間単位はs。古いコンテナは`python3 -m pip install osqp==1.0.4`と`gng_vlut_system`の再ビルドが必要。Dockerfileに同版を追加済み。
+
+- 変数: 選択された計画関節の変位`Δq`。他の関節は実測位置のまま固定。
+- 目的関数: `0.5 ||Δq − Δq_nom||²`。候補待ちで名目変位がゼロの場合のみ、近傍点群から目標余裕へ離れる項`100 ||J_cloud Δq − (target_clearance − d_cloud)||²`を追加。
+- 距離制約: `J Δq ≥ −0.5 (d − d_min)`。点群との外接球表面間距離、既存の自己干渉ペア、床・作業台を対象。点群の`d_min`は`max(min_cloud_clearance_th, min_clearance_th)`、内部形状は`min_planning_clearance_th`。
+- 関節制約: URDF範囲内の次姿勢。5次補間の速度・加速度最大値から`|Δq| ≤ min(v_max T / 1.875, a_max T² / (10/√3))`。`v_max`は既存速度設定とURDF上限の小さい方、`T`は既存制御周期。
+- 軽量化: 球中心の前進差分と最近傍面法線による距離勾配。変位上限だけで満足する線形制約の除外。距離制約数の上限打切りなし。
+- 棄却: 初期余裕不足、非有限値、求解失敗・不正確解・時間超過、制約残差超過、既存の非線形区間検査失敗、求解後の入力失効、処理全体の制御周期超過。元の未補正指令へのフォールバックなし、既存の停止・保持処理へ移行。
+- 診断: `avoidance/gng_status.local_qp`の`status`・`num_calls`・`num_constraints`・`solve_ms`・`total_ms`。`solve_ms`はOSQPのsetup・solve時間、`total_ms`は距離勾配・区間検査を含む処理時間。
+- 制限: 動く障害物の未来位置推定なし。距離の局所線形化と離散的な区間検査であり、連続時間の衝突回避保証・未知領域の安全保証なし。加速度制約は生成した静止端点間軌道に対する値で、実機追従・再計画時の加速度保証ではない。短い周期では許容変位が小さくなるため、速度設定だけを上げても高速化しない。
+
+参考: [OSQP Python API](https://osqp.org/docs/interfaces/python.html)、[求解状態](https://osqp.org/docs/interfaces/status_values.html)。
 
 ## 適用範囲と制限
 

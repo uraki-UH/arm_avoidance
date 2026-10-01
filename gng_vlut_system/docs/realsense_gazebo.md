@@ -1,6 +1,56 @@
 # RealSense実点群を使うGazebo回避
 
-RealSenseの実時間PointCloud2を受信し、指定した仮想カメラ配置でGazeboの基準座標へ変換。GNG/VLUTと点群距離で仮想ロボットを継続回避。実機への指令出力なし。
+接続方法は、通常Viewerで更新済みの環境・Tmapを使う方法と、点群を別の仮想カメラ配置へ変換する方法の2種類。GNG/VLUTと点群距離で仮想ロボットを継続回避。実機への指令出力なし。
+
+環境GNGは`ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml`で起動。`/topological_map`・`/scan/transformed`は`ToPoDualArm/base_link`基準。取得時刻の実機首・腰TFを使用し、TF欠測時は学習・配信を保留。`graspnet_topodualarm.yaml`も同じ座標変換方式、学習設定は個別。稼働中GNGの座標切替は蓄積状態の混在を避けるため再起動が必要。他機体・HTML入力への流用時は入力に対応した基準フレームとTFの設定が必要。[座標系・反映手順](releases/2026-10-01_environment_gng_base_frame.md)。
+
+## 更新中の環境・TmapをGazeboへ接続
+
+実機側で頭部カメラのTF、実測関節、自己除去、`Tmap_static`の更新が接続済みの場合の構成。
+
+```text
+RealSense → 実機TF → ROI → 実機姿勢による自己除去 → VLUT → Tmap_static
+                                 ↓                         ↓
+                         Gazeboの距離判定 ← 姿勢グラフの安全状態
+                                 ↓
+                        Gazebo回避 → Gazebo実測関節 → Viewer
+```
+
+既存のRealSense・Dynamixel読取り・`gng_viewer_bridge.launch.py`・Viewerは継続。追加の対話端末で以下を実行（コンテナ内、既存ノードと同じROS domain）。
+
+```bash
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/local_setup.bash
+export ROS_DOMAIN_ID=25 ROS_LOCALHOST_ONLY=0 ROS2CLI_NO_DAEMON=1
+ros2 launch gng_vlut_system pointcloud_avoidance.launch.py \
+  input_config:=/ros2_ws/src/gng_vlut_system/config/viewer_environment_gazebo_input.yaml
+```
+
+- 起動時: Gazebo GUI表示・保持状態。`A`で回避開始／保持、`Space`で停止ラッチ、`L`でラッチ解除後の保持、`Ctrl+C`で終了。Dockerからの起動には`docker exec -it gng_cpu_container bash`。
+- Viewer機体: `sim_ToPoDualArm`。姿勢入力は`/sim_ToPoDualArm/joint_states`のGazebo実測値。実機`ToPoDualArm`とは別機体として配信。
+- 環境表示: `/ToPoDualArm/self_filter_roi_voxels`と`/ToPoDualArm/Tmap_static`。回避経路は`/sim_ToPoDualArm/plan_Tmap`。この入力モードには`/sim_ToPoDualArm/external_points`の生成なし。
+- Gazebo自己形状: `/sim_ToPoDualArm/self_voxel`。Gazebo実測`joint_states`からの継続更新。Viewerでは機体`sim_ToPoDualArm`と組合せて表示。関節受信の失効0.5秒で新規配信停止。
+- 実点群の自己除去: 実機側`/ToPoDualArm/self_voxel`で常設。仮想腕と重なる環境障害物を消さないため、Gazebo自己形状による実点群の再除去なし。実機側の全独立関節の新鮮さも回避開始・継続の必須条件。
+- 座標: 実機とGazeboのURDFルートを同じ配置に対応。機体YAMLの`frame_id`からルートへの固定リンク変換を点群中心・経路表示へ適用。ToPoDualArmの`base_link`と`base_footprint`は固定恒等変換。可動リンクを環境基準にする設定は起動時に拒否。
+- 時刻: 元点群・自己除去後ROI・Tmap・実機関節の実時間stampを検査。既定期限1秒、重複・過去・未来stampを拒否。Gazebo時刻への再stampによる入力延命なし。停止した入力の復帰だけでは停止ラッチの解除なし。
+- 入力失効・空ROI: 回避開始拒否／動作中停止。観測のない領域を自由空間とする扱いなし。
+- ToPoDualArmの前方ROI: 頭部点群のX方向余白0.4 m、保存済みTmapで前方端約0.828 m。前方伸展した腕への接近を早く捉える範囲。変更反映には通常Viewerの環境入力launchも再起動が必要。[速度・検知範囲の検証](releases/2026-10-01_gazebo_avoidance_speed.md)。
+- 対応機体: `robot_config`の指定で切替え。入力名前空間は機体YAMLの`robot_name`、元点群は`environment_voxelization.input_topic`から導出。入力YAMLの`source_namespace`・`points_topic`による上書きも可能。環境とGazeboで同じURDF・学習済みGNG・関節順の使用が前提。
+- 現在の学習範囲: ToPoDualArm左腕7関節。Gazeboの基台・首・右腕はシミュレーション側の保持姿勢。実機姿勢への追従はこの起動に含まれない。
+
+Gazebo GUIはロボットの物理動作表示、点群との重なり確認はViewer。実点群からGazebo衝突物体を生成する機能なし。
+
+有限試験（試験点群、ROS domain96、起動ノード終了付き）:
+
+```bash
+ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 ROS2CLI_NO_DAEMON=1 \
+  python3 /ros2_ws/src/gng_vlut_system/test/check_viewer_environment_gazebo.py \
+  --output /ros2_ws/src/artifacts/viewer_environment_gazebo_trial
+```
+
+## 別の仮想カメラ配置を指定する入力
+
+RealSenseの実時間PointCloud2を受信し、指定した仮想カメラ配置でGazeboの基準座標へ変換。
 
 ```text
 RealSense実点群 → カメラ内部TF → 仮想カメラ配置 → 新鮮さ検査・Gazebo時刻付与
@@ -74,7 +124,8 @@ ROI生成だけを別ノードへ任せる場合は`enable_environment_voxelizat
 - Viewer機体: `sim_ToPoDualArm`。
 - 回避に使う配置済み点群: `/sim_ToPoDualArm/external_points`。Viewerのトピック一覧から表示。元の`/camera/camera/depth/color/points`とは座標・時刻が異なる別トピック。
 - 自己除去前ROI: `/sim_ToPoDualArm/roi_voxels`。実測関節がなくても点群とclockが有効なら配信。
-- 実機自己形状: `/sim_ToPoDualArm/self_voxel`。`sim_ToPoDualArm/real`名前空間の自己認識ノードによる配信。
+- 実機自己形状: `/sim_ToPoDualArm/real/self_voxel`。`sim_ToPoDualArm/real`名前空間の自己認識ノードによる配信。実点群の除去用。
+- Gazebo自己形状: `/sim_ToPoDualArm/self_voxel`。Gazeboの`joint_states`による更新。旧設定で実機形状表示にこのトピックを使っていた場合は`real/self_voxel`へ変更。
 - 自己除去後・回避用ボクセル: `/sim_ToPoDualArm/self_filter_roi_voxels`。VLUT・回避は常にこのトピックを使用。自己除去なしの迂回経路なし。
 - 入力診断: `/sim_ToPoDualArm/external_cloud/status`。受理数・拒否数・最終出力からの時間・拒否理由・仮想カメラ配置、`has_fresh_real_state`・`real_state_detail`による実機関節の不足・失効表示。
 - 経路・状態: `/sim_ToPoDualArm/plan_Tmap`、`avoidance/status`、`avoidance/gng_status`。

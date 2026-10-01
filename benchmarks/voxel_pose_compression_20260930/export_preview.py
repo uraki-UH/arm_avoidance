@@ -28,7 +28,7 @@ def sha256(path):
     return value.hexdigest()
 
 
-def read_gng(path):
+def read_gng(path, *, expected_num_layers=2, allow_missing_endpoints=False):
     """GNG v9 の可変長レコード境界と参照の検査。辺数ゼロの許容。"""
     data = path.read_bytes()
     offset = 0
@@ -54,7 +54,7 @@ def read_gng(path):
 
     require(read('I') == 9, 'GNG v9 以外の入力')
     num_layers, num_nodes = read('ii')
-    require(num_layers == 2, '座標層数が 2 以外の GNG')
+    require(num_layers == expected_num_layers, 'GNG の期待座標層数との不一致')
     require(0 <= num_nodes <= len(data) // 12, 'GNG ノード数の不整合')
     header = data[:offset]
     nodes = []
@@ -85,7 +85,7 @@ def read_gng(path):
         for _ in range(num_edges):
             edge_start = offset
             first_id, second_id, age, is_active = read('iii?')
-            require(first_id in node_ids and second_id in node_ids,
+            require(allow_missing_endpoints or (first_id in node_ids and second_id in node_ids),
                     f'GNG 辺の不正な参照: layer={layer_idx}')
             require(first_id != second_id and age >= 0,
                     f'GNG 辺の不正な内容: layer={layer_idx}')

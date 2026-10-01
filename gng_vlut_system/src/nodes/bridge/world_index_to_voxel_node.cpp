@@ -28,6 +28,7 @@
 #include <tf2_ros/transform_listener.h>
 
 #include "core/indexing/reachability_voxel_accumulator.hpp"
+#include "core/common/viewer_status.hpp"
 #include <point_cloud_store.hpp>
 #include "safety_engine/indexing/voxel_id_codec.hpp"
 
@@ -63,6 +64,7 @@ private:
 public:
   explicit WorldIndexToVoxelNode(const rclcpp::NodeOptions &options)
   : Node("world_index_to_voxel_node", options),
+    status_reporter_(*this, "pc"),
     voxel_codec_(0.02),
     world_bucket_codec_(0.2)
   {
@@ -582,7 +584,7 @@ private:
       }
       consumer.roi_publisher->publish(
         consumer.voxel_codec->makeMessage(roi_header, roi_voxel_ids));
-      RCLCPP_INFO_THROTTLE(
+      RCLCPP_DEBUG_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "追加ROI出力: consumer=%s candidate=%zu accepted=%zu roi_points=%zu roi_voxels=%zu target_identity=%s",
         consumer.name.c_str(), result.query_stats.candidate_point_num,
@@ -591,7 +593,7 @@ private:
     }
     const double query_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - query_start).count();
-    RCLCPP_INFO_THROTTLE(
+    RCLCPP_DEBUG_THROTTLE(
       get_logger(), *get_clock(), 1000,
       "追加ROI抽出集計: consumer_num=%zu parallel_thread_num=%d processing_ms=%.3f",
       additional_consumers_.size(), query_thread_num, query_ms);
@@ -677,7 +679,7 @@ private:
       }
       consumer.roi_publisher->publish(
         consumer.voxel_codec->makeMessage(header, voxel_ids));
-      RCLCPP_INFO_THROTTLE(
+      RCLCPP_DEBUG_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "追加直接ROI出力: consumer=%s roi_points=%zu roi_voxels=%zu source_to_target_identity=%s",
         consumer.name.c_str(), voxel_stats.accepted_point_count, voxel_ids.size(),
@@ -719,7 +721,10 @@ private:
       if (!enable_world_index_) {
         const double processing_ms = std::chrono::duration<double, std::milli>(
           std::chrono::steady_clock::now() - processing_start).count();
-        RCLCPP_INFO_THROTTLE(
+        if (has_direct_primary_output) {
+          status_reporter_.report({static_cast<double>(input_point_num), processing_ms});
+        }
+        RCLCPP_DEBUG_THROTTLE(
           get_logger(), *get_clock(), 1000,
           "直接ROI voxel化: input=%zu accepted=%zu outside=%zu nonfinite=%zu roi_voxels=%zu additional_consumer_num=%zu processing_ms=%.3f source_to_target_identity=%s",
           direct_voxel_stats.input_point_count, direct_voxel_stats.accepted_point_count,
@@ -793,7 +798,8 @@ private:
       publishWorldBuckets(world_header);
       const double processing_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - processing_start).count();
-      RCLCPP_INFO_THROTTLE(
+      status_reporter_.report({static_cast<double>(input_point_num), processing_ms});
+      RCLCPP_DEBUG_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "world index可視化更新: input=%zu world_points=%zu world_buckets=%zu primary_output=%s roi_voxels=%zu additional_consumer_num=%zu build_ms=%.3f processing_ms=%.3f source_to_world_identity=%s",
         input_point_num, world_index_->point_num(), world_index_->bucket_num(),
@@ -860,7 +866,8 @@ private:
 
     const double processing_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - processing_start).count();
-    RCLCPP_INFO_THROTTLE(
+    status_reporter_.report({static_cast<double>(input_point_num), processing_ms});
+    RCLCPP_DEBUG_THROTTLE(
       get_logger(), *get_clock(), 1000,
       "world index更新: input=%zu world_points=%zu world_buckets=%zu primary_output=%s candidate=%zu accepted=%zu roi_points=%zu roi_voxels=%zu additional_consumer_num=%zu build_ms=%.3f primary_query_ms=%.3f additional_query_ms=%.3f processing_ms=%.3f source_to_world_identity=%s world_to_target_identity=%s",
       input_point_num, world_index_->point_num(), world_index_->bucket_num(),
@@ -872,6 +879,7 @@ private:
       is_world_to_target_identity ? "true" : "false");
   }
 
+  robot_sim::common::viewer_status_reporter status_reporter_;
   std::string input_topic_;
   std::string output_topic_;
   std::string source_frame_id_;

@@ -27,7 +27,7 @@ class test_geometry:
     def has_internal_clearance(self, centers):
         return True
 
-    def has_inter_arm_clearance(self, centers):
+    def has_inter_arm_clearance(self, centers, min_clearance_th=.005):
         return True
 
 
@@ -38,7 +38,7 @@ class paired_geometry(test_geometry):
     def centers(self, positions):
         return np.column_stack((positions, np.zeros((2, 2))))
 
-    def has_inter_arm_clearance(self, centers):
+    def has_inter_arm_clearance(self, centers, min_clearance_th=.005):
         return np.linalg.norm(centers[0]-centers[1]) >= .2
 
     def has_internal_clearance(self, centers):
@@ -46,8 +46,41 @@ class paired_geometry(test_geometry):
 
 
 class test_gng_lidar_path(unittest.TestCase):
+    def test_python_neighbor_risk_bypasses_distance_only_hold(self):
+        search = self.make_search()
+        search.arm_names = ['L_joint1']
+        search.angles = {4: np.array([.2]), 9: np.array([-.8]), 20: np.array([.5])}
+        search.labels = {4: 1, 9: 3, 20: 1}
+        search.adjacency = {4: [9, 20], 9: [4], 20: [4]}
+        search.config['min_retreat_dist_th'] = .3
+        search.path = []
+        search.num_plans = search.num_selected_gng = 0
+        search.select_active_arms = lambda: np.array([], dtype=int)
+        search.cloud_clearance = lambda _: (.4, None)
+        search.can_bridge = lambda *args: True
+        search.plan_future = SimpleNamespace(done=lambda: True, result=lambda: dict(
+            path=[4, 20], active_angle_indices=np.array([0]), coordination_source_indices=np.array([], dtype=int)))
+        target, is_valid = gng_lidar_demo.select_target(search, None, None, .1)
+        assert is_valid and search.num_plans == 1
+        assert search.path == [4, 20]
+        np.testing.assert_allclose(target, [-.9])
+
+    def test_retreat_skips_unsafe_neighbor_goal_but_keeps_escape_path(self):
+        search = self.make_search()
+        search.positions = np.zeros(1)
+        search.angles = {0: np.array([.1]), 1: np.array([.2]), 2: np.array([.3]), 4: np.array([-.1])}
+        search.labels = {0: 1, 1: 1, 2: 1, 4: 3}
+        search.adjacency = {0: [1, 4], 1: [0, 2], 2: [1], 4: [0]}
+        search.config['max_entry_candidates'] = 1
+        search.cloud_clearance = lambda _: (.2, None)
+        search.can_bridge = lambda *args: True
+        self.assertEqual(search.plan(.2), [0, 1])
+        search.labels[2] = 2
+        self.assertEqual(search.plan(.2), [])
+
     def make_search(self):
         search = gng_path_search()
+        search.enable_native_planner = False
         search.geometry = test_geometry()
         search.home = np.zeros(1)
         search.positions = np.array([-1.])
@@ -57,7 +90,7 @@ class test_gng_lidar_path(unittest.TestCase):
         search.cell_radius = .02
         search.cloud_tree = cKDTree([[0., 0., 0.]])
         search.config = dict(max_plan_sec=1., max_bridge_step=.05, max_entry_candidates=40,
-                             min_cloud_clearance_th=.015, target_clearance=.12)
+                             min_cloud_clearance_th=.015, min_clearance_th=.035, target_clearance=.12)
         search.angles = {4: np.array([1.]), 9: np.array([-.8])}
         search.labels = {4: 1, 9: 1}
         search.adjacency = {4: [9], 9: [4]}
@@ -118,14 +151,14 @@ class test_gng_lidar_path(unittest.TestCase):
     def test_floor_or_body_blockage_does_not_enable_coordination(self):
         search = self.make_paired_search()
         search.geometry.has_internal_clearance = lambda _: False
-        search.geometry.has_inter_arm_clearance = lambda _: True
+        search.geometry.has_inter_arm_clearance = lambda _, min_clearance_th=.005: True
         result = search.plan_with_coordination(.9)
         self.assertEqual(result['path'], [])
         np.testing.assert_array_equal(result['active_angle_indices'], [0])
 
     def test_failed_coordination_restores_single_arm_selection(self):
         search = self.make_paired_search()
-        search.geometry.has_inter_arm_clearance = lambda _: False
+        search.geometry.has_inter_arm_clearance = lambda _, min_clearance_th=.005: False
         result = search.plan_with_coordination(.9)
         self.assertEqual(result['path'], [])
         np.testing.assert_array_equal(result['active_angle_indices'], [0])
@@ -189,6 +222,8 @@ class test_gng_lidar_path(unittest.TestCase):
 
     def test_return_holds_other_arm_and_discards_previous_plan(self):
         search = self.make_search()
+        # 復帰時の対象腕選択に限定した、継続時間なしの検証
+        search.config['return_clear_sec'] = 0.
         search.arm_names = [f'{side}_joint{idx}' for side in ('L', 'R') for idx in range(1, 8)]
         search.arm_indices = list(range(14))
         search.home = np.zeros(14)
@@ -220,6 +255,7 @@ class test_gng_lidar_path(unittest.TestCase):
         search.path = []
         search.angles = {4: np.full(14, .5)}
         search.labels = {4: 1}
+        search.adjacency = {4: []}
         search.num_plans = search.num_selected_gng = 0
         search.config['min_retreat_dist_th'] = .2
         search.geometry = SimpleNamespace(
@@ -276,6 +312,18 @@ class test_gng_lidar_path(unittest.TestCase):
         self.assertFalse(search.can_bridge(np.array([-1.]), np.array([1.]), .015))
         self.assertTrue(search.can_bridge(np.array([-1.]), np.array([-.8]), .015))
         self.assertEqual(search.plan(.93), [9])
+
+    def test_bridge_rejects_stop_zone_between_safe_endpoints(self):
+        search = self.make_search()
+        search.cloud_tree = cKDTree([[0., .09, 0.]])
+        first, second = np.array([-.2]), np.array([.2])
+        self.assertGreater(search.cloud_clearance(first)[0], .035)
+        self.assertGreater(search.cloud_clearance(second)[0], .035)
+        # 両端は安全、区間中央の余裕は20 mm。計画側15 mm指定でも実行側35 mmで棄却
+        self.assertFalse(search.can_bridge(first, second, .015))
+        search.cloud_tree = cKDTree([[0., .11, 0.]])
+        self.assertTrue(search.can_bridge(first, second, .015))
+        self.assertFalse(search.can_bridge(first, second, .05))
 
     def test_unsafe_vlut_nodes_are_excluded(self):
         search = self.make_search()

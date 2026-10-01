@@ -47,8 +47,24 @@ def add_lidar(world, namespace, config=None):
     et.SubElement(plugin, 'frame_name').text = namespace+'/lidar'
 
 
+def simulation_self_node(params_path, namespace, pipeline):
+    """実点群の除去マスクとは独立した、Gazebo実測姿勢の自己ボクセル。"""
+    base_frame = pipeline['base_frame']
+    return Node(package='gng_vlut_system', executable='self_recognition_viz_node',
+            namespace=namespace, output='screen', parameters=[str(params_path), {
+                'use_sim_time': True, 'joint_topic': '/'+namespace+'/joint_states',
+                'max_joint_state_age_sec': 0.5,
+                'self_recognition.resolution': pipeline['voxel_size'],
+                'self_recognition.root_link': base_frame,
+                'self_recognition.target_frame_id': base_frame,
+                'self_recognition.marker_frame_id': base_frame,
+                'self_recognition.mask_topic': '/'+namespace+'/self_voxel'}])
+
+
 def pipeline_nodes(params_path, params, namespace, config):
     pipeline = pipeline_config(config)
+    if 'external_environment' in pipeline:
+        return [simulation_self_node(params_path, namespace, pipeline)]
     base_frame = pipeline['base_frame']
     base = namespace+'/'+base_frame
     voxel_size, publish_hz = pipeline['voxel_size'], pipeline['publish_hz']
@@ -80,6 +96,7 @@ def pipeline_nodes(params_path, params, namespace, config):
             'target_frame': base, 'use_sim_time': False, 'max_publish_hz': publish_hz,
             'urdf_path': params['urdf_path'], 'real_root_frame': namespace+'/real/'+base_frame}))
     is_external = 'external_cloud' in pipeline
+    self_mask_topic = '/'+namespace+('/real/self_voxel' if is_external else '/self_voxel')
     return actions + [
         node('world_index_to_voxel_node', {
             'input_topic': pipeline['points_topic'],
@@ -94,10 +111,10 @@ def pipeline_nodes(params_path, params, namespace, config):
             'self_recognition.root_link': base_frame,
             'self_recognition.target_frame_id': '/'+base if is_external else base_frame,
             'self_recognition.marker_frame_id': '/'+base if is_external else base_frame,
-            'self_recognition.mask_topic': '/'+namespace+'/self_voxel'}, True,
+            'self_recognition.mask_topic': self_mask_topic}, True,
             node_namespace=namespace+'/real' if is_external else namespace),
         node('self_voxel_filter_node', {'self_recognition.enable_environment_self_filter': True,
-            'self_recognition.mask_topic': 'self_voxel',
+            'self_recognition.mask_topic': self_mask_topic,
             'self_recognition.raw_environment_voxel_topic': 'roi_voxels',
             'self_recognition.filtered_environment_voxel_topic': 'self_filter_roi_voxels'}, True),
         node('voxel_to_vlut_node', {
@@ -111,4 +128,4 @@ def pipeline_nodes(params_path, params, namespace, config):
             'node_feature_topic': 'topological_node_features', 'node_state_topic': 'gng_node_states', 'edge_mode': 0, 'publish_hz': publish_hz,
             'occupied_voxels_topic': 'occupied_voxels', 'danger_voxels_topic': 'danger_voxels',
             'visualization_gng.enabled': False}, True),
-    ]
+    ] + ([simulation_self_node(params_path, namespace, pipeline)] if is_external else [])

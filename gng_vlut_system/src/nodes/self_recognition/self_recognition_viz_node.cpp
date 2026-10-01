@@ -520,7 +520,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     graph_timer_ = create_wall_timer(
         std::chrono::seconds(2),
         [this]() {
-            RCLCPP_INFO(
+            RCLCPP_DEBUG(
                 get_logger(),
                 "Topic graph: mask pubs=%zu joint pubs=%zu",
                 count_publishers(mask_topic_),
@@ -561,7 +561,7 @@ void SelfRecognitionVizNode::updateAndPublish() {
                 
                 if (recognition_manager_->isTfChanged(target_to_base)) {
                     const auto& t = target_to_base.translation();
-                    RCLCPP_INFO(get_logger(), "Robot moved! TF [%s -> %s]: pos=(%.2f, %.2f, %.2f)", 
+                    RCLCPP_DEBUG(get_logger(), "Robot moved! TF [%s -> %s]: pos=(%.2f, %.2f, %.2f)",
                                root_link_.c_str(), target_frame.c_str(), t.x(), t.y(), t.z());
                 }
             } catch (const tf2::TransformException & ex) {

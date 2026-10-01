@@ -1,0 +1,9 @@
+/**:
+  ros__parameters:
+    # 対象はID51・52固定。最小電流の試験用出力許可、実機安定性は未検証
+    allow_hardware_output: true
+    driver_namespace: /dynamixel
+    # 電流指令の絶対値上限 [mA]。順序はID51・52、機器の指令1刻み
+    max_current_ma: [500.0,  500.0]
+    # 速度に対する抵抗電流係数 [mA/(rad/s)]。0.1 rad/s付近で指令1刻みの試験設定
+    damping_gain: [50, 50]

@@ -136,3 +136,12 @@ def test_camera_box_contains_all_visual_vertices(robot_description):
     assert np.all(np.abs(points_in_box) <= size * 0.5 + 1e-12)
     assert np.allclose(points_in_box.max(axis=0) - points_in_box.min(axis=0), size,
                        rtol=0, atol=1e-12)
+
+
+def test_topodualarm_collision_geometry():
+    """標準ToPoDualArmの衝突形状欠落とカメラ包囲の確認。"""
+    path = repo_root / 'urdf/dual_arm_urdf/dual_arm_robot.urdf'
+    description = path, element_tree.parse(path).getroot()
+    test_visual_links_have_collision(description)
+    test_collision_geometry_assets_parse(description)
+    test_camera_box_contains_all_visual_vertices(description)

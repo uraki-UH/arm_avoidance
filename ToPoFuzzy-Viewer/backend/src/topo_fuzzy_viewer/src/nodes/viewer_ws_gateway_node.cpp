@@ -1120,8 +1120,8 @@ private:
 
     void subscribeStreamingTopics() {
         std::string base = viewer_internal::topics::kStreamRobot;
-        robotDescSub_ = create_subscription<std_msgs::msg::String>(base + "/description", rclcpp::QoS(1).reliable().transient_local(), [this](const std_msgs::msg::String::SharedPtr m) { handleRobotData(m, true); });
-        robotPoseSub_ = create_subscription<std_msgs::msg::String>(base + "/pose", rclcpp::QoS(1).best_effort(), [this](const std_msgs::msg::String::SharedPtr m) { handleRobotData(m, false); });
+        robotDescSub_ = create_subscription<std_msgs::msg::String>(base + "/description", rclcpp::QoS(1).reliable().transient_local(), [this](const std_msgs::msg::String::SharedPtr m, const rclcpp::MessageInfo& info) { handleRobotData(m, true, info); });
+        robotPoseSub_ = create_subscription<std_msgs::msg::String>(base + "/pose", rclcpp::QoS(1).best_effort(), [this](const std_msgs::msg::String::SharedPtr m, const rclcpp::MessageInfo& info) { handleRobotData(m, false, info); });
         jobEventSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kEditJobEvents, 100, [this](const std_msgs::msg::String::SharedPtr m) { broadcastText(m->data); });
     }
     void unsubscribeStreamingTopics() {
@@ -1157,13 +1157,16 @@ private:
             voxelStreamStates_.clear();
         }
     }
-    void handleRobotData(const std_msgs::msg::String::SharedPtr msg, bool is_desc) {
+    void handleRobotData(const std_msgs::msg::String::SharedPtr msg, bool is_desc, const rclcpp::MessageInfo& info) {
         if (msg->data.empty()) return;
         if (is_desc) {
             json j = json::parse(msg->data, nullptr, false);
             if (!j.is_discarded()) {
                 std::lock_guard<std::mutex> lock(robotMutex_);
                 lastRobotDescriptions_[j.value("tag", "default")] = msg->data;
+                const auto& gid = info.get_rmw_message_info().publisher_gid;
+                robot_description_publishers_[j.value("tag", "default")] =
+                    std::string(reinterpret_cast<const char*>(gid.data), RMW_GID_STORAGE_SIZE);
             }
             broadcastText(msg->data);
             return;
@@ -1194,12 +1197,25 @@ private:
         update_plane_subscription();
         broadcast_source_lifecycle_events();
         broadcastSourcesIfChanged();
-        if (this->get_publishers_info_by_topic(std::string(viewer_internal::topics::kStreamRobot) + "/description").empty()) {
+        // 共通トピック全体ではなく、各ロボットの配信元単位での終了判定。
+        std::unordered_set<std::string> robot_publishers;
+        for (const auto& publisher : get_publishers_info_by_topic(
+                 std::string(viewer_internal::topics::kStreamRobot) + "/description")) {
+            const auto& gid = publisher.endpoint_gid();
+            robot_publishers.emplace(reinterpret_cast<const char*>(gid.data()), RMW_GID_STORAGE_SIZE);
+        }
+        {
             std::lock_guard<std::mutex> lock(robotMutex_);
-            for (auto const& [tag, _] : lastRobotDescriptions_) {
+            for (auto it = robot_description_publishers_.begin(); it != robot_description_publishers_.end();) {
+                if (robot_publishers.count(it->second)) {
+                    ++it;
+                    continue;
+                }
+                const auto tag = it->first;
+                lastRobotDescriptions_.erase(tag);
+                it = robot_description_publishers_.erase(it);
                 broadcastText(json({{"type", "stream.robot.delete"}, {"tag", tag}}).dump());
             }
-            lastRobotDescriptions_.clear();
         }
     }
 
@@ -1316,6 +1332,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<void>> activeDynamicSubs_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_;
     std::unordered_map<std::string, std::string> active_source_publisher_signatures_;
+    std::unordered_map<std::string, std::string> robot_description_publishers_;
     std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastPointCloudForwardTime_;
     std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;

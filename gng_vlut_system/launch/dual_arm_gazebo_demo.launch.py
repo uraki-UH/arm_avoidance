@@ -1,4 +1,5 @@
 import importlib.util
+import math
 from pathlib import Path
 import shutil
 import tempfile
@@ -21,6 +22,40 @@ def load_module(path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def initial_joint_positions(root, configured):
+    """初期関節位置の検査と従属関節の展開。単位はrad・m。"""
+    joints = {item.get('name'): item for item in root.findall('joint') if item.get('type') != 'fixed'}
+    if not isinstance(configured, dict) or any(name not in joints for name in configured):
+        raise ValueError('初期姿勢には可動関節名と位置の辞書が必要です')
+    positions, visiting = {}, set()
+
+    def resolve(name):
+        if name in positions:
+            return positions[name]
+        if name in visiting or name not in joints:
+            raise ValueError('初期姿勢のmimic参照が不正です')
+        visiting.add(name)
+        joint = joints[name]
+        mimic = joint.find('mimic')
+        if mimic is not None:
+            if name in configured:
+                raise ValueError('初期姿勢のmimic関節は親関節で指定してください')
+            value = resolve(mimic.get('joint')) * float(mimic.get('multiplier', '1')) + float(mimic.get('offset', '0'))
+        else:
+            value = float(configured.get(name, 0.0))
+        limit = joint.find('limit')
+        if not math.isfinite(value) or (joint.get('type') != 'continuous' and
+                (limit is None or not float(limit.get('lower')) <= value <= float(limit.get('upper')))):
+            raise ValueError(f'初期関節位置がURDF範囲外です: {name}')
+        positions[name] = value
+        visiting.remove(name)
+        return value
+
+    for name in joints:
+        resolve(name)
+    return positions
 
 
 def launch_setup(context):
@@ -54,6 +89,7 @@ def launch_setup(context):
     temporary_urdf = Path(helper.write_gazebo_urdf(str(urdf_path), params['mesh_root_dir'], False, root_link))
     root = ET.parse(temporary_urdf).getroot()
     temporary_urdf.unlink()
+    initial_positions = initial_joint_positions(root, config.get('initial_joint_positions', {}))
     control = ET.SubElement(root, 'ros2_control', name='GazeboSystem', type='system')
     hardware = ET.SubElement(control, 'hardware')
     ET.SubElement(hardware, 'plugin').text = 'gng_vlut_system/bounded_gazebo_system'
@@ -66,12 +102,12 @@ def launch_setup(context):
         if mimic is None:
             joint_names.append(name)
         item = ET.SubElement(control, 'joint', name=name)
-        # 有限トルクモータへの位置目標。Gazebo関節位置の直接設定なし
+        # 物理開始後の有限トルクモータへの位置目標
         ET.SubElement(item, 'command_interface', name='position')
         ET.SubElement(item, 'param', name='position_gain').text = str(config.get('motor_position_gain', 60.0))
         ET.SubElement(item, 'param', name='motor_limit_scale').text = str(config.get('motor_limit_scale', 0.95))
         state = ET.SubElement(item, 'state_interface', name='position')
-        ET.SubElement(state, 'param', name='initial_value').text = '0.0'
+        ET.SubElement(state, 'param', name='initial_value').text = str(initial_positions[name])
         ET.SubElement(item, 'state_interface', name='velocity')
         ET.SubElement(item, 'state_interface', name='effort')
         if mimic is not None:
@@ -240,6 +276,22 @@ def launch_setup(context):
                 'stream_topic': '/viewer/internal/stream/robot'}]))
     if avoidance_config is not None and avoidance_config.get('enable_gng_vlut', False):
         actions.extend(sensor_helper.pipeline_nodes(params_path, params, namespace, avoidance_config))
+        if avoidance_config.get('enable_native_planner', False):
+            source = avoidance_config.get('pipeline', {}).get('external_environment', {})
+            actions.append(Node(package='gng_vlut_system', executable='topological_map_avoidance_node',
+                namespace=namespace, output='screen', parameters=[str(params_path), {
+                    'use_sim_time': True, 'joint_topic': '/'+namespace+'/joint_states',
+                    'topological_map_topic': source.get('graph_topic', '/'+namespace+'/Tmap_static'),
+                    'target_topic': '/'+namespace+'/native_avoidance_target',
+                    'trajectory_topic': '/'+namespace+'/plan_Tmap',
+                    'candidate_trajectory_topic': '/'+namespace+'/cand_Tmap',
+                    'candidate_metrics_topic': '/'+namespace+'/candidate_metrics',
+                    'goal_candidate_ids_topic': '/'+namespace+'/avoidance_goal_ids',
+                    'max_retreat_candidates': 32, 'robot_base_frame': namespace+'/'+root_link,
+                    'enable_safety_penalty': False,
+                    'publish_hz': 20.0, 'allow_zero_initial_joint_state': False,
+                    'publish_candidate_robot_preview': False, 'control_claim_enabled': False,
+                    'trial_mode': False, 'avoid_danger': True, 'allow_danger_goal': False}]))
     return actions
 
 

@@ -302,7 +302,7 @@ def launch_setup(context, *args, **kwargs):
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     # YAMLの値を上書き（消去）しないよう、明示的に指定された（空でない）パラメータのみを抽出
-    common_params = {}
+    common_params = {"enable_viewer_status": True}
     if robot_name:
         common_params["robot_name"] = robot_name
     if urdf_path:
@@ -403,12 +403,14 @@ def launch_setup(context, *args, **kwargs):
                 params_file,
                 {
                     "gng_model_path": gng_file,
+                    "enable_viewer_status": True,
                     "vlut_path": vlut_file,
                     "gng.data_directory": data_dir,
                     "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
                     "topic_name": topic_name,
                     "node_feature_topic": node_feature_topic,
+                    "stamped_node_state_topic": "gng_node_states_stamped",
                     "edge_mode": safe_int(edge_mode, 1),
                     # robot_name namespace 配下の相対トピックを購読する。
                     "occupied_voxels_topic": "occupied_voxels",
@@ -433,6 +435,8 @@ def launch_setup(context, *args, **kwargs):
             name="robot_viewer_bridge_node",
             namespace=robot_name,
             parameters=viewer_bridge_params,
+            output_format="{line}",
+            additional_env={"RCUTILS_CONSOLE_OUTPUT_FORMAT": "[{severity}] [{name}] {message}"},
         )
     ]
 
@@ -493,7 +497,7 @@ def launch_setup(context, *args, **kwargs):
                 name="self_voxel_filter_node",
                 namespace=robot_name,
                 output="screen",
-                parameters=filter_params,
+                parameters=filter_params + [{"enable_viewer_status": True}],
             )
         )
 
@@ -561,6 +565,7 @@ def launch_setup(context, *args, **kwargs):
         target_frame = base_frame if base_frame.startswith(robot_name + '/') else robot_name + '/' + base_frame
         # world座標の仮定なし。ロボット基準へのTF変換後の直接ROI生成
         roi_params = {
+            'enable_viewer_status': True,
             'input_topic': environment.get('input_topic', '/camera/camera/depth/color/points'),
             'output_topic': self_recognition_ns.get('raw_environment_voxel_topic', 'roi_voxels'),
             'source_frame_id': environment.get('source_frame_id', ''),

@@ -261,6 +261,10 @@ void GrowingNeuralGas<T_angle, T_coord>::remove_node(int node) {
     if (index) index->remove_point(node);
   }
 
+  // 削除IDの再利用時にも残存しない、関節空間辺の双方向削除
+  const auto angle_neighbors = edges_angle_per_node[node];
+  for (int other : angle_neighbors) remove_edge_angle(node, other);
+
   if (!edges_coord_per_node[node].empty()) {
     std::vector<int> coord_neighbors(edges_coord_per_node[node].begin(),
                                      edges_coord_per_node[node].end());
@@ -1529,7 +1533,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     }
 
     if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
-        (size_t)n2 < nodes.size()) {
+        (size_t)n2 < nodes.size() && nodes[n1].id >= 0 && nodes[n2].id >= 0) {
       add_edge_angle(n1, n2);
       edges_angle[n1][n2].age = age;
       edges_angle[n2][n1].age = age;
@@ -1554,7 +1558,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
         }
 
         if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
-            (size_t)n2 < nodes.size()) {
+            (size_t)n2 < nodes.size() && nodes[n1].id >= 0 && nodes[n2].id >= 0) {
           add_edge_coord(layer, n1, n2);
           auto &edges =
               (layer == 0) ? edges_coord : edges_coord_per_layer_[layer];
@@ -1581,7 +1585,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
       }
 
       if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
-          (size_t)n2 < nodes.size()) {
+          (size_t)n2 < nodes.size() && nodes[n1].id >= 0 && nodes[n2].id >= 0) {
         add_edge_coord(n1, n2);
         edges_coord[n1][n2].age = age;
         edges_coord[n2][n1].age = age;

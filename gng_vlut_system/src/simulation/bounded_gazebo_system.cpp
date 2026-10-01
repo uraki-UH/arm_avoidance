@@ -118,7 +118,17 @@ public:
         RCLCPP_ERROR(nh_->get_logger(), "関節%sの上限・ゲインが不正です", data.name.c_str());
         return false;
       }
-      // 一時停止中の生成姿勢を初期目標とする、位置・速度の直接設定なし
+      // モデル生成時の一時停止中に限る初期姿勢の設定。駆動開始後の位置更新は有限トルクモータのみ
+      for (const auto & state : item.state_interfaces) {
+        if (state.name != "position" || state.initial_value.empty()) continue;
+        const double initial_position = std::stod(state.initial_value);
+        if (!model->GetWorld()->IsPaused() || !std::isfinite(initial_position) ||
+            initial_position < data.min_position || initial_position > data.max_position) {
+          RCLCPP_ERROR(nh_->get_logger(), "関節%sの初期姿勢または物理停止状態が不正です", data.name.c_str());
+          return false;
+        }
+        if (!data.joint->SetPosition(0, initial_position)) return false;
+      }
       data.position = data.command = data.hold_position = data.joint->Position(0);
       data.joint->SetProvideFeedback(true);
       // 関節ストッパ離脱時の過大なモータ力を防ぐODE係数

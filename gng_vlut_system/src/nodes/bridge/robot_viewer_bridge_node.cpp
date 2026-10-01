@@ -76,7 +76,7 @@ std::string rewriteRelativeMeshUris(const std::string &urdf_text,
 } // namespace
 
 RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options)
-: Node("robot_viewer_bridge_node", options) {
+: Node("robot_viewer_bridge_node", options), status_summary_(*this) {
     robot_name_ = declare_parameter<std::string>("robot_name", "topoarm");
     const std::string urdf_path = declare_parameter<std::string>("urdf_path", "");
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");

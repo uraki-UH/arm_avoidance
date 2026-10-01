@@ -34,7 +34,8 @@ def launch_setup(context):
     avoidance_path.write_text(yaml.safe_dump({'dual_arm_avoidance_demo': config}, allow_unicode=True))
     demo = {'namespace': namespace, 'enable_gui': True, 'enable_auto_start': False,
             'enable_viewer': LaunchConfiguration('enable_viewer').perform(context).lower() == 'true',
-            'motor_position_gain': 60.0, 'motor_limit_scale': 0.95}
+            'motor_position_gain': 60.0, 'motor_limit_scale': 0.95,
+            'initial_joint_positions': config.get('initial_joint_positions', {})}
     demo_path.write_text(yaml.safe_dump({'dual_arm_gazebo_demo': demo}))
     actions = [
         LogInfo(msg=f'点群回避: {namespace}, 計画グループ: ' + ', '.join(group['name'] for group in config['planning_groups'])),

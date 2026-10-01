@@ -151,8 +151,10 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
         }
     }
 #if defined(VERSION_MOVE)
-        // 前回の設定がない場合
-        if(no_prev_config){
+        // 固定座標では入力点群だけの変換。蓄積ノードへのセンサー差分適用の禁止
+        if (!param.config.local_coordinates) {
+            no_prev_config = true;
+        } else if(no_prev_config){
             prev_config = *_config;
             no_prev_config = false;
         }else{
