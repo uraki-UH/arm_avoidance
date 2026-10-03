@@ -62,6 +62,24 @@
 ロボットモデル依存のIK連携は`gng_vlut_system`側の把持ノードに配置。
 Pythonシミュレーションは`scripts`内を維持。制御の共通入口は[動作スムージング](motion_smoothing.md)。
 
+## Pythonテストの管理単位
+
+同じ機能のテストを機能単位のファイルへ集約。テスト関数・パラメータ化ケースは維持。
+
+| テストファイル | 対象 |
+| --- | --- |
+| `test/test_avoidance_motion.py` | 動作選択・部品差替え・復帰継続・停止優先・指令周期 |
+| `test/test_pointcloud_avoidance.py` | 機体設定・Viewer環境入力・外部点群・座標変換・鮮度検査 |
+| `test/test_dual_arm_launch.py` | 機種別launch設定・頭部深度センサー・光学座標 |
+| `test/test_dual_arm_collision_geometry.py` | URDF衝突形状・外接球包囲・自己干渉・退避余裕 |
+
+設定検査の`robot_config`フィクスチャは点群回避テスト内で共有。テストモジュールを経由した設定フィクスチャのimportなし。launchファイルの読込みは起動設定テスト内の`load`へ集約。
+この4ファイルは同名のCTestターゲットへ登録。キーボード操作・UDP通信・ROSノードを起動する統合試験は独立のまま維持。
+
+```bash
+ctest --test-dir /ros2_ws/build/gng_vlut_system -R '^(test_avoidance_motion|test_pointcloud_avoidance|test_dual_arm_launch|test_dual_arm_collision_geometry)$' --output-on-failure
+```
+
 ## 条件・検証
 
 - 対象：`gng_vlut_system`のC++部品配置・共通関節値変換・旧CMake・回帰テスト・構成資料。

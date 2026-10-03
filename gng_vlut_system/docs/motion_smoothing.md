@@ -47,7 +47,7 @@ HTMLは単体ファイル配布を維持。共通関数は同じHTML内に配置
 
 ```bash
 export PYTHONPATH=/ros2_ws/src/gng_vlut_system/scripts:$PYTHONPATH
-python3 -m pytest -q /ros2_ws/src/gng_vlut_system/test/test_motion_smoothing.py /ros2_ws/src/gng_vlut_system/test/test_dual_arm_gazebo_motion.py /ros2_ws/src/gng_vlut_system/test/test_dual_arm_avoidance_geometry.py
+python3 -m pytest -q /ros2_ws/src/gng_vlut_system/test/test_motion_smoothing.py /ros2_ws/src/gng_vlut_system/test/test_dual_arm_gazebo_motion.py /ros2_ws/src/gng_vlut_system/test/test_dual_arm_collision_geometry.py
 ctest --test-dir /ros2_ws/build/gng_vlut_system -R '^test_motion_smoothing(_cpp)?$' --output-on-failure
 ```
 

@@ -35,107 +35,168 @@ def mesh_vertices(path):
                      if line.strip().startswith('vertex ')])
 
 
+def read_joint_geometry(root):
+    """URDF記載順の関節定義・独立関節名・位置制限・親リンク。"""
+    joints, joint_names, limits, parents = [], [], [], {}
+    for item in root.findall('joint'):
+        name = item.get('name')
+        kind = item.get('type')
+        mimic = item.find('mimic')
+        idx = -1
+        if kind != 'fixed' and mimic is None:
+            idx = len(joint_names)
+            joint_names.append(name)
+            limit = item.find('limit')
+            limits.append((-np.pi, np.pi) if kind == 'continuous' else
+                          (float(limit.get('lower')), float(limit.get('upper'))))
+        axis = item.find('axis')
+        parent, child = item.find('parent').get('link'), item.find('child').get('link')
+        parents[child] = parent
+        joints.append((name, parent, child, kind, origin(item.find('origin')),
+                       np.fromstring(axis.get('xyz') if axis is not None else '1 0 0', sep=' '), idx, mimic))
+    return joints, joint_names, np.asarray(limits), parents
+
+
+def shape_vertices(shape, mesh_directory, link_name):
+    """形状ローカル座標の頂点群。基本形状は外接箱の頂点群。"""
+    mesh = shape.find('geometry/mesh')
+    if mesh is not None:
+        vertices = mesh_vertices(mesh_directory/mesh.get('filename'))
+        vertices *= np.fromstring(mesh.get('scale', '1 1 1'), sep=' ')
+        return vertices
+    box = shape.find('geometry/box')
+    if box is not None:
+        size = np.fromstring(box.get('size', ''), sep=' ')
+        if size.shape != (3,) or not np.all(np.isfinite(size)) or np.any(size <= 0):
+            raise ValueError(f'直方体寸法の不正: {link_name}')
+        return np.asarray(list(product((-1, 1), repeat=3))) * size / 2
+    sphere = shape.find('geometry/sphere')
+    if sphere is not None:
+        radius = float(sphere.get('radius'))
+        if not np.isfinite(radius) or radius <= 0:
+            raise ValueError(f'球寸法の不正: {link_name}')
+        return np.asarray(list(product((-1, 1), repeat=3))) * radius
+    cylinder = shape.find('geometry/cylinder')
+    if cylinder is not None:
+        radius, length = float(cylinder.get('radius')), float(cylinder.get('length'))
+        if not np.all(np.isfinite([radius, length])) or min(radius, length) <= 0:
+            raise ValueError(f'円柱寸法の不正: {link_name}')
+        return np.asarray(list(product((-1, 1), repeat=3))) * [radius, radius, length / 2]
+    raise ValueError(f'未対応の形状: {link_name}')
+
+
+def enclosing_spheres(link_name, vertices):
+    """リンク座標の頂点群を覆うAABB球列。長軸方向の記載順。"""
+    lower, upper = vertices.min(axis=0), vertices.max(axis=0)
+    axis = int(np.argmax(upper-lower))
+    center = (lower+upper)/2
+    half = (upper-lower)/2
+    count = max(1, int(np.ceil(half[axis]*2/0.035)))
+    spacing = half[axis]*2/count
+    radius = float(np.sqrt(np.sum(np.delete(half, axis)**2)+(spacing/2)**2))
+    spheres = []
+    for part in range(count):
+        point = center.copy()
+        point[axis] = lower[axis]+spacing*(part+0.5)
+        spheres.append((link_name, point, radius))
+    return spheres
+
+
+def read_link_spheres(root, mesh_directory):
+    """URDF記載順のリンク外接球。衝突形状のない外装も監視対象。"""
+    spheres = []
+    for link in root.findall('link'):
+        name = link.get('name')
+        shapes = link.findall('collision') or link.findall('visual')
+        for shape in shapes:
+            vertices = shape_vertices(shape, mesh_directory, name)
+            transform = origin(shape.find('origin'))
+            vertices = vertices@transform[:3, :3].T + transform[:3, 3]
+            spheres.extend(enclosing_spheres(name, vertices))
+    return spheres
+
+
+def compile_link_operations(root, joints, joint_names, parents):
+    """木構造の接続順・mimic係数・軸行列の事前展開。"""
+    roots = {link.get('name') for link in root.findall('link')} - set(parents)
+    if len(roots) != 1:
+        raise ValueError('URDFのルートリンクが一意ではありません')
+    root_link = roots.pop()
+    link_indices = {root_link: 0}
+    operations = []
+    remaining = list(joints)
+    while remaining:
+        pending = []
+        for name, parent, child, kind, fixed, axis, idx, mimic in remaining:
+            if parent not in link_indices:
+                pending.append((name, parent, child, kind, fixed, axis, idx, mimic))
+                continue
+            child_idx = len(link_indices)
+            link_indices[child] = child_idx
+            multiplier, offset = 1.0, 0.0
+            if mimic is not None:
+                idx = joint_names.index(mimic.get('joint'))
+                multiplier, offset = float(mimic.get('multiplier', '1')), float(mimic.get('offset', '0'))
+            axis = axis/np.linalg.norm(axis)
+            x, y, z = axis
+            cross = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+            operations.append((link_indices[parent], child_idx, kind, fixed, axis, idx,
+                               multiplier, offset, cross, cross@cross))
+        if len(pending) == len(remaining):
+            raise ValueError('URDFの接続を解決できません')
+        remaining = pending
+    return root_link, link_indices, operations
+
+
+def is_nearby_link_pair(first, second, parents):
+    """自己干渉監視から除外する接続距離3以内のリンク対。"""
+    ancestors = {}
+    for depth in range(4):
+        ancestors[first] = depth
+        first = parents.get(first, first)
+    for depth in range(4):
+        if second in ancestors and depth+ancestors[second] <= 3:
+            return True
+        second = parents.get(second, second)
+    return False
+
+
+def build_collision_pairs(spheres, centers, radii, is_arm, parents, link_groups):
+    """初期重複・隣接リンクを除いた自己干渉ペアと腕間ペア。"""
+    pairs = []
+    for first in range(len(spheres)):
+        for second in range(first):
+            if not (is_arm[first] or is_arm[second]):
+                continue
+            if is_nearby_link_pair(spheres[first][0], spheres[second][0], parents):
+                continue
+            gap = np.linalg.norm(centers[first]-centers[second])-radii[first]-radii[second]
+            if gap > 0.015:
+                pairs.append((first, second))
+    # 左右の可動腕同士の干渉ペア。胴体・床・作業台との干渉とは区別
+    inter_arm_pairs = [
+        (first, second) for first, second in pairs
+        if is_arm[first] and is_arm[second]
+        and (link_groups[spheres[first][0]] != link_groups[spheres[second][0]] if link_groups is not None
+             else {spheres[first][0][0], spheres[second][0][0]} == {'L', 'R'})
+    ]
+    return (np.asarray(pairs, dtype=int).reshape(-1, 2),
+            np.asarray(inter_arm_pairs, dtype=int).reshape(-1, 2))
+
+
 class robot_geometry:
     """外接球列による保守的なリンク形状。隣接・初期重複球を除いた自己干渉監視。"""
 
     def __init__(self, urdf_path, planning_groups=None):
         path = Path(urdf_path)
         root = ET.parse(path).getroot()
-        self.joints = []
-        self.joint_names = []
-        self.limits = []
-        self.parents = {}
-        for item in root.findall('joint'):
-            name = item.get('name')
-            kind = item.get('type')
-            mimic = item.find('mimic')
-            idx = -1
-            if kind != 'fixed' and mimic is None:
-                idx = len(self.joint_names)
-                self.joint_names.append(name)
-                limit = item.find('limit')
-                self.limits.append((-np.pi, np.pi) if kind == 'continuous' else
-                                   (float(limit.get('lower')), float(limit.get('upper'))))
-            axis = item.find('axis')
-            parent, child = item.find('parent').get('link'), item.find('child').get('link')
-            self.parents[child] = parent
-            self.joints.append((name, parent, child, kind, origin(item.find('origin')),
-                                np.fromstring(axis.get('xyz') if axis is not None else '1 0 0', sep=' '), idx, mimic))
-        self.limits = np.asarray(self.limits)
+        self.joints, self.joint_names, self.limits, self.parents = read_joint_geometry(root)
         self.arm_indices = [i for i, name in enumerate(self.joint_names)
                             if name.startswith(('L_joint', 'R_joint'))]
-        self.spheres = []
-        for link in root.findall('link'):
-            name = link.get('name')
-            # 衝突形状のない外装も監視対象
-            shapes = link.findall('collision') or link.findall('visual')
-            for shape in shapes:
-                mesh = shape.find('geometry/mesh')
-                box = shape.find('geometry/box')
-                if mesh is not None:
-                    vertices = mesh_vertices(path.parent/mesh.get('filename'))
-                    vertices *= np.fromstring(mesh.get('scale', '1 1 1'), sep=' ')
-                elif box is not None:
-                    size = np.fromstring(box.get('size', ''), sep=' ')
-                    if size.shape != (3,) or not np.all(np.isfinite(size)) or np.any(size <= 0):
-                        raise ValueError(f'直方体寸法の不正: {name}')
-                    # 回転・平行移動後の直方体全体を覆うAABB球列への入力
-                    vertices = np.asarray(list(product((-1, 1), repeat=3))) * size / 2
-                elif shape.find('geometry/sphere') is not None:
-                    radius = float(shape.find('geometry/sphere').get('radius'))
-                    if not np.isfinite(radius) or radius <= 0:
-                        raise ValueError(f'球寸法の不正: {name}')
-                    vertices = np.asarray(list(product((-1, 1), repeat=3))) * radius
-                elif shape.find('geometry/cylinder') is not None:
-                    cylinder = shape.find('geometry/cylinder')
-                    radius, length = float(cylinder.get('radius')), float(cylinder.get('length'))
-                    if not np.all(np.isfinite([radius, length])) or min(radius, length) <= 0:
-                        raise ValueError(f'円柱寸法の不正: {name}')
-                    vertices = np.asarray(list(product((-1, 1), repeat=3))) * [radius, radius, length / 2]
-                else:
-                    raise ValueError(f'未対応の形状: {name}')
-                transform = origin(shape.find('origin'))
-                vertices = vertices@transform[:3, :3].T + transform[:3, 3]
-                lower, upper = vertices.min(axis=0), vertices.max(axis=0)
-                axis = int(np.argmax(upper-lower))
-                center = (lower+upper)/2
-                half = (upper-lower)/2
-                count = max(1, int(np.ceil(half[axis]*2/0.035)))
-                spacing = half[axis]*2/count
-                radius = float(np.sqrt(np.sum(np.delete(half, axis)**2)+(spacing/2)**2))
-                for part in range(count):
-                    point = center.copy()
-                    point[axis] = lower[axis]+spacing*(part+0.5)
-                    self.spheres.append((name, point, radius))
-        # 木構造・軸行列・形状添字の事前展開
-        roots = {link.get('name') for link in root.findall('link')} - set(self.parents)
-        if len(roots) != 1:
-            raise ValueError('URDFのルートリンクが一意ではありません')
-        self.root_link = roots.pop()
-        link_indices = {self.root_link: 0}
-        self.operations = []
-        remaining = list(self.joints)
-        while remaining:
-            pending = []
-            for name, parent, child, kind, fixed, axis, idx, mimic in remaining:
-                if parent not in link_indices:
-                    pending.append((name, parent, child, kind, fixed, axis, idx, mimic))
-                    continue
-                child_idx = len(link_indices)
-                link_indices[child] = child_idx
-                multiplier, offset = 1.0, 0.0
-                if mimic is not None:
-                    idx = self.joint_names.index(mimic.get('joint'))
-                    multiplier, offset = float(mimic.get('multiplier', '1')), float(mimic.get('offset', '0'))
-                axis = axis/np.linalg.norm(axis)
-                x, y, z = axis
-                cross = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
-                self.operations.append((link_indices[parent], child_idx, kind, fixed, axis, idx,
-                                        multiplier, offset, cross, cross@cross))
-            if len(pending) == len(remaining):
-                raise ValueError('URDFの接続を解決できません')
-            remaining = pending
-        self.link_indices = link_indices
+        self.spheres = read_link_spheres(root, path.parent)
+        self.root_link, self.link_indices, self.operations = compile_link_operations(
+            root, self.joints, self.joint_names, self.parents)
+        link_indices = self.link_indices
         self.sphere_links = np.array([link_indices[name] for name, _, _ in self.spheres])
         self.sphere_points = np.array([point for _, point, _ in self.spheres])
         self.radii = np.array([entry[2] for entry in self.spheres])
@@ -148,34 +209,8 @@ class robot_geometry:
             self.arm_indices = [self.joint_names.index(name) for group in planning_groups for name in group['joint_names']]
         self.self_pairs = np.empty((0, 2), dtype=int)
         centers = self.centers(np.zeros(len(self.joint_names)))
-        def nearby(first, second):
-            ancestors = {}
-            for depth in range(4):
-                ancestors[first] = depth
-                first = self.parents.get(first, first)
-            for depth in range(4):
-                if second in ancestors and depth+ancestors[second] <= 3:
-                    return True
-                second = self.parents.get(second, second)
-            return False
-        pairs = []
-        for first in range(len(self.spheres)):
-            for second in range(first):
-                if not (self.is_arm[first] or self.is_arm[second]):
-                    continue
-                if nearby(self.spheres[first][0], self.spheres[second][0]):
-                    continue
-                gap = np.linalg.norm(centers[first]-centers[second])-self.radii[first]-self.radii[second]
-                if gap > 0.015:
-                    pairs.append((first, second))
-        self.self_pairs = np.asarray(pairs, dtype=int).reshape(-1, 2)
-        # 左右の可動腕同士の干渉ペア。胴体・床・作業台との干渉とは区別
-        self.inter_arm_pairs = np.asarray([
-            (first, second) for first, second in pairs
-            if self.is_arm[first] and self.is_arm[second]
-            and (link_groups[self.spheres[first][0]] != link_groups[self.spheres[second][0]] if link_groups is not None
-                 else {self.spheres[first][0][0], self.spheres[second][0][0]} == {'L', 'R'})
-        ], dtype=int).reshape(-1, 2)
+        self.self_pairs, self.inter_arm_pairs = build_collision_pairs(
+            self.spheres, centers, self.radii, self.is_arm, self.parents, link_groups)
 
     def link_transforms(self, positions):
         transforms = np.empty((len(self.operations)+1, 4, 4))

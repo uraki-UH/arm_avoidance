@@ -1,16 +1,22 @@
-"""動作優先順位と差替え部品に対する共通安全制約の検証。"""
+"""回避動作の選択・差替え・復帰継続・停止優先・指令周期の検証。"""
 from dataclasses import asdict, replace
-import json
 from pathlib import Path
-import sys
+from types import SimpleNamespace
 from unittest.mock import Mock
+import json
+import sys
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'launch'))
+
 from avoidance_motion import motion_flags, motion_input, motion_result, motion_components, select_motion
+from dual_arm_avoidance_demo import avoidance_demo, next_control_time
 from gng_avoidance_planner import gng_avoidance_policy
+import dual_arm_gng_lidar_demo as ros_module
+import gng_avoidance_planner as module
 
 
 @pytest.mark.parametrize('flags, expected', [
@@ -180,3 +186,123 @@ def test_component_cannot_move_unplanned_joints(policy):
     policy.motion_components = motion_components(retreat=lambda request: motion_result(np.array([.8, .7, 9.]), True))
     value, _ = policy.select_target(None, None, .032)
     assert value[2] == policy.positions[2]
+
+
+@pytest.fixture
+def retreat(monkeypatch):
+    clock = [10.]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    observed = {'label': 1, 'gap': .12, 'can_bridge': True}
+    state = module.gng_avoidance_policy()
+    state.__dict__.update(positions=np.array([.3]), home=np.array([0.]),
+        arm_indices=[0], num_selected_gng=0, path=[], plan_future=None,
+        active_angle_indices=np.array([0]), coordination_source_indices=np.array([], dtype=int),
+        phase='avoiding', max_home_error_th=.015,
+        config={'min_cloud_clearance_th': .015, 'min_clearance_th': .015,
+                'target_clearance': .1, 'return_clear_sec': .5, 'max_state_age_sec': 1.},
+        select_active_arms=lambda: np.array([0]),
+        has_safe_measured_neighbors=lambda: observed['label'] == 1,
+        cloud_clearance=lambda _: (observed['gap'], None),
+        can_bridge=lambda *args: observed['can_bridge'],
+        refine_target=lambda step: (np.array([.3+step]), True))
+    state.motion_components = motion_components(retreat=lambda request: motion_result(np.array([.8]), True, True))
+    return state, observed, clock
+
+
+@pytest.mark.parametrize('cause', ['danger', 'collision', 'missing', 'distance', 'path'])
+def test_return_requires_uninterrupted_safety_and_risk_is_immediate(retreat, cause):
+    state, observed, clock = retreat
+    value, is_valid = state.select_target(None, None, .032)
+    assert is_valid and state.phase == 'waiting_for_clearance'
+    np.testing.assert_allclose(value, [.3])
+    clock[0] += .49
+    value, _ = state.select_target(None, None, .032)
+    np.testing.assert_allclose(value, [.3])
+    if cause in ('danger', 'collision', 'missing'):
+        observed['label'] = {'danger': 3, 'collision': 2, 'missing': 0}[cause]
+    elif cause == 'distance':
+        observed['gap'] = .08
+    else:
+        observed['can_bridge'] = False
+    value, _ = state.select_target(None, None, .032)
+    assert state.return_clear_since_sec is None
+    assert state.phase == ('waiting_for_clearance' if cause == 'path' else 'avoiding')
+    if cause != 'path':
+        assert value[0] > .3
+    observed.update(label=1, gap=.12, can_bridge=True)
+    clock[0] += .02
+    state.select_target(None, None, .032)
+    clock[0] += .49
+    value, _ = state.select_target(None, None, .032)
+    np.testing.assert_allclose(value, [.3])
+    clock[0] += .02
+    value, _ = state.select_target(None, None, .032)
+    assert state.phase == 'returning' and value[0] < .3
+    # 復帰中の距離減少だけによる逆転なし。隣接危険は即時再回避
+    observed['gap'] = .08
+    clock[0] += .05
+    value, _ = state.select_target(None, None, .032)
+    assert state.phase == 'returning' and value[0] < .3
+    observed['label'] = 3
+    value, _ = state.select_target(None, None, .032)
+    assert state.phase == 'avoiding' and value[0] > .3
+
+
+@pytest.mark.parametrize('jump', [-1., 2.])
+def test_confirmation_does_not_cross_clock_reset_or_check_gap(retreat, jump):
+    state, _, clock = retreat
+    state.select_target(None, None, .032)
+    clock[0] += jump
+    value, _ = state.select_target(None, None, .032)
+    assert state.phase == 'waiting_for_clearance'
+    np.testing.assert_allclose(value, [.3])
+    clock[0] += .51
+    state.select_target(None, None, .032)
+    assert state.phase == 'returning'
+
+
+def test_new_run_and_software_stop_clear_confirmation(retreat, monkeypatch):
+    state, _, _ = retreat
+    target = ros_module.gng_lidar_demo.__new__(ros_module.gng_lidar_demo)
+    target.__dict__.update(state.__dict__)
+    target.return_clear_since_sec = 1.
+    target.plan_future = None
+    monkeypatch.setattr(ros_module.avoidance_demo, 'on_start', lambda *args: SimpleNamespace(success=True))
+    target.on_start(None, None)
+    assert target.return_clear_since_sec is None
+    target.return_clear_since_sec = 1.
+    target.on_safety_stop(SimpleNamespace(data=True))
+    assert target.return_clear_since_sec is None and target.is_stop_latched
+
+
+def test_zero_delay_allows_immediate_return(retreat):
+    state, _, _ = retreat
+    state.config['return_clear_sec'] = 0.
+    value, _ = state.select_target(None, None, .032)
+    assert state.phase == 'returning' and value[0] < .3
+
+
+def test_absolute_schedule_does_not_halve_rate():
+    scheduled = 1.
+    commands = []
+    for idx in range(101):
+        now = 1.+idx*.05*.88
+        if now >= scheduled:
+            commands.append(now)
+            scheduled = next_control_time(now, scheduled, .05)
+    assert 87 <= len(commands) <= 89
+    assert all(.043 < b-a < .089 for a, b in zip(commands, commands[1:]))
+
+
+def test_skips_missed_slots_and_keeps_future_slot():
+    assert next_control_time(3.17, 1., .05) == pytest.approx(3.2)
+    assert next_control_time(3.18, 3.2, .05) == pytest.approx(3.2)
+    assert next_control_time(3.17, 0., .05) == pytest.approx(3.22)
+
+
+def test_stop_latch_keeps_original_fault():
+    state = SimpleNamespace(state='fault', error='joint_age_sec: 1.2')
+    avoidance_demo.on_safety_stop(state, SimpleNamespace(data=True))
+    assert state.state == 'stopped' and state.is_stop_latched
+    assert state.error == 'joint_age_sec: 1.2'
+    assert not state.enable_auto_start

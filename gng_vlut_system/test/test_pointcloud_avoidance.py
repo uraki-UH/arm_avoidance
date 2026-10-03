@@ -1,23 +1,31 @@
-"""任意の関節名・異なるグループ関節数・入力次元とセンサー構成の検証。"""
+"""点群回避の機体設定・環境入力・座標変換・鮮度・欠測拒否の検証。"""
 from pathlib import Path
+from types import SimpleNamespace
 import struct
 import sys
-from types import SimpleNamespace
+import time
 import xml.etree.ElementTree as et
 
+from ais_gng_msgs.msg import TopologicalMap, TopologicalNode, TopologicalNodeStates
+from scipy.spatial import cKDTree
+from sensor_msgs.msg import JointState, PointCloud2, PointField
+from voxel_msgs.msg import Voxel
 import numpy as np
 import pytest
-from scipy.spatial import cKDTree
 import yaml
 
-share = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(share / 'scripts'))
-sys.path.insert(0, str(share / 'launch'))
-from pointcloud_avoidance_config import load_config, gng_angle_num, resolve_clearance_margins
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'launch'))
+
 from dual_arm_avoidance_geometry import robot_geometry
-from dual_arm_gng_lidar_demo import gng_lidar_demo
+from dual_arm_gng_lidar_demo import gng_lidar_demo, graph_topology_hash
+from external_pointcloud_bridge import cloud_xyz, transform_xyz, has_fresh_input, external_pointcloud_bridge, pose_matrix, real_root_transform
 from gng_avoidance_planner import gng_path_search
+from pointcloud_avoidance_config import load_config, gng_angle_num, resolve_clearance_margins
 import dual_arm_lidar_setup as lidar_setup
+
+
+share = Path(__file__).resolve().parents[1]
 
 
 def write_gng(path, num):
@@ -248,3 +256,244 @@ def test_real_cloud_config_requires_pose_and_real_self_filter(robot_config, monk
     input_path.write_text(yaml.safe_dump(input_value))
     with pytest.raises(ValueError, match='自己除去の省略'):
         load_config(path, input_path, [0, 0, 1, 0, 0, 0])
+
+
+def stamp(message, age=0.0):
+    value = time.time_ns()-int(age*1e9)
+    message.header.stamp.sec, message.header.stamp.nanosec = divmod(value, 1_000_000_000)
+    return message
+
+
+def test_fixed_source_frame_and_existing_self_filter(robot_config, monkeypatch):
+    path, _ = robot_config
+    params_path = path.parent/'params.yaml'
+    params = yaml.safe_load(params_path.read_text())
+    params['/**']['ros__parameters'].update(frame_id='mount', environment_voxelization={'input_topic': '/camera/points'})
+    params_path.write_text(yaml.safe_dump(params))
+    urdf_path = path.parent/'robot.urdf'
+    urdf_path.write_text(urdf_path.read_text().replace('<link name="mount"/>', '''<link name="foundation"/>
+      <link name="mount"/><joint name="mount_fixed" type="fixed"><parent link="foundation"/>
+      <child link="mount"/><origin xyz="1 2 3" rpy="0 0 1.5707963267948966"/></joint>'''))
+    overlay = path.parent/'input.yaml'
+    overlay.write_text(yaml.safe_dump({'enable_live_obstacles': True,
+        'pipeline': {'enable_lidar': False, 'external_environment': {'max_input_age_sec': 1.}}}))
+    params_path, params, config = load_config(path, overlay)
+    source = config['pipeline']['external_environment']
+    np.testing.assert_allclose(np.asarray(source['root_from_source']) @ [1, 0, 0, 1], [1, 3, 3, 1])
+    assert source['voxel_topic'] == '/example_robot/self_filter_roi_voxels'
+    assert source['graph_topic'] == '/example_robot/Tmap_static'
+    assert source['state_topic'] == '/example_robot/gng_node_states_stamped'
+    monkeypatch.setattr(lidar_setup, 'Node', lambda **values: values)
+    nodes = lidar_setup.pipeline_nodes(params_path, params, 'sim_example_robot', config)
+    assert len(nodes) == 1 and nodes[0]['executable'] == 'self_recognition_viz_node'
+    settings = nodes[0]['parameters'][-1]
+    assert settings['joint_topic'] == '/sim_example_robot/joint_states'
+    assert settings['self_recognition.mask_topic'] == '/sim_example_robot/self_voxel'
+    assert settings['self_recognition.target_frame_id'] == 'foundation'
+    assert settings['max_joint_state_age_sec'] == .5
+    params['frame_id'] = 'upper'
+    params_path.write_text(yaml.safe_dump({'/**': {'ros__parameters': params}}))
+    with pytest.raises(ValueError, match='固定リンク'):
+        load_config(path, overlay)
+
+
+@pytest.fixture
+def receiver():
+    target = gng_lidar_demo.__new__(gng_lidar_demo)
+    target.external_environment = {'source_frame': 'actual/base', 'max_input_age_sec': 1.,
+        'root_from_source': [[0., -1., 0., 1.], [1., 0., 0., 2.], [0., 0., 1., 3.], [0., 0., 0., 1.]]}
+    target.source_stamps = {}
+    target.voxel_frame = 'sim/base'
+    target.last_voxel_stamp = -1
+    target.voxel_time = target.real_joint_time = 0.
+    target.graph_ids, target.graph_edges, target.graph_sub = (), None, object()
+    target.geometry = SimpleNamespace(joint_names=['waist', 'neck'])
+    return target
+
+
+def test_voxel_transform_and_stale_or_replayed_input(receiver):
+    message = stamp(Voxel(voxel_size=.02, x_shift=42, y_shift=21, z_shift=0, offset=0, data=[0]))
+    message.header.frame_id = 'actual/base'
+    receiver.on_voxels(message)
+    np.testing.assert_allclose(receiver.cloud_tree.data, [[.99, 2.01, 3.01]])
+    received = receiver.voxel_time
+    receiver.on_voxels(message)
+    receiver.on_voxels(stamp(message, 3.))
+    receiver.on_voxels(stamp(message, -3.))
+    assert receiver.voxel_time == received
+    stamp(message)
+    message.header.frame_id = 'camera'
+    receiver.on_voxels(message)
+    assert receiver.voxel_time == received
+
+
+def test_external_graph_keeps_receiving_safety_changes(receiver):
+    def graph(label):
+        message = stamp(TopologicalMap(nodes=[TopologicalNode(id=9, label=label)]))
+        message.header.frame_id = 'actual/base'
+        return message
+    receiver.on_graph(graph(1))
+    assert receiver.graph_sub is not None
+    assert receiver.graph_message.header.frame_id == 'sim/base'
+    point = receiver.graph_message.nodes[0].pos
+    np.testing.assert_allclose([point.x, point.y, point.z], [1, 2, 3])
+    receiver.on_graph(graph(2))
+    assert receiver.labels == {9: 2}
+    receiver.on_graph(graph(1))
+    assert receiver.labels == {9: 1}
+
+
+def test_stamped_states_preserve_freshness_and_topology(receiver):
+    receiver.external_environment['state_topic'] = '/actual/states'
+    destroyed = []
+    receiver.destroy_subscription = destroyed.append
+    graph = stamp(TopologicalMap(nodes=[TopologicalNode(id=9, label=1), TopologicalNode(id=12, label=1)], edges=[0, 1]))
+    graph.header.frame_id = 'actual/base'
+    receiver.on_graph(graph)
+    assert receiver.graph_sub is None and len(destroyed) == 1
+    message = stamp(TopologicalNodeStates(topology_hash=graph_topology_hash([9, 12], [0, 1]),
+                                        node_ids=[9, 12], labels=[2, 3]))
+    message.header.frame_id = 'actual/base'
+    receiver.on_stamped_states(message)
+    assert receiver.labels == {9: 2, 12: 3}
+    received = receiver.graph_time
+    receiver.on_stamped_states(message)
+    receiver.on_stamped_states(stamp(message, 2.))
+    receiver.on_stamped_states(stamp(message, -2.))
+    assert receiver.graph_time == received
+    for kind in ('topology', 'order', 'length', 'label', 'frame'):
+        invalid = stamp(TopologicalNodeStates(topology_hash=receiver.graph_topology_hash,
+                                             node_ids=[9, 12], labels=[1, 1]))
+        invalid.header.frame_id = 'actual/base'
+        if kind == 'topology':
+            invalid.topology_hash = graph_topology_hash([9, 12], [1, 0])
+        elif kind == 'order':
+            invalid.node_ids = [12, 9]
+        elif kind == 'length':
+            invalid.labels = [1]
+        elif kind == 'label':
+            invalid.labels = [0, 1]
+        else:
+            invalid.header.frame_id = 'camera'
+        receiver.on_stamped_states(invalid)
+        assert receiver.graph_time == received and receiver.labels == {9: 2, 12: 3}
+
+
+def test_first_neighbors_use_measured_angles_and_reject_unknown_labels():
+    from scipy.spatial import cKDTree
+    target = SimpleNamespace(positions=np.array([.01]), arm_indices=[0],
+        angle_tree=cKDTree([[0.], [1.], [2.]]), angle_node_ids=(10, 20, 30),
+        adjacency={10: [20], 20: [10, 30], 30: [20]}, labels={10: 1, 20: 1, 30: 3})
+    assert gng_lidar_demo.has_safe_measured_neighbors(target)
+    assert target.current_node_id == 10
+    target.positions[:] = .95
+    assert not gng_lidar_demo.has_safe_measured_neighbors(target)
+    target.labels[30] = 1
+    assert gng_lidar_demo.has_safe_measured_neighbors(target)
+    for label in (2, 3, 0):
+        target.labels[10] = label
+        assert not gng_lidar_demo.has_safe_measured_neighbors(target)
+    del target.labels[10]
+    assert not gng_lidar_demo.has_safe_measured_neighbors(target)
+    target.labels.update({10: 1, 20: 2})
+    assert not gng_lidar_demo.has_safe_measured_neighbors(target)
+
+
+def test_real_pose_requires_all_joints_and_fresh_measurements(receiver):
+    receiver.on_real_joints(stamp(JointState(name=['neck'], position=[1.24])))
+    assert receiver.real_joint_time == 0.
+    message = stamp(JointState(name=['neck', 'waist'], position=[1.24, 0.]))
+    receiver.on_real_joints(message)
+    received = receiver.real_joint_time
+    assert received > 0.
+    receiver.on_real_joints(message)
+    receiver.on_real_joints(stamp(message, 2.))
+    message.position[0] = float('nan')
+    receiver.on_real_joints(stamp(message))
+    assert receiver.real_joint_time == received
+
+
+def test_delayed_arrival_does_not_extend_source_lifetime(receiver, monkeypatch):
+    now = time.time_ns()
+    receiver.source_stamps = {kind: now-900_000_000 for kind in ('cloud', 'voxels', 'graph', 'joints')}
+    monkeypatch.setattr(time, 'time_ns', lambda: now)
+    assert receiver.has_fresh_environment()
+    monkeypatch.setattr(time, 'time_ns', lambda: now+200_000_000)
+    assert not receiver.has_fresh_environment()
+
+
+@pytest.mark.parametrize('is_bigendian', [True, False])
+def test_organized_cloud_with_padding_and_invalid_point(is_bigendian):
+    message = PointCloud2(height=2, width=1, point_step=16, row_step=20, is_bigendian=is_bigendian)
+    message.fields = [PointField(name=name, offset=offset, datatype=PointField.FLOAT32, count=1)
+                      for name, offset in [('x', 4), ('y', 8), ('z', 12)]]
+    order = '>' if is_bigendian else '<'
+    message.data = struct.pack(order+'ffffIffffI', 8, 1, 2, 3, 0, 9, float('nan'), 0, 0, 0)
+    np.testing.assert_equal(cloud_xyz(message), [[1, 2, 3]])
+    message.row_step = 12
+    with pytest.raises(ValueError, match='欠損'):
+        cloud_xyz(message)
+
+
+def test_optical_forward_and_mount_rotation():
+    # 光学Z前方→本体X前方→取付yaw 90度による仮想Y前方
+    result = transform_xyz(np.array([[0., 0., 2.]]), [1., 2., 3., 0., 0., np.pi/2],
+                           [0., 0., 0.], [-.5, .5, -.5, .5])
+    np.testing.assert_allclose(result, [[1, 4, 3]], atol=1e-12)
+
+
+@pytest.mark.parametrize('stamp,last,now,expected', [
+    (1_000_000_000, 0, 1.1, True), (1_000_000_000, 0, 2.1, False),
+    (1_000_000_000, 1_000_000_000, 1.1, False), (2_000_000_000, 0, 1., False)])
+def test_stale_duplicate_future_input_rejected(stamp, last, now, expected):
+    assert has_fresh_input(stamp, last, now, 1.) is expected
+
+
+def test_missing_clock_never_relabels_old_data():
+    target = SimpleNamespace(settings={'source_frame': 'optical', 'max_input_age_sec': 1.},
+                             last_input_stamp=-1, sim_stamp=None, num_rejected=0)
+    import time
+    stamp = time.time_ns()
+    message = PointCloud2()
+    message.header.frame_id = 'optical'
+    message.header.stamp.sec, message.header.stamp.nanosec = divmod(stamp, 1_000_000_000)
+    external_pointcloud_bridge.on_cloud(target, message)
+    assert target.num_rejected == 1
+    assert 'clock' in target.reason
+
+
+def test_real_robot_mask_and_camera_points_share_transform():
+    camera_pose = [.2, -.1, .6, .1, .4, -.3]
+    mount = [.02, 0., .01, 0., .1, 0.]
+    real_camera = pose_matrix([.1, .05, .4, -.2, .3, .5])
+    camera_point = np.array([.2, .1, .4, 1.])
+    real_point = real_camera @ pose_matrix(mount) @ camera_point
+    placement = real_root_transform(camera_pose, mount, real_camera)
+    np.testing.assert_allclose(placement @ real_point, pose_matrix(camera_pose) @ camera_point, atol=1e-12)
+
+
+def test_incomplete_real_joints_never_default_to_zero():
+    import time
+    target = SimpleNamespace(geometry=SimpleNamespace(joint_names=['waist_joint', 'neck_joint'],
+        limits=np.array([[-1., 1.], [-1., 1.]])), real_positions=None, last_real_stamp=-1,
+        settings={'max_input_age_sec': 1.}, real_joint_time=0.)
+    message = JointState(name=['neck_joint'], position=[.2])
+    message.header.stamp.sec, message.header.stamp.nanosec = divmod(time.time_ns(), 1_000_000_000)
+    external_pointcloud_bridge.on_real_joints(target, message)
+    assert target.real_positions is None
+    assert 'waist_joint' in target.real_state_detail
+    message.name, message.position = ['waist_joint', 'neck_joint'], [.1, .2]
+    external_pointcloud_bridge.on_real_joints(target, message)
+    np.testing.assert_equal(target.real_positions, [.1, .2])
+    received = target.real_joint_time
+    external_pointcloud_bridge.on_real_joints(target, message)
+    assert target.real_joint_time == received
+
+
+@pytest.mark.parametrize('value', [-.1, float('nan'), float('inf'), True, '0.5'])
+def test_invalid_return_delay_rejected_before_launch(robot_config, value):
+    path, _ = robot_config
+    overlay = path.parent/'delay.yaml'
+    overlay.write_text(yaml.safe_dump({'return_clear_sec': value}))
+    with pytest.raises(ValueError, match='return_clear_sec'):
+        load_config(path, overlay)

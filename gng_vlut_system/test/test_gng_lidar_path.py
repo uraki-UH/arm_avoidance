@@ -1,8 +1,10 @@
 """VLUTラベルと観測点群を用いた経路入口・中間姿勢の検証。"""
+from copy import deepcopy
+import json
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from types import SimpleNamespace
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
@@ -11,11 +13,14 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
-from dual_arm_gng_lidar_demo import gng_lidar_demo
+from dual_arm_gng_lidar_demo import gng_lidar_demo, build_path_message, voxel_centers
+from avoidance_motion import motion_flags
+from builtin_interfaces.msg import Time
 from gng_avoidance_planner import gng_avoidance_policy
 from dual_arm_avoidance_geometry import robot_geometry
 from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
 from std_msgs.msg import UInt16MultiArray
+from voxel_msgs.msg import Voxel
 
 
 class test_geometry:
@@ -47,6 +52,107 @@ class paired_geometry(test_geometry):
 
 
 class test_gng_lidar_path(unittest.TestCase):
+    def test_path_message_preserves_cached_graph_and_source_labels(self):
+        graph = TopologicalMap(nodes=[TopologicalNode(id=4, label=1), TopologicalNode(id=9, label=1)], edges=[0, 1])
+        graph.header.frame_id, graph.header.stamp.sec = 'sim/base', 2
+        before = deepcopy(graph)
+        message = build_path_message(graph, [9, 100, 4], {9: 3}, Time(sec=8))
+        self.assertEqual([node.id for node in message.nodes], [9, 4])
+        self.assertEqual([node.label for node in message.nodes], [3, 0])
+        self.assertEqual(list(message.edges), [0, 1])
+        self.assertEqual((message.header.frame_id, message.header.stamp.sec), ('sim/base', 8))
+        self.assertEqual(graph, before)
+        message.nodes[0].pos.x = 99.
+        self.assertEqual(graph, before)
+        empty = build_path_message(graph, [], {}, Time(sec=9))
+        self.assertEqual(empty.nodes, [])
+        self.assertEqual(list(empty.edges), [])
+
+    def test_voxel_centers_preserve_source_and_coordinate_order(self):
+        cells = np.array([[-2, 3, 1], [4, -1, 0]], dtype=np.int64)
+        transform = np.array([[0., -1., 0., 1.], [1., 0., 0., 2.], [0., 0., 1., 3.], [0., 0., 0., 1.]])
+        for shifts in ((42, 21, 0), (0, 21, 42)):
+            ids = [sum(int(value+10) << shift for value, shift in zip(cell, shifts)) for cell in cells]
+            message = Voxel(voxel_size=.2, x_shift=shifts[0], y_shift=shifts[1], z_shift=shifts[2],
+                            offset=10, origin_x=.1, origin_y=.2, origin_z=.3, data=ids)
+            before = deepcopy(message)
+            expected = (cells+.5)*message.voxel_size + [.1, .2, .3]
+            np.testing.assert_allclose(voxel_centers(message), expected)
+            np.testing.assert_allclose(voxel_centers(message, transform), expected @ transform[:3, :3].T + transform[:3, 3])
+            self.assertEqual(message, before)
+
+    def test_invalid_and_empty_voxels_do_not_refresh_valid_input(self):
+        target = gng_lidar_demo.__new__(gng_lidar_demo)
+        target.external_environment, target.voxel_frame = None, 'sim/base'
+        for invalid in (dict(voxel_size=0.), dict(voxel_size=float('nan')), dict(x_shift=0), dict(origin_z=float('inf'))):
+            with self.subTest(invalid=invalid):
+                message = Voxel(voxel_size=.02, x_shift=42, y_shift=21, z_shift=0, data=[0])
+                message.header.frame_id, message.header.stamp.sec = 'sim/base', 1
+                for name, value in invalid.items():
+                    setattr(message, name, value)
+                previous = target.cloud_tree = object()
+                target.voxel_time, target.last_voxel_stamp, target.num_voxels, target.cell_radius = 5., 6, 11, .01
+                target.on_voxels(message)
+                self.assertIs(target.cloud_tree, previous)
+                self.assertEqual((target.voxel_time, target.last_voxel_stamp, target.num_voxels, target.cell_radius), (5., 6, 11, .01))
+        message = Voxel(voxel_size=.02, x_shift=42, y_shift=21, z_shift=0)
+        message.header.frame_id, message.header.stamp.sec = 'sim/base', 1
+        target.on_voxels(message)
+        self.assertIsNone(target.cloud_tree)
+        self.assertEqual((target.voxel_time, target.num_voxels, target.last_voxel_stamp), (5., 11, 1_000_000_000))
+
+    def test_diagnostics_keep_schema_and_one_observation_time(self):
+        state = SimpleNamespace(num_cloud=2, num_voxels=3, qp=None, motion_phase='monitoring',
+            motion_flags=motion_flags(), current_node_id=9, has_safe_neighbors=True,
+            cloud_time=17., voxel_time=18., graph_time=19., real_joint_time=16.,
+            external_environment={'source_namespace': 'actual'}, labels={4: 1, 9: 3, 10: 2},
+            num_local_steps=5, num_plans=6, num_selected_gng=7, path=[9], cloud_gap=.2,
+            coordination_source_indices=np.array([0]), arm_names=['L_joint1', 'R_joint1'],
+            active_angle_indices=np.array([1]))
+        status = gng_lidar_demo.diagnostic_status(state, 20.)
+        self.assertEqual(json.loads(json.dumps(status)), {
+            'num_cloud': 2, 'num_voxels': 3, 'local_qp': None, 'planner_backend': 'gng_avoidance_policy',
+            'motion_phase': 'monitoring', 'motion_flags': dict(is_stop_requested=False, has_valid_input=True,
+                has_active_joints=False, has_safe_neighbors=False, can_finish_retreat=False, can_return=False, is_home=False),
+            'current_node_id': 9, 'has_safe_first_neighbors': True,
+            'cloud_age_sec': 3., 'voxel_age_sec': 2., 'graph_age_sec': 1., 'real_joint_age_sec': 4.,
+            'environment_namespace': 'actual', 'num_safe': 1, 'num_danger': 1, 'num_collision': 1,
+            'num_local_steps': 5, 'num_plans': 6, 'num_selected_gng': 7, 'node_path': [9],
+            'cloud_clearance_m': .2, 'is_coordinated': True, 'active_arm_joints': ['R_joint1']})
+        status['node_path'].clear()
+        self.assertEqual(state.path, [9])
+        state.external_environment = None
+        status = gng_lidar_demo.diagnostic_status(state, 20.)
+        self.assertIsNone(status['real_joint_age_sec'])
+        self.assertIsNone(status['environment_namespace'])
+
+    def test_tick_keeps_safety_and_plan_reset_before_diagnostics(self):
+        for state, phase, has_reset in [('running', 'monitoring', False), ('running', 'obstacle_wait', True),
+                                       ('stopped', 'software_stop', True), ('fault', 'fault', True)]:
+            with self.subTest(state=state, phase=phase):
+                target = gng_lidar_demo.__new__(gng_lidar_demo)
+                target.state, target.phase, target.motion_phase = state, phase, 'avoiding'
+                events = []
+                target.clear_plan = lambda: events.append('clear')
+                target.publish_diagnostics = lambda: events.append('diagnostics')
+                with patch('dual_arm_gng_lidar_demo.avoidance_demo.tick', side_effect=lambda: events.append('control')), \
+                     patch('dual_arm_gng_lidar_demo.has_stable_return_clearance', side_effect=lambda *_: events.append('confirmation')):
+                    target.tick()
+                expected = ['control'] + (['confirmation', 'clear'] if has_reset else []) + ['diagnostics']
+                self.assertEqual(events, expected)
+                self.assertEqual(target.motion_phase, phase if has_reset else 'avoiding')
+
+    def test_reset_planning_cycle_cancels_only_pending_plan(self):
+        target = gng_lidar_demo.__new__(gng_lidar_demo)
+        target.plan_future = future = Mock()
+        target.path, target.next_plan_sec, target.return_clear_since_sec = [4], 10., 3.
+        target.reset_planning_cycle()
+        future.cancel.assert_called_once_with()
+        self.assertEqual(target.path, [])
+        self.assertIsNone(target.plan_future)
+        self.assertIsNone(target.return_clear_since_sec)
+        self.assertEqual(target.next_plan_sec, 0.)
+
     def test_python_neighbor_risk_bypasses_distance_only_hold(self):
         search = self.make_search()
         search.arm_names = ['L_joint1']

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """実レイ点群・VLUT状態・学習済み姿勢グラフによるGazebo専用退避。"""
 from concurrent.futures import ProcessPoolExecutor
+from copy import deepcopy
 from dataclasses import asdict
 from multiprocessing import get_context
 import json
@@ -27,6 +28,32 @@ def graph_topology_hash(ids, edges):
     for value in (len(ids), *ids, len(edges), *edges):
         result = ((result ^ int(value)) * 1099511628211) & ((1 << 64)-1)
     return result
+
+
+def voxel_centers(message, root_from_source=None):
+    """受信状態を変更しないボクセル中心座標の復号と固定座標変換。"""
+    ids = np.asarray(message.data, dtype=np.int64)
+    mask = (1 << 21)-1
+    cells = np.column_stack([((ids >> shift) & mask)-message.offset for shift in
+                             (message.x_shift, message.y_shift, message.z_shift)])
+    points = (cells+.5)*message.voxel_size+np.array([message.origin_x, message.origin_y, message.origin_z])
+    if root_from_source is not None:
+        transform = np.asarray(root_from_source)
+        points = points @ transform[:3, :3].T + transform[:3, 3]
+    return points
+
+
+def build_path_message(graph, path, labels, stamp):
+    """元グラフの時刻・ラベルを保持した、表示用経路メッセージの生成。"""
+    message = TopologicalMap()
+    message.header = deepcopy(graph.header)
+    message.header.stamp = stamp
+    nodes = {node.id: node for node in graph.nodes}
+    message.nodes = [deepcopy(nodes[idx]) for idx in path if idx in nodes]
+    for node in message.nodes:
+        node.label = labels.get(node.id, 0)
+    message.edges = [value for idx in range(len(message.nodes)-1) for value in (idx, idx+1)]
+    return message
 
 
 class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
@@ -141,24 +168,20 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         response = super().on_start(request, response)
         if response.success:
             self.motion_phase = 'monitoring'
-            has_stable_return_clearance(self, False)
-            self.path = []
-            if self.plan_future is not None:
-                self.plan_future.cancel()
-                self.plan_future = None
-            self.next_plan_sec = 0.0
+            self.reset_planning_cycle()
         return response
 
     def on_safety_stop(self, message):
         super().on_safety_stop(message)
         if self.is_stop_latched:
-            has_stable_return_clearance(self, False)
-            self.path = []
-            if self.plan_future is not None:
-                self.plan_future.cancel()
-                self.plan_future = None
-            self.next_plan_sec = 0.0
+            self.reset_planning_cycle()
             self.coordination_source_indices = np.array([], dtype=int)
+
+    def reset_planning_cycle(self):
+        """開始・停止時の復帰確認、未採用探索結果、再探索時刻の初期化。"""
+        has_stable_return_clearance(self, False)
+        self.clear_plan()
+        self.next_plan_sec = 0.0
 
     def on_cloud(self, message):
         if not self.can_accept_environment_sample(message, 'cloud'):
@@ -184,21 +207,14 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         if stamp <= self.last_voxel_stamp:
             return
         self.last_voxel_stamp = stamp
-        ids = np.asarray(message.data, dtype=np.int64)
-        if len(ids) == 0:
+        if len(message.data) == 0:
             self.cloud_tree = None
             return
-        mask = (1 << 21)-1
-        cells = np.column_stack([((ids >> shift) & mask)-message.offset for shift in
-                                 (message.x_shift, message.y_shift, message.z_shift)])
-        points = (cells+.5)*message.voxel_size+np.array([message.origin_x, message.origin_y, message.origin_z])
-        if source:
-            transform = np.asarray(source['root_from_source'])
-            points = points @ transform[:3, :3].T + transform[:3, 3]
+        points = voxel_centers(message, source['root_from_source'] if source else None)
         self.cloud_tree = cKDTree(points)
         self.cell_radius = message.voxel_size*np.sqrt(3)/2
         self.voxel_time = time.monotonic()
-        self.num_voxels = len(ids)
+        self.num_voxels = len(points)
 
     def on_features(self, message):
         if any(len(feature.weight_angle) != len(self.arm_names) or not np.all(np.isfinite(feature.weight_angle))
@@ -315,46 +331,46 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
                 return
         super().publish_target(target)
 
+    def diagnostic_status(self, now_sec):
+        """同一観測時刻を基準とする診断値の構築。配信処理からの分離。"""
+        return {
+            'num_cloud': self.num_cloud, 'num_voxels': self.num_voxels,
+            'local_qp': self.qp.report if self.qp is not None else None,
+            'planner_backend': 'gng_avoidance_policy',
+            'motion_phase': self.motion_phase,
+            'motion_flags': asdict(self.motion_flags) if hasattr(self, 'motion_flags') else None,
+            'current_node_id': self.current_node_id, 'has_safe_first_neighbors': self.has_safe_neighbors,
+            'cloud_age_sec': now_sec-self.cloud_time,
+            'voxel_age_sec': now_sec-self.voxel_time,
+            'graph_age_sec': now_sec-self.graph_time,
+            'real_joint_age_sec': now_sec-self.real_joint_time if self.external_environment else None,
+            'environment_namespace': self.external_environment['source_namespace'] if self.external_environment else None,
+            'num_safe': sum(value == 1 for value in self.labels.values()),
+            'num_danger': sum(value == 3 for value in self.labels.values()),
+            'num_collision': sum(value == 2 for value in self.labels.values()),
+            'num_local_steps': self.num_local_steps,
+            'num_plans': self.num_plans, 'num_selected_gng': self.num_selected_gng,
+            'node_path': list(self.path), 'cloud_clearance_m': self.cloud_gap,
+            'is_coordinated': bool(len(self.coordination_source_indices) and self.path),
+            'active_arm_joints': [self.arm_names[idx] for idx in self.active_angle_indices],
+        }
+
+    def publish_diagnostics(self):
+        """経路表示と診断JSONの配信境界。"""
+        if not hasattr(self, 'diag'):
+            return
+        if self.graph_message is not None:
+            message = build_path_message(self.graph_message, self.path, self.labels, self.get_clock().now().to_msg())
+            self.path_pub.publish(message)
+        self.diag.publish(String(data=json.dumps(self.diagnostic_status(time.monotonic()))))
+
     def tick(self):
         super().tick()
         if self.state != 'running' or self.phase == 'obstacle_wait':
             has_stable_return_clearance(self, False)
             self.clear_plan()
             self.motion_phase = self.phase
-        if hasattr(self, 'diag'):
-            if self.state != 'running':
-                self.path = []
-            if self.graph_message is not None:
-                message = TopologicalMap()
-                message.header = self.graph_message.header
-                message.header.stamp = self.get_clock().now().to_msg()
-                nodes = {node.id: node for node in self.graph_message.nodes}
-                message.nodes = [nodes[idx] for idx in self.path if idx in nodes]
-                for node in message.nodes:
-                    node.label = self.labels.get(node.id, 0)
-                message.edges = [value for idx in range(len(message.nodes)-1) for value in (idx, idx+1)]
-                self.path_pub.publish(message)
-            self.diag.publish(String(data=json.dumps({
-                'num_cloud': self.num_cloud, 'num_voxels': self.num_voxels,
-                'local_qp': self.qp.report if self.qp is not None else None,
-                'planner_backend': 'gng_avoidance_policy',
-                'motion_phase': self.motion_phase,
-                'motion_flags': asdict(self.motion_flags) if hasattr(self, 'motion_flags') else None,
-                'current_node_id': self.current_node_id, 'has_safe_first_neighbors': self.has_safe_neighbors,
-                'cloud_age_sec': time.monotonic()-self.cloud_time,
-                'voxel_age_sec': time.monotonic()-self.voxel_time,
-                'graph_age_sec': time.monotonic()-self.graph_time,
-                'real_joint_age_sec': time.monotonic()-self.real_joint_time if self.external_environment else None,
-                'environment_namespace': self.external_environment['source_namespace'] if self.external_environment else None,
-                'num_safe': sum(value == 1 for value in self.labels.values()),
-                'num_danger': sum(value == 3 for value in self.labels.values()),
-                'num_collision': sum(value == 2 for value in self.labels.values()),
-                'num_local_steps': self.num_local_steps,
-                'num_plans': self.num_plans, 'num_selected_gng': self.num_selected_gng,
-                'node_path': self.path, 'cloud_clearance_m': self.cloud_gap,
-                'is_coordinated': bool(len(self.coordination_source_indices) and self.path),
-                'active_arm_joints': [self.arm_names[idx] for idx in self.active_angle_indices],
-            })))
+        self.publish_diagnostics()
 
 
 def main():
