@@ -242,6 +242,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/urdf")
 endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
+  scripts/joint_motion_state.py
   scripts/local_qp.py
   scripts/joint_command_model.py
   scripts/dual_arm_mode_model.py
@@ -250,6 +251,7 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 )
 
 install(PROGRAMS
+  scripts/joint_motion_observer.py
   scripts/dynamixel_neck_torque.py
   scripts/dynamixel_sim_output.py
   scripts/dynamixel_sim_keyboard.py

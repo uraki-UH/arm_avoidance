@@ -2,7 +2,7 @@
 
 ## 要約
 
-2026-09-28時点の配置と責務。計算部品を`src/core`、ROS入出力を`src/nodes`へ配置。
+部品の配置と責務。計算部品を`src/core`、ROS入出力を`src/nodes`へ配置。
 既存部品の移動であり、全機能の独立ライブラリ化やROS依存の完全除去は未実施。
 `planning`に混在していた関節実行・局所回避・把持補正を責務ごとに分離。
 
@@ -14,6 +14,8 @@
 | 軌道計画 | [core/planning](../src/core/planning)：グラフ探索、経路コスト、探索索引 | [nodes/planning](../src/nodes/planning)：目標選択・共有計画ノード |
 | 回避 | [core/avoidance](../src/core/avoidance)：従来アーム回避の補助処理 | [nodes/avoidance](../src/nodes/avoidance)：`arm_avoid_node` |
 | 制御・実行 | [core/control](../src/core/control)：指令補間・速度制限・制御インターフェース | [nodes/control](../src/nodes/control)：目標関節実行・仮想関節ドライバー・指令仲裁 |
+| 関節運動状態 | [joint_motion_state.py](../scripts/joint_motion_state.py)：位置・速度・加速度・ジャークの状態と任意の微分計算 | [joint_motion_observer.py](../scripts/joint_motion_observer.py)：標準状態の観測。既定は未起動。[仕様・起動](joint_control.md#任意の運動状態観測) |
+| シミュレータ接続・表示 | 標準`JointState`・`JointTrajectory`・TF、[共有effort設定](../launch/dual_arm_effort_config.py) | [dual_arm_gz.launch.py](../launch/dual_arm_gz.launch.py)：Harmonic、[dual_arm_isaac.py](../launch/dual_arm_isaac.py)：Isaac標準制御（物理検証待ち）、[gng_viewer_bridge.launch.py](../launch/gng_viewer_bridge.launch.py)：実測購読。接続引数は[標準トピック仕様](dual_arm_simulation.md#標準ros-2トピックとviewerの接続) |
 | 把持補正 | [core/grasping](../src/core/grasping)：点群に基づく幅・姿勢補正 | [nodes/grasping](../src/nodes/grasping)：補正入力、IK連携、結果配信 |
 | 把持候補・把持物体 | [grasping_system/include](../../grasping_system/include)：candidate・rigid・graph・voxel | [grasping_system/src](../../grasping_system/src)：候補生成等 |
 | 衝突判定 | [core/collision](../src/core/collision)：形状・自己・環境の干渉検査 | 利用元の計画・安全監視ノード |

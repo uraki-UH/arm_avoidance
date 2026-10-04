@@ -1,5 +1,199 @@
 # 双腕シミュレーションの制御・物理設定
 
+## Gazebo Harmonicの標準effort制御
+
+新しい駆動検証の入口: `launch/dual_arm_gz.launch.py`。ROS 2 Jazzy＋Gazebo Harmonic＋標準`gz_ros2_control/GazeboSimSystem`を使用。自作モータプラグインへの依存なし。
+制御経路は`JointTrajectory`の位置・速度目標 → `JointTrajectoryController`のPID → 制限付きeffort → Gazeboの物理更新 → 実測位置・速度。
+
+- 設定: `config/dual_arm_effort.yaml`。1 ms周期に合わせた関節別PIDゲイン。元URDFの変更なし。
+- トルク上限: URDFの`limit effort`をeffortインターフェースとPIDの`u_clamp_min/max`へ反映。検証軌道のeffortフィードフォワードは未使用。
+- 停止: 軌道トピックへの現在位置・終端速度ゼロの保持指令。トルク制限内での減速。停止ラッチとは別の機能。
+- 適用範囲: max／longの標準駆動バックエンド。既存のGNG/VLUT点群処理・統合キーボード・ソフト停止ラッチは新入口に未接続。Viewerの実測表示は標準JointStateで接続可能。実機パラメータ同定前。
+- 実行環境: `gz_ros2_control` 1.2.20、`joint_trajectory_controller` 4.42.1、`ros_gz_sim` 1.0.24。Gazebo Classicの起動なし。
+
+ワークスペースルートでの環境構築:
+
+```bash
+docker build -f docker/Dockerfile.gazebo_harmonic -t uraki-gazebo-harmonic:local docker
+```
+
+headless起動（終了はCtrl+C）:
+
+```bash
+docker run --rm -it -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
+  -e GZ_PARTITION=uraki_harmonic -v "$PWD":/workspace \
+  uraki-gazebo-harmonic:local bash -c \
+  'source /opt/ros/jazzy/setup.bash; ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py'
+```
+
+検証コマンド（`fixture`を`max`／`long`へ変更可能。出力先は未使用のディレクトリ）:
+
+```bash
+docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
+  -e GZ_PARTITION=uraki_motor_check -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/workspace \
+  uraki-gazebo-harmonic:local bash -c \
+  'source /opt/ros/jazzy/setup.bash; python3 gng_vlut_system/test/check_sim_motor.py --model fixture --output /workspace/artifacts/gz_motor_check/fixture'
+```
+
+検証条件: 重力あり、実URDFの左右`joint4`を同時駆動、各速度は軌道のピーク値。速度誤差RMS判定値0.05 rad/s、最大位置誤差判定値0.05 rad。停止試験では0.4 rad／0.8秒の別軌道の途中で、実測角速度0.2 rad/sを確認して保持指令を送信。全関節が0.02 rad/s未満で落ち着く時刻を停止時間とする。無制限トルク・直接速度設定による追従ではないことを、既知慣性モデルでも確認。
+
+| 対象 | ピーク0.2 rad/sでの速度誤差RMS [rad/s] | ピーク0.5 rad/sでの速度誤差RMS [rad/s] | 運動中保持指令からの停止時間 [s] |
+| --- | --- | --- | --- |
+| max | 0.01192 | 0.01907 | 0.294 |
+| long | 0.02412 | 0.03833 | 0.555 |
+
+既知慣性モデル: 慣性0.1 kg m²、トルク上限0.5 N m。飽和中の実測角加速度5.000 rad/s²、慣性×角加速度0.500 N m。標準コントローラの出力も上限内。
+実URDFの最大出力／URDF上限比: max 0.4014、long 0.5175。位置誤差最大値: max 0.00242 rad、long 0.00548 rad。合否と生波形は`artifacts/gz_motor_20261003/{fixture_02,max_final,long_final}/`の`report.json`、`joint_samples.json`、`controller_samples.json`。所有プロセスの終了確認も`report.json`へ保存。
+
+## 標準ROS 2トピックとViewerの接続
+
+Harmonicの物理処理とViewer表示の間は標準ROS 2メッセージ。専用の関節状態リレーは不要。
+既定の名前空間は`/sim_topo_dual_arm_max`。相対トピック名はこの名前空間内、絶対名は指定した接続先。
+
+| 用途 | 既定トピック | 型 | Harmonicのlaunch引数 |
+| --- | --- | --- | --- |
+| 実測位置・角速度・effort | `joint_states` | `sensor_msgs/msg/JointState` | `state_topic` |
+| 目標軌道 | `dual_arm_controller/joint_trajectory` | `trajectory_msgs/msg/JointTrajectory` | `trajectory_topic` |
+| ロボット形状 | `robot_description` | `std_msgs/msg/String` | `description_topic` |
+| リンク姿勢 | `/tf`、`/tf_static` | `tf2_msgs/msg/TFMessage` | 標準TF |
+| 物理時刻 | `/clock` | `rosgraph_msgs/msg/Clock` | 標準時刻 |
+
+`robot_description`はtransient-localで後からの購読にも対応。Viewerの関節入力はSensorDataQoSでreliable／best-effort双方に接続。
+Viewer内の描画用JSONへの変換は既存`robot_viewer_bridge_node`の責務。Gazebo固有処理や新しいWebSocket形式の追加なし。
+位置・速度の単位はrad、rad/s。関節対応は`JointState.name`、姿勢更新時刻は実測の`header.stamp`。
+固定基台は`world`。このlaunchのTFはURDFリンク名のままなので、複数機体の同一TF空間への同時投入には別途フレーム名の分離が必要。
+
+既存ViewerコンテナとHarmonicコンテナを接続する場合、同じROS_DOMAIN_IDとDDS通信可能なネットワークが必要。
+上の隔離駆動試験のDockerコマンドはそのままでは外部Viewerへの接続例ではない。
+既存`gng_cpu_container`と接続する開発環境の例:
+
+```bash
+docker run --rm -it --network host --ipc container:gng_cpu_container \
+  -e ROS_DOMAIN_ID=0 -e ROS_LOCALHOST_ONLY=1 -e GZ_PARTITION=uraki_harmonic \
+  -v "$PWD":/workspace uraki-gazebo-harmonic:local bash -c \
+  'source /opt/ros/jazzy/setup.bash; ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py'
+```
+
+Viewer側は更新済みの`gng_vlut_system`をビルド・source後、既存コンテナ内で以下を起動。
+`params_file:=`はロボット表示だけの構成。既存の仮想姿勢・同じ機体のViewer bridgeと重複起動しない。
+
+```bash
+ros2 launch /ros2_ws/src/gng_vlut_system/launch/gng_viewer_bridge.launch.py \
+  params_file:= robot_name:=sim_topo_dual_arm_max \
+  urdf_path:=/ros2_ws/src/urdf/topo_dual_arm_max/topo_dual_arm_max.urdf \
+  joint_control_backend:=external \
+  state_topic:=/sim_topo_dual_arm_max/joint_states \
+  enable_robot_state_publisher:=false use_sim_time:=true robot_base_frame:=world
+```
+
+`state_topic`直接指定時は初期姿勢の配信を無効化し、外部実測への仮想値混入を防止。
+`enable_robot_state_publisher:=false`でHarmonic側のTF配信を利用。Viewerからの制御ノード起動は`external`で無効化。
+未指定の既存Viewer接続は従来の`viewer_joint_states`を維持。
+Viewerの操作入力、回避・停止ラッチの統合はこの表示接続に含まれない。
+目標軌道の発行者は指令管理部に一元化し、Viewerや複数の計画器からコントローラへ直接競合送信しない。
+
+接続検証は`test/check_sim_motor.py --enable-topic-remap`で標準トピックを`/robot_io/`へ変更して実施可能。
+`--viewer-stream-topic /viewer_test/robot/pose`の追加で、別起動したViewer bridgeの配信を同時刻の実測関節角と照合。
+検証時のノード起動コマンド（双方とも`ROS_DOMAIN_ID=96`、`ROS_LOCALHOST_ONLY=1`。ViewerはHumbleコンテナ内、検証器はhost network／共有IPCのJazzyコンテナ内）:
+
+```bash
+# 現行ビルドのViewer配信。有限起動と専用ストリーム
+timeout --signal=INT --kill-after=10s 120s /ros2_ws/build/gng_vlut_system/src/robot_viewer_bridge_node --ros-args \
+  -r __node:=harmonic_viewer_connection_check_final -p robot_name:=sim_motor_check \
+  -p urdf_path:=/ros2_ws/src/urdf/topo_dual_arm_max/topo_dual_arm_max.urdf \
+  -p joint_state_topic:=/robot_io/joint_states -p stream_topic:=/viewer_test/robot \
+  -p frame_id:=world -p use_sim_time:=true --disable-rosout-logs
+
+# Gazebo・標準制御の起動から表示照合、所有プロセスの停止まで
+python3 gng_vlut_system/test/check_sim_motor.py --model max --enable-topic-remap \
+  --viewer-stream-topic /viewer_test/robot/pose \
+  --output /workspace/artifacts/gz_topics_check/max
+```
+
+max接続試験: Viewer配信307件の実測角との差0 rad、別名トピックでの速度誤差RMS 0.02425 rad/s（目標ピーク0.5 rad/s）、保持指令後0.300秒で停止。best-effort入力の表示反映も確認。結果は`artifacts/gz_topics_20261004/max_complete/report.json`。
+ブラウザ操作・点群入力・全ROS型のHumble/Jazzy間互換性はこの試験の対象外。
+
+## Isaac Simの接続
+
+対象: Isaac Sim 6.1.0、ROS 2 Jazzy。`isaacsim.ros2.control`の標準Controller Managerと`JointTrajectoryController`を使用。
+Isaac本体の入口は`launch/dual_arm_isaac.py`、ROS側のTF・controller起動は`launch/dual_arm_isaac.launch.py`。
+従来の`construction_isaac_sim`の建設シーン用設定とは独立した機体接続。
+
+- 共通設定: `config/dual_arm_effort.yaml`。旧`dual_arm_gz.yaml`から移動。`launch/dual_arm_effort_config.py`が独立関節・PID・トルク上限を両バックエンドへ反映。
+- 変換: 元URDFから一時領域へUSDを生成。固定基台、1 ms物理周期、URDFとUSDの関節名一致を起動時に検査。
+- 駆動: USDのforce drive、stiffness／dampingゼロ。位置・速度誤差からのトルク計算は標準effortコントローラ。mimicへの独立したdriveを除外。
+- 上限: URDFの`limit effort`をUSDの`maxForce`とPIDの`u_clamp_min/max`へ反映。
+- 状態: Isaacのjoint_state_broadcasterが`/<namespace>/joint_states`を配信。目標軌道は`/<namespace>/dual_arm_controller/joint_trajectory`、アクションは同controllerの`follow_joint_trajectory`。
+- 形状・時刻: Isaacの標準拡張が`robot_description`、時計graphが`/clock`を配信。ROS側のrobot_state_publisherがIsaacの合成URDFを購読しTFを配信。
+- Viewer: 上記の`joint_control_backend:=external`と`state_topic`をそのまま使用。Viewerへ渡す元URDFはIsaacの起動対象と一致させる。
+- ゲイン: Harmonicの調整値を共用。Isaac物理上での安定性・速度追従・停止時間は未検証。回避・停止ラッチの統合も別途。
+
+公式API: [Isaac ROS 2 Control](https://docs.isaacsim.omniverse.nvidia.com/latest/py/source/extensions/isaacsim.ros2.control/docs/index.html)。6.1.0の取得済みイメージ内で同拡張・URDFImporterConfig・PID出力上限パラメータの同梱を確認。
+
+### 起動
+
+GPUコンテナ利用とIsaac Sim利用規約への同意が前提。ROS_DOMAIN_IDはViewerと一致させる。以下は独立ドメイン96。
+Harmonicと同じ名前空間・`/clock`を同時使用しない。
+
+```bash
+# ワークスペースルート。ACCEPT_EULAは利用規約への同意後に設定
+export ACCEPT_EULA=Y
+export ROS_DOMAIN_ID=96
+docker compose -f docker/compose.dual_arm_isaac.yaml up --build
+```
+
+既定の機体はmax。longへの変更は起動前に次を設定:
+
+```bash
+export ROBOT_URDF=urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf
+export ROBOT_NAMESPACE=sim_topo_dual_arm_max_long
+```
+
+終了:
+
+```bash
+docker compose -f docker/compose.dual_arm_isaac.yaml down
+```
+
+生成USD・controller設定はIsaacコンテナの一時ディレクトリ。元URDFやメッシュの書換えなし。
+ROS側のイメージはHarmonic検証環境を再利用するが、この構成が起動するシミュレータはIsaacのみ。
+独立したIsaac環境では`python.sh gng_vlut_system/launch/dual_arm_isaac.py`でも起動可能。
+`--urdf`、`--namespace`、`--control-config`で機体と設定を選択。`--output-dir`は未使用の生成先、`--max-run-sec`は起動完了後の有限実行時間。
+
+### 検証と現在の制限
+
+検証済み: max／longの共通制御設定一致、実USD APIによるdrive設定・兄弟配置の関節探索・mimic独立駆動の除外、launch回帰を含む45テスト。
+設定共通化後のHarmonic実物理試験も合格。トルク上限0.5 N mに対し慣性×実測角加速度0.500 N m。
+Isaac 6.1.0イメージ内で起動CLIの読込と使用APIの同梱を確認。
+
+未検証: Isaac本体上のURDFインポート完走、標準controllerのactivation、動的TF、Viewer表示、追従・停止の実物理動作。
+このホストではGPUコンテナ試験が`failed to discover GPU vendor from CDI: no known GPU vendor found`で起動失敗。
+NVIDIA Container Toolkit/CDIの設定には管理者権限が必要。sudo認証が必要なため自動設定は未実施。
+管理者側で[公式セットアップ](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)のaptリポジトリを登録し、CDI用の`nvidia-container-toolkit-base`を導入。
+このホストのDocker 29ではnative CDIを利用可能。[CDI公式手順](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/cdi-support.html)に従い`nvidia-ctk cdi list`でデバイスを確認。
+既存コンテナを維持するため、本作業ではDocker daemonの設定変更・再起動を行わない。
+GPU利用確認:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
+```
+
+GPU利用が成功した後、以下の共通試験で検証する。
+
+1. Isaac本体のみを`--namespace sim_motor_check`、検証対象のmaxまたはlong URDFで起動。
+2. 同じROS_DOMAIN_ID=96のJazzy環境から以下を実行。試験自身がROS側接続launchを起動するため、Composeの`ros`サービスとの重複起動は不要。
+
+```bash
+python3 gng_vlut_system/test/check_sim_motor.py --backend isaac --model max \
+  --output /workspace/artifacts/isaac_motor_check/max
+```
+
+共通試験の対象: 実測・TF・後発購読URDF・時刻、左右joint4の0.2／0.5 rad/s軌道、全関節のトルク出力制限、運動中の保持指令による停止。
+試験が終了するのは自身のROS側launchのみ。別起動したIsaac本体は起動元で停止が必要。
+
+以下は旧Classic構成の記録。Harmonicの駆動検証には使用しない構成。
+
+
 機体設定を切り替えてGazebo点群・自己除去・GNG/VLUT回避を起動する構成は[共通点群回避](pointcloud_avoidance.md)を参照。ToPoDualArmの保存済み左腕データにも対応。
 
 ## ToPoDualArmの統合回避デモ

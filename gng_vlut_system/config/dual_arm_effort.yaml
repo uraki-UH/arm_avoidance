@@ -1,0 +1,68 @@
+# effort軌道制御のPIDゲイン。トルク上限は機体URDFからの導出
+# 1 ms制御周期とURDF慣性に対するシミュレーション調整値。実機同定前
+default_gains:
+  p: 20.0
+  i: 0.0
+  d: 0.15
+  i_clamp: 0.0
+joint_gains:
+  waist_joint:
+    p: 40.0
+    d: 2.0
+  neck_pan_joint:
+    p: 5.0
+    d: 0.1
+  neck_tilt_joint:
+    p: 5.0
+    d: 0.1
+  L_joint1:
+    p: 20.0
+    d: 0.08
+  R_joint1:
+    p: 20.0
+    d: 0.08
+  L_joint5:
+    p: 4.0
+    d: 0.015
+  R_joint5:
+    p: 4.0
+    d: 0.015
+  L_joint6:
+    p: 5.0
+    d: 0.04
+  R_joint6:
+    p: 5.0
+    d: 0.04
+  L_joint7:
+    p: 2.0
+    d: 0.015
+  R_joint7:
+    p: 2.0
+    d: 0.015
+  L_gripper_joint:
+    p: 1.0
+    d: 0.005
+  R_gripper_joint:
+    p: 1.0
+    d: 0.005
+  motor_joint:
+    p: 20.0
+    d: 2.0
+  L_joint2:
+    p: 30.0
+    d: 0.7
+  L_joint3:
+    p: 10.0
+    d: 0.025
+  L_joint4:
+    p: 20.0
+    d: 0.15
+  R_joint2:
+    p: 30.0
+    d: 0.7
+  R_joint3:
+    p: 10.0
+    d: 0.025
+  R_joint4:
+    p: 20.0
+    d: 0.15

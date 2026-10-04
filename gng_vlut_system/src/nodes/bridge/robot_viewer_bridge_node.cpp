@@ -136,7 +136,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     pose_pub_ = create_publisher<std_msgs::msg::String>(stream_topic_ + "/pose", rclcpp::QoS(1).best_effort());
 
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-        joint_state_topic_, 10, std::bind(&RobotViewerBridgeNode::jointStateCallback, this, std::placeholders::_1));
+        joint_state_topic_, rclcpp::SensorDataQoS(), std::bind(&RobotViewerBridgeNode::jointStateCallback, this, std::placeholders::_1));
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);

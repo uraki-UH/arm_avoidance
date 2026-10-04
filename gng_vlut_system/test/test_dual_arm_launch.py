@@ -222,3 +222,175 @@ def test_pipeline_selection(tmp_path, source):
     assert voxel['allow_latest_transform'] == (source == 'external_lidar')
     with pytest.raises(ValueError):
         pipeline.point_cloud_topic('unknown')
+
+
+@pytest.mark.parametrize('model', ['topo_dual_arm_max', 'topo_dual_arm_max_long'])
+def test_harmonic_effort_limits_and_passive_mimics(tmp_path, model):
+    """実URDF上限と標準PID飽和の一致、元モデルの保持、mimic指令の禁止。"""
+    launch = load('dual_arm_gz.launch')
+    urdf = workspace/'urdf'/model/'topo_dual_arm_max.urdf'
+    before = urdf.read_bytes()
+    tuning = yaml.safe_load((share/'config/dual_arm_effort.yaml').read_text())
+    generated = launch.prepare_model(urdf, tmp_path, 'sim_test', tuning)
+    assert urdf.read_bytes() == before
+    root = et.parse(generated).getroot()
+    params = yaml.safe_load((tmp_path/'controllers.yaml').read_text())
+    controller = params['/sim_test/dual_arm_controller']['ros__parameters']
+    assert controller['command_interfaces'] == ['effort']
+    assert controller['state_interfaces'] == ['position', 'velocity']
+    assert 'gazebo_ros2_control' not in generated.read_text()
+    assert root.findtext('ros2_control/hardware/plugin') == 'gz_ros2_control/GazeboSimSystem'
+    for joint in root.findall('joint'):
+        if joint.get('type') == 'fixed':
+            continue
+        name = joint.get('name')
+        control = root.find(f"ros2_control/joint[@name='{name}']")
+        if joint.find('mimic') is not None:
+            assert control.find('command_interface') is None and name not in controller['joints']
+            continue
+        effort = float(joint.find('limit').get('effort'))
+        gains = controller['gains'][name]
+        assert gains['u_clamp_min'] == -effort and gains['u_clamp_max'] == effort
+        assert float(control.findtext("command_interface/param[@name='max']")) == effort
+        assert float(control.findtext("command_interface/param[@name='min']")) == -effort
+    for mesh in root.findall('.//mesh'):
+        assert Path(mesh.get('filename').removeprefix('file://')).is_file()
+
+
+def test_harmonic_standard_topic_remapping(tmp_path):
+    """標準トピックの変更先をGazeboとcontroller_managerへ共有。"""
+    module = load('dual_arm_gz.launch')
+    tuning = yaml.safe_load((share/'config/dual_arm_effort.yaml').read_text())
+    topics = {'joint_states': '/robot_io/states', 'robot_description': '/robot_io/description',
+              'dual_arm_controller/joint_trajectory': '/robot_io/trajectory'}
+    generated = module.prepare_model(workspace/'urdf/topo_dual_arm_max/topo_dual_arm_max.urdf',
+                                     tmp_path, 'sim_test', tuning, topics)
+    root = et.parse(generated).getroot()
+    assert {item.text for item in root.findall('gazebo/plugin/ros/remapping')} == {
+        name+':='+target for name, target in topics.items()}
+
+
+def test_viewer_external_measured_state(tmp_path):
+    """外部実測の直接購読とTF・初回姿勢・制御出力の二重起動防止。"""
+    from launch.actions import DeclareLaunchArgument
+    module = load('gng_viewer_bridge.launch')
+    params = tmp_path/'params.yaml'
+    params.write_text(yaml.safe_dump({'/**': {'ros__parameters': {
+        'robot_name': 'sim_test', 'urdf_path': str(workspace/'urdf/topo_dual_arm_max/topo_dual_arm_max.urdf')}}}))
+    context = LaunchContext()
+    with patch.object(module, 'get_package_share_directory', return_value=str(share)):
+        for action in module.generate_launch_description().entities:
+            if isinstance(action, DeclareLaunchArgument):
+                action.execute(context)
+        context.launch_configurations.update({
+            'params_file': str(params), 'robot_name': 'sim_test',
+            'joint_control_backend': 'external', 'state_topic': '/robot_io/states',
+            'enable_robot_state_publisher': 'false', 'use_sim_time': 'true'})
+        with patch.object(module, 'Node', side_effect=lambda **kwargs: kwargs):
+            actions = module.launch_setup(context)
+    includes = [action for action in actions if isinstance(action, IncludeLaunchDescription)]
+    spawn = next(action for action in includes if 'joint_state_topic' in dict(action.launch_arguments))
+    assert not spawn.condition.evaluate(context)
+    assert dict(spawn.launch_arguments)['publish_initial_joint_state'] == 'false'
+    control = next(action for action in includes if 'backend' in dict(action.launch_arguments))
+    assert not control.condition.evaluate(context)
+    viewer = next(action for action in actions if isinstance(action, dict) and action.get('executable') == 'robot_viewer_bridge_node')
+    assert any(isinstance(params, dict) and params.get('joint_state_topic') == '/robot_io/states'
+               for params in viewer['parameters'])
+
+
+@pytest.mark.parametrize('model', ['topo_dual_arm_max', 'topo_dual_arm_max_long'])
+def test_isaac_effort_contract_matches_harmonic(tmp_path, model):
+    """両バックエンドの関節・制御方式・トルク制限の同一契約。"""
+    isaac = load('dual_arm_isaac')
+    harmonic = load('dual_arm_gz.launch')
+    urdf = workspace/'urdf'/model/'topo_dual_arm_max.urdf'
+    before = urdf.read_bytes()
+    tuning = yaml.safe_load((share/'config/dual_arm_effort.yaml').read_text())
+    root, gains, path, params_path = isaac.prepare_config(urdf, tmp_path/'isaac', tuning)
+    harmonic.prepare_model(urdf, tmp_path, 'sim_test', tuning)
+    expected = yaml.safe_load((tmp_path/'controllers.yaml').read_text())
+    actual = yaml.safe_load(params_path.read_text())
+    assert actual == {name.removeprefix('/sim_test/'): value for name, value in expected.items()}
+    assert all(j.get('name') not in gains for j in root.findall('joint') if j.find('mimic') is not None)
+    assert not et.parse(path).getroot().findall('gazebo/plugin')
+    assert urdf.read_bytes() == before
+
+
+@pytest.mark.parametrize('effort', ['0', '-1', 'nan', 'inf'])
+def test_sim_effort_rejects_invalid_limit(effort):
+    from dual_arm_effort_config import effort_joints
+    root = et.fromstring(f'<robot><joint name="motor" type="revolute"><limit effort="{effort}"/></joint></robot>')
+    with pytest.raises(ValueError, match='トルク上限'):
+        effort_joints(root, {'default_gains': {'p': 1.0}})
+
+
+def test_isaac_connection_uses_external_description():
+    """Isaac合成URDFの購読と標準controller起動。二重状態配信なし。"""
+    module = load('dual_arm_isaac.launch')
+    context = LaunchContext()
+    context.launch_configurations['namespace'] = 'sim_test'
+    with patch.object(module, 'Node', side_effect=lambda **kwargs: kwargs):
+        nodes = module.launch_setup(context)
+    state = next(node for node in nodes if node['package'] == 'robot_state_publisher')
+    assert state['parameters'] == [{'use_sim_time': True, 'use_robot_description_topic': True}]
+    assert state['namespace'] == 'sim_test'
+    spawner = next(node for node in nodes if node['package'] == 'controller_manager')
+    assert '/sim_test/controller_manager' in spawner['arguments']
+    assert all(node['package'] not in ('ros_gz_sim', 'ros_gz_bridge') for node in nodes)
+
+
+def test_isaac_usd_force_limits_and_mimic():
+    """実USD APIでの力制御・上限設定とmimic二重駆動の排除。"""
+    pytest.importorskip('pxr.Usd')
+    from pxr import Usd, UsdGeom, UsdPhysics
+    module = load('dual_arm_isaac')
+    stage = Usd.Stage.CreateInMemory()
+    prim = UsdGeom.Xform.Define(stage, '/Robot').GetPrim()
+    base = UsdGeom.Xform.Define(stage, '/Robot/base').GetPrim()
+    UsdPhysics.ArticulationRootAPI.Apply(base)
+    motor = UsdPhysics.RevoluteJoint.Define(stage, '/Robot/motor').GetPrim()
+    follower = UsdPhysics.RevoluteJoint.Define(stage, '/Robot/follower').GetPrim()
+    for item in (motor, follower):
+        drive = UsdPhysics.DriveAPI.Apply(item, 'angular')
+        drive.CreateStiffnessAttr(100.0)
+        drive.CreateDampingAttr(10.0)
+    model = et.fromstring('<robot><joint name="motor" type="revolute"><limit effort="0.5"/></joint>'
+                          '<joint name="follower" type="revolute"><mimic joint="motor"/></joint></robot>')
+    from dual_arm_effort_config import effort_joints
+    gains = effort_joints(model, {'default_gains': {'p': 20.0, 'd': 2.0}})
+    assert module.configure_drives(stage, '/Robot', model, gains) == '/Robot'
+    drive = UsdPhysics.DriveAPI(motor, 'angular')
+    assert drive.GetTypeAttr().Get() == 'force'
+    assert drive.GetMaxForceAttr().Get() == .5
+    assert drive.GetStiffnessAttr().Get() == 0.0
+    assert drive.GetDampingAttr().Get() == 0.0
+    assert not follower.HasAPI(UsdPhysics.DriveAPI, 'angular')
+    UsdPhysics.RevoluteJoint.Define(stage, '/Robot/unknown')
+    with pytest.raises(ValueError, match='不一致'):
+        module.configure_drives(stage, '/Robot', model, gains)
+
+
+@pytest.mark.parametrize('enable_observer', [False, True])
+def test_joint_motion_observer_is_opt_in(enable_observer):
+    """無効時の空起動と、有効時の独立した観測ノード。"""
+    from launch.actions import DeclareLaunchArgument
+
+    module = load('joint_motion_state.launch')
+    context = LaunchContext()
+    for action in module.generate_launch_description().entities:
+        if isinstance(action, DeclareLaunchArgument):
+            action.execute(context)
+    assert context.launch_configurations['enable_joint_motion_state'] == 'false'
+    context.launch_configurations.update(enable_joint_motion_state=str(enable_observer).lower(),
+                                         namespace='sim_observer', use_sim_time='true')
+    with patch.object(module, 'Node', side_effect=lambda **kwargs: kwargs):
+        actions = module.launch_setup(context)
+    if not enable_observer:
+        assert actions == []
+        return
+    assert len(actions) == 1
+    assert actions[0]['executable'] == 'joint_motion_observer.py'
+    assert actions[0]['namespace'] == 'sim_observer'
+    assert actions[0]['parameters'][0]['use_sim_time'] is True
+    assert actions[0]['parameters'][0]['max_derivative_order'] == 3

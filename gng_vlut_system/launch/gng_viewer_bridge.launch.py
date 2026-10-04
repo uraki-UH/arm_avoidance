@@ -8,7 +8,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogI
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 
 
 def resolve_package_uri(raw_path: str) -> str:
@@ -323,10 +323,13 @@ def launch_setup(context, *args, **kwargs):
         common_params["resource_root_dir"] = resource_root
     if mesh_root:
         common_params["mesh_root_dir"] = mesh_root
-    # Viewer 用の関節状態は制御系の /joint_states と分離する。
-    # ここが public /joint_states と混ざると、初期姿勢や GUI 由来の部分集合が
-    # そのまま制御系に流れ込んで不安定になる。
-    viewer_joint_state_topic = f"/{robot_name}/viewer_joint_states"
+    # 外部実測入力の直接購読。仮想姿勢との混在防止
+    state_topic = LaunchConfiguration("state_topic").perform(context)
+    if state_topic and joint_control_backend != "external":
+        raise ValueError("state_topicの直接指定にはjoint_control_backend:=externalが必要です")
+    viewer_joint_state_topic = state_topic or f"/{robot_name}/viewer_joint_states"
+    if state_topic:
+        enable_joint_state_publisher = False
     common_params["joint_state_topic"] = viewer_joint_state_topic
 
     # 内部ストリーム用のトピック名
@@ -357,9 +360,11 @@ def launch_setup(context, *args, **kwargs):
     has_learning_data = not missing_result_files
 
     actions = [
+        SetParameter(name="use_sim_time", value=LaunchConfiguration("use_sim_time")),
         # 0. ロボット本体の起動（TF / robot_state_publisher / 初回姿勢配信）
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
+            condition=IfCondition(LaunchConfiguration("enable_robot_state_publisher")),
             launch_arguments={
                 "robot_name": robot_name,
                 "enable_joint_state_publisher": "false",
@@ -631,6 +636,11 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
+        DeclareLaunchArgument("state_topic", default_value="",
+                              description="外部実測JointStateの購読先。未指定時は従来のViewer入力"),
+        DeclareLaunchArgument("enable_robot_state_publisher", default_value="true",
+                              description="ロボットTF配信の起動。外部配信済みの場合はfalse"),
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("dir", default_value="gng_results"),
         DeclareLaunchArgument("id", default_value=""),

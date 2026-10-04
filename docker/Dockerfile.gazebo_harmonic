@@ -1,0 +1,9 @@
+FROM ros:jazzy-ros-base
+
+# 現行Gazeboと標準の関節軌道制御。Classic関連パッケージの依存なし
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-ros-gz ros-jazzy-gz-ros2-control ros-jazzy-ros2-controllers \
+    ros-jazzy-robot-state-publisher python3-numpy python3-scipy python3-pytest \
+    assimp-utils \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /workspace
