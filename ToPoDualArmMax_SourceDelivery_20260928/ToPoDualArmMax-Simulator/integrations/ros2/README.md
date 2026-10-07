@@ -2,6 +2,21 @@
 
 通常のシミュレータを起動する際、このフォルダーの設定は不要です。
 
+## サーバーとROSブリッジの一括起動
+
+ホストのワークスペースルートで実行（起動済みの `gng_cpu` サービスを使用）：
+
+```bash
+docker compose exec gng_cpu bash /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/start_ros.sh
+```
+
+Docker内で操作中ならアプリのルートで `bash start_ros.sh`。Node.js 22以上とROS Humble環境が必要です。
+アプリは `http://127.0.0.1:8877/?model=long`、ROS送信先は `http://127.0.0.1:8879`。
+ブラウザのMID-360有効化・連続取得開始と「ROS 2送信 → 連続送信」は手動です。GPU用ブラウザはホストで既存の起動スクリプトを使用します。
+旧版が残っている場合は `bash start_ros.sh --restart` で同じ配置・ポートの起動元とブリッジを停止して再起動します。別配置・別ポートのプロセスは対象外です。管理中のブリッジはPythonソース更新を検知して自動再起動します（外部起動したサービスの再利用中は対象外）。
+通常起動では既存サービスを再利用し、Ctrl+Cでは今回起動したサービスだけを停止。既存サービスの設定は変更しません。ブリッジのROSドメインは起動環境の `ROS_DOMAIN_ID` に従います。
+別ポートは `bash start_ros.sh --port 8880 --bridge-port 8881`。ブラウザのURLと送信先も表示された値に変更してください。
+
 ## 独立した点群送信
 
 ブラウザの「ROS 2送信」タブ専用。GNG・FVG・NumPy・独自メッセージへの依存はありません。
@@ -13,8 +28,8 @@ python3 integrations/ros2/pointcloud_bridge.py
 ```
 
 既存ブラウザ（8877）を再読み込みし、送信先 `http://127.0.0.1:8879` を指定します。
-点群種別（物体の場合は対象も）を選び、「1回送信」または「連続送信」を押してください。
-「環境で選択中の物体を使用」で対象を同期できます。送信上限は既定2 Hz、同時取得・送信は1件です。
+送信したいトピックにチェックを入れ、「連続送信」を押してください。RGB-D・MID-360・完全表面・遮蔽付き点群は複数選択できます。
+取得・Hz設定はRGB-D／LiDARタブ、物体点群の対象・点数・取得Hzは「環境 → 物体点群の取得」で指定します。送信側は点群を生成せず、選択したトピックの新規フレームを順番に送ります。同時通信は1件、待機中は各トピックの最新分だけを保持します。
 完全表面は既定10,000点。RGB-Dの点数・解像度は現在のセンサー設定に従います。
 
 このワークスペースの既存Docker（hostネットワーク）からは次の起動も可能です。
@@ -30,7 +45,7 @@ docker exec -it gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && 
 | 対象の完全表面 | `/sim/object/full_points` | メッシュ面積に比例する指定点数のサンプル |
 | 対象の遮蔽付きRGB-D | `/sim/object/visible_points` | シーン全体と対象単体の深度が一致する有効点 |
 
-上表は全て `sensor_msgs/PointCloud2`、XYZのfloat32、メートル、`base_footprint` 座標です。RGB画像・色フィールドの転送はありません。
+上表は全て `sensor_msgs/PointCloud2`、XYZのfloat32、メートル、`base_footprint` 座標です。RGB-D全体と遮蔽付きRGB-Dは `rgb`（packed FLOAT32）・`color_valid`（UINT8）付きで、point_stepは20 bytes。色が取得できない点は代替の灰色と `color_valid=0`。MID-360・完全表面はXYZのみで12 bytesです。RGB画像そのものは送信しません。
 完全表面は非表示メッシュ・裏面・内部面も含み、外皮の集合演算ではありません。同一形状・姿勢・点数では結果を再利用します。
 遮蔽付きではロボット・他物体も遮蔽物です。視野外や全面遮蔽では0点を送信し、古い点群の再送はしません。
 透明材質も幾何深度として扱い、完全に同一深度で重なる面の物体識別はできません。
@@ -47,15 +62,27 @@ GNGの入力トピックを上表に合わせ、`ROS_DOMAIN_ID` をブリッジ�
 形式の回帰試験は `python3 -m unittest discover -s integrations/ros2 -p test_pointcloud_bridge.py` で実行できます。
 2026-09-29にHumbleでブラウザ→HTTP→3種類のROS点群の受信を確認。GNG学習・実機接続はこの試験の対象外です。
 
+### GNGへの接続
+
+ブラウザ点群とGNGの基準座標系は `base_footprint`。CPU用の `sim_rgbd.yaml` を使用します。
+
+```bash
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=sim_rgbd.yaml
+```
+
+入力は `/sim/rgbd/points`、TF必須設定は有効。同じ座標系の入力は追加変換なしで学習します。
+実機用の `graspnet.yaml` は `ToPoDualArm/base_link` を要求するため、トピック名だけの変更では代用できません。URDF内の `base_link` はロボット構造用として維持し、`base_footprint` と固定TFで接続します。
+
 ### MID-360の送信
 
 1. ブリッジを起動し、ブラウザを再読み込み。
-2. LiDARタブでMID-360を有効化。「腰上・前方25°の配置に戻す」で前下がりの配置、XYZ・RPY欄で調整。
-3. 「ROS 2送信」で「MID-360：LiDAR点群」を選択し、1回送信または連続送信。LiDARタブ側の連続取得は不要。
+2. LiDARタブでMID-360を有効化。「腰上・前方45°の配置に戻す」で前下がりの配置、XYZ・RPY欄で調整。
+3. LiDARタブの「連続取得 Hz」（既定10 Hz、0.1〜40 Hz）を設定し、「連続取得」を開始。
+4. 「ROS 2送信」で `/sim/lidar/points` にチェックを入れて「連続送信」。ROS側のHz設定は不要です。取得済みの最新フレームから送信し、その後は新規フレームだけを送ります。
 
 点群は `/sim/lidar/points`、取得時の `base_footprint → sim_mid360_frame` は `/sim/tf` に共通stampで配信。点群は既にbase_footprint座標のため、取付変換の二重適用は不要です。ロボットのworld配置・関節角も取得開始時の状態を使用します。
 `/sim/points/info` の `lidar` に走査開始秒・積分秒・スロット数・走査方式を収録。積分0.1秒は20,000スロットで、有効点数ではありません。intensity・点別時刻・IMU・Livox CustomMsgは出力しません。
-送信Hzは上限で、実速度は描画と取得処理に依存。ROSの受信時刻とシミュレーション走査時刻は別です。GNGへ接続する場合は入力を `/sim/lidar/points` に設定し、ブリッジとROSドメインを揃えてください。
+連続取得Hzは実時間の取得上限で、実速度は描画と取得処理に依存。積分時間は1フレームの走査量であり、取得Hzとは別の設定です。ROS側は新規フレームだけを送り、送信中に複数取得された場合は最新分を使用。送信停止ではLiDAR取得は止めません。ROSの受信時刻とシミュレーション走査時刻は別です。GNGへ接続する場合は入力を `/sim/lidar/points` に設定し、ブリッジとROSドメインを揃えてください。
 
 2026-10-07にLong・標準モデルからHumbleへの実受信、移動配置・25°／40°の取付で全点とTFの一致、連続送信、取得中リセットを確認。回帰17件成功。ブラウザ試験はSwiftShaderのためGPU性能・指定Hzの達成は未検証です。
 
@@ -63,13 +90,13 @@ GNGの入力トピックを上表に合わせ、`ROS_DOMAIN_ID` をブリッジ�
 
 ブリッジを再起動し、ブラウザを再読み込みしてください。
 「RGB-D：シーン全体」で「深度画像・CameraInfo・画素対応点群も送信」（既定ON）を選ぶと、既存点群と同じ取得フレームから次の3トピックも配信します。
-対象物体モードには適用しません。チェックを外すと従来のXYZのみの送信形式に戻ります。
+対象物体モードには適用しません。チェックを外すと追加の深度画像・CameraInfo・画素対応点群を送信せず、色付きの `/sim/rgbd/points` のみ送信します。
 
 | トピック | メッセージ・内容 |
 | --- | --- |
 | `/sim/camera/depth/image_rect_raw` | `sensor_msgs/Image`、32FC1、光軸方向の深度［m］、無効画素0 |
 | `/sim/camera/depth/camera_info` | `sensor_msgs/CameraInfo`、取得に使用した内部パラメータ、歪みなし |
-| `/sim/camera/depth/points` | `sensor_msgs/PointCloud2`、XYZ、画像と同じwidth・height、無効画素XYZは全成分NaN |
+| `/sim/camera/depth/points` | `sensor_msgs/PointCloud2`、XYZ・rgb・color_valid、画像と同じwidth・height、無効画素XYZは全成分NaN |
 
 3トピックは共通header、frame_idは `sim_camera_depth_optical_frame`（X右・Y下・Z前方）。
 画像の `(u,v)` に対応する点群のバイト位置は `v * row_step + u * point_step`、point_stepは12です。
@@ -86,9 +113,11 @@ RealSenseの16UC1深度を前提とする購読側では、32FC1［m］への対
 ROS環境での回帰試験：`python3 -m unittest discover -s integrations/ros2 -p test_depth_output.py`。
 Humble実受信で848×480全画素の対応・無効値・共通時刻・既存点群との有効点数一致を確認済み。
 
+色はブラウザのdepth→color外部パラメータと遮蔽判定で対応付けたRGBを使用します。取付補正は校正JSONの `mount`、内部パラメータは `depth` に設定。補正済み光学フレームをTFへ反映し、base_footprint点群には変換を適用済みです。実機から校正値を推定する機能ではありません。更新時はブラウザとブリッジの両方を再起動してください。
+
 ### ロボット配置・TF・ROS軌道の往復（2026-10-01追加）
 
-ブリッジ再起動・ページ再読み込み後、「ROS 2送信」内の「ロボットとROS」を使用します。
+ブリッジ再起動・ページ再読み込み後、「ロボット」タブ内の「ロボットとROS」を使用します。
 配置はworld基準のXYZ［m］とroll/pitch/yaw［deg］。回転順はURDFと同じZYXです。
 「配置を適用」でロボット全体を移動し、環境の物体はその場に残ります。
 配置はモデル別の現在のブラウザ内だけに保持し、再読み込み・ポーズJSONには保存しません。
@@ -107,7 +136,7 @@ Humble実受信で848×480全画素の対応・無効値・共通時刻・既存
 「姿勢・TFを定期送信」をONにすると、点群なしでも上限10 Hzで現在姿勢を送ります。
 受信時のROS時計を使用するため、実センサーとの取得時刻同期を保証する仕組みではありません。
 
-TFは `/sim/tf` のみへ配信。利用ノードで `/tf:=/sim/tf` をremapしてください。
+TFは標準の `/tf` と互換用の `/sim/tf` に同じ内容を配信します。専用配信だけにする場合はブリッジ起動時に `--tf-topic /sim/tf` を指定し、利用ノードで `/tf:=/sim/tf` をremapしてください。
 URDFのメッシュ参照先は元のままです。RViz等で形状も表示する場合は参照先のメッシュ配置が別途必要です。
 同じモデルのTFをrobot_state_publisherから重複配信しないでください。状態・指令は1つのブラウザタブで使用します。
 

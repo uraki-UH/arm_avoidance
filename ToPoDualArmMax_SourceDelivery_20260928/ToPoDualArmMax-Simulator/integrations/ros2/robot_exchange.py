@@ -61,7 +61,7 @@ def trajectory_payload(message):
 
 
 class RobotExchange:
-    def __init__(self, node, joints):
+    def __init__(self, node, joints, tf_topic='/tf'):
         from geometry_msgs.msg import PoseStamped
         from tf2_msgs.msg import TFMessage
         from trajectory_msgs.msg import JointTrajectory
@@ -69,6 +69,7 @@ class RobotExchange:
         from rclpy.qos import QoSProfile, DurabilityPolicy
         self.node, self.joints = node, joints
         self.tf = node.create_publisher(TFMessage, '/sim/tf', 10)
+        self.standard_tf = node.create_publisher(TFMessage, tf_topic, 10) if tf_topic != '/sim/tf' else None
         self.base_pose = node.create_publisher(PoseStamped, '/sim/base_pose', 10)
         self.description = node.create_publisher(String, '/sim/robot_description', QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.model = None
@@ -118,6 +119,8 @@ class RobotExchange:
                 base.pose.orientation = msg.transform.rotation
                 self.base_pose.publish(base)
         self.tf.publish(TFMessage(transforms=transforms))
+        if self.standard_tf is not None:
+            self.standard_tf.publish(TFMessage(transforms=transforms))
         joints = JointState()
         joints.header.stamp, joints.header.frame_id = stamp, 'base_footprint'
         joints.name = list(state['robot_pose'])

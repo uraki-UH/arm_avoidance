@@ -5,6 +5,18 @@ import xml.etree.ElementTree as et
 from pathlib import Path
 
 
+def default_urdf(model='topo_dual_arm_max_long'):
+    """インストール済み資産を優先した機体URDFの解決。ソース直接起動にも対応。"""
+    if model not in ('topo_dual_arm_max', 'topo_dual_arm_max_long'):
+        raise ValueError('未対応の機体です: ' + model)
+    package_dir = Path(__file__).resolve().parents[1]
+    for root in (package_dir, package_dir.parent):
+        path = root / 'urdf' / model / 'topo_dual_arm_max.urdf'
+        if path.is_file():
+            return path
+    raise FileNotFoundError('URDF資産が見つかりません: ' + model)
+
+
 def validate_namespace(namespace):
     """ROS名前空間と機体名の検査。"""
     if not re.fullmatch(r'sim_[a-zA-Z0-9_]+', namespace):

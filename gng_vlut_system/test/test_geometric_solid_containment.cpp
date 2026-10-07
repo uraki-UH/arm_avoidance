@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -288,6 +289,147 @@ TEST(geometric_solid_containment, transforms_seeds_and_surfaces_with_collision_o
     expect_collision(outer, inner, 0.0, has_surface_intersection, q);
     expect_collision(outer, inner, 0.005, is_contained_or_intersecting, q);
   }
+}
+
+
+// 原点移動・任意回転・大きな姿勢変化・衝突後の復帰を含む通常FCLとの照合。
+TEST(mesh_collision_front, matches_uncached_fcl_through_pose_changes) {
+  auto mesh = make_box_mesh({-0.09, -0.07, -0.04}, {-0.055, 0.07, 0.04});
+  append_mesh(mesh, make_box_mesh({0.055, -0.07, -0.04}, {0.09, 0.07, 0.04}));
+  append_mesh(mesh, make_box_mesh({-0.055, -0.07, -0.04}, {0.055, -0.045, 0.04}));
+  const temporary_binary_stl body_file(mesh);
+  const temporary_binary_stl tool_file(make_box_mesh(
+      {-0.018, -0.022, -0.026}, {0.018, 0.022, 0.026}));
+  collision::FCLCollisionDetector detector;
+  const int body = detector.addRobotMeshLink(body_file.path, Eigen::Vector3d::Ones());
+  const int tool = detector.addRobotMeshLink(tool_file.path, Eigen::Vector3d::Ones());
+  ASSERT_GE(body, 0);
+  ASSERT_GE(tool, 0);
+  std::mt19937 generator(137);
+  std::uniform_real_distribution<double> unit(-1.0, 1.0);
+  int num_collisions = 0;
+  int num_clear = 0;
+  for (int iter = 0; iter < 192; ++iter) {
+    SCOPED_TRACE(iter);
+    Eigen::Isometry3d common_pose = Eigen::Isometry3d::Identity();
+    common_pose.translation() = Eigen::Vector3d(unit(generator), unit(generator), unit(generator));
+    common_pose.rotate(Eigen::AngleAxisd(unit(generator), Eigen::Vector3d(1.0, 2.0, 3.0).normalized()));
+    Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
+    relative_pose.translation() = Eigen::Vector3d(0.15 * unit(generator), 0.09 * unit(generator), 0.02 * unit(generator));
+    relative_pose.rotate(Eigen::AngleAxisd(2.0 * unit(generator), Eigen::Vector3d(2.0, 1.0, 3.0).normalized()));
+    detector.updateRobotLinkPose(body, common_pose);
+    detector.updateRobotLinkPose(tool, common_pose * relative_pose);
+    const bool is_expected = detector.checkSelfCollision({}, false);
+    EXPECT_EQ(detector.checkSelfCollision({}, true), is_expected);
+    EXPECT_EQ(detector.checkSelfCollision({}, true), is_expected);
+    if (is_expected) ++num_collisions;
+    else ++num_clear;
+  }
+  EXPECT_GT(num_collisions, 0);
+  EXPECT_GT(num_clear, 0);
+}
+
+// 細分化の継続と周期的再構築をまたぐ、狭い隙間から接触・交差・離脱までの照合。
+TEST(mesh_collision_front, preserves_contacts_after_long_noncolliding_motion) {
+  const temporary_binary_stl file(make_box_mesh(
+      {-0.03, -0.02, -0.01}, {0.03, 0.02, 0.01}));
+  collision::FCLCollisionDetector detector;
+  const int first = detector.addRobotMeshLink(file.path, Eigen::Vector3d::Ones());
+  const int second = detector.addRobotMeshLink(file.path, Eigen::Vector3d::Ones());
+  Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+  detector.updateRobotLinkPose(first, pose);
+  for (int iter = 0; iter < 160; ++iter) {
+    SCOPED_TRACE(iter);
+    pose.translation() = Eigen::Vector3d(0.0001 * iter, 0.0, 0.02001);
+    detector.updateRobotLinkPose(second, pose);
+    ASSERT_FALSE(detector.checkSelfCollision({}, false));
+    EXPECT_FALSE(detector.checkSelfCollision({}, true));
+  }
+  for (const double offset : {0.02, 0.019, -0.019, -0.02, -0.02001, 0.02001}) {
+    SCOPED_TRACE(offset);
+    pose.translation() = Eigen::Vector3d(0.0, 0.0, offset);
+    detector.updateRobotLinkPose(second, pose);
+    EXPECT_EQ(detector.checkSelfCollision({}, true), detector.checkSelfCollision({}, false));
+  }
+}
+
+// 除外ペアの変更と同一IDへの別形状再登録後の判定。
+TEST(mesh_collision_front, respects_exclusions_and_geometry_reregistration) {
+  const temporary_binary_stl small_file(make_box_mesh(
+      Eigen::Vector3d::Constant(-0.01), Eigen::Vector3d::Constant(0.01)));
+  const temporary_binary_stl large_file(make_box_mesh(
+      Eigen::Vector3d::Constant(-0.04), Eigen::Vector3d::Constant(0.04)));
+  collision::FCLCollisionDetector detector;
+  for (const auto &path : {small_file.path, large_file.path}) {
+    detector.clearObstacles();
+    const int first = detector.addRobotMeshLink(path, Eigen::Vector3d::Ones());
+    const int second = detector.addRobotMeshLink(path, Eigen::Vector3d::Ones());
+    Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+    detector.updateRobotLinkPose(first, pose);
+    pose.translation().x() = 0.06;
+    detector.updateRobotLinkPose(second, pose);
+    EXPECT_EQ(detector.checkSelfCollision({}, true), path == large_file.path);
+    pose.translation().x() = 0.005;
+    detector.updateRobotLinkPose(second, pose);
+    EXPECT_FALSE(detector.checkSelfCollision({{second, first}}, true));
+    EXPECT_TRUE(detector.checkSelfCollision({}, true));
+    EXPECT_TRUE(detector.checkSelfCollision({}, false));
+  }
+}
+
+// メッシュ対primitiveの通常FCL経路と、別チェッカー間のキャッシュ独立性。
+TEST(mesh_collision_front, preserves_primitive_queries_and_detector_independence) {
+  const temporary_binary_stl file(make_box_mesh(
+      Eigen::Vector3d::Constant(-0.04), Eigen::Vector3d::Constant(0.04)));
+  collision::FCLCollisionDetector first_detector;
+  collision::FCLCollisionDetector second_detector;
+  for (auto *detector : {&first_detector, &second_detector}) {
+    const int mesh = detector->addRobotMeshLink(file.path, Eigen::Vector3d::Ones());
+    collision::Sphere sphere;
+    sphere.radius = detector == &first_detector ? 0.01 : 0.07;
+    sphere.center = Eigen::Vector3d::Zero();
+    const int primitive = detector->addRobotLink(sphere);
+    Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+    detector->updateRobotLinkPose(mesh, pose);
+    for (int iter = 0; iter < 80; ++iter) {
+      pose.translation().x() = (iter - 40) * 0.003;
+      detector->updateRobotLinkPose(primitive, pose);
+      EXPECT_EQ(detector->checkSelfCollision({}, true), detector->checkSelfCollision({}, false));
+    }
+  }
+}
+
+
+// 多数の非交差部分を保持した後の遠端衝突。探索境界の上限到達時にも検査を維持。
+TEST(mesh_collision_front, preserves_late_contacts_after_large_noncolliding_mesh) {
+  simulation::MeshData outer;
+  simulation::MeshData inner;
+  for (int idx = 0; idx < 1024; ++idx) {
+    const Eigen::Vector3d center(0.04 * idx, 0.0, 0.0);
+    append_mesh(outer, make_box_mesh(center - Eigen::Vector3d::Constant(0.01),
+                                      center + Eigen::Vector3d::Constant(0.01)));
+    append_mesh(inner, make_box_mesh(center - Eigen::Vector3d::Constant(0.005),
+                                      center + Eigen::Vector3d::Constant(0.005)));
+  }
+  const temporary_binary_stl outer_file(outer);
+  const temporary_binary_stl inner_file(inner);
+  collision::FCLCollisionDetector detector;
+  const int outer_id = detector.addRobotMeshLink(outer_file.path, Eigen::Vector3d::Ones());
+  const int inner_id = detector.addRobotMeshLink(inner_file.path, Eigen::Vector3d::Ones());
+  const Eigen::Isometry3d identity = Eigen::Isometry3d::Identity();
+  detector.updateRobotLinkPose(outer_id, identity);
+  for (int iter = 0; iter < 5; ++iter) {
+    Eigen::Isometry3d pose = identity;
+    pose.translation().y() = 0.00001 * iter;
+    detector.updateRobotLinkPose(inner_id, pose);
+    ASSERT_FALSE(detector.checkSelfCollision({}, false));
+    EXPECT_FALSE(detector.checkSelfCollision({}, true));
+  }
+  Eigen::Isometry3d pose = identity;
+  pose.rotate(Eigen::AngleAxisd(0.0002, Eigen::Vector3d::UnitY()));
+  detector.updateRobotLinkPose(inner_id, pose);
+  ASSERT_TRUE(detector.checkSelfCollision({}, false));
+  EXPECT_TRUE(detector.checkSelfCollision({}, true));
 }
 
 }  // 無名名前空間の終端

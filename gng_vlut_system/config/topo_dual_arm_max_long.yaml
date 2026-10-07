@@ -14,6 +14,11 @@
     # Viewer起動直後の初回関節姿勢配信
     enable_joint_state_publisher: true
 
+    # Viewerでの自己干渉検査済みモデル。学習の出力先とは独立
+    viewer:
+      gng_model_path: "/ros2_ws/src/artifacts/gng_self_collision_fix_20261001/long/model/gng.bin"
+      vlut_path: "/ros2_ws/src/artifacts/gng_self_collision_fix_20261001/long/model/vlut.bin"
+
     # GNG学習とVLUT生成
     gng:
       experiment_id: "topo_dual_arm_max_long" #実験ID(結果の保存先ディレクトリ名)

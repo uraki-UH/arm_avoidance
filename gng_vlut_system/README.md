@@ -129,11 +129,54 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py
 `gng.experiment_id`に従い、既定では`gng_results/topo_dual_arm_max_long/`です。
 別モデルを使う場合は`params_file:=...`で対象の設定ファイルを指定します。
 
+
+オフライン学習では`gng_params.enable_static_collision_cache: true`が既定です。
+同一の関節角を持つ非干渉ノードと、両端の姿勢が変わっていない検査済みの辺を、
+複数回の`strictFilter()`間で再利用します。量子化や許容差による一致判定はなく、
+姿勢変更・未検査の辺には従来と同じ検査を適用します。
+メッシュ・ボクセルの判定精度と、辺の補間間隔（最大関節差0.025 rad）は従来どおりです。
+初回の検査や、追加学習中に変わる姿勢の衝突判定は引き続き必要です。
+比較時は次の引数でフィルタ結果の再利用を無効化できます。
+
+```bash
+ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py enable_static_collision_cache:=false
+```
+
+この再利用は、ロボット形状・固定姿勢・運動連鎖・除外規則・環境が不変のオフライン学習用です。
+汎用GNGクラスでは既定オフです。APIで有効化した後にこれらの条件を変える場合は、
+`invalidate_collision_cache()`の呼出しが必要です。チェッカー差替え・パラメータ設定・
+モデル読込みでは自動的に破棄され、キャッシュ自体はモデルに保存されません。
+
+現在の`use_voxel_collision: true`は、全身のメッシュ表面とボクセルによる内部干渉検査の選択です。
+voxel-ball近似への切替ではありません。衝突回避付きの追加学習にも、この判定を使用します。
+
+追加学習と辺の検査では、FCLのメッシュ探索境界をリンクペアごとに再利用します。
+直前の非交差検査で得た範囲から探索を再開し、各範囲を現在の姿勢で再検査します。
+元の三角形・包絡判定・内部判定・関節補間間隔を維持します。
+保持量の上限と定期的な再構築があり、衝突検出時の未完了範囲は再利用しません。
+形状の差替えや探索順の反転では破棄します。対象は幾何不変のFCL OBBRSSメッシュのbool判定です。
+他の形状と接触点取得は通常のFCL経路です。この最適化はフィルタ結果の再利用とは独立して有効です。
+
 ### ToPoFuzzy-Viewerへのブリッジ
 
 学習したGNGマップやアームの姿勢をToPoFuzzy-Viewerに送信します。
 
-ToPoDualArmのロボットとGNGを表示します。左右グリッパーの体積確認用トピック
+既定のロボット名・設定は `topo_dual_arm_max_long` です。次の指定はファイル名だけでも利用でき、
+`params_file` を省略した場合も同じ設定です。
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=topo_dual_arm_max_long.yaml
+```
+
+この設定の `viewer.gng_model_path`・`viewer.vlut_path` は、自己干渉検査済みの
+24,006ノードの保存済みモデルを指定しています。学習の出力先 `gng.data_directory`・
+`gng.experiment_id` とは独立しています。再学習した結果を表示する場合は、これらのViewer用パスを
+更新するか、launchの `dir`・`id` または `gng_model_path`・`vlut_path` で読み込み対象を指定します。
+これらの引数を指定した場合、YAMLのViewer用パスは適用されません。
+名前・モデル・設定の切替には、起動中のブリッジの終了と新しい設定での再起動が必要です。
+
+別モデルのToPoDualArmは次の指定です。左右グリッパーの体積確認用トピック
 （`L_grip_V_Tmap`など、左右の`V`・`minV`・`baseV`・`sweptV`）は
 `ToPoDualArm.yaml`で既定オフです。
 

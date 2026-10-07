@@ -44,10 +44,19 @@ def parse_packet(raw):
         if depth.get('model') != 'none' or depth.get('coeffs') != [0, 0, 0, 0, 0]:
             raise ValueError('歪み補正済みの深度画像が必要です')
         num_pixels = width * height
-    if len(raw) != offset + count * 12 + num_pixels * 4:
+    has_color = 'color_format' in meta
+    if has_color and (meta['color_format'] != 'rgb8_valid8' or meta['source'] not in ('rgbd', 'object_visible')):
+        raise ValueError('色情報の形式・点群種別が不正です')
+    color_offset = offset + count * 12 + num_pixels * 4
+    if len(raw) != color_offset + (count * 4 if has_color else 0):
         raise ValueError('点群・深度画像のデータ長が不正です')
-    if num_pixels and any(not math.isfinite(v[0]) or v[0] < 0 for v in struct.iter_unpack('<f', raw[offset + count * 12:])):
+    if num_pixels and any(not math.isfinite(v[0]) or v[0] < 0 for v in struct.iter_unpack('<f', raw[offset + count * 12:color_offset])):
         raise ValueError('深度値が不正です')
+    if has_color:
+        if any(v not in (0, 1) for v in raw[color_offset + 3::4]):
+            raise ValueError('色の有効フラグが不正です')
+        if num_pixels and sum(v[0] > 0 for v in struct.iter_unpack('<f', raw[offset + count * 12:color_offset])) != count:
+            raise ValueError('深度と色付き点群の有効点数が一致しません')
     data = raw[offset:]
     if any(not math.isfinite(v[0]) for v in struct.iter_unpack('<f', data[:count * 12])):
         raise ValueError('座標に非有限値があります')
@@ -110,7 +119,7 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
                 except ValueError as error:
                     return self.respond(400, {'error': str(error)})
             if urlsplit(self.path).path == '/api/points/status':
-                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'topics': topics})
+                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 2, 'topics': topics})
             super().do_GET()
 
         def do_POST(self):
@@ -145,6 +154,7 @@ def main():
     from std_msgs.msg import String
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--tf-topic', default='/tf', help='標準TFの配信先。/sim/tf指定で専用配信のみ')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8879)
     parser.add_argument('--allow-origin', action='append', default=[])
@@ -161,7 +171,7 @@ def main():
     depth_publishers = [node.create_publisher(kind, topic, 2) for kind, topic in
                         zip((Image, CameraInfo, PointCloud2), depth_topics)]
     lock = threading.Lock()
-    exchange = RobotExchange(node, joints)
+    exchange = RobotExchange(node, joints, args.tf_topic)
 
     def publish_state(state):
         with lock:
@@ -183,9 +193,15 @@ def main():
         msg.point_step = 12
         msg.row_step = meta['count'] * 12
         msg.is_dense = True
-        msg.data = array('B', data[:msg.row_step])
+        xyz_size = meta['count'] * 12
+        depth_size = meta['depth_image']['width'] * meta['depth_image']['height'] * 4 if meta.get('depth_image') else 0
+        colors = data[xyz_size + depth_size:] if meta.get('color_format') else None
+        msg.data = array('B', data[:xyz_size])
+        if colors is not None:
+            from depth_output import colorize_cloud
+            colorize_cloud(msg, colors)
         # 深度の逆投影・配列構築中も姿勢送信が可能なロック範囲
-        depth_messages = create_depth_messages(meta['depth_image'], data[msg.row_step:], stamp) if meta.get('depth_image') is not None else []
+        depth_messages = create_depth_messages(meta['depth_image'], data[xyz_size:xyz_size + depth_size], stamp, colors) if meta.get('depth_image') is not None else []
         with lock:
             publishers[meta['source']].publish(msg)
             for publisher, message in zip(depth_publishers, depth_messages):

@@ -6,7 +6,7 @@ depth_topics = ['/sim/camera/depth/image_rect_raw', '/sim/camera/depth/camera_in
                 '/sim/camera/depth/points']
 
 
-def create_depth_messages(calibration, data, stamp):
+def create_depth_messages(calibration, data, stamp, colors=None):
     from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
     width, height = calibration['width'], calibration['height']
     image = Image()
@@ -41,4 +41,29 @@ def create_depth_messages(calibration, data, stamp):
     cloud.point_step = 12
     cloud.row_step = width * 12
     cloud.data = array('B', points)
+    if colors is not None:
+        colorize_cloud(cloud, colors, data)
     return image, info, cloud
+
+
+def colorize_cloud(cloud, colors, depth=None):
+    """RGBのpacked float表現と色有効フラグ。深度配列指定時は画素順を維持。"""
+    from sensor_msgs.msg import PointField
+    num_points = cloud.width * cloud.height
+    packed = bytearray(num_points * 20)
+    xyz = memoryview(cloud.data)
+    color_idx = 0
+    for idx in range(num_points):
+        packed[idx * 20:idx * 20 + 12] = xyz[idx * 12:idx * 12 + 12]
+        if depth is not None and struct.unpack_from('<f', depth, idx * 4)[0] <= 0:
+            continue
+        red, green, blue, valid = colors[color_idx:color_idx + 4]
+        struct.pack_into('<IB', packed, idx * 20 + 12, (red << 16) | (green << 8) | blue, valid)
+        color_idx += 4
+    if color_idx != len(colors):
+        raise ValueError('点群と色の点数が一致しません')
+    cloud.fields.extend([PointField(name='rgb', offset=12, datatype=PointField.FLOAT32, count=1),
+                         PointField(name='color_valid', offset=16, datatype=PointField.UINT8, count=1)])
+    cloud.point_step = 20
+    cloud.row_step = cloud.width * 20
+    cloud.data = array('B', packed)

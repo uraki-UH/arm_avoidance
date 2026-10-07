@@ -1,6 +1,32 @@
 cmake_minimum_required(VERSION 3.10)
 project(gng_vlut_system)
 
+# Jazzy/HarmonicのPython実行環境。既定OFFによる従来C++ビルドの維持。
+option(enable_harmonic_runtime_only "Harmonic実行部品だけのインストール" OFF)
+if(enable_harmonic_runtime_only)
+  find_package(ament_cmake REQUIRED)
+  install(FILES
+    launch/dual_arm_tasks.launch.py
+    launch/dual_arm_gz.launch.py
+    launch/dual_arm_effort_config.py
+    launch/simulation_scenario.py
+    DESTINATION share/${PROJECT_NAME}/launch)
+  install(FILES config/dual_arm_effort.yaml DESTINATION share/${PROJECT_NAME}/config)
+  install(DIRECTORY config/simulation DESTINATION share/${PROJECT_NAME}/config)
+  install(FILES scripts/task_program.py DESTINATION lib/${PROJECT_NAME})
+  install(PROGRAMS scripts/task_executor.py scripts/harmonic_launcher.py DESTINATION lib/${PROJECT_NAME})
+  install(DIRECTORY
+    ../urdf/topo_dual_arm_max ../urdf/topo_dual_arm_max_long
+    DESTINATION share/${PROJECT_NAME}/urdf)
+  if(BUILD_TESTING)
+    find_package(ament_cmake_pytest REQUIRED)
+    ament_add_pytest_test(test_task_program test/test_task_program.py)
+    ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
+  endif()
+  ament_package()
+  return()
+endif()
+
 # Set default build type to Release for optimized performance
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -169,6 +195,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_dual_arm_collision_geometry test/test_dual_arm_collision_geometry.py)
   ament_add_pytest_test(test_dual_arm_launch test/test_dual_arm_launch.py)
   ament_add_pytest_test(test_avoidance_motion test/test_avoidance_motion.py)
+  ament_add_pytest_test(test_task_program test/test_task_program.py)
+  ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
   ament_add_pytest_test(test_pointcloud_avoidance test/test_pointcloud_avoidance.py)
   ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
   ament_add_pytest_test(test_gazebo_stop_keyboard test/test_gazebo_stop_keyboard.py)
@@ -242,6 +270,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/urdf")
 endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
+  scripts/task_program.py
   scripts/joint_motion_state.py
   scripts/local_qp.py
   scripts/joint_command_model.py
@@ -251,6 +280,8 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 )
 
 install(PROGRAMS
+  scripts/task_executor.py
+  scripts/harmonic_launcher.py
   scripts/joint_motion_observer.py
   scripts/dynamixel_neck_torque.py
   scripts/dynamixel_sim_output.py

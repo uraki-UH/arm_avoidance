@@ -12,7 +12,7 @@ from launch_ros.actions import Node
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from dual_arm_effort_config import load_model, effort_joints, controller_parameters, validate_namespace
+from dual_arm_effort_config import load_model, effort_joints, controller_parameters, validate_namespace, default_urdf
 from simulation_scenario import load_scenario, save_scenario, gazebo_world
 
 package_dir = Path(__file__).resolve().parents[1]
@@ -98,7 +98,7 @@ def launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('urdf', default_value=str(package_dir.parent/'urdf/topo_dual_arm_max/topo_dual_arm_max.urdf')),
+        DeclareLaunchArgument('urdf', default_value=str(default_urdf('topo_dual_arm_max'))),
         DeclareLaunchArgument('control_config', default_value=str(package_dir/'config/dual_arm_effort.yaml')),
         DeclareLaunchArgument('scenario', default_value='empty', description='環境シナリオ名またはYAMLパス'),
         DeclareLaunchArgument('namespace', default_value='sim_topo_dual_arm_max'),

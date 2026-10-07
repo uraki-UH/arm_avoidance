@@ -29,6 +29,23 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 
 新しい双腕モデルは`params_file`を`topo_dual_arm_max.yaml`または`topo_dual_arm_max_long.yaml`へ変更。ロボット本体は学習前でも表示可能。GNG・VLUTの表示には機種ごとの学習後にlaunchを再起動。[設定・学習手順](gng_vlut_system/docs/releases/2026-09-28_dual_arm_models.md)。
 
+### FuzzBotの表示専用起動
+
+初回のみDocker内でモデル・メッシュのパッケージをビルド。親ディレクトリの`COLCON_IGNORE`は維持、実機ドライバは対象外。
+
+```bash
+cd /ros2_ws
+colcon build --paths /ros2_ws/src/fuzzbot_gng/fuzzbot/fuzzbot_description --packages-select fuzzbot_description --symlink-install
+source /ros2_ws/install/setup.bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/fuzzbot.yaml
+```
+
+既存Viewerへの`fuzzbot`の原点表示。初回の車輪ゼロ姿勢だけ配信、走行指令・実機接続・Gazebo・学習・自己認識ボクセルは未起動。
+設定は[fuzzbot.yaml](gng_vlut_system/config/fuzzbot.yaml)。`joint_control_backend: external`で関節指令経路を省略。明示launch引数が最優先、YAML未設定時は従来の`viewer`。
+学習データ不足の通知は未学習時の正常動作。ロボット表示にGNG・VLUTは不要。停止は起動ターミナルで`Ctrl+C`。
+起動・TF・配信の隔離検証: Docker内で`python3 -B /ros2_ws/src/gng_vlut_system/test/check_fuzzbot_viewer.py`。ROSドメイン228の未使用が前提、所有launchは試験終了時に停止。
+
 ## 双腕Gazeboデモ
 
 ```bash

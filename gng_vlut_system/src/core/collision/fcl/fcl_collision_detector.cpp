@@ -2,6 +2,7 @@
 
 #include "collision/fcl/fcl_collision_detector.hpp"
 #include "collision/fcl/solid_voxel_geometry.hpp"
+#include "collision/fcl/mesh_collision_front.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -496,16 +497,22 @@ bool FCLSelfCollisionCallback(fcl::CollisionObject<double> *o1,
 
   fcl::CollisionRequest<double> request;
   fcl::CollisionResult<double> result;
-  fcl::collide(o1, o2, request, result);
-
   if (can_use_pose_cache) {
-    detail::self_collision_pose_cache_entry entry;
+    auto &entry = (*col_data->pose_cache)[pair_key];
+    if (entry.first_geometry != first->collisionGeometry() ||
+        entry.second_geometry != second->collisionGeometry()) {
+      entry.mesh_front.clear();
+      entry.next_mesh_front.clear();
+      entry.num_front_uses = 0;
+    }
+    detail::check_mesh_collision_with_front(*o1, *o2, request, result, entry, idx1 > idx2);
     entry.first_geometry = first->collisionGeometry();
     entry.second_geometry = second->collisionGeometry();
     entry.first_pose = first->getTransform();
     entry.second_pose = second->getTransform();
     entry.is_collision = result.isCollision();
-    (*col_data->pose_cache)[pair_key] = std::move(entry);
+  } else {
+    fcl::collide(o1, o2, request, result);
   }
 
   if (result.isCollision()) {

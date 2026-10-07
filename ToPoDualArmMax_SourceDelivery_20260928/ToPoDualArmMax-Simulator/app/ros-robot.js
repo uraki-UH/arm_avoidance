@@ -22,14 +22,14 @@ export function validate_trajectory(command,robot){
 export class RosRobotPanel{
  constructor({rgbd,toast}){
   this.rgbd=rgbd;this.toast=toast;this.is_busy=false;this.last_ms=0;this.sequence=null;this.generation=0;this.active=null;this.model=null;
-  const panel=document.createElement('div');panel.innerHTML=`<h2>ロボットとROS</h2><p>world基準の配置。XYZはm、角度はdeg。</p><div class="field-grid">${['x','y','z','roll','pitch','yaw'].map(name=>`<label>${name}<input id="ros-base-${name}" type="number" value="0" step="0.1"></label>`).join('')}</div><button id="ros-base-apply">配置を適用</button><label><input id="ros-state-enable" type="checkbox"> 姿勢・TFを定期送信（上限10 Hz）</label><label><input id="ros-command-enable" type="checkbox"> ROSの関節軌道をブラウザで再生</label><button id="ros-command-stop">軌道停止・受信OFF</button><pre id="ros-robot-status">接続待ち</pre><p>点群送信時は取得時の姿勢・TFも送信。軌道は位置のみの線形補間、受信後の相対時刻で再生。実機への指令なし。</p>`;
-  $('ros-panel').append(panel);
+  const panel=document.createElement('div');panel.innerHTML=`<h2>ロボットとROS</h2><p>world基準の配置。XYZはm、角度はdeg。</p><div class="field-grid">${['x','y','z','roll','pitch','yaw'].map(name=>`<label>${name}<input id="ros-base-${name}" type="number" value="0" step="0.1"></label>`).join('')}</div><button id="ros-base-apply" class="wide-button">配置を適用</button><label><input id="ros-state-enable" type="checkbox"> 姿勢・TFを定期送信（上限10 Hz）</label><label><input id="ros-command-enable" type="checkbox"> ROSの関節軌道をブラウザで再生</label><button id="ros-command-stop" class="wide-button">軌道停止・受信OFF</button><pre id="ros-robot-status">接続待ち</pre><p>点群送信時は取得時の姿勢・TFも送信。軌道は位置のみの線形補間、受信後の相対時刻で再生。実機への指令なし。</p>`;
+  $('robot-panel').append(panel);
   $('ros-base-apply').onclick=()=>{try{const values=['x','y','z','roll','pitch','yaw'].map(name=>Number($('ros-base-'+name).value));if(values.some(v=>!Number.isFinite(v))||values.slice(0,3).some(v=>Math.abs(v)>100))throw Error('配置は有限値、XYZは±100 mです');this.stop();window.simulator.set_robot_placement(values);$('ros-robot-status').textContent='配置を更新';}catch(error){toast(error.message);}};
   $('ros-command-stop').onclick=()=>this.stop();
   $('ros-command-enable').onchange=()=>{this.active=null;this.sequence=null;this.generation++;};
   $('ros-endpoint').addEventListener('change',()=>this.stop());
   // 手動操作・モデル切替・タブ非表示での受信解除と再生停止
-  document.addEventListener('pointerdown',event=>{if(this.active&&!$('ros-panel').contains(event.target)&&event.target!==this.rgbd.renderer.domElement)this.stop();},true);
+  document.addEventListener('pointerdown',event=>{if(this.active&&!panel.contains(event.target)&&event.target!==this.rgbd.renderer.domElement)this.stop();},true);
   document.addEventListener('keydown',event=>{if(event.key==='Escape')this.stop();});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)this.stop();});
  }

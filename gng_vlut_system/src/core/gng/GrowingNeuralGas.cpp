@@ -26,8 +26,8 @@ namespace {
 template <typename angle_type>
 bool has_same_angles(const angle_type &first, const angle_type &second) {
   return first.size() == second.size() &&
-      std::memcmp(first.data(), second.data(),
-                  first.size() * sizeof(typename angle_type::Scalar)) == 0;
+      (first.size() == 0 || std::memcmp(first.data(), second.data(),
+                  first.size() * sizeof(typename angle_type::Scalar)) == 0);
 }
 
 static std::string makePairKey(std::string a, std::string b) {

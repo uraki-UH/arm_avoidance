@@ -14,16 +14,20 @@
 ワークスペースルートでの環境構築:
 
 ```bash
-docker build -f docker/Dockerfile.gazebo_harmonic -t uraki-gazebo-harmonic:local docker
+docker build -f docker/Dockerfile.gazebo_harmonic -t uraki-gazebo-harmonic:local .
 ```
+
+ビルドコンテキストはworkspaceルートの`.`。旧イメージは再ビルドが必要。
+Harmonic専用の`enable_harmonic_runtime_only=ON`で、launch・Pythonノード・設定・max／longのURDFとメッシュを正規amentパッケージとしてインストール。
+イメージ内の配置先は`/opt/gng_harmonic`、起動時に自動読込み。既定のHumble／Classicビルドは変更なし。
+この構成にC++ GNGや実機ドライバーは含まない。コード・組込み設定・資産の更新後は再ビルドが必要。
 
 headless起動（終了はCtrl+C）:
 
 ```bash
 docker run --rm -it -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
-  -e GZ_PARTITION=uraki_harmonic -v "$PWD":/workspace \
-  uraki-gazebo-harmonic:local bash -c \
-  'source /opt/ros/jazzy/setup.bash; ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py'
+  -e GZ_PARTITION=uraki_harmonic uraki-gazebo-harmonic:local \
+  ros2 launch gng_vlut_system dual_arm_gz.launch.py
 ```
 
 検証コマンド（`fixture`を`max`／`long`へ変更可能。出力先は未使用のディレクトリ）:
@@ -44,6 +48,116 @@ docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
 
 既知慣性モデル: 慣性0.1 kg m²、トルク上限0.5 N m。飽和中の実測角加速度5.000 rad/s²、慣性×角加速度0.500 N m。標準コントローラの出力も上限内。
 実URDFの最大出力／URDF上限比: max 0.4014、long 0.5175。位置誤差最大値: max 0.00242 rad、long 0.00548 rad。合否と生波形は`artifacts/gz_motor_20261003/{fixture_02,max_final,long_final}/`の`report.json`、`joint_samples.json`、`controller_samples.json`。所有プロセスの終了確認も`report.json`へ保存。
+
+## タスクの組替えと方式選択
+
+入口: [dual_arm_tasks.launch.py](../launch/dual_arm_tasks.launch.py)。Gazeboとタスク実行器の一括起動。
+既定機体: `topo_dual_arm_max_long`。設定: [task_program.yaml](../config/simulation/task_program.yaml)。
+環境配置は`scenario`、作業順序は`task_file`。両設定の独立した変更が可能。
+
+| 種別 `kind` | 方式 `method` | 目標の指定 |
+| --- | --- | --- |
+| `move` | `direct`（既定） | `target: <posesの名前>` |
+| `move` | `waypoints` | `path: <pathsの名前>` |
+| `hold` | `position`（既定） | `duration_sec: <保持秒数>` |
+
+`defaults`で種別ごとの方式、各タスクの`method`で個別上書き。
+未指定関節は前回の指令位置を保持し、最初だけ開始時の実測位置を採用。
+経由点間は停止姿勢間の5次補間。設定例は左右`joint4`の移動→1秒保持→経由点→復帰。
+未知キー・方式・姿勢名・関節名・非有限値・関節目標の制限違反は起動前に拒否。
+
+### 起動と操作
+
+普段のHumble端末（`gng_cpu_container`）でも同じ1行:
+
+```bash
+ros2 launch gng_vlut_system dual_arm_tasks.launch.py
+```
+
+Humbleでは専用サービス経由、Jazzyでは直接起動。既定はheadless・開始待ち。終了はCtrl+C。
+Humbleコンテナの再起動・Docker権限の追加は不要。
+
+自動開始:
+
+```bash
+ros2 launch gng_vlut_system dual_arm_tasks.launch.py enable_autostart:=true
+```
+
+タスク完了後もGazeboと状態配信は継続。同じコントローラへの別の指令元は併用不可。
+
+別のHumble端末から開始（同じ`ROS_DOMAIN_ID`）:
+
+```bash
+ros2 service call /sim_topo_dual_arm_max_long/task_executor/start std_srvs/srv/Trigger '{}'
+```
+
+操作サービスの共通接頭辞: `/sim_topo_dual_arm_max_long/task_executor/`。
+`start`・`pause`・`resume`・`cancel`は`std_srvs/srv/Trigger`。
+`start`は待機・完了・取消後の先頭開始、`pause`は中断、`resume`は中断位置からの再計画、`cancel`は取消。
+状態は同接頭辞の`status`（JSON文字列）。タスク番号・経由点番号は0始まり。
+
+障害物中断の試験入力（自動検出ではない）:
+
+```bash
+ros2 service call /sim_topo_dual_arm_max_long/task_executor/obstacle std_srvs/srv/SetBool '{data: true}'
+ros2 service call /sim_topo_dual_arm_max_long/task_executor/obstacle std_srvs/srv/SetBool '{data: false}'
+ros2 service call /sim_topo_dual_arm_max_long/task_executor/resume std_srvs/srv/Trigger '{}'
+```
+
+障害物解除だけでは再開なし。`stopping`中は旧Actionの終了と実測停止を待機し、確認後に`paused`へ遷移。
+再開は実測停止姿勢から未完了の経由点へ。完了済みの経由点と保持の経過時間は維持。
+関節状態の欠損・期限切れ、時刻巻戻り、軌道失敗、タスク／停止期限切れは`failed`。再開には原因解消とノード再起動が必要。
+`software_stop`の呼出し・追加ラッチなし。中断と取消は標準`FollowJointTrajectory` Actionの取消経路へ集約。
+
+### 起動サービスの初回準備・管理
+
+ホストの元workspaceルートで1回実行:
+
+```bash
+install -d -m 0700 artifacts/harmonic_launcher
+docker build -f docker/Dockerfile.gazebo_harmonic -t uraki-gazebo-harmonic:local .
+docker compose -f docker/compose.harmonic_launcher.yaml up -d
+```
+
+- 待受: `artifacts/harmonic_launcher/launcher.sock`。専用ユーザー所有、権限0600。既定UID/GID: 1000。変更時は`GNG_LAUNCHER_UID`・`GNG_LAUNCHER_GID`を指定。
+- 起動受付: 1セッション。固定launchと検査済み引数のみ。Docker API・任意シェル実行の公開なし。
+- 終了連動: Ctrl+C・接続切断・5秒間のハートビート欠損。対象は当該セッションの子プロセスのみ。
+- 設定: `task_file`・`urdf`・ファイル指定の`scenario`は元workspaceの`gng_vlut_system/config/`または`urdf/`内。サービス側は読取専用。シナリオ名は組込み設定。コード・組込み設定の更新後は再ビルドと`up -d`が必要。
+- 制限: Humble経由は`gui:=false`・`output_dir`未指定。Jazzy直接起動は従来どおり。ソケット位置の変更は`launcher_socket`または`GNG_HARMONIC_SOCKET`。
+- ROS通信: 起動端末の`ROS_DOMAIN_ID`を継承、サービス側はUDP。別のシミュレータとの同一domain・`/clock`併用不可。
+- 互換性: Humble/Jazzy混在時に`sequence size exceeds remaining buffer`警告あり。実環境の`Gid`は24／16バイト（[変更履歴](https://github.com/ros2/rmw_dds_common/blob/rolling/rmw_dds_common/CHANGELOG.rst)）。関節状態・タスク状態・操作サービスは検証済み。ディストリビューション間のノード一覧・全メッセージの互換性保証なし。
+
+サービス自体の停止（起動中のシミュレーションも終了）:
+
+```bash
+docker compose -f docker/compose.harmonic_launcher.yaml down
+```
+
+### 差替え境界と検証範囲
+
+- [task_program.py](../scripts/task_program.py): `task_kind`・`run_state`のenum、設定検証、方式登録表`task_methods`、ROS非依存の進行管理。
+- 方式追加: `task_method(resolve_targets, plan)`の登録。設定解釈と実行時の区間計画を一組で差替え。計画関数の引数は実測開始位置・目標位置・URDF制限・設定制限、返却値は時刻付き`motion_point`列。
+- 共通検査: 始終点、時刻、配列寸法、有限値、各指令点の位置・速度・加速度。独自方式の連続区間の干渉検査は計画側の責務。
+- [task_executor.py](../scripts/task_executor.py): 関節状態・サービス・状態配信と標準Actionへの接続。取消受理前の再送禁止。別の軌道トピック発行元も開始前・実行中に検出。ただし別Actionクライアントとの排他保証は対象外。
+- 設定例の指令上限: 0.2 rad/s、0.5 rad/s²。到達誤差: 0.05 rad。停止確認: 0.03 rad/s、継続時間0.25秒。関節状態期限: ROS時刻・実時間とも0.5秒。
+- 重力補償なしの既存effort制御では、保持中の肩関節に約0.043 radの静的偏差。0.05 radはこの例の到達条件であり、位置精度の保証ではない。
+- 取消はコントローラの保持処理。指令生成時の速度・加速度制限は、実測値や取消過渡の制限ではない。max_long試験では取消直後の状態サンプルで全関節最大角速度約0.81 rad/sを観測。停止過渡の補償・減速設計は未完了。
+- 未接続: GNG／QP、自動障害物検出、経路の自己・環境衝突検査、把持・開放、Isaac、実機出力。`gng`／`local_qp`の方式名も未登録。高速回避・人との近接試験への使用不可。
+
+単体検証: `python3 -m pytest gng_vlut_system/test/test_task_program.py -q`（Action試験はJazzy環境）。
+Harmonicの空環境・max_longで移動中断、停止確認、明示再開、保持、経由点復帰、取消を確認。
+インストール済みパッケージだけの構成でも同試験に合格。ソースworkspaceやURDFの外部マウントなしでの起動を確認。
+Humble入口でも移動・中断・再開・保持・復帰・取消、引数なし起動、Ctrl+C終了、多重起動拒否を確認。
+再現コマンド（専用コンテナ、出力先は未使用ディレクトリ）:
+
+```bash
+docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
+  -e GZ_PARTITION=task_check_manual -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/workspace \
+  uraki-gazebo-harmonic:local \
+  python3 gng_vlut_system/test/check_task_program.py --output /workspace/artifacts/task_check_manual
+```
+
+試験結果と所有プロセスの終了確認は出力先の`report.json`。点群回避性能・停止距離・実機安全性の検証ではない。
 
 ## 環境シナリオの管理
 
@@ -84,7 +198,7 @@ Harmonicは標準SDFの衝突・剛体、Isaacは標準USDの`CollisionAPI`・`R
 シミュレーション開始時から運動が進行。再実行はシナリオを再起動して初期状態から開始。
 
 ```bash
-ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py scenario:=rolling_ball
+ros2 launch gng_vlut_system dual_arm_gz.launch.py scenario:=rolling_ball
 ```
 
 3球は`scenario:=rolling_balls`へ変更。Isaac側も`--scenario rolling_balls`、Composeは`SIM_SCENARIO=rolling_balls`で選択。
@@ -98,7 +212,7 @@ ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py scenario:=ro
 Jazzy環境をsource済みのHarmonicコンテナ内:
 
 ```bash
-ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py scenario:=tabletop
+ros2 launch gng_vlut_system dual_arm_gz.launch.py scenario:=tabletop
 ```
 
 Isaac本体は同じ名前を`--scenario`へ指定:
@@ -186,8 +300,8 @@ Viewer内の描画用JSONへの変換は既存`robot_viewer_bridge_node`の責�
 ```bash
 docker run --rm -it --network host --ipc container:gng_cpu_container \
   -e ROS_DOMAIN_ID=0 -e ROS_LOCALHOST_ONLY=1 -e GZ_PARTITION=uraki_harmonic \
-  -v "$PWD":/workspace uraki-gazebo-harmonic:local bash -c \
-  'source /opt/ros/jazzy/setup.bash; ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py'
+  uraki-gazebo-harmonic:local \
+  ros2 launch gng_vlut_system dual_arm_gz.launch.py
 ```
 
 Viewer側は更新済みの`gng_vlut_system`をビルド・source後、既存コンテナ内で以下を起動。

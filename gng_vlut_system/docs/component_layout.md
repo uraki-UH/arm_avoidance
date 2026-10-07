@@ -11,6 +11,7 @@
 | 共通描画 | [libs/arrow_visualization](../../libs/arrow_visualization)：矢印Marker・状態色・購読補助 | GNG、把持表示、Viewerから共用 |
 | 到達域 | [core/reachability](../src/core/reachability)：URDFサンプリング | [生成・表示仕様](reachability_maps.md)。経路GNGから独立 |
 | 目標タスク | [core/tasks](../src/core/tasks)：指定目標・安全退避の選択部品 | 共有計画ノードから利用 |
+| 逐次タスク実行 | [task_program.py](../scripts/task_program.py)：enum・方式登録・移動／保持・中断復帰 | [task_executor.py](../scripts/task_executor.py)：Harmonicの標準軌道Action。[設定・起動・制限](dual_arm_simulation.md#タスクの組替えと方式選択) |
 | 軌道計画 | [core/planning](../src/core/planning)：グラフ探索、経路コスト、探索索引 | [nodes/planning](../src/nodes/planning)：目標選択・共有計画ノード |
 | 回避 | [core/avoidance](../src/core/avoidance)：従来アーム回避の補助処理 | [nodes/avoidance](../src/nodes/avoidance)：`arm_avoid_node` |
 | 制御・実行 | [core/control](../src/core/control)：指令補間・速度制限・制御インターフェース | [nodes/control](../src/nodes/control)：目標関節実行・仮想関節ドライバー・指令仲裁 |

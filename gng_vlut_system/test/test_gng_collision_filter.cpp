@@ -12,6 +12,7 @@
 #include <fstream>
 #include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -260,4 +261,221 @@ TEST(gng_collision_filter, colliding_node_removes_incident_edges_in_all_layers) 
   ASSERT_TRUE(reloaded.load(files.path("filtered.bin")));
   EXPECT_EQ(reloaded.getActiveIndices(), std::vector<int>({1, 2}));
   expect_only_safe_edge(reloaded);
+}
+
+namespace {
+void enable_static_cache(gng_type &graph) {
+  auto params = graph.getParams();
+  params.enable_static_collision_cache = true;
+  graph.setParams(params);
+}
+std::vector<char> read_bytes(const std::string &path) {
+  std::ifstream input(path, std::ios::binary);
+  return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+}  // 無名名前空間の終端
+
+TEST(gng_collision_filter, static_cache_preserves_all_layers_and_saved_graph) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  fake_collision_checker cached_checker(is_in_narrow_collision_band);
+  fake_collision_checker reference_checker(is_in_narrow_collision_band);
+  gng_type cached(1, 3, &chain), reference(1, 3, &chain);
+  ASSERT_TRUE(cached.load(files.path("input.bin")));
+  ASSERT_TRUE(reference.load(files.path("input.bin")));
+  enable_static_cache(cached);
+  cached.setSelfCollisionChecker(&cached_checker);
+  reference.setSelfCollisionChecker(&reference_checker);
+  cached.strictFilter();
+  reference.strictFilter();
+  expect_only_safe_edge(cached);
+  expect_only_safe_edge(reference);
+  cached_checker.checked_angles.clear();
+  cached.strictFilter();
+  reference.strictFilter();
+  EXPECT_TRUE(cached_checker.checked_angles.empty());
+  ASSERT_TRUE(cached.save(files.path("cached.bin")));
+  ASSERT_TRUE(reference.save(files.path("reference.bin")));
+  EXPECT_EQ(read_bytes(files.path("cached.bin")), read_bytes(files.path("reference.bin")));
+}
+
+TEST(gng_collision_filter, static_cache_rechecks_retained_reference_edits_and_new_interior_collision) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  const auto is_colliding = [](double angle) { return angle > -0.095 && angle < -0.075; };
+  fake_collision_checker cached_checker(is_colliding), reference_checker(is_colliding);
+  gng_type cached(1, 3, &chain), reference(1, 3, &chain);
+  ASSERT_TRUE(cached.load(files.path("input.bin")));
+  ASSERT_TRUE(reference.load(files.path("input.bin")));
+  enable_static_cache(cached);
+  cached.setSelfCollisionChecker(&cached_checker);
+  reference.setSelfCollisionChecker(&reference_checker);
+  auto &retained_nodes = cached.getNodes();
+  cached.strictFilter();
+  reference.strictFilter();
+  cached_checker.checked_angles.clear();
+  retained_nodes[0].weight_angle[0] = -0.16f;
+  reference.nodeAt(0).weight_angle[0] = -0.16f;
+  cached.strictFilter();
+  reference.strictFilter();
+  EXPECT_TRUE(std::any_of(cached_checker.checked_angles.begin(),
+                          cached_checker.checked_angles.end(), is_colliding));
+  expect_only_safe_edge(cached);
+  ASSERT_TRUE(cached.save(files.path("cached.bin")));
+  ASSERT_TRUE(reference.save(files.path("reference.bin")));
+  EXPECT_EQ(read_bytes(files.path("cached.bin")), read_bytes(files.path("reference.bin")));
+}
+
+TEST(gng_collision_filter, static_cache_rechecks_moved_endpoint) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  fake_collision_checker checker([](double angle) { return angle < -0.01; });
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  enable_static_cache(graph);
+  graph.setSelfCollisionChecker(&checker);
+  graph.strictFilter();
+  graph.nodeAt(1).weight_angle[0] = -0.1f;
+  graph.strictFilter();
+  EXPECT_EQ(graph.getActiveIndices(), std::vector<int>({0, 2}));
+  for (int id : {0, 2}) {
+    EXPECT_TRUE(graph.getNeighborsAngle(id).empty());
+    for (int layer = 0; layer < 2; ++layer) EXPECT_TRUE(graph.getNeighborsCoord(id, layer).empty());
+  }
+}
+
+TEST(gng_collision_filter, static_cache_avoids_duplicate_endpoint_checks) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  fake_collision_checker checker([](double) { return false; });
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  enable_static_cache(graph);
+  graph.setSelfCollisionChecker(&checker);
+  graph.strictFilter();
+  for (double endpoint : {0.0, 0.16, 0.24}) {
+    EXPECT_EQ(std::count_if(checker.checked_angles.begin(), checker.checked_angles.end(),
+                           [endpoint](double value) { return std::abs(value - endpoint) < 1e-7; }), 1);
+  }
+  EXPECT_GT(checker.checked_angles.size(), 3U);
+}
+
+TEST(gng_collision_filter, static_cache_is_invalidated_by_checker_condition_changes) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  bool has_obstacle = false;
+  fake_collision_checker checker([&](double angle) { return has_obstacle && std::abs(angle) < 0.005; });
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  enable_static_cache(graph);
+  graph.setSelfCollisionChecker(&checker);
+  graph.strictFilter();
+  has_obstacle = true;
+  graph.invalidate_collision_cache();
+  graph.strictFilter();
+  EXPECT_EQ(graph.getActiveIndices(), std::vector<int>({1, 2}));
+  fake_collision_checker replacement([](double angle) { return angle > 0.15 && angle < 0.17; });
+  graph.setSelfCollisionChecker(&replacement);
+  graph.strictFilter();
+  EXPECT_EQ(graph.getActiveIndices(), std::vector<int>({2}));
+}
+
+TEST(gng_collision_filter, cache_disabled_by_default_observes_changed_conditions) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  bool has_obstacle = false;
+  fake_collision_checker checker([&](double angle) { return has_obstacle && std::abs(angle) < 0.005; });
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  EXPECT_FALSE(graph.getParams().enable_static_collision_cache);
+  graph.setSelfCollisionChecker(&checker);
+  graph.strictFilter();
+  has_obstacle = true;
+  graph.strictFilter();
+  EXPECT_EQ(graph.getActiveIndices(), std::vector<int>({1, 2}));
+}
+
+TEST(gng_collision_filter, static_cache_is_invalidated_by_load_and_params) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  fake_collision_checker checker([](double) { return false; });
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  enable_static_cache(graph);
+  graph.setSelfCollisionChecker(&checker);
+  graph.strictFilter();
+  checker.checked_angles.clear();
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  graph.strictFilter();
+  EXPECT_FALSE(checker.checked_angles.empty());
+  checker.checked_angles.clear();
+  graph.setParams(graph.getParams());
+  graph.strictFilter();
+  EXPECT_FALSE(checker.checked_angles.empty());
+}
+
+TEST(gng_collision_filter, static_cache_rechecks_reused_node_id) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  fake_collision_checker checker([](double) { return false; });
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  auto params = graph.getParams();
+  params.enable_static_collision_cache = true;
+  params.ais_threshold = 0.001f;
+  graph.setParams(params);
+  graph.setSelfCollisionChecker(&checker);
+  graph.strictFilter();
+  graph.setNodeActive(1, false);
+  graph.removeInactiveElements();
+  Eigen::VectorXf sample(1);
+  sample[0] = 0.16f;
+  graph.gngTrain({sample}, 1);
+  ASSERT_EQ(graph.nodeAt(1).id, 1);
+  ASSERT_FLOAT_EQ(graph.nodeAt(1).weight_angle[0], 0.16f);
+  checker.checked_angles.clear();
+  graph.strictFilter();
+  EXPECT_TRUE(std::any_of(checker.checked_angles.begin(), checker.checked_angles.end(),
+                          [](double angle) { return std::abs(angle - 0.16) < 1e-7; }));
+}
+
+TEST(gng_collision_filter, static_cache_checks_coordinate_edges_added_after_filter) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto cached_chain = make_chain();
+  auto reference_chain = make_chain();
+  fake_collision_checker cached_checker(is_in_narrow_collision_band);
+  fake_collision_checker reference_checker(is_in_narrow_collision_band);
+  gng_type cached(1, 3, &cached_chain);
+  gng_type reference(1, 3, &reference_chain);
+  ASSERT_TRUE(cached.load(files.path("input.bin")));
+  ASSERT_TRUE(reference.load(files.path("input.bin")));
+  enable_static_cache(cached);
+  cached.setSelfCollisionChecker(&cached_checker);
+  reference.setSelfCollisionChecker(&reference_checker);
+  cached.strictFilter();
+  reference.strictFilter();
+  cached_checker.checked_angles.clear();
+  Eigen::VectorXf sample(1);
+  sample[0] = 0.0f;
+  // 同位置TCPのID順で追加される、途中に干渉区間のある0--1辺。
+  cached.trainCoordEdges({sample}, 1);
+  reference.trainCoordEdges({sample}, 1);
+  ASSERT_EQ(cached.getNeighborsCoord(0), std::vector<int>({1}));
+  cached.strictFilter();
+  reference.strictFilter();
+  EXPECT_TRUE(std::any_of(cached_checker.checked_angles.begin(),
+                          cached_checker.checked_angles.end(), is_in_narrow_collision_band));
+  expect_only_safe_edge(cached);
+  ASSERT_TRUE(cached.save(files.path("cached.bin")));
+  ASSERT_TRUE(reference.save(files.path("reference.bin")));
+  EXPECT_EQ(read_bytes(files.path("cached.bin")), read_bytes(files.path("reference.bin")));
 }

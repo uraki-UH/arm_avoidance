@@ -72,6 +72,11 @@ struct self_collision_pose_cache_entry {
   fcl::Transform3d first_pose = fcl::Transform3d::Identity();
   fcl::Transform3d second_pose = fcl::Transform3d::Identity();
   bool is_collision = false;
+  // 非干渉時に全三角形対を覆ったBVH境界。次回も現在姿勢で再検査。
+  std::vector<std::pair<int, int>> mesh_front;
+  std::vector<std::pair<int, int>> next_mesh_front;
+  std::size_t num_front_uses = 0;
+  bool is_front_reversed = false;
 };
 using self_collision_pose_cache =
     std::unordered_map<std::uint64_t, self_collision_pose_cache_entry>;

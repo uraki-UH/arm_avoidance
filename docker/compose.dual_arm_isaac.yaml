@@ -27,8 +27,8 @@ services:
   ros:
     image: uraki-gazebo-harmonic:local
     build:
-      context: .
-      dockerfile: Dockerfile.gazebo_harmonic
+      context: ..
+      dockerfile: docker/Dockerfile.gazebo_harmonic
     entrypoint: ["/bin/bash", "-c"]
     command:
       - >-

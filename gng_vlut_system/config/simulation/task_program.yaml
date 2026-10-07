@@ -1,0 +1,29 @@
+# 環境とは独立した低速の関節タスク例。max_longの空環境向け。
+version: 1
+defaults:
+  move: direct
+  hold: position
+limits:
+  max_velocity: 0.2
+  max_acceleration: 0.5
+  max_feedback_age_sec: 0.5
+  max_task_sec: 60.0
+  max_stopping_sec: 5.0
+  # 重力補償なしのeffort制御に合わせた全関節の到達誤差 [rad]
+  max_position_error_th: 0.05
+  max_stopped_velocity_th: 0.03
+  settle_sec: 0.25
+poses:
+  work: {L_joint4: 0.35, R_joint4: 0.35}
+  via: {L_joint4: 0.15, R_joint4: 0.15}
+  home: {L_joint4: 0.0, R_joint4: 0.0}
+paths:
+  return_home: [via, home]
+tasks:
+  - kind: move
+    target: work
+  - kind: hold
+    duration_sec: 1.0
+  - kind: move
+    method: waypoints
+    path: return_home

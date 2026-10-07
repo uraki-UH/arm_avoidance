@@ -78,13 +78,21 @@ def safe_bool(value, default):
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     joint_control_backend = LaunchConfiguration("joint_control_backend").perform(context)
-    if joint_control_backend not in ("viewer", "dynamixel", "external"):
-        raise ValueError("joint_control_backendはviewer・dynamixel・externalのいずれかが必要です")
-    params_file = LaunchConfiguration("params_file").perform(context)
+    yaml_joint_control_backend = "viewer"
+    params_file = resolve_package_uri(LaunchConfiguration("params_file").perform(context))
+    # config内のファイル名指定と、明示的な設定パスの検証
+    if params_file and not os.path.isfile(params_file):
+        if not os.path.dirname(params_file):
+            params_file = os.path.join(pkg_share, "config", params_file)
+        if not os.path.isfile(params_file):
+            raise FileNotFoundError(f"設定ファイルが見つかりません: {params_file}")
     data_dir = LaunchConfiguration("dir").perform(context)
     exp_id = LaunchConfiguration("id").perform(context)
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
+    has_result_override = bool(
+        (data_dir and data_dir != "gng_results") or exp_id or gng_model_path or vlut_path
+    )
     urdf_path = LaunchConfiguration("urdf_path").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
     arm_leaf_link_names = LaunchConfiguration("arm_leaf_link_names").perform(context)
@@ -157,6 +165,12 @@ def launch_setup(context, *args, **kwargs):
                     break
 
             if isinstance(root_ros_params, dict):
+                yaml_joint_control_backend = root_ros_params.get('joint_control_backend', 'viewer')
+                # 学習の出力先とは独立したViewer用の保存済みモデル。明示引数を優先
+                viewer_params = root_ros_params.get('viewer', {})
+                if isinstance(viewer_params, dict) and not has_result_override:
+                    gng_model_path = str(viewer_params.get('gng_model_path') or '')
+                    vlut_path = str(viewer_params.get('vlut_path') or '')
                 yaml_enable_environment_voxelization = safe_bool(
                     root_ros_params.get('enable_environment_voxelization'), False
                 )
@@ -236,6 +250,11 @@ def launch_setup(context, *args, **kwargs):
         except Exception:
             pass
 
+    # 関節出力先の優先順位: 明示launch引数、機体YAML、従来のviewer。
+    joint_control_backend = joint_control_backend or yaml_joint_control_backend
+    if joint_control_backend not in ("viewer", "dynamixel", "external"):
+        raise ValueError("joint_control_backendはviewer・dynamixel・externalのいずれかが必要です")
+
     # 名前空間の決定（YAML優先、コマンドライン指定があればそちら）
     robot_name_default = LaunchConfiguration("robot_name").perform(context)
     if robot_name_default and robot_name_default != "ToPoDualArm":
@@ -278,10 +297,8 @@ def launch_setup(context, *args, **kwargs):
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
             if os.path.isabs(path):
-                if os.path.exists(path):
-                    return path
-                # 既存の絶対パスを優先しつつ、存在しない場合は basename を相対候補として扱う。
-                path = os.path.basename(path)
+                # 指定モデルの欠落時に、別の保存済みモデルへ切り替わることの防止
+                return path
             if path.startswith("gng_results/") or "/" in path:
                 return os.path.join(pkg_share, path)
         filename = path or default_filename
@@ -652,8 +669,8 @@ def generate_launch_description():
             default_value="",
             description="初回姿勢配信の上書き。未指定時はparams_fileを使用。",
         ),
-        DeclareLaunchArgument("joint_control_backend", default_value="viewer",
-                              description="関節出力先。viewer・dynamixel・external"),
+        DeclareLaunchArgument("joint_control_backend", default_value="",
+                              description="関節出力先。未指定時は機体YAML、設定なしはviewer"),
         DeclareLaunchArgument("dynamixel_mapping_file", default_value=""),
         DeclareLaunchArgument('enable_dynamixel_current_pose', default_value='',
                               description='Dynamixel実測姿勢の表示。未指定時は機体YAMLを使用'),
