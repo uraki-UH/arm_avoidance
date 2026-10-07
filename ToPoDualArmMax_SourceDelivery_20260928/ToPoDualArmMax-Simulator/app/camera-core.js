@@ -9,7 +9,7 @@ export function camera_preset(mode = 'mono') {
   const lens = {width: 640, height: 480, fx: focal, fy: focal, cx: 319.5, cy: 239.5,
     distortion_model: is_fisheye ? 'equidistant' : 'plumb_bob',
     d: is_fisheye ? [0, 0, 0, 0] : [0, 0, 0, 0, 0], max_fov_deg: is_fisheye ? 180 : 160};
-  return {format: 'topo-camera/1', label: '汎用設定（未実機校正）', mode, rate_hz: 5,
+  return {format: 'topo-camera/1', label: '汎用設定（未実機校正）', mode, color_mode: 'rgb', rate_hz: 5,
     cube_size: 512, near_m: 0.005, far_m: 20,
     mount: {translation_m: [0, 0, 0], rpy_deg: [0, 0, 0]},
     left: lens, right: structuredClone(lens),
@@ -33,6 +33,8 @@ export function validate_camera(input) {
   const config = structuredClone(input);
   if (config?.format !== 'topo-camera/1') throw Error('校正形式はtopo-camera/1');
   if (!['mono', 'stereo', 'fisheye'].includes(config.mode)) throw Error('未対応のカメラ方式');
+  config.color_mode ??= 'rgb';
+  if (!['rgb', 'monochrome'].includes(config.color_mode)) throw Error('出力方式: rgb / monochrome');
   if (typeof config.label !== 'string' || config.label.length > 200) throw Error('設定名は200文字以内');
   require_number(config.rate_hz, 1, 30, '取得Hz');
   if (![256, 512, 1024, 2048].includes(config.cube_size)) throw Error('cube_size: 256 / 512 / 1024 / 2048');
@@ -151,19 +153,81 @@ export function camera_transforms(config, optical_to_world) {
   return {left, right: left.clone().multiply(right_in_left)};
 }
 
-function ray_texture(lens) {
+// キューブ面番号: +X, -X, +Y, -Y, +Z, -Z。補間境界の隣接面も描画対象
+function extend_face_bounds(bounds, ray, cube_size) {
+  const [x, y, z] = ray, max_component = Math.max(Math.abs(x), Math.abs(y), Math.abs(z));
+  const min_component = max_component / (1 + 4 / cube_size);
+  for (let axis = 0; axis < 3; axis++) {
+    const component = ray[axis];
+    if (Math.abs(component) < min_component) continue;
+    const face = axis * 2 + (component < 0 ? 1 : 0), scale = Math.abs(component);
+    const horizontal = axis === 0 ? (component > 0 ? -z : z) : axis === 1 ? x : (component > 0 ? x : -x);
+    const vertical = axis === 1 ? (component > 0 ? z : -z) : -y;
+    const u = (horizontal / scale + 1) * 0.5, v = (vertical / scale + 1) * 0.5;
+    const bound = bounds[face];
+    bound.min_u = Math.min(bound.min_u, u); bound.max_u = Math.max(bound.max_u, u);
+    bound.min_v = Math.min(bound.min_v, v); bound.max_v = Math.max(bound.max_v, v);
+  }
+}
+
+export function camera_ray_map(lens, cube_size) {
   const data = new Float32Array(lens.width * lens.height * 4);
+  const bounds = Array.from({length: 6}, () => ({min_u: Infinity, max_u: -Infinity, min_v: Infinity, max_v: -Infinity}));
   let num_valid = 0;
   for (let v = 0; v < lens.height; v++) for (let u = 0; u < lens.width; u++) {
     const ray = pixel_ray(lens, u, v);
     if (!ray) continue;
     data.set([...ray, 1], (v * lens.width + u) * 4);
+    extend_face_bounds(bounds, ray, cube_size);
     num_valid++;
   }
   if (!num_valid) throw Error('逆投影できる画素なし');
-  const texture = new three.DataTexture(data, lens.width, lens.height, three.RGBAFormat, three.FloatType);
-  texture.needsUpdate = true;
-  return texture;
+  const faces = [];
+  for (const [face, bound] of bounds.entries()) {
+    if (!Number.isFinite(bound.min_u)) continue;
+    const x = Math.max(0, Math.floor(bound.min_u * cube_size) - 2), y = Math.max(0, Math.floor(bound.min_v * cube_size) - 2);
+    const width = Math.min(cube_size, Math.ceil(bound.max_u * cube_size) + 2) - x;
+    const height = Math.min(cube_size, Math.ceil(bound.max_v * cube_size) + 2) - y;
+    faces.push({face, x, y, width, height});
+  }
+  return {data, faces};
+}
+
+function create_camera_resource(side, lens, config, key) {
+  const map = camera_ray_map(lens, config.cube_size);
+  const resource = {side, lens, key, faces: map.faces};
+  try {
+    resource.rays = new three.DataTexture(map.data, lens.width, lens.height, three.RGBAFormat, three.FloatType);
+    resource.rays.needsUpdate = true;
+    resource.cube = new three.WebGLCubeRenderTarget(config.cube_size, {colorSpace: three.SRGBColorSpace, generateMipmaps: false});
+    resource.cube.scissorTest = true;
+    resource.camera = new three.CubeCamera(config.near_m, config.far_m, resource.cube);
+    resource.camera.matrixAutoUpdate = false;
+    resource.output = new three.WebGLRenderTarget(lens.width, lens.height, {colorSpace: three.SRGBColorSpace, depthBuffer: false});
+    resource.material = new three.ShaderMaterial({depthTest: false, depthWrite: false, toneMapped: false,
+      uniforms: {ray_map: {value: resource.rays}, color_cube: {value: resource.cube.texture}, is_monochrome: {value: false}},
+      vertexShader: 'varying vec2 image_uv; void main(){image_uv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+      // 読み出し順への上下反転をGPU側へ集約。モノクロは線形RGBの輝度近似
+      fragmentShader: `uniform sampler2D ray_map; uniform samplerCube color_cube; uniform bool is_monochrome; varying vec2 image_uv;
+        void main(){vec4 ray=texture2D(ray_map,image_uv);
+          vec3 color=textureCube(color_cube,ray.a>0.5 ? ray.xyz : vec3(0.,0.,1.)).rgb;
+          if(is_monochrome) color=vec3(dot(color,vec3(0.2126,0.7152,0.0722)));
+          gl_FragColor=ray.a>0.5 ? vec4(color,1.) : vec4(0.);
+          #include <colorspace_fragment>
+        }`});
+    resource.geometry = new three.PlaneGeometry(2, 2);
+    resource.screen = new three.Scene();
+    resource.screen.add(new three.Mesh(resource.geometry, resource.material));
+    resource.screen_camera = new three.Camera();
+    return resource;
+  } catch (error) {
+    dispose_resources([resource]);
+    throw error;
+  }
+}
+
+function dispose_resources(resources) {
+  for (const resource of resources) for (const name of ['rays', 'cube', 'output', 'material', 'geometry']) resource[name]?.dispose();
 }
 
 export class color_camera {
@@ -178,34 +242,21 @@ export class color_camera {
 
   configure(input) {
     if (this.is_pending) throw Error('画像取得の完了後に設定可能');
-    const config = validate_camera(input), resources = [];
+    const config = validate_camera(input), resources = [], created = [];
     try {
       for (const side of config.mode === 'stereo' ? ['left', 'right'] : ['left']) {
         const lens = config[side];
-        const rays = ray_texture(lens);
-        resources.push({side, lens, rays});
-        const resource = resources.at(-1);
-        resource.cube = new three.WebGLCubeRenderTarget(config.cube_size, {colorSpace: three.SRGBColorSpace, generateMipmaps: false});
-        resource.camera = new three.CubeCamera(config.near_m, config.far_m, resource.cube);
-        resource.camera.matrixAutoUpdate = false;
-        resource.output = new three.WebGLRenderTarget(lens.width, lens.height, {colorSpace: three.SRGBColorSpace, depthBuffer: false});
-        resource.material = new three.ShaderMaterial({depthTest: false, depthWrite: false, toneMapped: false,
-          uniforms: {ray_map: {value: rays}, color_cube: {value: resource.cube.texture}},
-          vertexShader: 'varying vec2 image_uv; void main(){image_uv=uv;gl_Position=vec4(position.xy,0.,1.);}',
-          fragmentShader: `uniform sampler2D ray_map; uniform samplerCube color_cube; varying vec2 image_uv;
-            void main(){vec4 ray=texture2D(ray_map,vec2(image_uv.x,1.-image_uv.y));
-              gl_FragColor=ray.a>0.5 ? vec4(textureCube(color_cube,ray.xyz).rgb,1.) : vec4(0.);
-              #include <colorspace_fragment>
-            }`});
-        resource.geometry = new three.PlaneGeometry(2, 2);
-        resource.screen = new three.Scene();
-        resource.screen.add(new three.Mesh(resource.geometry, resource.material));
+        const key = JSON.stringify([lens, config.cube_size, config.near_m, config.far_m]);
+        let resource = this.resources.find(value => value.side === side && value.key === key);
+        if (!resource) { resource = create_camera_resource(side, lens, config, key); created.push(resource); }
+        resources.push(resource);
       }
     } catch (error) {
-      this.dispose_resources(resources);
+      dispose_resources(created);
       throw error;
     }
-    this.dispose_resources(this.resources);
+    dispose_resources(this.resources.filter(resource => !resources.includes(resource)));
+    for (const resource of resources) resource.material.uniforms.is_monochrome.value = config.color_mode === 'monochrome';
     this.resources = resources;
     this.config = config;
   }
@@ -215,10 +266,13 @@ export class color_camera {
     this.is_pending = true;
     const renderer = this.renderer, scene = this.scene;
     const config = structuredClone(this.config), transforms = camera_transforms(config, optical_to_world);
-    const frame = {format: 'topo-camera-frame/1', id: ++this.num_frames, timestamp_ms: Date.now(), calibration: config, images: {}};
+    const started_ms = performance.now();
+    const frame = {format: 'topo-camera-frame/1', id: ++this.num_frames, timestamp_ms: Date.now(), calibration: config, images: {},
+      num_scene_passes: this.resources.reduce((sum, resource) => sum + resource.faces.length, 0),
+      num_render_pixels: this.resources.reduce((sum, resource) => sum + resource.faces.reduce((area, face) => area + face.width * face.height, 0), 0)};
     const previous = {target: renderer.getRenderTarget(), face: renderer.getActiveCubeFace(), mip: renderer.getActiveMipmapLevel(),
       auto_clear: renderer.autoClear, shadow_update: renderer.shadowMap.autoUpdate, shadow_needed: renderer.shadowMap.needsUpdate,
-      xr_enabled: renderer.xr.enabled, override: scene.overrideMaterial};
+      xr_enabled: renderer.xr.enabled, override: scene.overrideMaterial, matrix_update: scene.matrixWorldAutoUpdate};
     const visibility = [...new Set(exclude.filter(Boolean))].map(object => [object, object.visible]);
     const reads = [];
     try {
@@ -228,18 +282,29 @@ export class color_camera {
         renderer.shadowMap.autoUpdate = false;
         renderer.shadowMap.needsUpdate = false;
         scene.overrideMaterial = null;
+        renderer.xr.enabled = false;
+        // 左右・各面で共通の物体行列更新を1回へ集約
+        if (scene.matrixWorldAutoUpdate) scene.updateMatrixWorld();
+        scene.matrixWorldAutoUpdate = false;
         // 同一シーン時刻での左右描画と読み出し要求。非同期待ちは全描画後
         for (const resource of this.resources) {
-          const {side, lens, camera, output, screen} = resource;
+          const {side, lens, camera, output, screen, cube} = resource;
+          if (camera.coordinateSystem !== renderer.coordinateSystem) {
+            camera.coordinateSystem = renderer.coordinateSystem;
+            camera.updateCoordinateSystem();
+          }
           camera.matrix.copy(transforms[side]);
           camera.updateMatrixWorld(true);
-          camera.update(renderer, scene);
+          for (const face of resource.faces) {
+            cube.scissor.set(face.x, face.y, face.width, face.height);
+            renderer.setRenderTarget(cube, face.face);
+            renderer.render(scene, camera.children[face.face]);
+          }
           renderer.setRenderTarget(output);
-          renderer.render(screen, new three.Camera());
+          renderer.render(screen, resource.screen_camera);
           const raw = new Uint8Array(lens.width * lens.height * 4);
           reads.push(renderer.readRenderTargetPixelsAsync(output, 0, 0, lens.width, lens.height, raw).then(() => {
-            const rgba = new Uint8ClampedArray(raw.length), stride = lens.width * 4;
-            for (let v = 0; v < lens.height; v++) rgba.set(raw.subarray((lens.height - 1 - v) * stride, (lens.height - v) * stride), v * stride);
+            const rgba = new Uint8ClampedArray(raw.buffer);
             frame.images[side] = {width: lens.width, height: lens.height, rgba, optical_to_world: transforms[side].toArray()};
           }));
           // 次眼のテクスチャ生成前の非同期読み出しバッファ解除
@@ -253,9 +318,12 @@ export class color_camera {
         renderer.shadowMap.needsUpdate = previous.shadow_needed;
         renderer.xr.enabled = previous.xr_enabled;
         scene.overrideMaterial = previous.override;
+        scene.matrixWorldAutoUpdate = previous.matrix_update;
         visibility.forEach(([object, is_visible]) => object.visible = is_visible);
       }
+      frame.submit_ms = performance.now() - started_ms;
       await Promise.all(reads);
+      frame.total_ms = performance.now() - started_ms;
       return frame;
     } finally {
       // 片眼の失敗時にも残りのGPU読み出し完了後の解放
@@ -264,13 +332,9 @@ export class color_camera {
     }
   }
 
-  dispose_resources(resources) {
-    for (const resource of resources) for (const name of ['rays', 'cube', 'output', 'material', 'geometry']) resource[name]?.dispose();
-  }
-
   dispose() {
     if (this.is_pending) throw Error('画像取得中の解放不可');
-    this.dispose_resources(this.resources);
+    dispose_resources(this.resources);
     this.resources = [];
   }
 }

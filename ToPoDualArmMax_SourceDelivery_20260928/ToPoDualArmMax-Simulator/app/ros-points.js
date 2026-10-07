@@ -7,8 +7,8 @@ const sources=['rgbd','mid360','object_full','object_visible'];
 export class RosPointsPanel{
  constructor({environment,rgbd,lidar,toast}){
   Object.assign(this,{environment,rgbd,lidar,toast});this.is_running=false;this.is_busy=false;this.generation=0;this.last_sent_frames={};this.next_source_idx=0;
-  $('ros-panel').innerHTML=`<h2>ROS 2連携</h2>
-  <label class="field-label">接続先ブリッジ（送受信共通）<input id="ros-endpoint" value="http://127.0.0.1:8879" type="url"></label>
+  $('ros-panel').innerHTML=`<h2>ROS2連携</h2>
+  <label class="ros-connection"><span>接続先</span><input id="ros-endpoint" value="http://127.0.0.1:8879" type="url" aria-label="ROSブリッジ接続先（送受信共通）" spellcheck="false"></label>
   <section id="ros-send-panel"><h3>ブラウザ → ROS：送信</h3>
   <fieldset><legend>点群トピック（複数選択可）</legend>
   ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（MID-360）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
