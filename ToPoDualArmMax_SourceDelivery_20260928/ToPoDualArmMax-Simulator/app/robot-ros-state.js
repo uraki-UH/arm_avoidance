@@ -18,6 +18,10 @@ export function attach_camera(state,depth_world){
  const matrix=new THREE.Matrix4().fromArray(state.base_to_world).invert().multiply(new THREE.Matrix4().fromArray(depth_world));
  state.transforms.push(transform_record('base_footprint','sim_camera_depth_optical_frame',matrix));
 }
+export function attach_lidar(state,lidar_world){
+ const matrix=new THREE.Matrix4().fromArray(state.base_to_world).invert().multiply(new THREE.Matrix4().fromArray(lidar_world));
+ state.transforms.push(transform_record('base_footprint','sim_mid360_frame',matrix));
+}
 export function points_to_base(points,state){
  const matrix=new THREE.Matrix4().fromArray(state.base_to_world).invert(),point=new THREE.Vector3();
  for(let idx=0;idx<points.length;idx+=3){point.fromArray(points,idx).applyMatrix4(matrix).toArray(points,idx);}return points;

@@ -12,7 +12,7 @@ from robot_exchange import validate_state, RobotExchange
 
 root = Path(__file__).resolve().parents[2] / 'app'
 topics = {'rgbd': '/sim/rgbd/points', 'object_full': '/sim/object/full_points',
-          'object_visible': '/sim/object/visible_points'}
+          'object_visible': '/sim/object/visible_points', 'mid360': '/sim/lidar/points'}
 max_body_bytes = 50000000
 
 
@@ -56,13 +56,17 @@ def parse_packet(raw):
             not isinstance(k, str) or type(v) not in (int, float) or not math.isfinite(v)
             for k, v in pose.items()):
         raise ValueError('関節角が不正です')
-    if meta['source'] != 'rgbd':
+    if meta['source'] in ('object_full', 'object_visible'):
         matrix = meta.get('object_to_world')
         if type(meta.get('object_id')) is not int or not isinstance(matrix, list) or len(matrix) != 16 or any(
                 type(v) not in (int, float) or not math.isfinite(v) for v in matrix):
             raise ValueError('対象物体の姿勢が不正です')
     if meta.get('robot_state') is not None:
         validate_state(meta['robot_state'])
+    if meta['source'] == 'mid360':
+        state = meta.get('robot_state')
+        if state is None or not any(t['child'] == 'sim_mid360_frame' and t['parent'] == 'base_footprint' for t in state['transforms']):
+            raise ValueError('MID-360の取得時TFが必要です')
     return meta, data
 
 

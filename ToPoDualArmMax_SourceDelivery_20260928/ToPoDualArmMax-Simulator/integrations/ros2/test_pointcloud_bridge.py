@@ -37,6 +37,20 @@ class PointcloudBridgeTest(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 parse_packet(packet(dict(self.meta, **{key: value}), (1, 2, 3)))
 
+    def test_mid360_state_and_empty(self):
+        state = dict(robot_model='long', robot_pose={}, transforms=[
+            dict(parent='world', child='base_footprint', translation=[.3, -.2, .1], rotation=[0, 0, 0, 1]),
+            dict(parent='base_footprint', child='sim_mid360_frame', translation=[.07769, 0, .3365], rotation=[0, 0, 0, 1])])
+        meta = dict(self.meta, source='mid360', robot_state=state)
+        self.assertEqual(parse_packet(packet(meta, (1, 2, 3)))[0]['source'], 'mid360')
+        self.assertEqual(parse_packet(packet(dict(meta, count=0)))[1], b'')
+        del state['transforms'][1]
+        with self.assertRaises(ValueError):
+            parse_packet(packet(meta, (1, 2, 3)))
+        del meta['robot_state']
+        with self.assertRaises(ValueError):
+            parse_packet(packet(meta, (1, 2, 3)))
+
     def test_object_pose(self):
         meta = dict(self.meta, source='object_full')
         with self.assertRaises(ValueError):

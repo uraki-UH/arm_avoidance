@@ -148,6 +148,8 @@
       beta: 0.0005
       # 関節角・TCPの厳密近傍索引
       enable_nearest_index: true
+      # 静的な自己干渉検査での、同一姿勢・同一端点の非干渉結果再利用
+      enable_static_collision_cache: true
       n_best_candidates: 4
       ais_threshold: 10.0
       start_node_num: 2

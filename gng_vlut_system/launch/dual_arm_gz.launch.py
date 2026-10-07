@@ -13,6 +13,7 @@ from launch_ros.actions import Node
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dual_arm_effort_config import load_model, effort_joints, controller_parameters, validate_namespace
+from simulation_scenario import load_scenario, save_scenario, gazebo_world
 
 package_dir = Path(__file__).resolve().parents[1]
 
@@ -66,6 +67,7 @@ def prepare_model(urdf_path, output_dir, namespace, tuning, topics=None):
 
 def launch_setup(context):
     value = lambda key: LaunchConfiguration(key).perform(context)
+    scenario = load_scenario(value('scenario'))
     namespace = value('namespace')
     validate_namespace(namespace)
     output = Path(value('output_dir') or tempfile.mkdtemp(prefix='dual_arm_gz_'))
@@ -76,14 +78,8 @@ def launch_setup(context):
         'robot_description': value('description_topic'),
         'dual_arm_controller/joint_trajectory': value('trajectory_topic')})
     world = output/'world.sdf'
-    world.write_text('''<sdf version="1.9"><world name="motor_test">
-      <gravity>0 0 -9.81</gravity>
-      <physics name="physics" type="ignored"><max_step_size>0.001</max_step_size><real_time_factor>1</real_time_factor></physics>
-      <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
-      <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
-      <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
-      <light name="sun" type="directional"><pose>0 0 10 0 0 0</pose><direction>-0.5 0.1 -0.9</direction></light>
-    </world></sdf>''')
+    save_scenario(scenario, output)
+    world.write_text(et.tostring(gazebo_world(scenario), encoding='unicode'))
     command = ['gz', 'sim', '-r', str(world)]
     if value('gui').lower() != 'true':
         command.insert(2, '-s')
@@ -104,6 +100,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('urdf', default_value=str(package_dir.parent/'urdf/topo_dual_arm_max/topo_dual_arm_max.urdf')),
         DeclareLaunchArgument('control_config', default_value=str(package_dir/'config/dual_arm_effort.yaml')),
+        DeclareLaunchArgument('scenario', default_value='empty', description='環境シナリオ名またはYAMLパス'),
         DeclareLaunchArgument('namespace', default_value='sim_topo_dual_arm_max'),
         DeclareLaunchArgument('state_topic', default_value='joint_states'),
         DeclareLaunchArgument('trajectory_topic', default_value='dual_arm_controller/joint_trajectory'),

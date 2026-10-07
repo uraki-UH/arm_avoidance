@@ -37,9 +37,10 @@ def fixture_urdf(path):
 
 
 class motor_trial:
-    def __init__(self, model, output, enable_topic_remap=False, viewer_stream_topic="", backend="harmonic"):
+    def __init__(self, model, output, enable_topic_remap=False, viewer_stream_topic="", backend="harmonic", scenario="empty"):
         self.model, self.output = model, output
         self.backend = backend
+        self.scenario = scenario
         self.namespace = '/sim_motor_check'
         self.enable_topic_remap = enable_topic_remap
         self.state_topic = '/robot_io/joint_states' if enable_topic_remap else self.namespace+'/joint_states'
@@ -64,7 +65,7 @@ class motor_trial:
             self.namespace+'/dual_arm_controller/controller_state', self.on_state, qos_profile_sensor_data)
         self.command = self.node.create_publisher(JointTrajectory, self.trajectory_topic, 10)
         self.launch = owned_launch(output, process_snapshot())
-        self.report = {'backend': backend, 'model': model, 'result': 'failed', 'checks': {}}
+        self.report = {'backend': backend, 'model': model, 'scenario': scenario if backend == 'harmonic' else None, 'result': 'failed', 'checks': {}}
 
     def on_joints(self, msg):
         self.joints = msg
@@ -118,7 +119,7 @@ class motor_trial:
                        'namespace:=sim_motor_check']
         else:
             command = ['ros2', 'launch', str(package_dir/'launch/dual_arm_gz.launch.py'),
-                       'urdf:='+str(urdf), 'namespace:=sim_motor_check', 'output_dir:='+str(self.output/'generated')]
+                       'urdf:='+str(urdf), 'scenario:='+self.scenario, 'namespace:=sim_motor_check', 'output_dir:='+str(self.output/'generated')]
             if self.enable_topic_remap:
                 command += ['state_topic:='+self.state_topic, 'trajectory_topic:='+self.trajectory_topic,
                             'description_topic:='+self.description_topic]
@@ -238,18 +239,21 @@ class motor_trial:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--backend', choices=['harmonic', 'isaac'], default='harmonic')
+    parser.add_argument('--scenario', default='empty', help='Harmonicの環境シナリオ名またはYAMLパス')
     parser.add_argument('--model', choices=['fixture', 'max', 'long'], required=True)
     parser.add_argument('--viewer-stream-topic', default='')
     parser.add_argument('--enable-topic-remap', action='store_true')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    if args.backend == "isaac" and args.scenario != "empty":
+        parser.error("Isaacの環境選択は本体側の--scenarioで指定してください")
     if args.backend == "isaac" and (args.enable_topic_remap or args.model == "fixture"):
         parser.error("Isaac外部接続の試験はmax／longと既定トピックが対象です")
     if os.environ.get('ROS_DOMAIN_ID') != '96':
         raise RuntimeError('検証専用ROS_DOMAIN_ID=96が必要です')
     args.output.mkdir(parents=True, exist_ok=False)
     rclpy.init()
-    trial = motor_trial(args.model, args.output.resolve(), args.enable_topic_remap, args.viewer_stream_topic, args.backend)
+    trial = motor_trial(args.model, args.output.resolve(), args.enable_topic_remap, args.viewer_stream_topic, args.backend, args.scenario)
     try:
         trial.execute()
     except Exception as error:

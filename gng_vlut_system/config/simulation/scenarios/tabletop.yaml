@@ -1,0 +1,8 @@
+description: 作業台と物理で動く把持物体
+objects_file: ../objects.yaml
+objects:
+  - {name: floor, asset: floor, position: [0.0, 0.0, -0.075]}
+  - {name: table, asset: workbench, position: [0.50, 0.0, 0.20]}
+  # 台上面から0.01 mの落下による初期接触
+  - {name: cube, asset: pick_cube, position: [0.35, 0.15, 0.255], rpy: [0.0, 0.0, 0.18]}
+  - {name: cylinder, asset: pick_cylinder, position: [0.42, -0.15, 0.26]}

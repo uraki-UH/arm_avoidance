@@ -45,6 +45,122 @@ docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
 既知慣性モデル: 慣性0.1 kg m²、トルク上限0.5 N m。飽和中の実測角加速度5.000 rad/s²、慣性×角加速度0.500 N m。標準コントローラの出力も上限内。
 実URDFの最大出力／URDF上限比: max 0.4014、long 0.5175。位置誤差最大値: max 0.00242 rad、long 0.00548 rad。合否と生波形は`artifacts/gz_motor_20261003/{fixture_02,max_final,long_final}/`の`report.json`、`joint_samples.json`、`controller_samples.json`。所有プロセスの終了確認も`report.json`へ保存。
 
+## 環境シナリオの管理
+
+環境の正本は[config/simulation](../config/simulation)。
+[objects.yaml](../config/simulation/objects.yaml)で物体の形状・寸法・色・固定/可動・質量・摩擦を定義し、
+[scenarios](../config/simulation/scenarios)の各YAMLで物体名・参照する定義・位置・姿勢を指定。
+制御ゲイン・トルク上限・機体URDFは従来の制御設定側。環境の変更と機体制御の変更を分離。
+
+| シナリオ | 環境 | 用途 |
+| --- | --- | --- |
+| `empty`（既定） | 環境物体なし | 既存の駆動・接続検証 |
+| `tabletop` | 床・固定天板・可動の箱と円柱 | 接触・把持試験の環境準備 |
+| `dual_obstacles` | 床・左右の固定円柱 | 腕ごとの障害物回避試験の環境準備 |
+| `narrow_workspace` | 床・左右の固定壁 | 作業領域を制限した試験の環境準備 |
+| `rolling_ball` | 向かい合わせの斜面と1個の球 | 重力による往復運動 |
+| `rolling_balls` | 同じ斜面と開始位置の異なる3個の球 | 異なるタイミングで動く障害物 |
+
+[simulation_scenario.py](../launch/simulation_scenario.py)が検証・参照解決・両形式への変換を担当。
+Harmonicは標準SDFの衝突・剛体、Isaacは標準USDの`CollisionAPI`・`RigidBodyAPI`・`MassAPI`を使用。
+可動物体の慣性は中心原点・一様密度の基本形状から共通計算。
+静的構造物は固定衝突体、箱・円柱・球は重力と接触で動く剛体。
+時刻指定の移動障害物・人物動作・把持成功判定・タスク指令はこのシナリオ層の対象外。
+
+座標は`world`、ロボットの固定基台は原点。寸法・位置はm、質量はkg、`rpy`はrad、色はRGBの0〜1。
+組込み環境の床上面はz=-0.05 m。max／longの基部下端との初期重複を避ける配置。
+`tabletop`の台は脚を省略した固定天板で、上面はz=0.22 m。箱・円柱の初期位置は天板から0.01 mの落下を伴う高さ。
+これは試験用配置であり、別機体への配置適合や把持動作の成立を保証する設定ではない。
+
+### 転がる球
+
+[rolling_ball.yaml](../config/simulation/scenarios/rolling_ball.yaml)と
+[rolling_balls.yaml](../config/simulation/scenarios/rolling_balls.yaml)は、静止状態から重力で動き始める環境。
+半径0.04 m・質量0.10 kgの球と、傾斜0.1 radの向かい合わせの板を配置。
+板の上面はy=0、z=0.20 mで接続。球が中央を通過して反対側の斜面へ上り、折り返す構成。
+3球の例はx位置と開始高さを分けた別々の経路。往復の振幅・周期は物理挙動に従い、接触で減衰する構成。
+
+球の移動・回転は標準物理エンジンによる計算。速度・姿勢の継続指令、追加ROSノード、移動用プラグインは不要。
+シミュレーション開始時から運動が進行。再実行はシナリオを再起動して初期状態から開始。
+
+```bash
+ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py scenario:=rolling_ball
+```
+
+3球は`scenario:=rolling_balls`へ変更。Isaac側も`--scenario rolling_balls`、Composeは`SIM_SCENARIO=rolling_balls`で選択。
+球の半径・質量・摩擦は`objects.yaml`の`rolling_ball`、斜面寸法は`rolling_ramp`、配置は各シナリオで管理。
+球の半径・斜面の傾きを変えた場合は、初期接触位置の高さと中央の接続位置も調整が必要。
+初期位置の設定式は、球中心z = 0.20 + |y| tan(0.1) + 半径/cos(0.1) + 0.002 m。
+末尾の0.002 mは鉛直方向の初期間隔。
+
+### 選択と追加
+
+Jazzy環境をsource済みのHarmonicコンテナ内:
+
+```bash
+ros2 launch /workspace/gng_vlut_system/launch/dual_arm_gz.launch.py scenario:=tabletop
+```
+
+Isaac本体は同じ名前を`--scenario`へ指定:
+
+```bash
+./python.sh /workspace/gng_vlut_system/launch/dual_arm_isaac.py --scenario tabletop
+```
+
+Composeでは起動前に`export SIM_SCENARIO=tabletop`を設定。
+既定は両方とも`empty`。`scenario:=/path/to/case.yaml`、`--scenario /path/to/case.yaml`による外部ファイルの選択も可能。
+相対的な`objects_file`は、シナリオYAMLの置き場所を基準に解決。
+
+シナリオ追加は`scenarios/<名前>.yaml`の追加のみ。launchの分岐や名前一覧の登録は不要。
+例として、既存の物体定義を使った片側障害物:
+
+```yaml
+description: 左腕前方の障害物
+objects_file: ../objects.yaml
+objects:
+  - name: left_post
+    asset: obstacle_post
+    position: [0.38, 0.32, 0.20]
+    rpy: [0.0, 0.0, 0.0]
+```
+
+物体の追加・寸法変更は物体定義へ集約。対応形状は`box`（`size`）、`sphere`（`radius`）、
+`cylinder`（`radius`・`length`、ローカルZ軸）。`is_static`は必須。可動物体には正の`mass`が必須。
+`color`の既定は灰色、`friction`の既定は0.8。位置・姿勢だけはシナリオの各配置で指定。
+名前はlower_snake_case。未知キー・未対応形状・未知の参照先・配置名重複・非有限値・不正寸法は起動前に拒否。
+
+生成先には`scenario.yaml`と`scenario_objects.yaml`を保存。参照解決済みの物体定義を含み、
+元設定を変更した後でも保存済み`scenario.yaml`を再指定して同じ初期環境を生成可能。
+実行途中の物体状態を保存するチェックポイントではない。物理エンジン間の数値軌道の一致も対象外。
+`world.sdf` / `scene.usda`は生成結果として管理し、環境変更の正本として手編集しない構成。
+
+### 検証範囲
+
+`test_dual_arm_launch.py`で全シナリオのSDF・USD形状、質量・慣性・摩擦、姿勢、保存後の再読込、
+入力拒否、max／longの初期姿勢との非干渉を検証。
+Harmonicでは全6環境の起動、箱・円柱の落下と台上接触、球の往復と回転を確認。
+作業台環境のmaxで、既存の速度追従・トルク上限・停止試験に合格。
+環境を付けた駆動検証は次のコマンドで再実行可能（専用ROS_DOMAIN_ID=96、未使用の出力先）。
+
+```bash
+python3 gng_vlut_system/test/check_sim_motor.py --model max --scenario tabletop \
+  --output /workspace/artifacts/scenario_motor_check
+```
+
+球の物理試験は同じテストファイルの`test_rolling_environment_physics`。
+通常の単体試験では省略し、専用GZ_PARTITIONを指定した隔離環境だけでGazeboを起動。
+観測した位置・姿勢から往復と回転を検査し、斜面との接触点速度で転がりを確認。
+試験自身が起動したGazebo・観測プロセスだけを終了。
+
+```bash
+GZ_PARTITION=uraki_rolling_check ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 \
+  python3 -m pytest gng_vlut_system/test/test_dual_arm_launch.py \
+  -k rolling_environment_physics -q
+```
+
+Isaacは実USD APIによる構造検証まで。本体での物理実行は下記のGPUコンテナ制約により未検証。
+環境のセンサー点群・GNG/VLUT回避への入力・ToPoFuzzy-Viewerでの環境物体表示は、この配置生成には未接続。
+
 ## 標準ROS 2トピックとViewerの接続
 
 Harmonicの物理処理とViewer表示の間は標準ROS 2メッセージ。専用の関節状態リレーは不要。

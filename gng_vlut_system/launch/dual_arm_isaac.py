@@ -11,6 +11,7 @@ import xml.etree.ElementTree as et
 import yaml
 
 from dual_arm_effort_config import load_model, effort_joints, controller_parameters, validate_namespace
+from simulation_scenario import load_scenario, save_scenario, add_isaac_environment
 
 
 package_dir = Path(__file__).resolve().parents[1]
@@ -65,6 +66,7 @@ def configure_drives(stage, root_path, model, gains):
 
 def run(args):
     # Isaacランタイムの初期化前に可能な入力検査
+    scenario = load_scenario(args.scenario)
     validate_namespace(args.namespace)
     if not math.isfinite(args.max_run_sec) or args.max_run_sec < 0:
         raise ValueError('max_run_secには有限の非負値が必要です')
@@ -72,6 +74,7 @@ def run(args):
     if args.output_dir and output.exists():
         raise FileExistsError(f'生成物を保護するため未使用のoutput_dirが必要です: {output}')
     root, gains, urdf, config = prepare_config(args.urdf, output, yaml.safe_load(args.control_config.read_text()))
+    save_scenario(scenario, output)
     from isaacsim import SimulationApp
     app = SimulationApp({'headless': not args.enable_gui, 'renderer': 'RayTracedLighting'})
     is_running = True
@@ -119,6 +122,7 @@ def run(args):
         app.update()
         stage = omni.usd.get_context().get_stage()
         articulation_path = configure_drives(stage, '/World/Robot', root, gains)
+        add_isaac_environment(stage, scenario)
         stage.GetRootLayer().Export(str(output/'scene.usda'))
         keys = og.Controller.Keys
         og.Controller.edit({'graph_path': '/SimulationClock', 'evaluator_name': 'execution'}, {
@@ -160,6 +164,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--urdf', type=Path, default=package_dir.parent/'urdf/topo_dual_arm_max/topo_dual_arm_max.urdf')
     parser.add_argument('--control-config', type=Path, default=package_dir/'config/dual_arm_effort.yaml')
+    parser.add_argument('--scenario', default='empty', help='環境シナリオ名またはYAMLパス')
     parser.add_argument('--namespace', default='sim_topo_dual_arm_max')
     parser.add_argument('--output-dir', type=Path)
     parser.add_argument('--enable-gui', action='store_true')

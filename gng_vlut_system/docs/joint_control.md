@@ -52,6 +52,7 @@ flowchart LR
 ## 起動
 
 以下はDocker `gng_cpu_container` 内でROS環境をsourceした後の例。
+Viewerの`params_file`省略時は`topo_dual_arm_max_long`が対象。別機種では対象のYAMLを`params_file:=...`で指定。
 Dynamixelを使う場合、USB接続・トルク・制御モードを設定した`dynamixel_handler`を別途起動し、`/dynamixel/state/present`を配信する。
 共通launchからドライバのトルク・制御モードは変更しない。
 

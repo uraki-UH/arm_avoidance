@@ -26,6 +26,7 @@ def launch_setup(context, *args, **kwargs):
     gng_profile_names = LaunchConfiguration("gng_profile_names").perform(context)
     use_task_density_bias = LaunchConfiguration("use_task_density_bias").perform(context)
     enable_nearest_index = LaunchConfiguration("enable_nearest_index").perform(context)
+    enable_static_collision_cache = LaunchConfiguration("enable_static_collision_cache").perform(context)
     max_node_num = LaunchConfiguration("max_node_num").perform(context)
     max_iterations = LaunchConfiguration("max_iterations").perform(context)
     refine_iterations = LaunchConfiguration("refine_iterations").perform(context)
@@ -73,6 +74,10 @@ def launch_setup(context, *args, **kwargs):
         if enable_nearest_index.lower() not in ("true", "false"):
             raise ValueError("enable_nearest_index must be true or false")
         overrides["gng_params.enable_nearest_index"] = (enable_nearest_index.lower() == "true")
+    if enable_static_collision_cache:
+        if enable_static_collision_cache.lower() not in ("true", "false"):
+            raise ValueError("enable_static_collision_cache must be true or false")
+        overrides["gng_params.enable_static_collision_cache"] = (enable_static_collision_cache.lower() == "true")
     if max_node_num:
         overrides["gng_params.max_node_num"] = int(max_node_num)
     if max_iterations:
@@ -96,7 +101,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
-    dual_cfg = os.path.join(pkg_share, "config", "topoarm_dual.yaml")
+    dual_cfg = os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")
     
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -163,6 +168,11 @@ def generate_launch_description():
             "enable_nearest_index",
             default_value="",
             description="厳密近傍索引の切替え。空指定時は設定ファイルの値を使用。",
+        ),
+        DeclareLaunchArgument(
+            "enable_static_collision_cache",
+            default_value="",
+            description="静的な自己干渉検査結果の再利用。空指定時は設定ファイルの値を使用。",
         ),
         DeclareLaunchArgument(
             "max_node_num",

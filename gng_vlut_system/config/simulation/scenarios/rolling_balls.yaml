@@ -1,0 +1,11 @@
+description: 異なる開始位置から別々のタイミングで往復する3個の球
+objects_file: ../objects.yaml
+objects:
+  - {name: floor, asset: floor, position: [0.0, 0.0, -0.075]}
+  # 上面が中央のy=0、z=0.20で接続する向かい合わせの斜面
+  - {name: left_ramp, asset: rolling_ramp, position: [0.50, 0.449749, 0.225025], rpy: [0.1, 0.0, 0.0]}
+  - {name: right_ramp, asset: rolling_ramp, position: [0.50, -0.449749, 0.225025], rpy: [-0.1, 0.0, 0.0]}
+  # 球と斜面の初期間隔は鉛直方向に0.002 m
+  - {name: left_ball, asset: rolling_ball, position: [0.35, 0.65, 0.307418]}
+  - {name: right_ball, asset: rolling_ball, position: [0.50, -0.50, 0.292368]}
+  - {name: near_ball, asset: rolling_ball, position: [0.65, 0.20, 0.262268]}

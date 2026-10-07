@@ -307,7 +307,7 @@ function initWorkspace(){
  catch(e){$('sensor-panel').textContent='RGB-Dを初期化できません：'+e.message;diagnostics.errors.push(String(e));}
  lidar=new LidarWorkspace({scene,overlay,robot,renderer,camera,environment:workspace,toast,download,onLayers:()=>updateCloudLayers()});
  ai=new VMAIWorkspace({scene,camera,robot,lidar,rgbd,environment:workspace,toast,motion:{toggle:toggleDemoMotion,active:()=>!!demoMotion}});
- ros_points=new RosPointsPanel({environment:workspace,rgbd,toast});
+ ros_points=new RosPointsPanel({environment:workspace,rgbd,lidar,toast});
  document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>x.classList.toggle('active',x===b));for(const name of ['robot','environment','sensor','lidar','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=b.dataset.panel==='environment'&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
  $('scene-save').onclick=()=>download('ToPo-workspace.json',JSON.stringify(workspace.getState(),null,2),'application/json');
  $('scene-load').onclick=()=>$('scene-file').click();$('scene-file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>1e6)throw Error('ファイルが大きすぎます');await workspace.load(JSON.parse(await f.text()));toast('シーンを読み込みました');}catch(error){toast('シーン読込エラー：'+error.message);}};

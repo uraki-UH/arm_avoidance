@@ -13,7 +13,7 @@ python3 integrations/ros2/pointcloud_bridge.py
 ```
 
 既存ブラウザ（8877）を再読み込みし、送信先 `http://127.0.0.1:8879` を指定します。
-点群種別と対象物体を選び、「1回送信」または「連続送信」を押してください。
+点群種別（物体の場合は対象も）を選び、「1回送信」または「連続送信」を押してください。
 「環境で選択中の物体を使用」で対象を同期できます。送信上限は既定2 Hz、同時取得・送信は1件です。
 完全表面は既定10,000点。RGB-Dの点数・解像度は現在のセンサー設定に従います。
 
@@ -25,6 +25,7 @@ docker exec -it gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && 
 
 | 種類 | ROS 2トピック | 内容 |
 | --- | --- | --- |
+| MID-360 | `/sim/lidar/points` | 現在の取付姿勢・走査設定で得た有効点 |
 | RGB-D全体 | `/sim/rgbd/points` | 現在のカメラの有効深度点 |
 | 対象の完全表面 | `/sim/object/full_points` | メッシュ面積に比例する指定点数のサンプル |
 | 対象の遮蔽付きRGB-D | `/sim/object/visible_points` | シーン全体と対象単体の深度が一致する有効点 |
@@ -45,6 +46,18 @@ GNGの入力トピックを上表に合わせ、`ROS_DOMAIN_ID` をブリッジ�
 
 形式の回帰試験は `python3 -m unittest discover -s integrations/ros2 -p test_pointcloud_bridge.py` で実行できます。
 2026-09-29にHumbleでブラウザ→HTTP→3種類のROS点群の受信を確認。GNG学習・実機接続はこの試験の対象外です。
+
+### MID-360の送信
+
+1. ブリッジを起動し、ブラウザを再読み込み。
+2. LiDARタブでMID-360を有効化。「腰上・前方25°の配置に戻す」で前下がりの配置、XYZ・RPY欄で調整。
+3. 「ROS 2送信」で「MID-360：LiDAR点群」を選択し、1回送信または連続送信。LiDARタブ側の連続取得は不要。
+
+点群は `/sim/lidar/points`、取得時の `base_footprint → sim_mid360_frame` は `/sim/tf` に共通stampで配信。点群は既にbase_footprint座標のため、取付変換の二重適用は不要です。ロボットのworld配置・関節角も取得開始時の状態を使用します。
+`/sim/points/info` の `lidar` に走査開始秒・積分秒・スロット数・走査方式を収録。積分0.1秒は20,000スロットで、有効点数ではありません。intensity・点別時刻・IMU・Livox CustomMsgは出力しません。
+送信Hzは上限で、実速度は描画と取得処理に依存。ROSの受信時刻とシミュレーション走査時刻は別です。GNGへ接続する場合は入力を `/sim/lidar/points` に設定し、ブリッジとROSドメインを揃えてください。
+
+2026-10-07にLong・標準モデルからHumbleへの実受信、移動配置・25°／40°の取付で全点とTFの一致、連続送信、取得中リセットを確認。回帰17件成功。ブラウザ試験はSwiftShaderのためGPU性能・指定Hzの達成は未検証です。
 
 ### 深度画像と画素対応点群（2026-10-01追加）
 
@@ -84,7 +97,7 @@ Humble実受信で848×480全画素の対応・無効値・共通時刻・既存
 | --- | --- |
 | `/sim/base_pose` | `geometry_msgs/PoseStamped`、world内のbase_footprint配置 |
 | `/sim/joint_states` | `sensor_msgs/JointState`、関節角 |
-| `/sim/tf` | `tf2_msgs/TFMessage`、world→base_footprint→URDF各リンク、および校正後カメラ |
+| `/sim/tf` | `tf2_msgs/TFMessage`、world→base_footprint→URDF各リンク、および取得時のカメラ・MID-360 |
 | `/sim/robot_description` | `std_msgs/String`、選択モデルのURDF、transient local |
 | `/sim/command/standard/joint_trajectory` | `trajectory_msgs/JointTrajectory`、標準モデルへの再生指令 |
 | `/sim/command/long/joint_trajectory` | 同上、Longモデルへの再生指令 |
@@ -118,7 +131,7 @@ header stampは0、positionsのみ、time_from_startは正の厳密増加、最�
 
 2026-10-01までの検証は標準モデル・ROS Humble。3種の点群の実受信、848×480全画素の深度・XYZ対応と共通時刻、移動配置（XYZ=(0.3,-0.2,0.1) m、yaw=25 deg）での点群・TF整合を確認。ROS軌道→ブラウザ首Yaw 0.1 rad→ROS関節状態の往復、未知関節・過速度・範囲外の拒否、停止操作を確認し、Python回帰15件が成功しています。
 
-Longの実送信・軌道往復、持続送信レート、大規模車両メッシュの性能、実RealSense購読アプリとの互換性、GNG/VLUTとの統合運転、実機動作は未検証です。
+LongのRGB-D実送信・軌道往復、持続送信レート、大規模車両メッシュの性能、実RealSense購読アプリとの互換性、GNG/VLUTとの統合運転、実機動作は未検証です。
 
 ## 含めたもの / 別途必要なもの
 

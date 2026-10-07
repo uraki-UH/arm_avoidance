@@ -1,0 +1,6 @@
+description: 左右の壁による狭い作業空間
+objects_file: ../objects.yaml
+objects:
+  - {name: floor, asset: floor, position: [0.0, 0.0, -0.075]}
+  - {name: left_panel, asset: side_panel, position: [0.50, 0.45, 0.25]}
+  - {name: right_panel, asset: side_panel, position: [0.50, -0.45, 0.25]}

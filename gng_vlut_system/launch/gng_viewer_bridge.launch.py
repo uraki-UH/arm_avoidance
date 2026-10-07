@@ -646,7 +646,7 @@ def generate_launch_description():
         DeclareLaunchArgument("id", default_value=""),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")),
         DeclareLaunchArgument(
             "enable_joint_state_publisher",
             default_value="",

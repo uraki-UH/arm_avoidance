@@ -7,6 +7,8 @@ services:
       - /workspace/gng_vlut_system/launch/dual_arm_isaac.py
       - --urdf
       - /workspace/${ROBOT_URDF:-urdf/topo_dual_arm_max/topo_dual_arm_max.urdf}
+      - --scenario
+      - ${SIM_SCENARIO:-empty}
       - --namespace
       - ${ROBOT_NAMESPACE:-sim_topo_dual_arm_max}
     network_mode: host

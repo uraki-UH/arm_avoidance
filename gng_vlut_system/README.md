@@ -112,6 +112,23 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
   ```
   Docker内でGUIが不要なら `gui:=false` にできます。
 
+### 双腕学習・Viewerの既定モデル
+
+モデル指定を省略した場合は`topo_dual_arm_max_long`を使用します。
+次の両launchの`params_file`既定値は`config/topo_dual_arm_max_long.yaml`です。
+
+```bash
+# 双腕GNGの学習
+ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py
+
+# 保存済みGNGのViewer配信
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py
+```
+
+学習結果の保存先・Viewerの読込先は、このYAMLの`gng.data_directory`と
+`gng.experiment_id`に従い、既定では`gng_results/topo_dual_arm_max_long/`です。
+別モデルを使う場合は`params_file:=...`で対象の設定ファイルを指定します。
+
 ### ToPoFuzzy-Viewerへのブリッジ
 
 学習したGNGマップやアームの姿勢をToPoFuzzy-Viewerに送信します。

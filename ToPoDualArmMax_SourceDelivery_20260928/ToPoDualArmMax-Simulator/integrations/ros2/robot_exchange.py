@@ -92,6 +92,8 @@ class RobotExchange:
         actual = {t['child']: t['parent'] for t in state['transforms']}
         if 'sim_camera_depth_optical_frame' in actual:
             expected['sim_camera_depth_optical_frame'] = 'base_footprint'
+        if 'sim_mid360_frame' in actual:
+            expected['sim_mid360_frame'] = 'base_footprint'
         if actual != expected or set(state['robot_pose']) != self.joint_names[model]:
             raise ValueError('URDFと状態の構成が一致しません')
 

@@ -1561,6 +1561,9 @@ public:
         this->declare_parameter<double>("gng_params.beta", 0.0005);
     gng_params_.enable_nearest_index = this->declare_parameter<bool>(
         "gng_params.enable_nearest_index", true);
+    // 学習中に形状・固定姿勢・判定条件が変化しないオフライン処理用。
+    gng_params_.enable_static_collision_cache = this->declare_parameter<bool>(
+        "gng_params.enable_static_collision_cache", true);
     gng_params_.n_best_candidates =
         this->declare_parameter<int>("gng_params.n_best_candidates", 4);
     gng_params_.ais_threshold =
@@ -2035,6 +2038,8 @@ public:
                 gng_params_.enable_nearest_index ? "true" : "false");
 
     gng.setSelfCollisionChecker(final_checker.get());
+    RCLCPP_INFO(this->get_logger(), "[CollisionCache] enable_static_collision_cache=%s",
+                gng_params_.enable_static_collision_cache ? "true" : "false");
     // Initialize Status Providers
     if (!skip_collision_checks_ && final_checker) {
       gng.registerStatusProvider(

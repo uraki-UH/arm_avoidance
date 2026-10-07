@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 import importlib.util
 import math
+import os
 import sys
 import xml.etree.ElementTree as et
 
@@ -394,3 +395,232 @@ def test_joint_motion_observer_is_opt_in(enable_observer):
     assert actions[0]['namespace'] == 'sim_observer'
     assert actions[0]['parameters'][0]['use_sim_time'] is True
     assert actions[0]['parameters'][0]['max_derivative_order'] == 3
+
+
+@pytest.mark.parametrize('scenario_name', [path.stem for path in sorted((share/'config/simulation/scenarios').glob('*.yaml'))])
+def test_shared_environment_shapes_physics_and_replay(tmp_path, scenario_name):
+    """共通物体のSDF・USD形状、物理属性、姿勢と保存設定の再読込。"""
+    from pxr import Usd, UsdGeom, UsdPhysics, UsdShade
+    from simulation_scenario import load_scenario, save_scenario, gazebo_world, add_isaac_environment, diagonal_inertia
+
+    scenario = load_scenario(scenario_name)
+    save_scenario(scenario, tmp_path)
+    assert load_scenario(tmp_path/'scenario.yaml') == scenario
+    world = gazebo_world(scenario).find('world')
+    assert world.findtext('gravity') == '0 0 -9.81'
+    assert float(world.findtext('physics/max_step_size')) == 0.001
+    assert len(world.findall('model')) == len(scenario['objects'])
+    stage = Usd.Stage.CreateInMemory()
+    add_isaac_environment(stage, scenario)
+    assert UsdGeom.GetStageUpAxis(stage) == UsdGeom.Tokens.z
+    assert UsdGeom.GetStageMetersPerUnit(stage) == 1.0
+    for item in scenario['objects']:
+        model = world.find("model[@name='environment_" + item['name'] + "']")
+        assert model.findtext('static') == str(item['is_static']).lower()
+        np.testing.assert_allclose(list(map(float, model.findtext('pose').split())), item['position'] + item['rpy'])
+        body = stage.GetPrimAtPath('/World/Environment/' + item['name'])
+        shape = stage.GetPrimAtPath(str(body.GetPath()) + '/shape')
+        transform = np.array(UsdGeom.Xformable(body).ComputeLocalToWorldTransform(Usd.TimeCode.Default())).T
+        np.testing.assert_allclose(transform[:3, 3], item['position'])
+        np.testing.assert_allclose(transform[:3, :3], Rotation.from_euler('xyz', item['rpy']).as_matrix(), atol=1e-7)
+        assert shape.HasAPI(UsdPhysics.CollisionAPI)
+        assert body.HasAPI(UsdPhysics.RigidBodyAPI) is (not item['is_static'])
+        geometry = model.find('link/collision/geometry')
+        assert geometry.find(item['shape']) is not None
+        if item['shape'] == 'box':
+            assert UsdGeom.Cube(shape).GetSizeAttr().Get() == 1.0
+            np.testing.assert_allclose(shape.GetAttribute('xformOp:scale').Get(), item['size'])
+        elif item['shape'] == 'sphere':
+            assert UsdGeom.Sphere(shape).GetRadiusAttr().Get() == item['radius']
+        elif item['shape'] == 'cylinder':
+            assert UsdGeom.Cylinder(shape).GetHeightAttr().Get() == item['length']
+            assert UsdGeom.Cylinder(shape).GetRadiusAttr().Get() == item['radius']
+        material, _ = UsdShade.MaterialBindingAPI(shape).ComputeBoundMaterial('physics')
+        assert UsdPhysics.MaterialAPI(material).GetStaticFrictionAttr().Get() == pytest.approx(item['friction'])
+        if not item['is_static']:
+            assert UsdPhysics.MassAPI(body).GetMassAttr().Get() == pytest.approx(item['mass'])
+            np.testing.assert_allclose(UsdPhysics.MassAPI(body).GetDiagonalInertiaAttr().Get(), diagonal_inertia(item))
+            assert float(model.findtext('link/inertial/mass')) == item['mass']
+    with pytest.raises(ValueError, match='既に存在'):
+        add_isaac_environment(stage, scenario)
+
+
+def test_environment_external_library_and_rotated_sphere(tmp_path):
+    """外部シナリオの相対参照と球形物体の物理属性。"""
+    from pxr import Usd, UsdGeom, UsdPhysics
+    from simulation_scenario import load_scenario, gazebo_world, add_isaac_environment
+
+    (tmp_path/'objects.yaml').write_text(yaml.safe_dump({'ball': {
+        'shape': 'sphere', 'radius': 0.1, 'is_static': False, 'mass': 2.0}}))
+    path = tmp_path/'case.yaml'
+    path.write_text(yaml.safe_dump({'description': '球の確認', 'objects_file': 'objects.yaml', 'objects': [
+        {'name': 'ball', 'asset': 'ball', 'position': [0.1, 0.2, 0.3], 'rpy': [0.2, -0.3, 0.4]}]}))
+    scenario = load_scenario(path)
+    stage = Usd.Stage.CreateInMemory()
+    add_isaac_environment(stage, scenario)
+    body = stage.GetPrimAtPath('/World/Environment/ball')
+    np.testing.assert_allclose(UsdGeom.Xformable(body).ComputeLocalToWorldTransform(Usd.TimeCode.Default()),
+        np.block([[Rotation.from_euler('xyz', [0.2, -0.3, 0.4]).as_matrix(), np.array([[0.1], [0.2], [0.3]])],
+                  [np.array([[0.0, 0.0, 0.0, 1.0]])]]).T, atol=1e-7)
+    assert UsdGeom.Sphere(stage.GetPrimAtPath('/World/Environment/ball/shape')).GetRadiusAttr().Get() == 0.1
+    np.testing.assert_allclose(UsdPhysics.MassAPI(body).GetDiagonalInertiaAttr().Get(), [0.008] * 3)
+    assert float(gazebo_world(scenario).findtext('world/model/link/inertial/inertia/ixx')) == pytest.approx(0.008)
+
+
+@pytest.mark.parametrize('change', [
+    {'shape': 'mesh'}, {'shape': ['box']}, {'size': [0.1, 0.2]}, {'size': [0.1, -0.2, 0.3]},
+    {'size': [0.1, float('nan'), 0.3]}, {'mass': 0.0}, {'mass': float('inf')},
+    {'is_static': 'false'}, {'color': [2.0, 0.0, 0.0]}, {'friction': -1.0}, {'typo': 1}])
+def test_environment_invalid_asset_rejected(tmp_path, change):
+    """寸法・質量・型・未知設定の起動前拒否。"""
+    from simulation_scenario import load_scenario
+
+    (tmp_path/'objects.yaml').write_text(yaml.safe_dump({'object': {
+        'shape': 'box', 'size': [0.1, 0.2, 0.3], 'is_static': False, 'mass': 1.0, **change}}))
+    (tmp_path/'case.yaml').write_text(yaml.safe_dump({
+        'description': '入力検査', 'objects_file': 'objects.yaml', 'objects': []}))
+    with pytest.raises(ValueError):
+        load_scenario(tmp_path/'case.yaml')
+
+
+@pytest.mark.parametrize('objects', [
+    [{'name': 'item', 'asset': 'missing', 'position': [0, 0, 0]}],
+    [{'name': 'bad/name', 'asset': 'floor', 'position': [0, 0, 0]}],
+    [{'name': 'item', 'asset': 'floor', 'position': [0, 0, float('inf')]}],
+    [{'name': 'item', 'asset': 'floor', 'position': [0, 0, 0], 'velocity': [1, 0, 0]}],
+    [{'name': 'item', 'asset': 'floor', 'position': [0, 0, 0]}] * 2])
+def test_environment_invalid_placement_rejected(tmp_path, objects):
+    """物体参照・名前・重複配置・非有限姿勢・未対応動作の拒否。"""
+    from simulation_scenario import load_scenario
+
+    (tmp_path/'case.yaml').write_text(yaml.safe_dump({'description': '配置検査',
+        'objects_file': str(share/'config/simulation/objects.yaml'), 'objects': objects}))
+    with pytest.raises(ValueError):
+        load_scenario(tmp_path/'case.yaml')
+
+
+@pytest.mark.parametrize('model', ['topo_dual_arm_max', 'topo_dual_arm_max_long'])
+def test_environment_clear_of_initial_robot_pose(model):
+    """全シナリオの初期姿勢に対する外接球と保守的な障害物箱の非干渉。"""
+    from simulation_scenario import load_scenario, scenario_dir
+
+    geometry = robot_geometry(workspace/'urdf'/model/'topo_dual_arm_max.urdf')
+    centers = geometry.centers(np.zeros(len(geometry.joint_names)))
+    for path in scenario_dir.glob('*.yaml'):
+        for item in load_scenario(path)['objects']:
+            local = (centers - item['position']) @ Rotation.from_euler('xyz', item['rpy']).as_matrix()
+            size = (item['size'] if item['shape'] == 'box' else
+                    [2 * item['radius'], 2 * item['radius'], item.get('length', 2 * item['radius'])])
+            nearest = np.maximum(np.abs(local) - np.array(size) / 2, 0)
+            assert np.all(np.linalg.norm(nearest, axis=1) > geometry.radii), (model, path.name, item['name'])
+
+
+def test_harmonic_environment_launch_selection(tmp_path):
+    """環境選択の起動経路と既定の空環境。制御設定との分離。"""
+    from launch.actions import DeclareLaunchArgument
+    from simulation_scenario import load_scenario
+
+    module = load('dual_arm_gz.launch')
+    context = LaunchContext()
+    for action in module.generate_launch_description().entities:
+        if isinstance(action, DeclareLaunchArgument):
+            action.execute(context)
+    assert context.launch_configurations['scenario'] == 'empty'
+    context.launch_configurations.update(scenario='tabletop', output_dir=str(tmp_path))
+    with patch.object(module, 'Node', side_effect=lambda **kwargs: kwargs), patch.object(module, 'ExecuteProcess', side_effect=lambda **kwargs: kwargs):
+        actions = module.launch_setup(context)
+    assert actions[0]['cmd'][0:3] == ['gz', 'sim', '-s']
+    assert len(et.parse(tmp_path/'world.sdf').findall('world/model')) == 4
+    assert load_scenario(tmp_path/'scenario.yaml') == load_scenario('tabletop')
+
+
+@pytest.mark.skipif(os.environ.get('GZ_PARTITION') != 'uraki_rolling_check',
+                    reason='実物理試験は専用GZ_PARTITION=uraki_rolling_checkのみ')
+@pytest.mark.parametrize('scenario_name', ['rolling_ball', 'rolling_balls'])
+def test_rolling_environment_physics(tmp_path, scenario_name):
+    """重力による往復・回転・接触点の滑りと、試験所有プロセスの終了確認。"""
+    import json
+    import subprocess
+    import time
+    from check_gazebo_software_stop import owned_launch, process_snapshot, save_json
+    from simulation_scenario import load_scenario, gazebo_world
+
+    scenario = load_scenario(scenario_name)
+    world = tmp_path/'world.sdf'
+    world.write_text(et.tostring(gazebo_world(scenario), encoding='unicode'))
+    checked = subprocess.run(['gz', 'sdf', '-k', str(world)], capture_output=True, text=True, timeout=15)
+    assert checked.returncode == 0, checked.stderr
+    launch = owned_launch(tmp_path, process_snapshot())
+    collector = None
+    report = {'scenario': scenario_name, 'result': 'failed', 'balls': {}}
+    try:
+        launch.start(['gz', 'sim', '-s', str(world)])
+        deadline = time.monotonic() + 30
+        while True:
+            result = subprocess.run(['gz', 'service', '-s', '/world/motor_test/scene/info',
+                '--reqtype', 'gz.msgs.Empty', '--reptype', 'gz.msgs.Scene', '--timeout', '1000', '--req', ''],
+                capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and 'environment_' in result.stdout:
+                break
+            assert time.monotonic() < deadline, '環境起動の時間切れ'
+        with (tmp_path/'poses.jsonl').open('w') as stream:
+            collector = subprocess.Popen(['gz', 'topic', '-e', '-d', '12', '--json-output',
+                '-t', '/world/motor_test/pose/info'], stdout=stream, stderr=subprocess.PIPE, text=True)
+            time.sleep(0.5)
+            result = subprocess.run(['gz', 'service', '-s', '/world/motor_test/control',
+                '--reqtype', 'gz.msgs.WorldControl', '--reptype', 'gz.msgs.Boolean',
+                '--timeout', '3000', '--req', 'pause: false'], capture_output=True, text=True, timeout=5)
+            assert result.returncode == 0 and 'true' in result.stdout
+            _, error = collector.communicate(timeout=20)
+            assert collector.returncode == 0, error
+        messages = [json.loads(line) for line in (tmp_path/'poses.jsonl').read_text().splitlines() if line.strip()]
+        for item in scenario['objects']:
+            if item['is_static']:
+                continue
+            samples = []
+            for message in messages:
+                stamp = message.get('header', {}).get('stamp', {})
+                stamp_sec = int(stamp.get('sec', 0)) + stamp.get('nsec', 0)*1e-9
+                pose = next((pose for pose in message.get('pose', []) if pose.get('name') == 'environment_' + item['name']), None)
+                if pose is None or (samples and stamp_sec <= samples[-1][0]):
+                    continue
+                position, orientation = pose.get('position', {}), pose.get('orientation', {})
+                samples.append([stamp_sec, *[position.get(axis, 0) for axis in ('x', 'y', 'z')],
+                                *[orientation.get(axis, 0) for axis in ('x', 'y', 'z')], orientation.get('w', 0)])
+            values = np.array(samples)
+            assert len(values) > 100
+            period = np.diff(values[:, 0])
+            velocity = np.diff(values[:, 1:4], axis=0) / period[:, None]
+            rotation = Rotation.from_quat(values[:, 4:8])
+            angular_velocity = (rotation[1:] * rotation[:-1].inv()).as_rotvec() / period[:, None]
+            middle = (values[:-1, :4] + values[1:, :4]) / 2
+            side = np.sign(middle[:, 2])
+            normal = np.column_stack((np.zeros(len(side)), -side*math.sin(0.1), np.full(len(side), math.cos(0.1))))
+            slip = np.linalg.norm(velocity - item['radius'] * np.cross(angular_velocity, normal), axis=1)
+            surface_z = 0.2 + abs(middle[:, 2])*math.tan(0.1) + item['radius']/math.cos(0.1)
+            is_rolling = ((middle[:, 0] > 0.2) & (abs(middle[:, 2]) > 0.15) &
+                          (abs(middle[:, 2]) < 0.8) & (abs(middle[:, 3]-surface_z) < 0.005) &
+                          (abs(velocity[:, 1]) > 0.06))
+            assert np.count_nonzero(is_rolling) > 20
+            metrics = {'min_y_m': float(values[:, 2].min()), 'max_y_m': float(values[:, 2].max()),
+                       'min_velocity_y_m_sec': float(velocity[:, 1].min()),
+                       'max_velocity_y_m_sec': float(velocity[:, 1].max()),
+                       'max_angular_velocity_rad_sec': float(np.linalg.norm(angular_velocity, axis=1).max()),
+                       'contact_slip_percentile_90_m_sec': float(np.percentile(slip[is_rolling], 90))}
+            report['balls'][item['name']] = metrics
+            assert metrics['min_y_m'] < -0.1 and metrics['max_y_m'] > 0.1
+            assert metrics['min_velocity_y_m_sec'] < -0.05 and metrics['max_velocity_y_m_sec'] > 0.05
+            assert metrics['max_angular_velocity_rad_sec'] > 1.0
+            assert metrics['contact_slip_percentile_90_m_sec'] < 0.05
+        report['result'] = 'passed'
+    finally:
+        if collector is not None and collector.poll() is None:
+            collector.terminate()
+            try:
+                collector.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                collector.kill()
+                collector.wait(timeout=3)
+        report['cleanup'] = launch.cleanup()
+        save_json(tmp_path/'rolling_report.json', report)
+        assert report['cleanup']['is_success']

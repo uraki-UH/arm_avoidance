@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
@@ -68,8 +69,12 @@ public:
   void setCollisionAware(bool enable) { collision_aware_ = enable; }
   bool isCollisionAware() const { return collision_aware_; }
   void setSelfCollisionChecker(simulation::ISelfCollisionChecker *checker) {
+    invalidate_collision_cache();
     collision_checker_ = checker;
   }
+
+  // 形状・固定姿勢・運動連鎖・除外規則・環境などの判定条件変更時の必須呼出し。
+  void invalidate_collision_cache();
 
   void gngTrain(const std::vector<T_angle> &samples, int max_iter = -1);
   void gngTrainOnTheFly(int max_iter);
@@ -227,6 +232,18 @@ private:
   void one_train_update(const T_angle &sample_angle,
                         const T_coord &sample_coord, int mode);
   void one_train_update(const T_angle &sample_angle);
+
+  // 関節角の完全一致と世代番号による、静的フィルタの判定結果管理。
+  struct filter_pose_record {
+    T_angle angles;
+    std::uint64_t generation = 0;
+    bool has_angles = false;
+    bool is_safe = false;
+  };
+  using filter_edge_generations = std::pair<std::uint64_t, std::uint64_t>;
+  std::vector<filter_pose_record> filter_poses_;
+  std::unordered_map<std::uint64_t, filter_edge_generations> filter_safe_edges_;
+  void prepare_filter_collision_cache();
 
   void invalidate_nearest_indexes();
   void sync_nearest_node(int node_id);
