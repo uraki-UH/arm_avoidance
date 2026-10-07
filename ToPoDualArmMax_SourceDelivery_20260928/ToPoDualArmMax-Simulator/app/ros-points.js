@@ -7,13 +7,16 @@ const sources=['rgbd','mid360','object_full','object_visible'];
 export class RosPointsPanel{
  constructor({environment,rgbd,lidar,toast}){
   Object.assign(this,{environment,rgbd,lidar,toast});this.is_running=false;this.is_busy=false;this.generation=0;this.last_sent_frames={};this.next_source_idx=0;
-  $('ros-panel').innerHTML=`<h2>ROS 2へ点群を送信</h2>
-  <label class="field-label">送信先ブリッジ<input id="ros-endpoint" value="http://127.0.0.1:8879" type="url"></label>
-  <fieldset><legend>送信トピック（複数選択可）</legend>
+  $('ros-panel').innerHTML=`<h2>ROS 2連携</h2>
+  <label class="field-label">接続先ブリッジ（送受信共通）<input id="ros-endpoint" value="http://127.0.0.1:8879" type="url"></label>
+  <section id="ros-send-panel"><h3>ブラウザ → ROS：送信</h3>
+  <fieldset><legend>点群トピック（複数選択可）</legend>
   ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（MID-360）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
   <label><input id="ros-depth" type="checkbox" checked> 深度画像・CameraInfo・画素対応点群も送信</label>
   <div class="row-actions"><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
-  <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>`;
+  <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>
+  <label><input id="ros-state-enable" type="checkbox"> 配置・TF・関節角の一式を送信（上限10 Hz）</label>
+  <p class="sub-note">高速な関節角の送受信は下の専用設定。こちらは /sim/joint_states、/sim/base_pose、/tf、/sim/tf。点群送信時は取得時の姿勢・TFも送信。</p></section>`;
   if(location.port==='8879')$('ros-endpoint').value=location.origin;
   this.object_capture=new ObjectCapturePanel({environment,rgbd});
   $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='新しい取得結果を送信します。取得の開始・停止はセンサー側で操作してください';};

@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-rosdep \
     ros-dev-tools \
     python3-pip \
+    python3-tornado \
     zip \
     unzip \
     vim \
@@ -68,7 +69,7 @@ RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.o
 RUN pip3 install --no-cache-dir "numpy<2" "ultralytics>=8.3,<9"
 
 # 局所回避の二次計画ソルバー
-RUN pip3 install --no-cache-dir "osqp==1.0.4"
+RUN pip3 install --no-cache-dir "osqp==1.0.4" "mujoco==3.3.7"
 
 # PCL RGB-D人物検出用HOG+SVM
 RUN mkdir -p /opt/pcl_people \

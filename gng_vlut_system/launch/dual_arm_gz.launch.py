@@ -6,7 +6,9 @@ import xml.etree.ElementTree as et
 
 import yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction, RegisterEventHandler, EmitEvent
+from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -83,7 +85,9 @@ def launch_setup(context):
     command = ['gz', 'sim', '-r', str(world)]
     if value('gui').lower() != 'true':
         command.insert(2, '-s')
-    return [ExecuteProcess(cmd=command, output='screen'),
+    simulator = ExecuteProcess(cmd=command, output='screen')
+    return [RegisterEventHandler(OnProcessExit(target_action=simulator,
+                on_exit=[EmitEvent(event=Shutdown(reason='Gazeboの終了'))])), simulator,
         Node(package='ros_gz_bridge', executable='parameter_bridge',
              arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'], output='screen'),
         Node(package='robot_state_publisher', executable='robot_state_publisher', namespace=namespace,

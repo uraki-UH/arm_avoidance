@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <Eigen/Core>
 #include "collision/self_collision_policy.hpp"
+#include "collision/independent_arm_model.hpp"
 #include "collision/geometric_self_collision_checker.hpp"
 #include "collision/joint_segment_collision.hpp"
 #include "robot_model/kinematic_adapter.hpp"
@@ -138,4 +139,72 @@ TEST(self_collision_policy, unregistered_backend_cannot_be_enabled_after_constru
   auto chain = simulation::createMultiArmKinematicChain(model, {{"body", "tool", ""}});
   simulation::GeometricSelfCollisionChecker checker(model, *chain, false);
   EXPECT_THROW(checker.setUseFCLBackend(true), std::invalid_argument);
+}
+
+// 対象腕・胴体・固定外装を保持し、反対腕の可動部分だけを除いた学習形状。
+TEST(independent_arm_model, preserves_body_and_mount_geometry) {
+  auto model = make_model();
+  add_link(model, "other_mount", false);
+  add_link(model, "other_cover");
+  add_link(model, "other_tip");
+  add_joint(model, "other_arm", "other_tip", kinematics::JointType::Fixed);
+  auto joint = *model.getJoint("mount_to_other_arm");
+  joint.parent_link = "other_mount";
+  model.addJoint(joint);
+  add_joint(model, "body", "other_mount", kinematics::JointType::Fixed);
+  add_joint(model, "other_mount", "other_cover", kinematics::JointType::Fixed);
+  const auto selected = simulation::make_independent_arm_collision_model(
+      model, "mount", {"mount", "other_mount"});
+  EXPECT_TRUE(selected.getLink("other_arm")->collisions.empty());
+  EXPECT_TRUE(selected.getLink("other_tip")->collisions.empty());
+  for (const auto *name : {"body", "upper", "cover", "tool", "other_cover"}) {
+    EXPECT_FALSE(selected.getLink(name)->collisions.empty()) << name;
+  }
+  EXPECT_FALSE(model.getLink("other_arm")->collisions.empty());
+  auto chain = simulation::createMultiArmKinematicChain(selected, {{"body", "tool", ""}});
+  simulation::GeometricSelfCollisionChecker checker(selected, *chain);
+  chain->updateKinematics(std::vector<double>(chain->getTotalDOF(), 0.0));
+  checker.updateBodyPoses(chain->getLinkPositions(), chain->getLinkOrientations());
+  EXPECT_TRUE(checker.checkCollision());
+}
+
+TEST(independent_arm_model, rejects_body_root_and_overlapping_arms) {
+  const auto model = make_model();
+  EXPECT_THROW(simulation::collect_moving_arm_links(model, "body"), std::invalid_argument);
+  EXPECT_THROW(simulation::collect_moving_arm_links(model, "missing"), std::invalid_argument);
+  EXPECT_THROW(simulation::make_independent_arm_collision_model(
+      model, "mount", {"mount", "upper"}), std::invalid_argument);
+  EXPECT_THROW(simulation::make_independent_arm_collision_model(
+      model, "mount", {"mount", "mount"}), std::invalid_argument);
+}
+
+TEST(independent_arm_model, inter_arm_collision_is_deferred_to_combination) {
+  auto model = make_model();
+  add_link(model, "other_mount", false);
+  add_joint(model, "body", "other_mount", kinematics::JointType::Fixed);
+  auto other_joint = *model.getJoint("mount_to_other_arm");
+  other_joint.parent_link = "other_mount";
+  other_joint.origin.translation() = Eigen::Vector3d(0.6, 0.0, 0.0);
+  model.addJoint(other_joint);
+  auto tool_joint = *model.getJoint("upper_to_tool");
+  tool_joint.origin.translation() = Eigen::Vector3d(0.3, 0.0, 0.0);
+  model.addJoint(tool_joint);
+  const auto selected = simulation::make_independent_arm_collision_model(
+      model, "mount", {"mount", "other_mount"});
+  auto chain = simulation::createMultiArmKinematicChain(model,
+      {{"mount", "tool", ""}, {"other_mount", "other_arm", ""}});
+  chain->updateKinematics(std::vector<double>(chain->getTotalDOF(), 0.0));
+  simulation::GeometricSelfCollisionChecker single_checker(selected, *chain);
+  single_checker.updateBodyPoses(chain->getLinkPositions(), chain->getLinkOrientations());
+  EXPECT_FALSE(single_checker.checkCollision());
+  simulation::GeometricSelfCollisionChecker full_checker(model, *chain);
+  full_checker.updateBodyPoses(chain->getLinkPositions(), chain->getLinkOrientations());
+  EXPECT_TRUE(full_checker.checkCollision());
+  bool has_inter_arm_pair = false;
+  for (const auto &pair : full_checker.collectSelfCollisionPairs()) {
+    has_inter_arm_pair = has_inter_arm_pair ||
+        (pair.first == "tool" && pair.second == "other_arm") ||
+        (pair.first == "other_arm" && pair.second == "tool");
+  }
+  EXPECT_TRUE(has_inter_arm_pair);
 }

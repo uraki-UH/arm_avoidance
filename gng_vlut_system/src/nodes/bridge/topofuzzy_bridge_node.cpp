@@ -167,7 +167,10 @@ public:
           "topofuzzy_bridge: failed to load safety context");
     }
 
-    calculateManipulabilityEllipsoidsDynamically();
+    // 関節選択済みモデルでは学習時の可操作度を保持
+    if (declare_parameter<bool>("enable_dynamic_manipulability", true)) {
+      calculateManipulabilityEllipsoidsDynamically();
+    }
 
     const int coord_layer_count = context_->gng->getCoordLayerCount();
     RCLCPP_INFO(get_logger(),

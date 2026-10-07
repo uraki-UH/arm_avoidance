@@ -25,7 +25,7 @@ def check_service(port, endpoint, key, expected):
     except Exception as error:
         raise RuntimeError(f'{port}番は使用中ですが、対象サービスの応答がありません') from error
     if value.get(key) == expected:
-        if expected == 'topo-pointcloud-bridge' and value.get('protocol_version', 1) < 2:
+        if expected == 'topo-pointcloud-bridge' and value.get('protocol_version', 1) < 3:
             raise RuntimeError(f'{port}番のROSブリッジは旧版です。bash start_ros.sh --restartで再起動してください')
         return True
     raise RuntimeError(f'{port}番は別サービスが使用中です')
@@ -88,7 +88,7 @@ def restart_existing(port, bridge_port):
 
 def bridge_revision():
     return tuple((Path(__file__).parent / name).stat().st_mtime_ns for name in
-                 ('pointcloud_bridge.py', 'robot_exchange.py', 'depth_output.py'))
+                 ('pointcloud_bridge.py', 'robot_exchange.py', 'depth_output.py', 'joint_stream.py', 'physics_scene.py', 'physics_stream.py'))
 
 
 def main():

@@ -60,7 +60,7 @@ def generate_launch_description():
         DeclareLaunchArgument('task_file', default_value=str(package_dir / 'config/simulation/task_program.yaml')),
         DeclareLaunchArgument('namespace', default_value='sim_topo_dual_arm_max_long'),
         DeclareLaunchArgument('scenario', default_value='empty'),
-        DeclareLaunchArgument('gui', default_value='false'),
+        DeclareLaunchArgument('gui', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('output_dir', default_value=''),
         DeclareLaunchArgument('enable_autostart', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('launcher_socket', default_value=os.environ.get('GNG_HARMONIC_SOCKET',

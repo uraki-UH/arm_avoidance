@@ -1,4 +1,5 @@
 import os
+import json
 import math
 import struct
 import yaml
@@ -134,6 +135,7 @@ def launch_setup(context, *args, **kwargs):
     yaml_enable_realsense_mount_tf = False
     yaml_realsense_mount_config = "package://gng_vlut_system/config/realsense_mount.yaml"
     yaml_vlut_resolution = 0.0
+    yaml_enable_independent_arms = False
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
@@ -187,6 +189,7 @@ def launch_setup(context, *args, **kwargs):
                     'realsense_mount_config', yaml_realsense_mount_config
                 )
                 gng_ns = root_ros_params.get('gng', {}) if isinstance(root_ros_params.get('gng', {}), dict) else {}
+                yaml_enable_independent_arms = safe_bool(gng_ns.get('enable_independent_arms'), False)
                 yaml_data_dir = gng_ns.get('data_directory', yaml_data_dir)
                 yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
                 gng_model_filename = gng_ns.get('gng_model_filename', gng_model_filename)
@@ -254,6 +257,10 @@ def launch_setup(context, *args, **kwargs):
     joint_control_backend = joint_control_backend or yaml_joint_control_backend
     if joint_control_backend not in ("viewer", "dynamixel", "external"):
         raise ValueError("joint_control_backendはviewer・dynamixel・externalのいずれかが必要です")
+
+    enable_independent_arms = safe_bool(
+        LaunchConfiguration("enable_independent_arms").perform(context), yaml_enable_independent_arms
+    )
 
     # 名前空間の決定（YAML優先、コマンドライン指定があればそちら）
     robot_name_default = LaunchConfiguration("robot_name").perform(context)
@@ -374,6 +381,40 @@ def launch_setup(context, *args, **kwargs):
     # 学習前のURDF表示と、学習済みGNG・VLUT配信の分離
     gng_file = resolve_result_path(gng_model_path, gng_model_filename)
     missing_result_files = [path for path in (gng_file, vlut_file) if not os.path.isfile(path)]
+    independent_profiles = []
+    if enable_independent_arms:
+        if gng_model_path or vlut_path:
+            raise ValueError("独立学習モデルはdir・idで指定してください。単体モデルの指定にはenable_independent_arms:=falseが必要です")
+        models_dir = os.path.join(data_dir if os.path.isabs(data_dir) else os.path.join(pkg_share, data_dir), exp_id)
+        manifest_path = os.path.join(models_dir, "independent_arms.json")
+        missing_result_files = []
+        if not os.path.isfile(manifest_path):
+            missing_result_files.append(manifest_path)
+        else:
+            with open(manifest_path, encoding="utf-8") as stream:
+                manifest = json.load(stream)
+            if manifest.get("version") != 1 or manifest.get("mode") != "independent_arms":
+                raise ValueError("独立学習モデルのmanifest形式が不正です")
+            profiles = manifest.get("profiles", [])
+            if len(profiles) != 2 or {item["name"] for item in profiles} != {"left_arm", "right_arm"}:
+                raise ValueError("left_armとright_armの独立学習モデルが必要です")
+            for profile in profiles:
+                metadata_path = os.path.join(models_dir, profile["metadata"])
+                with open(metadata_path, encoding="utf-8") as stream:
+                    metadata = json.load(stream)
+                if metadata.get("mode") != "independent_arm" or metadata.get("profile") != profile["name"]:
+                    raise ValueError("独立学習モデルのprofileが一致しません")
+                metadata_dir = os.path.dirname(metadata_path)
+                entry = dict(metadata, metadata_path=metadata_path,
+                             gng_path=os.path.join(metadata_dir, metadata["gng_file"]),
+                             vlut_path=os.path.join(metadata_dir, metadata["vlut_file"]))
+                independent_profiles.append(entry)
+                missing_result_files.extend(path for path in (entry["gng_path"], entry["vlut_path"]) if not os.path.isfile(path))
+            sizes = [read_vlut_voxel_size(item["vlut_path"]) for item in independent_profiles]
+            if not missing_result_files:
+                if sizes[0] is None or sizes[0] != sizes[1]:
+                    raise ValueError("左右VLUTのボクセル幅が一致しません")
+                self_recognition_resolution = sizes[0]
     has_learning_data = not missing_result_files
 
     actions = [
@@ -418,7 +459,7 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package="gng_vlut_system",
             executable="topofuzzy_bridge_node",
-            condition=IfCondition(str(has_learning_data).lower()),
+            condition=IfCondition(str(has_learning_data and not enable_independent_arms).lower()),
             name="topofuzzy_bridge_node",
             namespace=robot_name,
             parameters=[
@@ -461,6 +502,38 @@ def launch_setup(context, *args, **kwargs):
             additional_env={"RCUTILS_CONSOLE_OUTPUT_FORMAT": "[{severity}] [{name}] {message}"},
         )
     ]
+
+    if enable_independent_arms and has_learning_data:
+        for profile in independent_profiles:
+            name = profile["profile"]
+            actions.append(Node(
+                package="gng_vlut_system", executable="topofuzzy_bridge_node",
+                name="topofuzzy_" + name, namespace=robot_name,
+                parameters=[params_file, {
+                    "gng_model_path": profile["gng_path"], "vlut_path": profile["vlut_path"],
+                    "topic_name": "Tmap_" + name,
+                    "node_feature_topic": name + "/topological_node_features",
+                    "node_state_topic": name + "/gng_node_states",
+                    "stamped_node_state_topic": name + "/gng_node_states_stamped",
+                    "frame_id": gng_frame_id or "base_link",
+                    "source_frame_id": gng_source_frame_id or "base_link",
+                    "edge_mode": safe_int(edge_mode, 1), "publish_hz": publish_hz,
+                    "enable_viewer_status": True, "urdf_path": urdf_path,
+                    "occupied_voxels_topic": "occupied_voxels", "danger_voxels_topic": "danger_voxels",
+                    "grasp.state_topic": name + "/grasp_state",
+                    "grasp.applied_state_topic": name + "/grasp_state_applied",
+                    "enable_dynamic_manipulability": False,
+                    "visualization_gng.enabled": False,
+                }]))
+        profiles_by_name = {item["profile"]: item for item in independent_profiles}
+        actions.append(Node(
+            package="gng_vlut_system", executable="independent_arm_pair_node",
+            name="independent_arm_pair_node", namespace=robot_name,
+            parameters=[params_file, {
+                "left_model_path": profiles_by_name["left_arm"]["metadata_path"],
+                "right_model_path": profiles_by_name["right_arm"]["metadata_path"],
+                "urdf_path": urdf_path, "resource_root_dir": resource_root, "mesh_root_dir": mesh_root,
+            }]))
 
     if not has_learning_data:
         actions.insert(0, LogInfo(msg=(
@@ -596,7 +669,7 @@ def launch_setup(context, *args, **kwargs):
             'enable_world_bucket_publish': False, 'allow_unconnected_source_as_world': False,
             'voxel_size': self_recognition_resolution,
             'enable_reachability_filter': True,
-            'reachability_map_topic': environment.get('reachability_map_topic', 'Tmap_static'),
+            'reachability_map_topic': '' if enable_independent_arms else environment.get('reachability_map_topic', 'Tmap_static'),
         }
         for key, default in (('x_shift', 42), ('y_shift', 21), ('z_shift', 0), ('offset', 1000000)):
             roi_params[key] = int(yaml_voxel_idx.get(key, default))
@@ -653,6 +726,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
+        DeclareLaunchArgument("enable_independent_arms", default_value=""),
         DeclareLaunchArgument("state_topic", default_value="",
                               description="外部実測JointStateの購読先。未指定時は従来のViewer入力"),
         DeclareLaunchArgument("enable_robot_state_publisher", default_value="true",

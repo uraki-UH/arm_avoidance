@@ -8,6 +8,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -214,6 +215,19 @@ def create_matching_nodes(context):
             }],
         ),
     ]
+    nodes.append(Node(
+        package="gng_vlut_system",
+        executable="object_class_recognition_node.py",
+        name="object_class_recognition_node",
+        condition=IfCondition(LaunchConfiguration("enable_class_recognition")),
+        output="screen",
+        parameters=[{
+            "config_file": LaunchConfiguration("class_config_file"),
+            "template_ids": template_ids,
+            "candidate_topics": candidate_topics,
+            "output_topic": LaunchConfiguration("class_output_topic"),
+        }],
+    ))
     has_multiple_templates = len(templates) > 1
     for dataset_path, template_id, _, _ in templates:
         candidate_topic = f"/{template_id}/object_template_match_candidates"
@@ -262,6 +276,12 @@ def generate_launch_description():
             "profile_file",
             default_value=os.path.join(package_share, "config", "object_template_matching.yaml"),
         ),
+        DeclareLaunchArgument("enable_class_recognition", default_value="true"),
+        DeclareLaunchArgument(
+            "class_config_file",
+            default_value=os.path.join(package_share, "config", "object_class_recognition.yaml"),
+        ),
+        DeclareLaunchArgument("class_output_topic", default_value="/object_recognition/classes"),
         DeclareLaunchArgument("environment_topological_map_topic", default_value="/topological_map"),
         DeclareLaunchArgument("plane_clusters_topic", default_value="/plane_clusters"),
         DeclareLaunchArgument("frame_id", default_value="object_template"),

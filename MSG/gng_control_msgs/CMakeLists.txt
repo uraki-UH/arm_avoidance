@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/GraspRefinementArray.msg"
   "msg/GraspState.msg"
   "msg/JointControlClaim.msg"
+  "srv/CheckArmPair.srv"
   DEPENDENCIES geometry_msgs sensor_msgs std_msgs
 )
 

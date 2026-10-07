@@ -77,6 +77,14 @@ ros2 launch gng_vlut_system dual_arm_tasks.launch.py
 Humbleでは専用サービス経由、Jazzyでは直接起動。既定はheadless・開始待ち。終了はCtrl+C。
 Humbleコンテナの再起動・Docker権限の追加は不要。
 
+Gazebo GUI付き起動（同じHumble端末）:
+
+```bash
+ros2 launch gng_vlut_system dual_arm_tasks.launch.py gui:=true
+```
+
+表示先: 起動サービスに設定したホスト画面。GUIだけの起動でも初期状態は開始待ち。
+
 自動開始:
 
 ```bash
@@ -123,7 +131,9 @@ docker compose -f docker/compose.harmonic_launcher.yaml up -d
 - 起動受付: 1セッション。固定launchと検査済み引数のみ。Docker API・任意シェル実行の公開なし。
 - 終了連動: Ctrl+C・接続切断・5秒間のハートビート欠損。対象は当該セッションの子プロセスのみ。
 - 設定: `task_file`・`urdf`・ファイル指定の`scenario`は元workspaceの`gng_vlut_system/config/`または`urdf/`内。サービス側は読取専用。シナリオ名は組込み設定。コード・組込み設定の更新後は再ビルドと`up -d`が必要。
-- 制限: Humble経由は`gui:=false`・`output_dir`未指定。Jazzy直接起動は従来どおり。ソケット位置の変更は`launcher_socket`または`GNG_HARMONIC_SOCKET`。
+- GUI: `gui:=true/false`。X11ソケットと認証ファイルの読取専用共有、Mesa描画。起動前のOpenGL接続検査あり。ホスト側`DISPLAY`・`XAUTHORITY`をサービス構築時に継承。ログインし直して認証が変わった場合は`up -d --force-recreate`で受付を更新（実行中のタスクは先に終了）。
+- 描画デバイス: `GNG_RENDER_DEVICE`（既定`/dev/dri/renderD128`）、`GNG_RENDER_GID`（既定110）。別PCではデバイスと所有グループIDに合わせて指定。CPU描画は`GNG_GUI_SOFTWARE=1`で受付を更新。X11以外の画面接続は未検証。
+- 制限: Humble経由は`output_dir`未指定。Jazzy直接起動は従来どおり。ソケット位置の変更は`launcher_socket`または`GNG_HARMONIC_SOCKET`。
 - ROS通信: 起動端末の`ROS_DOMAIN_ID`を継承、サービス側はUDP。別のシミュレータとの同一domain・`/clock`併用不可。
 - 互換性: Humble/Jazzy混在時に`sequence size exceeds remaining buffer`警告あり。実環境の`Gid`は24／16バイト（[変更履歴](https://github.com/ros2/rmw_dds_common/blob/rolling/rmw_dds_common/CHANGELOG.rst)）。関節状態・タスク状態・操作サービスは検証済み。ディストリビューション間のノード一覧・全メッセージの互換性保証なし。
 
@@ -148,6 +158,7 @@ docker compose -f docker/compose.harmonic_launcher.yaml down
 Harmonicの空環境・max_longで移動中断、停止確認、明示再開、保持、経由点復帰、取消を確認。
 インストール済みパッケージだけの構成でも同試験に合格。ソースworkspaceやURDFの外部マウントなしでの起動を確認。
 Humble入口でも移動・中断・再開・保持・復帰・取消、引数なし起動、Ctrl+C終了、多重起動拒否を確認。
+GUI: Humble入口からmax_longのメッシュ描画、Intel GPU・Mesa経由のOpenGL描画を確認。Ctrl+C・GUIプロセス終了の両経路で、サーバー・タスク・接続launchの終了を確認。
 再現コマンド（専用コンテナ、出力先は未使用ディレクトリ）:
 
 ```bash

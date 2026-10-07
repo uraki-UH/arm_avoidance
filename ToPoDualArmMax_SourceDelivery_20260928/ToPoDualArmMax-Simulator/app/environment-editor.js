@@ -51,14 +51,15 @@ export class SceneEnvironment extends WorkEnvironment{
  focus(){if(this.selected)this.focusBounds(new THREE.Box3().setFromObject(this.selected.group));}
  focusBounds(b){const c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3()).length(),distance=Math.max(.4,s/(2*Math.sin(THREE.MathUtils.degToRad(this.camera.fov)/2)));this.orbit.target.copy(c);this.camera.position.copy(c).add(new THREE.Vector3(1,-1,.65).normalize().multiplyScalar(distance));this.orbit.update();}
  changed(){super.changed();this.scene.updateMatrixWorld(true);}
- itemState(x){return{type:x.type,color:x.color||'#ffffff',parent:x.parent||'table',position:x.group.position.toArray(),rpy:[x.group.rotation.x,x.group.rotation.y,x.group.rotation.z],scaleXYZ:x.group.scale.toArray(),visible:x.group.visible};}
+ itemState(x){return{type:x.type,color:x.color||'#ffffff',parent:x.parent||'table',position:x.group.position.toArray(),rpy:[x.group.rotation.x,x.group.rotation.y,x.group.rotation.z],scaleXYZ:x.group.scale.toArray(),visible:x.group.visible,physics:x.physics||{mode:'none',mass:.2}};}
  getState(){return{format:'topo-workspace/2',table:{...this.state},objects:this.items.map(x=>this.itemState(x)),mid360:this.getSensorState?.()||null};}
- applyItem(item,o){const g=item.group;(o.parent==='world'?this.scene:this.objectRoot).add(g);item.parent=o.parent||'table';g.position.fromArray(o.position);g.rotation.set(...(o.rpy||[0,0,o.yaw]),'ZYX');g.scale.fromArray(o.scaleXYZ||[o.scale,o.scale,o.scale]);g.visible=o.visible!==false;this.setColor(item,o.color);}
+ applyItem(item,o){item.physics=o.physics?{...o.physics}:{mode:'none',mass:.2};const g=item.group;(o.parent==='world'?this.scene:this.objectRoot).add(g);item.parent=o.parent||'table';g.position.fromArray(o.position);g.rotation.set(...(o.rpy||[0,0,o.yaw]),'ZYX');g.scale.fromArray(o.scaleXYZ||[o.scale,o.scale,o.scale]);g.visible=o.visible!==false;this.setColor(item,o.color);}
  disposeItem(x){x.group.traverse(o=>{if(o.isMesh){o.geometry.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material])if(!m.userData.shared)m.dispose();}});}
  async load(v){
   const t=v?.table;if(!['topo-workspace/1','topo-workspace/2'].includes(v?.format)||!t||!TABLES[t.type]||!['x','y','z','yaw','width','depth'].every(k=>Number.isFinite(t[k]))||['x','y','z'].some(k=>Math.abs(t[k])>100)||t.width<.06||t.width>50||t.depth<.06||t.depth>50||!Array.isArray(v.objects)||v.objects.length>30)throw Error('シーンの形式・寸法が不正です');
   const objects=v.objects.map(o=>({...o,parent:o.parent||'table',rpy:o.rpy||[0,0,o.yaw],scaleXYZ:o.scaleXYZ||[o.scale,o.scale,o.scale]}));
   for(const o of objects)if(!(OBJECTS[o.type]||VEHICLES[o.type])||!/^#[0-9a-f]{6}$/i.test(o.color)||!finite3(o.position)||o.position.some(x=>Math.abs(x)>100)||!finite3(o.rpy)||!finite3(o.scaleXYZ)||o.scaleXYZ.some(x=>x<.001||x>1000)||!['world','table'].includes(o.parent))throw Error('物体の設定が不正です');
+  for(const o of objects)if(o.physics&&(!['none','static','dynamic','kinematic'].includes(o.physics.mode)||!Number.isFinite(o.physics.mass)||o.physics.mass<.001||o.physics.mass>1000))throw Error('物理設定が不正です');
   for(const k of ['roll','pitch','height'])if(t[k]!==undefined&&!Number.isFinite(t[k]))throw Error('テーブル設定が不正です');
   if(t.height!==undefined&&(t.height<.06||t.height>50))throw Error('テーブルの高さが不正です');if(t.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(t.color))throw Error('テーブル色が不正です');
   if(v.mid360)this.validateSensorState?.(v.mid360);

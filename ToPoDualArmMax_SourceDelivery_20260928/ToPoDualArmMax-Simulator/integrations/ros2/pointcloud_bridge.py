@@ -119,7 +119,7 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
                 except ValueError as error:
                     return self.respond(400, {'error': str(error)})
             if urlsplit(self.path).path == '/api/points/status':
-                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 2, 'topics': topics})
+                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 3, 'topics': topics})
             super().do_GET()
 
         def do_POST(self):
@@ -159,6 +159,9 @@ def main():
     parser.add_argument('--port', type=int, default=8879)
     parser.add_argument('--allow-origin', action='append', default=[])
     args = parser.parse_args()
+    if not 1024 <= args.port <= 65534:
+        parser.error('HTTPポートは1024～65534。次のポートを関節WebSocketに使用します')
+    from joint_stream import start_joint_stream
     allowed = set(args.allow_origin) | {f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost')
                                        for port in (8877, args.port)}
     rclpy.init()
@@ -217,6 +220,7 @@ def main():
             info.publish(String(data=json.dumps(dict(meta, stamp_sec=stamp.sec, stamp_nanosec=stamp.nanosec))))
         return {'topic': topics[meta['source']], 'depth_topics': depth_topics if meta.get('depth_image') else [], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
 
+    stop_joint_stream = start_joint_stream(node, exchange, args.host, args.port + 1, allowed)
     server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed, publish_state, exchange.latest))
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -227,6 +231,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        stop_joint_stream()
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)

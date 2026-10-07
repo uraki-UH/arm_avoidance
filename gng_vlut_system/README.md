@@ -126,8 +126,43 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py
 ```
 
 学習結果の保存先・Viewerの読込先は、このYAMLの`gng.data_directory`と
-`gng.experiment_id`に従い、既定では`gng_results/topo_dual_arm_max_long/`です。
+`gng.experiment_id`に従います。左右別モデルの保存先は
+`gng_results/topo_dual_arm_max_long_independent/`です。
 別モデルを使う場合は`params_file:=...`で対象の設定ファイルを指定します。
+
+
+`gng.enable_independent_arms: true`では左右各7関節を別々に学習します。
+上限は片腕10,000ノード、初期240万回・衝突回避付き追加10万回・TCP辺構築10万回が片腕ごとの設定です。
+干渉ノードを除去するため、保存されるノード数は上限を下回る場合があります。
+各ノードが持つ姿勢はその腕の7関節角1組です。左右の全組合せを事前生成する構成ではありません。
+
+保存形式は次のとおりです。
+
+- `independent_arms.json`: 左右モデルの一覧。両方の保存成功後に生成。
+- `left_arm/`・`right_arm/`: 各腕の`gng.bin`、`vlut.bin`、`model.json`。
+- `model.json`: 関節名・順番、URDF、固定関節条件、ノード数、ボクセル幅。
+
+片腕の学習では反対腕の可動部分だけを衝突形状から外し、対象腕・胴体・固定外装を検査します。
+VLUTには対象腕の可動リンクと、その先の固定外装・指を収録します。
+腰・首・グリッパーは0の条件です。左右それぞれ安全なノードでも、組合せが安全とは限りません。
+
+Viewer用launchは`Tmap_left_arm`・`Tmap_right_arm`と、
+`/<robot_name>/check_arm_pair`サービスを起動します。
+`left_arm/topological_node_features`・`right_arm/topological_node_features`の`weight_angle`は各7要素です。
+ノードIDは各腕のグラフ内でのみ有効です。
+
+```bash
+ros2 service call /topo_dual_arm_max_long/check_arm_pair \
+  gng_control_msgs/srv/CheckArmPair '{left_node_id: 0, right_node_id: 0}'
+```
+
+IDは配信グラフから選択します。`start_state`なしは終点のみの検査です。
+現在姿勢を`start_state.name`・`start_state.position`に渡すと、左右14関節すべてを必須として、
+開始点・終点・途中の全身自己干渉を最大関節差0.025 radの間隔で検査します。
+連続時間の非干渉保証ではなく、関節角の線形補間に沿った離散検査です。
+指定した固定関節が0以外の場合は拒否します。省略した固定関節は保存時の0が前提です。
+`is_valid && is_collision_free`を採用条件とし、`joint_state`で組合せ後の14関節を取得します。
+環境障害物・実機への送信・既存の制御経路への自動介入はこのサービスの対象外です。
 
 
 オフライン学習では`gng_params.enable_static_collision_cache: true`が既定です。
@@ -169,11 +204,11 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=topo_dual_arm_max_long.yaml
 ```
 
-この設定の `viewer.gng_model_path`・`viewer.vlut_path` は、自己干渉検査済みの
-24,006ノードの保存済みモデルを指定しています。学習の出力先 `gng.data_directory`・
-`gng.experiment_id` とは独立しています。再学習した結果を表示する場合は、これらのViewer用パスを
-更新するか、launchの `dir`・`id` または `gng_model_path`・`vlut_path` で読み込み対象を指定します。
-これらの引数を指定した場合、YAMLのViewer用パスは適用されません。
+左右別モデルは`dir`・`id`で出力ディレクトリを指定して表示します。
+`gng_results/topo_dual_arm_max_long_independent/independent_arms.json`から左右のファイルを読み込みます。
+従来の14関節モデルを表示する場合は`enable_independent_arms:=false`と、
+`gng_model_path`・`vlut_path`を指定します。以前の検査済みモデルは
+`artifacts/gng_self_collision_fix_20261001/long/model/`に保持しています。
 名前・モデル・設定の切替には、起動中のブリッジの終了と新しい設定での再起動が必要です。
 
 別モデルのToPoDualArmは次の指定です。左右グリッパーの体積確認用トピック

@@ -59,8 +59,10 @@ def launch_command(request, workspace, output_dir):
         raise ValueError('ROS_DOMAIN_IDは0〜232で指定してください')
     if re.fullmatch(r'sim_[a-zA-Z0-9_]+', request['namespace']) is None:
         raise ValueError('名前空間はsim_で始まる英数字・下線が必要です')
-    if request['gui'] != 'false' or request['output_dir']:
-        raise ValueError('Humble経由はheadless専用です。gui:=false、output_dir未指定で使用してください')
+    if request['gui'] not in ('true', 'false'):
+        raise ValueError('guiはtrue/falseが必要です')
+    if request['output_dir']:
+        raise ValueError('Humble経由はoutput_dir未指定で使用してください')
     if request['enable_autostart'] not in ('true', 'false'):
         raise ValueError('enable_autostartはtrue/falseが必要です')
     args = {name: request[name] for name in ('namespace', 'enable_autostart')}
@@ -73,7 +75,7 @@ def launch_command(request, workspace, output_dir):
         if Path(scenario).is_absolute():
             raise ValueError('シナリオにはworkspace相対パスが必要です')
         scenario = str(shared_path(scenario, workspace))
-    args.update(scenario=scenario, gui='false', output_dir=str(output_dir))
+    args.update(scenario=scenario, gui=request['gui'], output_dir=str(output_dir))
     return ['ros2', 'launch', 'gng_vlut_system', 'dual_arm_tasks.launch.py'] + [
         f'{name}:={value}' for name, value in args.items()]
 
@@ -122,6 +124,21 @@ def stop_process(process):
     process.wait(timeout=1)
 
 
+def check_display(environment):
+    """シミュレータ起動前のX11認証・OpenGL接続検査。"""
+    if not environment.get('DISPLAY'):
+        raise ValueError('GUI用DISPLAYが未設定です。ホストの画面設定で起動サービスを更新してください')
+    try:
+        result = subprocess.run(['glxinfo', '-B'], env=environment, capture_output=True,
+                                text=True, timeout=8)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError('GUI描画の接続確認に失敗しました。起動サービスのイメージと画面設定を確認してください') from error
+    if result.returncode != 0 or 'OpenGL renderer string:' not in result.stdout:
+        detail = (result.stderr or result.stdout).strip()[-1500:]
+        raise ValueError('GUIへ接続できません。起動サービスのDISPLAY・XAUTHORITY・描画設定を確認してください: ' + detail)
+    return next(line for line in result.stdout.splitlines() if 'OpenGL renderer string:' in line)
+
+
 def run_session(server, peer, request):
     """接続・ハートビートと連動した一回分のシミュレーション。"""
     with tempfile.TemporaryDirectory(prefix='harmonic_session_') as output:
@@ -129,6 +146,9 @@ def run_session(server, peer, request):
         environment = dict(os.environ, ROS_DOMAIN_ID=str(request['ros_domain_id']),
                            GZ_PARTITION='harmonic_' + uuid.uuid4().hex,
                            ROS2CLI_NO_DAEMON='1', PYTHONUNBUFFERED='1')
+        if request.get('gui') == 'true':
+            renderer = check_display(environment)
+            peer.send({'event': 'log', 'text': renderer + '\n'})
         process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, start_new_session=True)
         print(f'開始: pid={process.pid} namespace={request["namespace"]}', flush=True)

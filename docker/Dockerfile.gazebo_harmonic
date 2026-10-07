@@ -26,6 +26,10 @@ RUN . /opt/ros/jazzy/setup.sh && colcon build --base-paths src/gng_vlut_system \
 
 # ソースworkspaceのマウント不要な実行イメージ。
 FROM dependencies
+# X11/OpenGL接続確認とMesa描画。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mesa-utils mesa-vulkan-drivers \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=package_build /opt/gng_harmonic /opt/gng_harmonic
 COPY --chmod=755 docker/harmonic_entrypoint.sh /harmonic_entrypoint.sh
 ENTRYPOINT ["/harmonic_entrypoint.sh"]

@@ -1,6 +1,7 @@
 """限定起動引数・接続切断・所有プロセス終了の回帰検査。"""
 from pathlib import Path
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -22,7 +23,9 @@ def asset_request(tmp_path):
                 enable_autostart='false', ros_domain_id=96)
 
 
-def test_command_and_request(asset_request, tmp_path):
+@pytest.mark.parametrize('gui', ['false', 'true'])
+def test_command_and_request(asset_request, tmp_path, gui):
+    asset_request['gui'] = gui
     values = dict(asset_request)
     values.pop('ros_domain_id')
     values['urdf'] = str(tmp_path / values['urdf'])
@@ -32,12 +35,13 @@ def test_command_and_request(asset_request, tmp_path):
     assert command[:4] == ['ros2', 'launch', 'gng_vlut_system', 'dual_arm_tasks.launch.py']
     assert 'enable_autostart:=false' in command
     assert 'output_dir:=/tmp/owned_output' in command
+    assert f'gui:={gui}' in command
 
 
 @pytest.mark.parametrize('name,value', [
     ('namespace', 'real_robot'), ('namespace', 'sim_x;echo'),
     ('ros_domain_id', True), ('ros_domain_id', -1), ('ros_domain_id', 233),
-    ('ros_domain_id', '96'), ('enable_autostart', '1'), ('gui', 'true'),
+    ('ros_domain_id', '96'), ('enable_autostart', '1'), ('gui', '1'),
     ('output_dir', '/workspace'), ('urdf', '/etc/passwd'),
     ('urdf', '../../../etc/passwd'), ('task_file', 'urdf/missing'),
     ('task_file', None), ('scenario', '/etc/passwd'), ('scenario', 'x;echo'),
@@ -55,6 +59,38 @@ def test_reject_symlink_escape(asset_request, tmp_path):
     link.symlink_to(outside)
     with pytest.raises(ValueError):
         launcher.shared_path(link, tmp_path)
+
+
+def test_display_missing():
+    with pytest.raises(ValueError, match='DISPLAY'):
+        launcher.check_display({})
+
+
+def test_display_success(monkeypatch):
+    def probe(command, **kwargs):
+        assert command == ['glxinfo', '-B']
+        assert kwargs['timeout'] == 8
+        assert kwargs['env']['DISPLAY'] == ':0'
+        return subprocess.CompletedProcess(command, 0, 'OpenGL renderer string: Mesa\n', '')
+    monkeypatch.setattr(launcher.subprocess, 'run', probe)
+    assert launcher.check_display({'DISPLAY': ':0'}) == 'OpenGL renderer string: Mesa'
+
+
+@pytest.mark.parametrize('error', [FileNotFoundError(), subprocess.TimeoutExpired('glxinfo', 8)])
+def test_display_probe_error(monkeypatch, error):
+    def probe(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(launcher.subprocess, 'run', probe)
+    with pytest.raises(ValueError, match='接続確認'):
+        launcher.check_display({'DISPLAY': ':0'})
+
+
+@pytest.mark.parametrize('code,stdout', [(1, ''), (0, '')])
+def test_display_unavailable(monkeypatch, code, stdout):
+    monkeypatch.setattr(launcher.subprocess, 'run', lambda *args, **kwargs:
+                        subprocess.CompletedProcess(args[0], code, stdout, 'display unavailable'))
+    with pytest.raises(ValueError, match='XAUTHORITY'):
+        launcher.check_display({'DISPLAY': ':0'})
 
 
 def test_peer_partial_frames_and_size():

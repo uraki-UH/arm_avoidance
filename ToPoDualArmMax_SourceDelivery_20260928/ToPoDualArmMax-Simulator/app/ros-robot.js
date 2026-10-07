@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {RosJointStream} from './ros-joints.js';
 import {robot_snapshot,attach_camera} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 
@@ -22,21 +23,25 @@ export function validate_trajectory(command,robot){
 export class RosRobotPanel{
  constructor({rgbd,toast}){
   this.rgbd=rgbd;this.toast=toast;this.is_busy=false;this.last_ms=0;this.sequence=null;this.generation=0;this.active=null;this.model=null;
-  const panel=document.createElement('div');panel.innerHTML=`<h2>ロボットとROS</h2><p>world基準の配置。XYZはm、角度はdeg。</p><div class="field-grid">${['x','y','z','roll','pitch','yaw'].map(name=>`<label>${name}<input id="ros-base-${name}" type="number" value="0" step="0.1"></label>`).join('')}</div><button id="ros-base-apply" class="wide-button">配置を適用</button><label><input id="ros-state-enable" type="checkbox"> 姿勢・TFを定期送信（上限10 Hz）</label><label><input id="ros-command-enable" type="checkbox"> ROSの関節軌道をブラウザで再生</label><button id="ros-command-stop" class="wide-button">軌道停止・受信OFF</button><pre id="ros-robot-status">接続待ち</pre><p>点群送信時は取得時の姿勢・TFも送信。軌道は位置のみの線形補間、受信後の相対時刻で再生。実機への指令なし。</p>`;
-  $('robot-panel').append(panel);
+  const placement_panel=document.createElement('section');placement_panel.innerHTML=`<h2>ロボット配置</h2><p>world基準の配置。XYZはm、角度はdeg。</p><div class="field-grid">${['x','y','z','roll','pitch','yaw'].map(name=>`<label>${name}<input id="ros-base-${name}" type="number" value="0" step="0.1"></label>`).join('')}</div><button id="ros-base-apply" class="wide-button">配置を適用</button>`;
+  $('robot-panel').append(placement_panel);
+  const panel=document.createElement('section');panel.id='ros-receive-panel';panel.innerHTML=`<h3>ROS → ブラウザ：受信</h3><label><input id="ros-command-enable" type="checkbox"> 関節軌道を受信して再生</label><p class="sub-note">表示モデルに対応する /sim/command/standard/joint_trajectory または /sim/command/long/joint_trajectory を受信。</p><button id="ros-command-stop" class="wide-button">軌道停止・受信OFF</button><pre id="ros-robot-status">受信OFF</pre><p class="sub-note">JointState受信は上の高速通信設定。TF・Poseによるベース位置の受信は未対応。</p><p class="sub-note">軌道は位置のみの線形補間、受信後の相対時刻で再生。実機への指令なし。</p>`;
+  $('ros-panel').append(panel);
+  this.joint_stream=new RosJointStream(this);
   $('ros-base-apply').onclick=()=>{try{const values=['x','y','z','roll','pitch','yaw'].map(name=>Number($('ros-base-'+name).value));if(values.some(v=>!Number.isFinite(v))||values.slice(0,3).some(v=>Math.abs(v)>100))throw Error('配置は有限値、XYZは±100 mです');this.stop();window.simulator.set_robot_placement(values);$('ros-robot-status').textContent='配置を更新';}catch(error){toast(error.message);}};
   $('ros-command-stop').onclick=()=>this.stop();
-  $('ros-command-enable').onchange=()=>{this.active=null;this.sequence=null;this.generation++;};
+  $('ros-command-enable').onchange=()=>{if($('ros-command-enable').checked)this.joint_stream.stop();this.active=null;this.sequence=null;this.generation++;};
   $('ros-endpoint').addEventListener('change',()=>this.stop());
   // 手動操作・モデル切替・タブ非表示での受信解除と再生停止
-  document.addEventListener('pointerdown',event=>{if(this.active&&!panel.contains(event.target)&&event.target!==this.rgbd.renderer.domElement)this.stop();},true);
+  document.addEventListener('pointerdown',event=>{if((this.active||$('ros-joints-receive').checked)&&!$('ros-panel').contains(event.target)&&!placement_panel.contains(event.target)&&event.target!==this.rgbd.renderer.domElement)this.stop();},true);
   document.addEventListener('keydown',event=>{if(event.key==='Escape')this.stop();});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)this.stop();});
  }
- stop(){this.active=null;this.sequence=null;this.generation++;$('ros-command-enable').checked=false;}
+ stop(){this.joint_stream?.stop();this.active=null;this.sequence=null;this.generation++;$('ros-command-enable').checked=false;}
  tick(now){
   const robot=this.rgbd.robot;
   if(this.model!==robot.modelId){this.stop();this.model=robot.modelId;const e=new THREE.Euler().setFromQuaternion(robot.quaternion,'ZYX');[...robot.position.toArray(),...['x','y','z'].map(k=>THREE.MathUtils.radToDeg(e[k]))].forEach((v,idx)=>$('ros-base-'+['x','y','z','roll','pitch','yaw'][idx]).value=v);}
+  this.joint_stream.tick();
   if(this.active){
    const {command,start}=this.active,t=(now-start)/1000,points=command.points;let idx=1;while(idx<points.length-1&&points[idx].time_sec<t)idx++;
    const a=points[idx-1],b=points[idx],u=Math.min(1,Math.max(0,(t-a.time_sec)/(b.time_sec-a.time_sec))),pose={};

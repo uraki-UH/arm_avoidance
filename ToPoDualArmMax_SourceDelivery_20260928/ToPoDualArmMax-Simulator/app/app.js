@@ -1,3 +1,4 @@
+import {PhysicsPanel} from './physics-ui.js';
 import {RosPointsPanel} from './ros-points.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -12,9 +13,12 @@ import { Robot, solveIK, orientationError } from './robot.js';
 import {SceneEnvironment as WorkEnvironment} from './environment-editor.js';
 import {LidarWorkspace} from './lidar-ui.js';
 import {RGBDWorkspace} from './rgbd-ui.js';
+import {camera_workspace} from './camera-ui.js';
 import {VMAIWorkspace} from './vm-ai.js';
 import {ROBOT_MODELS,initialModel} from './models.js';
+let physics_panel;
 let workspace, rgbd, lidar, ai, ros_points, demoMotion=null;
+let color_camera_panel;
 let model=initialModel(),switchingModel=false;
 const modelCache=new Map(),modelStates=new Map();
 
@@ -152,7 +156,7 @@ async function download(name,data,type){
   const response=await fetch('/api/export?name='+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':type,'X-ToPo-Export':'1'},body:blob});
   if(!response.ok)throw new Error('Static server');
   const result=await response.json();diagnostics.lastExport=result.url;
-  const link=$('export-link');link.href=result.url;link.hidden=false;link.textContent='保存済みファイルを開く：'+(type==='image/png'?'PNG画像':type==='application/zip'?'RGB-D一式ZIP':name==='ToPo-workspace.json'?'シーンJSON':'ポーズJSON');
+  const link=$('export-link');link.href=result.url;link.hidden=false;link.textContent='保存済みファイルを開く：'+(type==='image/png'?'PNG画像':type==='application/zip'?name:name==='ToPo-workspace.json'?'シーンJSON':'ポーズJSON');
   toast('シミュレータ内の exports フォルダーに保存しました');return;
  }catch{
   const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
@@ -222,7 +226,7 @@ function updateLabels(){for(const side of ['L','R']){const tcp=robot.tcp(side),p
 function updateUI(){const tcp=robot.tcp(activeSide),error=tcp.position.distanceTo(targets[activeSide].position)*1000,angle=orientationError(targets[activeSide].quaternion,tcp.quaternion).length()*DEG,hold=$('hold-orientation').checked,ok=error<1&&(!hold||angle<1);$('ik-state').textContent=playing?'ポーズを再生中':ok?'目標に到達':activeTarget&&solveFrames<40?'手先が追従中':'目標未到達';$('ik-error').textContent=error.toFixed(1)+' mm'+(hold?' / '+angle.toFixed(1)+'°':'');$('ik-dot').style.background=ok?'var(--green)':'var(--amber)';$('ik-state').style.color=ok?'#007700':'var(--amber)';$('actual-position').textContent='TCP '+tcp.position.toArray().map(v=>(v*1000).toFixed(1).padStart(6)).join(' / ')+' mm';syncControls();if(!gizmo.dragging)syncTargetInputs();if(window.simulator)document.documentElement.dataset.simState=JSON.stringify(window.simulator.getState());}
 // 標準品質では中間バッファと画面全体の後処理を省略
 function draw(){if(ao.enabled)composer.render();else renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(overlay,camera);renderer.autoClear=true;}
-function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;rgbd?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}draw();diagnostics.frames++;frameCount++;if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;physics_panel?.tick(now);rgbd?.tick(now);color_camera_panel?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}draw();diagnostics.frames++;frameCount++;if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
 
 function updateModelUI(){
  document.querySelector('.product-header strong').textContent=model.title;document.title=model.title+' · Motion Studio';
@@ -242,14 +246,14 @@ async function switchModel(id){
  const previous=model,previousRobot=robot,restoreTabFocus=!!document.activeElement?.closest('#model-tabs'),wasLive={lidar:lidar.live,rgbd:rgbd?.live,ai:ai?.running};
  modelStates.set(model.id,{pose:robot.getPose(),keyframes:structuredClone(keyframes)});
  stopPlayback();releaseMarker();ready=false;switchingModel=true;diagnostics.ready=false;
- lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);
+ lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);
  document.querySelector('aside').inert=true;document.querySelector('footer').inert=true;
  $('loading').classList.remove('done');$('loading').setAttribute('aria-hidden','false');$('load-progress').style.width='0%';updateModelUI();
  try{
   const next=await loadRobotModel(ROBOT_MODELS[id]);scene.remove(robot);scene.add(next);robot=next;model=ROBOT_MODELS[id];
   robot.setPose(modelStates.get(id)?.pose||homePose());
   keyframes.splice(0,keyframes.length,...(modelStates.get(id)?.keyframes||[]));renderKeyframes();buildJointControls();
-  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);
+  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);
   for(const t of Object.values(trails)){t.points=[];t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry();}
   syncTargets();syncControls();setSide(activeSide);updateCloudLayers();renderer.shadowMap.needsUpdate=true;
   await renderer.compileAsync(scene,camera);const url=new URL(location.href);url.searchParams.set('model',id);history.replaceState(null,'',url);
@@ -257,7 +261,7 @@ async function switchModel(id){
  }catch(e){
   scene.remove(robot);robot=previousRobot;model=previous;scene.add(robot);robot.setPose(modelStates.get(model.id).pose);
   keyframes.splice(0,keyframes.length,...modelStates.get(model.id).keyframes);renderKeyframes();buildJointControls();
-  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);syncTargets();syncControls();
+  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);syncTargets();syncControls();
   toast('モデル切替失敗：'+e.message);diagnostics.errors.push(String(e));
  }finally{
   switchingModel=false;ready=true;diagnostics.ready=true;document.querySelector('aside').inert=false;document.querySelector('footer').inert=false;
@@ -276,7 +280,7 @@ async function init(){
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
   $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');$('load-status').textContent='LOCAL · READY';
   ready=true;diagnostics.ready=true;toast('手先の矢印をドラッグして操作できます');
-  window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,diagnostics,keyframes,
+  window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,color_camera_panel,get physics_panel(){return physics_panel;},diagnostics,keyframes,
    apply_ros_pose:pose=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;robot.setPose(pose);syncTargets();renderer.shadowMap.needsUpdate=true;},
    set_robot_placement:values=>{stopPlayback();activeTarget=false;robot.position.fromArray(values);robot.quaternion.setFromEuler(new THREE.Euler(...values.slice(3).map(v=>v*RAD),'ZYX'));robot.updateMatrixWorld(true);syncTargets();renderer.shadowMap.needsUpdate=true;},setSide,setMode,solveIK,homePose,presetPose,animatePose,syncTargets,validatePose,switchModel,
    getState:()=>({ready,model:model.id,modelTitle:model.title,source:model.urdf,switchingModel,activeSide,mode,workspace:workspace?.getState(),rgbd:rgbd?.lastSummary,dragging:gizmo.dragging,playing:!!playing,quality:$('quality').value,holdOrientation:$('hold-orientation').checked,appearance:{greenBaseHex:'#'+materials.green.color.getHexString(),toneMapping:'Neutral, chroma preserved',logo:'branding/FuzzRoBo-logo.png'},joints:robot.getPose(),tcp:Object.fromEntries(['L','R'].map(s=>{const p=robot.tcp(s);return[s,{position:p.position.toArray(),quaternion:p.quaternion.toArray(),target:targets[s].position.toArray(),errorMm:p.position.distanceTo(targets[s].position)*1000,errorDeg:orientationError(targets[s].quaternion,p.quaternion).length()*DEG}]})),diagnostics:{...diagnostics},triangles:robot.triangles}),
@@ -305,10 +309,13 @@ function initWorkspace(){
  workspace=new WorkEnvironment({scene,overlay,camera,renderer,orbit,toast,onEdit:()=>updateMarkerVisibility()});
  try{rgbd=new RGBDWorkspace({scene,overlay,renderer,camera,robot,environment:workspace,exclude:[grid,...Object.values(trails).map(x=>x.line),robot.links.camera_link],toast,download,aim:aimAtTable,onCloudOnly:()=>updateCloudLayers()});}
  catch(e){$('sensor-panel').textContent='RGB-Dを初期化できません：'+e.message;diagnostics.errors.push(String(e));}
+ try{color_camera_panel=new camera_workspace({scene,renderer,robot,environment:workspace,exclude:[grid,...Object.values(trails).map(x=>x.line),robot.links.camera_link],toast,download,aim:aimAtTable});}
+ catch(e){$('camera-panel').textContent='カメラを初期化できません：'+e.message;diagnostics.errors.push(String(e));}
  lidar=new LidarWorkspace({scene,overlay,robot,renderer,camera,environment:workspace,toast,download,onLayers:()=>updateCloudLayers()});
  ai=new VMAIWorkspace({scene,camera,robot,lidar,rgbd,environment:workspace,toast,motion:{toggle:toggleDemoMotion,active:()=>!!demoMotion}});
  ros_points=new RosPointsPanel({environment:workspace,rgbd,lidar,toast});
- document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>x.classList.toggle('active',x===b));for(const name of ['robot','environment','sensor','lidar','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=b.dataset.panel==='environment'&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
+ physics_panel=new PhysicsPanel({environment:workspace,robot:()=>robot,scene});
+ document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>x.classList.toggle('active',x===b));for(const name of ['robot','environment','sensor','camera','lidar','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=b.dataset.panel==='environment'&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
  $('scene-save').onclick=()=>download('ToPo-workspace.json',JSON.stringify(workspace.getState(),null,2),'application/json');
  $('scene-load').onclick=()=>$('scene-file').click();$('scene-file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>1e6)throw Error('ファイルが大きすぎます');await workspace.load(JSON.parse(await f.text()));toast('シーンを読み込みました');}catch(error){toast('シーン読込エラー：'+error.message);}};
 }

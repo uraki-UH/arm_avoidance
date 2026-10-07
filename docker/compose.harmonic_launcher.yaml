@@ -1,9 +1,11 @@
-# 既存Humbleコンテナを変更しない、headless専用の起動受付。
+# 既存Humbleコンテナを変更しない、GUI・headless共通の起動受付。
 name: gng-harmonic-launcher
 services:
   launcher:
     image: "${GNG_HARMONIC_IMAGE:-uraki-gazebo-harmonic:local}"
     user: "${GNG_LAUNCHER_UID:-1000}:${GNG_LAUNCHER_GID:-1000}"
+    group_add:
+      - "${GNG_RENDER_GID:-110}"
     init: true
     network_mode: host
     restart: unless-stopped
@@ -16,11 +18,27 @@ services:
       FASTRTPS_DEFAULT_PROFILES_FILE: /run/fastdds_udp.xml
       FASTDDS_DEFAULT_PROFILES_FILE: /run/fastdds_udp.xml
       PYTHONDONTWRITEBYTECODE: "1"
+      DISPLAY: "${DISPLAY:-:0}"
+      XAUTHORITY: /run/gng-xauthority
+      QT_QPA_PLATFORM: xcb
+      QT_X11_NO_MITSHM: "1"
+      __GLX_VENDOR_LIBRARY_NAME: mesa
+      __NV_PRIME_RENDER_OFFLOAD: "0"
+      LIBGL_ALWAYS_SOFTWARE: "${GNG_GUI_SOFTWARE:-0}"
+    devices:
+      - "${GNG_RENDER_DEVICE:-/dev/dri/renderD128}:/dev/dri/renderD128"
     volumes:
-      - ../artifacts/harmonic_launcher:/run/gng-harmonic
+      - ${GNG_LAUNCHER_RUNTIME_DIR:-../artifacts/harmonic_launcher}:/run/gng-harmonic
       - ../gng_vlut_system/config:/workspace/gng_vlut_system/config:ro
       - ../urdf:/workspace/urdf:ro
       - ./fastdds_harmonic_udp.xml:/run/fastdds_udp.xml:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - type: bind
+        source: "${XAUTHORITY:-/run/user/1000/gdm/Xauthority}"
+        target: /run/gng-xauthority
+        read_only: true
+        bind:
+          create_host_path: false
     command:
       - python3
       - /opt/gng_harmonic/gng_vlut_system/lib/gng_vlut_system/harmonic_launcher.py

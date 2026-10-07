@@ -11,6 +11,7 @@
 | 共通描画 | [libs/arrow_visualization](../../libs/arrow_visualization)：矢印Marker・状態色・購読補助 | GNG、把持表示、Viewerから共用 |
 | 到達域 | [core/reachability](../src/core/reachability)：URDFサンプリング | [生成・表示仕様](reachability_maps.md)。経路GNGから独立 |
 | 目標タスク | [core/tasks](../src/core/tasks)：指定目標・安全退避の選択部品 | 共有計画ノードから利用 |
+| ファジークラス認識 | [object_class_recognition.py](../scripts/object_class_recognition.py)：階層・属性・適合度・失効 | [object_class_recognition_node.py](../scripts/object_class_recognition_node.py)：テンプレート候補購読とJSON配信。[仕様](TECHNICAL_SPEC.md#ファジークラス属性認識) |
 | 逐次タスク実行 | [task_program.py](../scripts/task_program.py)：enum・方式登録・移動／保持・中断復帰 | [task_executor.py](../scripts/task_executor.py)：Harmonicの標準軌道Action。[設定・起動・制限](dual_arm_simulation.md#タスクの組替えと方式選択) |
 | 軌道計画 | [core/planning](../src/core/planning)：グラフ探索、経路コスト、探索索引 | [nodes/planning](../src/nodes/planning)：目標選択・共有計画ノード |
 | 回避 | [core/avoidance](../src/core/avoidance)：従来アーム回避の補助処理 | [nodes/avoidance](../src/nodes/avoidance)：`arm_avoid_node` |

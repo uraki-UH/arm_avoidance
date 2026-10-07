@@ -25,11 +25,13 @@ def launch_setup(context, *args, **kwargs):
     validation_dump_path = LaunchConfiguration("validation_dump_path").perform(context)
     gng_profile_names = LaunchConfiguration("gng_profile_names").perform(context)
     use_task_density_bias = LaunchConfiguration("use_task_density_bias").perform(context)
+    enable_independent_arms = LaunchConfiguration("enable_independent_arms").perform(context)
     enable_nearest_index = LaunchConfiguration("enable_nearest_index").perform(context)
     enable_static_collision_cache = LaunchConfiguration("enable_static_collision_cache").perform(context)
     max_node_num = LaunchConfiguration("max_node_num").perform(context)
     max_iterations = LaunchConfiguration("max_iterations").perform(context)
     refine_iterations = LaunchConfiguration("refine_iterations").perform(context)
+    coord_edge_iterations = LaunchConfiguration("coord_edge_iterations").perform(context)
 
     # 上書き用パラメータの準備
     overrides = {}
@@ -70,6 +72,10 @@ def launch_setup(context, *args, **kwargs):
         overrides["gng.profile_names"] = gng_profile_names
     use_task_density_bias_value = (use_task_density_bias.lower() == "true")
     overrides["gng_params.use_task_density_bias"] = use_task_density_bias_value
+    if enable_independent_arms:
+        if enable_independent_arms.lower() not in ("true", "false"):
+            raise ValueError("enable_independent_arms must be true or false")
+        overrides["gng.enable_independent_arms"] = enable_independent_arms.lower() == "true"
     if enable_nearest_index:
         if enable_nearest_index.lower() not in ("true", "false"):
             raise ValueError("enable_nearest_index must be true or false")
@@ -82,6 +88,8 @@ def launch_setup(context, *args, **kwargs):
         overrides["gng_params.max_node_num"] = int(max_node_num)
     if max_iterations:
         overrides["gng_params.max_iterations"] = int(max_iterations)
+    if coord_edge_iterations:
+        overrides["gng_params.coord_edge_iterations"] = int(coord_edge_iterations)
     if refine_iterations:
         overrides["gng_params.refine_iterations"] = int(refine_iterations)
 
@@ -104,6 +112,8 @@ def generate_launch_description():
     dual_cfg = os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")
     
     return LaunchDescription([
+        DeclareLaunchArgument("enable_independent_arms", default_value=""),
+        DeclareLaunchArgument("coord_edge_iterations", default_value=""),
         DeclareLaunchArgument(
             "params_file",
             default_value=dual_cfg,

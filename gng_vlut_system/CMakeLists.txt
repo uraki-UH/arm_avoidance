@@ -192,6 +192,7 @@ if(BUILD_TESTING)
     ament_target_dependencies(gng_nearest_index_benchmark Eigen3 rclcpp urdfdom)
   endif()
 
+  ament_add_pytest_test(test_object_class_recognition test/test_object_class_recognition.py)
   ament_add_pytest_test(test_dual_arm_collision_geometry test/test_dual_arm_collision_geometry.py)
   ament_add_pytest_test(test_dual_arm_launch test/test_dual_arm_launch.py)
   ament_add_pytest_test(test_avoidance_motion test/test_avoidance_motion.py)
@@ -213,6 +214,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_gazebo_stop_latch test/test_gazebo_stop_latch.cpp)
   target_include_directories(test_gazebo_stop_latch PRIVATE src)
   ament_add_pytest_test(test_joint_command_model test/test_joint_command_model.py)
+  ament_add_pytest_test(test_mobile_state_graph test/test_mobile_state_graph.py)
   ament_add_gtest(test_joint_state_utils test/test_joint_state_utils.cpp)
   target_include_directories(test_joint_state_utils PRIVATE src)
   ament_target_dependencies(test_joint_state_utils Eigen3 sensor_msgs)
@@ -270,6 +272,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/urdf")
 endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
+  scripts/object_class_recognition.py
+  scripts/mobile_state_graph.py
   scripts/task_program.py
   scripts/joint_motion_state.py
   scripts/local_qp.py
@@ -280,6 +284,8 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 )
 
 install(PROGRAMS
+  scripts/object_class_recognition_node.py
+  scripts/mobile_state_graph_node.py
   scripts/task_executor.py
   scripts/harmonic_launcher.py
   scripts/joint_motion_observer.py

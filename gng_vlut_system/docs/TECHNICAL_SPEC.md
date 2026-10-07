@@ -991,6 +991,25 @@ profileの`voxel_exclude`はこの自動収録後にも適用する。
 `L_link2`から`L_link7`、`L_gripper_base`、`L_finger_left`、`L_finger_right`を収録する。
 `L_shoulder_mount`と`L_tcp`はcollision geometryを持たないため関係レコードを生成しない。
 
+### 左右独立の7関節モデル
+
+`gng.enable_independent_arms`が有効な`offline_urdf_trainer_dual.launch.py`は、
+選択profileごとに独立GNG・VLUTを保存する。`topo_dual_arm_max_long`の左右は各7次元。
+各profileのroot以下で可動jointを経たリンク集合を抽出し、反対腕の集合だけを
+学習用collision modelから除去する。可動jointより手前の固定外装は胴体側に保持する。
+対象腕のVLUTは同じ可動リンク集合の全形状を収録し、従来の`voxel_exclude`を適用しない。
+
+`model.json`は関節名と順番・固定関節条件・URDF・ノード数・ボクセル幅を記録する。
+`independent_arms.json`は左右の保存成功後の生成物。Viewerはmanifestに基づき
+`Tmap_left_arm`・`Tmap_right_arm`を配信する。関節選択済みの可操作度は保存値を利用する。
+
+`independent_arm_pair_node`の`gng_control_msgs/srv/CheckArmPair`は指定ノードを結合し、
+反対腕の形状を含む全身モデルで再検査する。`start_state`ありは左右全関節の入力を必須とし、
+線形補間を最大関節差0.025 radで検査する。固定関節変更・欠落関節・重複・非有限値・
+可動域外は不正入力。衝突時の応答は`is_valid=true, is_collision_free=false`。
+これは自己干渉検査APIであり、環境障害物の検査や実機コマンド送信の実装ではない。
+詳細な起動・保存形式は[README](../README.md#双腕学習viewerの既定モデル)を参照。
+
 ## 15. 単体HTMLの物体GNGテンプレート
 
 `ToPo-FUZZY_Manipulation_v1.html`は、現在のGNGを物体テンプレートJSONとして保存し、
@@ -1181,6 +1200,67 @@ yaw仮説ごとに一対一対応させる。`min_plane_extent_allow_ratio`か�
 
 `object_template_map_publisher_node`へ`activation_state_topic`を設定しない既存の起動方法は、
 従来どおり起動直後から静的マップを配信する。
+
+#### ファジークラス・属性認識
+
+`object_class_recognition_node.py`は既存matcherの候補topicを購読し、クラスごとの適合度と
+代表テンプレートの属性を`/object_recognition/classes`へ`std_msgs/msg/String`のJSONで配信する。
+ROS非依存の計算部品は`scripts/object_class_recognition.py`、定義は
+`config/object_class_recognition.yaml`。個別テンプレートの照合・確定・配信経路へのフィードバックなし。
+
+- クラス: `vehicle` → `passenger_car` → `kei_car`、`vehicle` → `truck`、
+  `container` → `mug`などの親子関係。複数親にも対応。
+- 属性: `large`、`box_shaped`など、クラスと同時に成立する注釈。
+  車両固有の分岐なし。属性はテンプレートの注釈に由来し、環境中の実寸法の測定結果ではない。
+- テンプレート対応: `templates.<template_id>.classes`と`attributes`へ所属度0〜1を記述。
+  同じクラスへ複数の代表テンプレートを登録可能。IDは保存JSONの`template_id`との完全一致が必要。
+  このYAMLへの追記だけではモデルを読込まない。照合対象の選択は既存のsources YAMLで指定。
+
+`score`をクラスごとの`min_score`〜`max_score`から0〜1へ線形変換し、端点で飽和した値と
+テンプレートの所属度の小さい方を適合度とする。複数代表からの根拠は最大値で統合し、
+代表数の増加だけでは適合度を増やさない。子の適合度は祖先へ最大値で伝播する。
+確率ではなく合計1への正規化なし。既定の変換範囲・属性注釈は実データ校正前の初期値であり、
+出力は`is_probability: false`、`is_calibrated: false`。
+
+`min_visible_ratio`はクラス・属性別。例えば可視率0.20のトラック候補では、
+既定設定で「車」の評価は可能だが「トラック」と「大型」は`insufficient`。
+親の可視率条件を子より厳しくする設定、階層の循環、未定義クラス、非有限値はエラー。
+
+| 出力 | 内容 |
+| --- | --- |
+| `hypotheses` | テンプレート候補ごとの元score、可視率、受信後秒数、クラス・属性適合度 |
+| `classes` / `attributes` | 期限内の候補から得たシーン内の存在根拠。物体単位の統合結果ではない |
+| `support_template_id` | 最大の根拠となったテンプレートID。数値評価がある場合のみ |
+| `unconfigured_template_ids` | 読込済みだがクラス定義のないテンプレート。個別照合は継続 |
+
+`membership_th`による`supported` / `weak`の区別と、未観測`unobserved`、
+観測不足`insufficient`、候補反証`rejected`、更新停止`stale`を出力する。
+後者4状態の`membership`は`null`。一つのテンプレートが反証されたことを、クラス全体の不存在と解釈しない。
+入力はテンプレートごとに最新1件だけ保持し、受信から`max_candidate_age_sec`経過後は失効。
+時刻は単調時計。既定保持時間5秒、配信頻度5 Hz。
+
+matcherはテンプレートごとに異なる物体へ対応する可能性があり、安定した物体追跡IDも持たないため、
+シーン全体の出力には`scope: scene_presence`を付与する。車とマグカップの候補を同一物体に統合しない。
+位置合わせ・物体単位の追跡・Viewer専用表示はこの認識層の対象外。
+制御した形状からCPU GNGを生成する初期検証では、箱への車クラス誤支持、車種間の重複支持、
+小物のグリッド密度不足を確認。現段階の適合度だけで細分類の確定には使用しない。
+小物のグリッド細分化ではマグカップの別観測を支持できたが、取っ手のない円筒も支持するため、
+密度だけでは識別性能の不足は解消しない。実測センサー・実環境での精度は未評価。
+
+実入力検証は[`check_object_class_recognition.py`](../test/check_object_class_recognition.py)。
+CPU GNG → C++ matcher → ROS非依存のクラス評価部品を通す試験。
+`--stage prepare`で4代表、`--stage evaluate`で登録グラフ・再学習・半面遮蔽・形状変更・負例の
+19条件を生成。既定はGNG上限128ノード・24出力フレーム、点群間引き幅とノード間隔は物体の広がりから設定。
+マグカップの密度切り分けは`--stage mug_detail`（256ノード、`node.grid=0.02`、5条件）。
+`--template-dir`、`--output`、現行ビルドの`--matcher`を指定し、既存ノードと異なるROSドメインで実行。
+点群の乱数は`--seed`で指定可能だが、CPU GNG内部の乱数状態の固定は未実施。
+正常終了は計測完了だけを示し、分類合格を意味しない。クラスの取扱いと条件別結果は出力JSONで確認。
+
+`object_template_matching.launch.py`では既定で同時起動。
+`enable_class_recognition:=false`で追加ノードの起動を無効化可能。
+設定変更は`class_config_file`、配信先変更は`class_output_topic`で指定する。
+ノード単独起動時は`template_ids`と、同順序の`candidate_topics`が必要。
+新規実行ファイルの利用前に`gng_vlut_system`の再ビルド・install反映が必要。
 
 #### 15.2.1 Viewer Matchタブによる実行時調整
 
