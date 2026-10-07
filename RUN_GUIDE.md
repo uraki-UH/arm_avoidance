@@ -40,12 +40,190 @@ http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 
 
 ## 点群から占有ボクセルに変換
-ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
+ros2 launch gng_vlut_system point_to_voxel.launch.py \
   input_topic:=/semantic_points \
   output_topic:=/topo_voxel_ids
 
+### `/dataset/points`をToPoDualArmのVLUTへ反映
+
+`/dataset/points`のheader frameは`world`とし、点群のframeを強制的に
+`ToPoDualArm/base_link`として扱わない。点群時刻のTF
+`world`→`ToPoDualArm/base_link`でロボット座標系へ変換した後、2 cm voxel IDを
+VLUT入力へ渡す構成。
+
+```bash
+# ROI voxel化、world index、occupied/danger更新の起動
+ros2 launch gng_vlut_system environment_to_vlut.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+```
+
+このlaunchはViewer gatewayやロボットを起動しない。先に別terminalで
+`gng_viewer_bridge.launch.py`を起動した状態で使用する。既定で`ToPoDualArm.yaml`からVLUT fileを特定し、`vlut.bin` headerの
+`voxel_size`をROI voxel化と`occupied_voxels`出力の両方へ自動適用する。したがって、
+通常は`voxel_size`や`output_voxel_size`を指定しない。別のrobot設定では、同じrobotの
+`params_file`を指定する。headerを持たない旧VLUTだけは、起動ログを警告して手動設定値の
+`0.02 m`へフォールバックする。
+
+`environment_voxelization.world_index`では、index構築とROI抽出経路を別々に選択できる。
+
+| `enable_build` | `enable_roi_query` | 動作 |
+| --- | --- | --- |
+| `false` | `false` | indexを構築せず、各robot座標系へ直接ROI voxel化 |
+| `true` | `false` | world indexはViewer確認用に構築し、ROI voxel化は直接方式 |
+| `true` | `true` | world indexを構築し、bucket AABB抽出後にROI voxel化 |
+
+`enable_build: false`と`enable_roi_query: true`の組合せは不正として起動を停止する。`enable_bucket_publish`はworld bucketの
+Viewer出力だけを制御する。`enable_build`が`false`ならbucket出力も無効になる。旧設定の
+`world_index.enable`は、新しい2項目が未指定の場合だけ両方の既定値として扱う後方互換設定である。
+`ToPoDualArm.yaml`の既定値は`enable_build: true`、`enable_roi_query: true`、`0.2 m` bucketである。
+
+複数robotのindex ROI抽出は`parallel_thread_num`で並列化できる。`1`は逐次、`4`は追加ROIを最大4 workerで
+並列抽出する設定である。共有設定例は`4`、単一robot設定は`1`である。運用ログには
+`world_points`、`world_buckets`、`candidate`、`roi_voxels`、`build_ms`、`primary_query_ms`、
+`additional_query_ms`、`processing_ms`を出力する。比較専用の`world_bucket_benchmark_node`は廃止した。
+
+### ToPo Fuzzy Viewerでのworld index確認
+
+Viewer gatewayを別途起動後、Viewerのtopic一覧から次の`voxel_msgs/Voxel`を有効にする。
+
+- `/ToPoDualArm/roi_voxel_ids`: `ToPoDualArm/base_link`座標系のVLUT入力ROI voxel
+- `/ToPoDualArm/world_index_buckets`: `world`座標系の非空world bucket voxel
+
+どちらもreliable/transient-localでpublishするため、Viewerを後から接続しても直近の状態を
+受信する。`world index更新:`ログの`roi_voxels`と`world_buckets`が0以外であること、Viewer側で
+両topicのレイヤーを有効化すること、`world`から`ToPoDualArm/base_link`へのTFが存在することが
+可視化の確認条件である。
+
+`environment_voxelization.base_frame`と`robot_name`から、入力点群の変換先
+`ToPoDualArm/base_link`を自動解決する。`source_frame_id`が空なら、入力点群headerの
+frameを使用する。移動マニピュレータは自己位置推定またはSLAMが毎時刻の
+`world`→`ToPoDualArm/base_link`をpublishするため、YAMLの`enable_static_tf`は`false`のままにする。
+固定設置だけは同YAMLの`enable_static_tf: true`と`static_tf_*`へ外部キャリブレーション値を設定する。
+既存のlocalization TFがある場合に静的TFを追加してはならない。
+
+### 複数robotの共有world index
+
+`environment_voxelization.world_index.consumers`に各robotの`params_file`、`robot_name`、
+`voxel_topic`を列挙すると、`environment_to_vlut.launch.py`がworld bucket索引を1回だけ構築し、
+各robotのTF・ROI・VLUT header解像度で個別にROI voxelを出力する。
+`config/world_index.yaml`は同一URDFを2台使う動作例であり、実機では各要素の`params_file`を
+各robotの設定へ置き換える。
+
+```bash
+ros2 launch gng_vlut_system environment_to_vlut.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/world_index.yaml
+```
+
+robot本体とViewer gatewayは各robotごとに別terminalで起動する。共有world index launchはそれらを
+起動しないため、既存の`gng_viewer_bridge.launch.py`とnode名・topic名が重複しない。
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm_A
+```
+
+2台目以降も、そのrobotの`params_file`と`robot_name`で同様に起動する。
+
+`/ToPoDualArm/occupied_voxels`と`/ToPoDualArm/danger_voxels`はfull snapshotとしてpublishする。
+TopoFuzzyの`SafetyVlutMapper`は前回snapshotとの差分だけをVLUT node countへ加減算するため、
+追加・削除ボクセルのための別launchは不要。full snapshotにより、点群から消えた占有も安全に解除する。
+
+danger判定方式は`ToPoDualArm.yaml`の`environment_voxelization.danger_source`で選択する。
+
+- `environment_inflation`: 現在の既定値。`danger_inflation`だけ環境voxelを膨張してdangerへ送る方式
+- `vlut_distance`: 環境側膨張を0にし、VLUT relationの距離値を`vlut_danger_dist`で判定する方式
+
+現行の`ToPoDualArm10000/vlut.bin`はrelation距離が全て0のため、`vlut_distance`には切り替えない。
+距離付きVLUTを生成した後にだけ、次の設定へ変更する。
+
+```yaml
+environment_voxelization:
+  danger_source: "vlut_distance"
+  vlut_danger_dist: 0.025
+```
+
+起動後は、`/dataset/points`、`/ToPoDualArm/roi_voxel_ids`、
+`/ToPoDualArm/occupied_voxels`が順に更新されることを確認する。
+
+```bash
+ros2 topic hz /dataset/points
+ros2 topic echo --once /ToPoDualArm/roi_voxel_ids
+ros2 topic echo --once /ToPoDualArm/occupied_voxels
+```
+
+既定では`ToPoDualArm/base_link`へ点群を変換し、同座標系のreachability範囲
+`x=[-0.1, 0.5] m`、`y=[-1.0, 1.0] m`、`z=[-1.0, 1.0] m`だけを
+各軸0.2 m拡張した領域を逐次ボクセル化する。別ロボットでは次の引数をrobot configの
+TCPサンプリング範囲へ合わせる。
+
+```bash
+ros2 launch gng_vlut_system point_to_voxel.launch.py \
+  target_frame_id:=<robot_base_frame> \
+  min_reachability_x:=<min_x> max_reachability_x:=<max_x> \
+  min_reachability_y:=<min_y> max_reachability_y:=<max_y> \
+  min_reachability_z:=<min_z> max_reachability_z:=<max_z> \
+  reachability_margin_x:=<margin_x> \
+  reachability_margin_y:=<margin_y> \
+  reachability_margin_z:=<margin_z>
+```
+
+marginには把持物の最大張り出し、位置推定誤差、安全余裕を含める。移動マニピュレータでは、
+ボクセルを保持したい移動範囲を`reachability_margin_x`と`reachability_margin_y`へ加える。
+領域は各点群時刻のTFで現在のロボット基準座標系へ追従するため、marginには先読みする
+台車移動範囲を指定する。不要な高さ方向のボクセル増加を避けるため、各軸を個別指定する。
+
+全点を従来どおりボクセル化する場合は`enable_reachability_filter:=false`を指定する。
+dense bitmapは既定で最大8,000,000 voxelとし、超える範囲では再利用hashへ自動fallbackする。
+メモリ上限を調整する場合は`max_dense_voxel_num`を指定する。
+
+### depth画素handle付きpersistent world indexの比較
+
+`depth_world_index_benchmark_node`は固定解像度のraw depth画素を安定handleにし、world bucket内の
+点だけを差分更新する。各フレームのdepth全画素を読むが、複数robotのためのworld index構築は1回だけで、
+各robotには局所AABB query後の点だけをVLUT IDへ変換する。debug有効時だけ、確認用voxel topicもpublishする。
+
+camera-to-worldが固定である前提のため、実機では`camera_world_*`に固定外部パラメータを指定する。
+camera姿勢、camera_infoの画像寸法、intrinsicsの変更時は安全側でworld indexを全再構築する。
+
+```bash
+# ターミナル1: persistent indexの実行設定
+ros2 run gng_vlut_system depth_world_index_benchmark_node --ros-args \
+  --params-file /ros2_ws/src/gng_vlut_system/config/depth_world_index_benchmark.yaml
+
+# ターミナル2: raw depthとcamera_infoを同時に配信
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
+  --topics \
+    /camera/camera/depth/image_rect_raw \
+    /camera/camera/depth/camera_info
+```
+
+YAML既定値では、毎フレームの`direct8`全再構築比較を実行しない。`robot_num:=1`のpersistent queryと
+debug voxel出力だけのため、Viewer確認時に基準方式のCPU負荷を加えない。比較が必要なときだけ
+`enable_comparison_benchmark:=true`を指定する。`depth_update_mm_th:=1`と`free_confirmation_num:=1`では、
+比較有効時の`mismatch_num=0`、`recall=1`、`precision=1`が毎フレーム全再構築と同じVLUT IDの条件となる。`free_confirmation_num:=3`は
+depth値が0になった画素を3フレーム残す保守設定であり、false negativeを抑える代わりに一時的な
+false positiveを許容する。valid depthが奥へ移る変化は、現観測を優先して即時更新する。
+
+常駐時の毎フレーム計測ログは既定で有効である。処理時間、world bucket数、ROI voxel数を出力し、
+ログを抑止する場合だけ`enable_runtime_log:=false`を指定する。
+
+YAMLのROIは今回の狭い局所chunkの実測条件である。`robot_spacing_x:=0.0`と
+`robot_yaw_step_deg:=0.0`はworld indexの共有費用だけを分離する比較条件であり、実機のrobot配置には
+各robotのworld poseを使う。実機の固定cameraでは同YAMLの`camera_world_*`を外部キャリブレーション値へ変更する。
+
+#### ROI voxelとworld indexの視覚確認
+
+YAMLの既定値ではdebug publishが有効で、`frame_num:=0`のためCtrl-Cまで継続する。ToPo Fuzzy Viewerでは次の2 topicだけを有効化する。
+
+- `/depth_world_index/debug/roi_voxels` (`voxel_msgs/Voxel`): ROIで採用された2 cm voxel。VLUT入力と同一形式
+- `/depth_world_index/debug/world_buckets_voxels` (`voxel_msgs/Voxel`): 非空world bucketを`bucket_size=0.2 m`のvoxelとして出力。world indexの格子確認用
+
+camera-to-worldをidentityにしたraw depth rosbagでは、両topicの`frame_id`は`camera_depth_optical_frame`になる。
+実機設定では、`camera_world_*`でworld座標系へ変換し、同時に`debug_frame_id`をそのworld frameへ指定する。
+
 ##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
-ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   robot_name:=ToPoDualArm \
   input_topic:=/topo_voxel_ids \
   danger_inflation:=0.08
@@ -82,7 +260,7 @@ ros2 launch ais_gng topological_grid.launch.py \
 
 ##　dynamixel handlerの起動（使えない可能性が高い）
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
-USB の番号が変わる環境では、こちらのラッパーの方が安定します。
+USB の番号が変わる環境では、こちらのラッパーの方が安定。
 ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
 
 ##　dynamixelの/dynamixel/state/present　トピックをjoint_statesに変換
@@ -107,7 +285,7 @@ ros2 launch gng_vlut_system self_recognition_viz.launch.py \
   mask_topic:=/ToPoDualArm/right_arm_voxel
 
 ##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
-ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   robot_name:=ToPoDualArm \
   input_topic:=/ToPoDualArm/right_arm_voxel \
   danger_inflation:=0.05
@@ -188,14 +366,12 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
     /camera/camera/depth/camera_info \
   --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw
 
-# 再生終了後、ターミナル3でCtrl-Cしてrecordを終了する。
-# 作成後は変換ノードなしで次を再生できる。
+# 再生終了後、作成後は変換御殿軍を次で再生。
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
 
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   use_voxel_collision:=true \gng_profile_names:=left_arm 
-
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証
 
 ## 衝突urdfの球化
@@ -208,19 +384,17 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/
 ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=ToPoDualArm   target_topic:=target_joint_states   state_topic:=joint_states   command_topic:=joint_commands   max_joint_velocity:=0.6   publish_hz:=20.0
 
 
-python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
+python3 test_tf_publisher.py --static --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2 --hold-seconds 1.0
 
 
-同じ座標系でそのまま通す場合は、`voxel_to_vlut_bridge` の `target_frame_id` は指定しません。
+同じ座標系でそのまま通す場合は、`voxel_to_vlut` の `target_frame_id` は指定しません。
 このとき、入力 voxel の frame をそのまま使って再エンコードします。
 
 
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
 
-
-
-GNGノードを、把持候補の前段となるラベル付きボクセルへ変換する。
+## GNGノードを、把持候補の前段となるラベル付きボクセルへ変換?
 `/downsampling/grasp_support` は `UNKNOWN_OBJECT` を優先し、`DEFAULT`で残りを補う
 把持支持点群である。`graspnet.yaml`では最大10,000点（unknown最大5,000点）を空間的な
 カバレッジ優先で選ぶ。GNG本体は、別に設定した入力点群を均一選択して学習する。
@@ -279,31 +453,13 @@ GNGノードID単位の所属を持ち越して差分だけ直すため、所属
 1本のエッジだけで所属が漏れ出すのを防ぐ。
 
 ```bash
-# 初回はビルドが必要
-docker exec gng_cpu_container_uraki bash -lc '
-source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
-cd /ros2_ws && colcon build --packages-select ais_gng --symlink-install'
-```
-
-```bash
 ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
 ```
 
-```bash
-# 数値確認
-ros2 topic echo /topological_planar_clusters_incremental --once
-```
-
-可視化はToPoFuzzy Viewerの`Connection & Streams`から
 `/topological_planar_clusters_incremental/markers/obb` と
-`/topological_planar_clusters_incremental/markers/nodes` を個別に有効化する。前者はOBB境界・
-法線矢印・任意テキスト、後者は所属GNGノード点とクラスタ内エッジである。クラスタIDから
-決まる色なので、IDが持続する限り色も変わらない。
+`/topological_planar_clusters_incremental/markers/nodes` 。
 
-ログの`changes=`が0に張り付けば定常状態、`chain=`は鎖状（共分散の第2固有値が第1固有値に
-対して小さすぎる形）として棄却した領域数、
-`update=`が1フレームの処理時間である。
 
 ## 把持ボクセルテンプレート（左グリッパ、POC）
 
@@ -389,19 +545,7 @@ GNG法線方向の補助スコアは `normal_drift_mean_score` と `normal_drift
 変えない。極端に疎な入力またはキャッシュが大きくなり過ぎる入力では自動的に従来の直接探索へ戻る。
 
 `point_activity_update_enabled:=true`では、点群占有頻度と点密度から重い更新の実行間隔を連続的に変える。
-静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで
-統計を取るため、`grid_size`を小さくしても活動度の統計セル数が過剰に増えにくい。
-
-# 補間由来だけを確認
-ros2 topic echo /topo_voxel_ids/edge_inferred
-ros2 topic echo /topo_voxel_ids/triangle_inferred
-
-# 表示専用で、把持候補には含まれない孤立セルを確認
-ros2 topic echo /topo_voxel_ids/isolated
-
-候補labelや点群支持、補間条件を変える場合も、launch 引数を増やさず
-`topological_grid.yaml`をコピーしたプロファイルを作り、`params_file`で指定する。
-
+静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで統計を取るため、`grid_size`を小さくしても活動度の統計セル数が過剰に増えにくい。
 
 ## realsense 
 ros2 launch realsense2_camera rs_launch.py \
@@ -481,15 +625,6 @@ ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
 `*_grip_sweptV_topological_map`
 topicを自動発見するため、`ros2 run
 rosbridge_server rosbridge_websocket`だけではなく上記launchを使用する。
-
-```bash
-python3 -m http.server 8000
-```
-
-```text
-# 3) ブラウザで開く
-http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
-```
 
 
 ## 左腕をtopological_map_avoidanceで動かす

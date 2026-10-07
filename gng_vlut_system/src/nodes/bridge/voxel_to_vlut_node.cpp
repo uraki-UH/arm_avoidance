@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <iterator>
 #include <mutex>
 #include <unordered_set>
@@ -22,10 +23,10 @@
 
 namespace robot_sim::bridge {
 
-class VoxelToVlutBridgeNode : public rclcpp::Node {
+class VoxelToVlutNode : public rclcpp::Node {
 public:
-  explicit VoxelToVlutBridgeNode(const rclcpp::NodeOptions &options)
-  : Node("voxel_to_vlut_bridge_node", options),
+  explicit VoxelToVlutNode(const rclcpp::NodeOptions &options)
+  : Node("voxel_to_vlut_node", options),
     grid_(::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE),
     processor_(::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE) {
     declare_parameter<std::string>("input_topic", "/self_recognition/voxel_mask");
@@ -35,6 +36,9 @@ public:
     declare_parameter<double>("danger_inflation", ::robot_sim::common::Constants::DEFAULT_SAFETY_MARGIN);
     declare_parameter<double>("output_voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<double>("publish_hz", 30.0);
+    declare_parameter<double>("identity_transform_translation_th", 1e-9);
+    declare_parameter<double>("identity_transform_rotation_th", 1e-9);
+    declare_parameter<double>("voxel_size_match_th", 1e-9);
 
     input_topic_ = get_parameter("input_topic").as_string();
     occupied_topic_ = get_parameter("occupied_voxels_topic").as_string();
@@ -42,6 +46,12 @@ public:
     target_frame_id_ = get_parameter("target_frame_id").as_string();
     danger_inflation_ = std::max(0.0, get_parameter("danger_inflation").as_double());
     output_voxel_size_ = std::max(1e-6, get_parameter("output_voxel_size").as_double());
+    identity_transform_translation_th_ = std::max(
+        0.0, get_parameter("identity_transform_translation_th").as_double());
+    identity_transform_rotation_th_ = std::max(
+        0.0, get_parameter("identity_transform_rotation_th").as_double());
+    voxel_size_match_th_ = std::max(
+        0.0, get_parameter("voxel_size_match_th").as_double());
     const double hz = std::max(0.1, get_parameter("publish_hz").as_double());
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -49,7 +59,7 @@ public:
 
     mask_sub_ = create_subscription<voxel_msgs::msg::Voxel>(
         input_topic_, rclcpp::QoS(1).reliable().transient_local(),
-        std::bind(&VoxelToVlutBridgeNode::maskCallback, this, std::placeholders::_1));
+        std::bind(&VoxelToVlutNode::maskCallback, this, std::placeholders::_1));
 
     occupied_pub_ = create_publisher<std_msgs::msg::Int64MultiArray>(
         occupied_topic_, rclcpp::QoS(1).reliable().transient_local());
@@ -58,7 +68,7 @@ public:
 
     publish_timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / hz)),
-        std::bind(&VoxelToVlutBridgeNode::publishLatest, this));
+        std::bind(&VoxelToVlutNode::publishLatest, this));
 
     graph_timer_ = create_wall_timer(
         std::chrono::seconds(2),
@@ -72,7 +82,7 @@ public:
         });
 
     RCLCPP_INFO(get_logger(),
-                "VoxelToVlutBridgeNode initialized. input=%s occupied=%s danger=%s target_frame=%s inflation=%.4f output_voxel_size=%.4f",
+                "VoxelToVlutNode initialized. input=%s occupied=%s danger=%s target_frame=%s inflation=%.4f output_voxel_size=%.4f",
                 input_topic_.c_str(), occupied_topic_.c_str(),
                 danger_topic_.c_str(), target_frame_id_.c_str(), danger_inflation_, output_voxel_size_);
   }
@@ -82,6 +92,16 @@ private:
     std::sort(values.begin(), values.end());
     values.erase(std::unique(values.begin(), values.end()), values.end());
     return values;
+  }
+
+  bool isIdentityTransform(const Eigen::Isometry3d &source_to_target) const {
+    return source_to_target.translation().norm() <= identity_transform_translation_th_ &&
+           (source_to_target.linear() - Eigen::Matrix3d::Identity()).cwiseAbs().maxCoeff() <=
+               identity_transform_rotation_th_;
+  }
+
+  bool hasSameVoxelSize(double input_voxel_size) const {
+    return std::abs(input_voxel_size - output_voxel_size_) <= voxel_size_match_th_;
   }
 
   std::vector<long> computeDangerShell(const std::vector<long> &occupied) {
@@ -169,17 +189,22 @@ private:
     processor_.getGrid().setVoxelSize(output_voxel_size_);
     processor_.getGrid().setIndexingParams(msg->x_shift, msg->y_shift, msg->z_shift, msg->offset);
 
-    latest_occupied_ = convertVoxelIds(
-        std::vector<long>(msg->data.begin(), msg->data.end()),
-        input_voxel_size, output_voxel_size_, source_to_target);
+    const bool can_reuse_voxel_ids =
+        isIdentityTransform(source_to_target) && hasSameVoxelSize(input_voxel_size);
+    std::vector<long> input_ids(msg->data.begin(), msg->data.end());
+    latest_occupied_ = can_reuse_voxel_ids
+                           ? uniqueSorted(std::move(input_ids))
+                           : convertVoxelIds(
+                               input_ids, input_voxel_size, output_voxel_size_, source_to_target);
     latest_danger_ = computeDangerShell(latest_occupied_);
     has_new_data_ = true;
 
     RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Mask received: input_voxel_size=%.4f input=%zu occupied=%zu danger=%zu source_frame=%s target_frame=%s",
+        "Mask received: input_voxel_size=%.4f input=%zu occupied=%zu danger=%zu source_frame=%s target_frame=%s voxel_id_reuse=%s",
         input_voxel_size, msg->data.size(), latest_occupied_.size(),
-        latest_danger_.size(), source_frame.c_str(), target_frame_id_.c_str());
+        latest_danger_.size(), source_frame.c_str(), target_frame_id_.c_str(),
+        can_reuse_voxel_ids ? "true" : "false");
   }
 
   void publishLatest() {
@@ -199,6 +224,9 @@ private:
   std::string target_frame_id_ = "world";
   double danger_inflation_ = 0.0;
   double output_voxel_size_ = ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE;
+  double identity_transform_translation_th_ = 1e-9;
+  double identity_transform_rotation_th_ = 1e-9;
+  double voxel_size_match_th_ = 1e-9;
 
   GNG::Analysis::IndexVoxelGrid grid_;
   robot_sim::analysis::VoxelProcessor processor_;
@@ -219,12 +247,12 @@ private:
 
 } // namespace robot_sim::bridge
 
-RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::bridge::VoxelToVlutBridgeNode)
+RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::bridge::VoxelToVlutNode)
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node =
-      std::make_shared<robot_sim::bridge::VoxelToVlutBridgeNode>(
+      std::make_shared<robot_sim::bridge::VoxelToVlutNode>(
           rclcpp::NodeOptions());
   rclcpp::spin(node);
   rclcpp::shutdown();

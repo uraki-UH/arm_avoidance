@@ -5,13 +5,13 @@ ais_gng_node:
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
-    node.eta_decay_rate: 0.99
+    node.eta_decay_rate: 1.00
     node.s1_reset_range: 0.1
-    node.grid: 0.5
+    node.grid: 10.0
     node.s1_age_max: [6, 6, 6, 3] #[default, safe, wall, unknown]
     node.clusted_s1_age: [20, 20, 6, 3] #[default, safe, wall, unknown]
-    node.interval: [0.1, 0.4, 0.4, 0.05] #[default, safe, wall, unknown]
-    node.static.age_min: 250 # 長期記憶の年齢
+    node.interval: [5.0, 3.0, 2.0, 1.0] #[default, safe, wall, unknown]
+    node.static.age_min: -1 # 長期記憶の年齢
 
     ds.transformed: true
     ds.range_max: 0.2
@@ -51,12 +51,12 @@ ais_gng_node:
     input.topic_names: ["/scan"]
     input.point_cloud_num: 200000
     input.base_frame_id: "map"
-    input.voxel_grid_unit: 0.00
+    input.voxel_grid_unit: 10.0
     input.visualize: true
     input.local_coordinates: false
-    input.x_min: 0.
-    input.x_max: 100.
-    input.y_min: -50.
-    input.y_max: 50.
-    input.z_min: -5.0
-    input.z_max: 10.0
+    input.x_min: -1000.
+    input.x_max: 1000.
+    input.y_min: -5000.
+    input.y_max: 5000.
+    input.z_min: -50.0
+    input.z_max: 100.0

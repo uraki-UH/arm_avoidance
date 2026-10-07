@@ -37,14 +37,8 @@ public:
                           const std::vector<long>& current_danger) {
         if (!spatial_index_) return;
 
-        auto normalized_occupied = current_occupied;
-        auto normalized_danger = current_danger;
-        std::sort(normalized_occupied.begin(), normalized_occupied.end());
-        normalized_occupied.erase(std::unique(normalized_occupied.begin(), normalized_occupied.end()),
-                                  normalized_occupied.end());
-        std::sort(normalized_danger.begin(), normalized_danger.end());
-        normalized_danger.erase(std::unique(normalized_danger.begin(), normalized_danger.end()),
-                                normalized_danger.end());
+        auto normalized_occupied = normalize(current_occupied);
+        auto normalized_danger = normalize(current_danger);
 
         added_occ_.clear(); removed_occ_.clear();
         std::set_difference(prev_occupied_voxels_.begin(), prev_occupied_voxels_.end(),
@@ -66,6 +60,41 @@ public:
 
         prev_occupied_voxels_ = std::move(normalized_occupied);
         prev_danger_voxels_   = std::move(normalized_danger);
+    }
+
+    void updateFromVlutDistance(const std::vector<long>& current_occupied,
+                                float danger_dist) {
+        if (!spatial_index_) return;
+
+        auto normalized_occupied = normalize(current_occupied);
+        added_occ_.clear();
+        removed_occ_.clear();
+        added_dan_.clear();
+        removed_dan_.clear();
+        std::set_difference(prev_occupied_voxels_.begin(), prev_occupied_voxels_.end(),
+                            normalized_occupied.begin(), normalized_occupied.end(),
+                            std::back_inserter(removed_occ_));
+        std::set_difference(normalized_occupied.begin(), normalized_occupied.end(),
+                            prev_occupied_voxels_.begin(), prev_occupied_voxels_.end(),
+                            std::back_inserter(added_occ_));
+
+        const float clamped_danger_dist = std::max(0.0f, danger_dist);
+        constexpr float collision_dist = 1e-6f;
+        if (!added_occ_.empty()) {
+            spatial_index_->updateCounts(
+                added_occ_, node_collision_counts_, 1, collision_dist);
+            spatial_index_->updateCounts(
+                added_occ_, node_danger_counts_, 1, clamped_danger_dist);
+        }
+        if (!removed_occ_.empty()) {
+            spatial_index_->updateCounts(
+                removed_occ_, node_collision_counts_, -1, collision_dist);
+            spatial_index_->updateCounts(
+                removed_occ_, node_danger_counts_, -1, clamped_danger_dist);
+        }
+
+        prev_occupied_voxels_ = std::move(normalized_occupied);
+        prev_danger_voxels_.clear();
     }
 
     /**
@@ -101,6 +130,13 @@ public:
     const std::vector<long>& getPrevDangerVoxels() const { return prev_danger_voxels_; }
 
 private:
+    static std::vector<long> normalize(const std::vector<long>& values) {
+        auto normalized = values;
+        std::sort(normalized.begin(), normalized.end());
+        normalized.erase(std::unique(normalized.begin(), normalized.end()), normalized.end());
+        return normalized;
+    }
+
     std::shared_ptr<ISpatialIndex> spatial_index_;
     
     std::vector<int> node_collision_counts_;

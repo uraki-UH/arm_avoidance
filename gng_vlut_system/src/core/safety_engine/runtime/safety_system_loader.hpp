@@ -26,6 +26,13 @@ struct SafetySystemContext {
             mapper->updateFromVoxels(occupied_vids, danger_vids);
         }
     }
+
+    void updateFromVlutDistance(const std::vector<long>& occupied_vids,
+                                float danger_dist) {
+        if (mapper) {
+            mapper->updateFromVlutDistance(occupied_vids, danger_dist);
+        }
+    }
 };
 
 /**

@@ -121,6 +121,9 @@ public:
     declare_parameter("source_frame_id", "world");
     declare_parameter("occupied_voxels_topic", "occupied_voxels");
     declare_parameter("danger_voxels_topic", "danger_voxels");
+    declare_parameter("environment_voxelization.danger_source",
+                      "environment_inflation");
+    declare_parameter("environment_voxelization.vlut_danger_dist", 0.025);
     declare_parameter("grasp.state_topic", "grasp_state");
     declare_parameter("grasp.applied_state_topic", "grasp_state_applied");
     declare_parameter("node_feature_topic", "topological_node_features");
@@ -176,6 +179,27 @@ public:
     frame_id_ = get_parameter("frame_id").as_string();
     source_frame_id_ = get_parameter("source_frame_id").as_string();
     publish_hz_ = std::max(0.1, get_parameter("publish_hz").as_double());
+    danger_source_ = get_parameter(
+        "environment_voxelization.danger_source").as_string();
+    std::transform(
+        danger_source_.begin(), danger_source_.end(), danger_source_.begin(),
+        [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    if (danger_source_ != "environment_inflation" &&
+        danger_source_ != "vlut_distance") {
+      RCLCPP_WARN(
+          get_logger(),
+          "未対応danger_source=%s。environment_inflationへフォールバック",
+          danger_source_.c_str());
+      danger_source_ = "environment_inflation";
+    }
+    vlut_danger_dist_ = std::max(
+        0.0, get_parameter(
+                 "environment_voxelization.vlut_danger_dist").as_double());
+    if (danger_source_ == "vlut_distance" && vlut_danger_dist_ <= 1e-6) {
+      RCLCPP_WARN(
+          get_logger(),
+          "vlut_distanceのdanger距離が衝突距離以下。danger状態は生成されない設定");
+    }
 
     // Resolve frame IDs with namespace if they are relative
     std::string ns = get_namespace();
@@ -263,9 +287,11 @@ public:
 
     RCLCPP_INFO(get_logger(),
                 "topofuzzy_bridge_node initialized. edge_mode=%s "
-                "occupied_topic=%s danger_topic=%s grasp_state_topic=%s",
+                "occupied_topic=%s danger_topic=%s danger_source=%s "
+                "vlut_danger_dist=%.4f grasp_state_topic=%s",
                 activeEdgeModeName(edge_mode_).c_str(),
                 occupied_voxels_topic_.c_str(), danger_voxels_topic_.c_str(),
+                danger_source_.c_str(), vlut_danger_dist_,
                 grasp_state_topic_.c_str());
 
     publishGraph();
@@ -518,7 +544,12 @@ private:
     }
 
     const auto t0 = std::chrono::steady_clock::now();
-    context_->update(latest_occ_vids_, latest_dan_vids_);
+    if (danger_source_ == "vlut_distance") {
+      context_->updateFromVlutDistance(latest_occ_vids_,
+                                       static_cast<float>(vlut_danger_dist_));
+    } else {
+      context_->update(latest_occ_vids_, latest_dan_vids_);
+    }
     const auto t1 = std::chrono::steady_clock::now();
     const double vlut_update_ms =
         std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -1020,6 +1051,8 @@ private:
   std::string occupied_voxels_topic_relative_;
   std::string danger_voxels_topic_ = "danger_voxels";
   std::string danger_voxels_topic_relative_;
+  std::string danger_source_ = "environment_inflation";
+  double vlut_danger_dist_ = 0.025;
   std::string grasp_state_topic_ = "grasp_state";
   std::string grasp_applied_state_topic_ = "grasp_state_applied";
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

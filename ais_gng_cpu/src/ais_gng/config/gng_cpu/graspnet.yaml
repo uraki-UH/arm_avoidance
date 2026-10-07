@@ -16,10 +16,6 @@ ais_gng_node:
 
     ds.transformed: true
     ds.range_max: 0.2
-    # Grasp candidate support retains substantially more object evidence than
-    # the historical visualization-oriented 4k cloud.
-    # These established parameter names now configure the explicit
-    # /downsampling/grasp_support output as well as the legacy alias.
     ds.all.num_max: 10000
     ds.unknown.num_max: 6000
     ds.human.num_max: 3000
