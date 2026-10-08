@@ -84,12 +84,16 @@ GPU測定は `TOPO_TEST_GPU=mesa npm run test:browser`。通常試験はSwiftSha
 ## 独立した点群送信
 
 ブラウザの「ROS2連携」タブ専用。GNG・FVG・NumPy・独自メッセージへの依存はありません。
-ROS 2環境に `rclpy`、`sensor_msgs`、`std_msgs`、`geometry_msgs`、`tf2_msgs`、`trajectory_msgs` が必要です。送付アプリのルートで実行します。
+ROS 2環境に `rclpy`、`sensor_msgs`、`std_msgs`、`geometry_msgs`、`tf2_msgs`、`trajectory_msgs` と、C++17コンパイラ・実行Python用の開発ヘッダー（Ubuntuでは `g++`、`python3-dev`）が必要です。送付アプリのルートで実行します。
 
 ```bash
 source /opt/ros/humble/setup.bash
 python3 integrations/ros2/pointcloud_bridge.py
 ```
+
+点群の非有限値検査・深度の逆投影・色付け・PointCloud2用配列の構築はC++で実行します。計算中はGILを解放し、HTTP・姿勢更新のPythonスレッドを実行可能にします。深度の逆投影と色付けは1回の画素走査に集約します。
+ネイティブモジュールは起動時に必要な場合だけビルドし、OSの一時ディレクトリ内の `topo-pointcloud-native-<UID>` へソース・Python ABI別にキャッシュします。事前ビルドは `python3 integrations/ros2/native_points.py`。ビルド失敗時は起動エラーになり、低速なPython処理へ自動で戻りません。
+`GET /api/points/status` の `pointcloud_backend: "cpp"` で稼働版を確認できます。既存ブリッジへの反映は再起動後。`start_simulator.py` が管理するブリッジは関連ソースの更新を検出して再起動します。
 
 既存ブラウザ（8877）を再読み込みし、送信先 `http://127.0.0.1:8879` を指定します。
 送信したいトピックにチェックを入れ、「連続送信」を押してください。RGB-D・MID-360・完全表面・遮蔽付き点群は複数選択できます。
@@ -163,18 +167,22 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=sim_rgbd.yaml
 | `/sim/camera/depth/points` | `sensor_msgs/PointCloud2`、XYZ・rgb・color_valid、画像と同じwidth・height、無効画素XYZは全成分NaN |
 
 3トピックは共通header、frame_idは `sim_camera_depth_optical_frame`（X右・Y下・Z前方）。
-画像の `(u,v)` に対応する点群のバイト位置は `v * row_step + u * point_step`、point_stepは12です。
+画像の `(u,v)` に対応する点群のバイト位置は `v * row_step + u * point_step`、point_stepは色情報付きで20、色情報なしで12です。
 点群は `is_dense=false`。深度0の画素を除去せず位置を保持し、全画素無効でも画像寸法を維持します。
 内部パラメータはK/P、Rは単位行列、Dは0。RGB画像への位置合わせは行いません。
 既存 `/sim/rgbd/points` はbase_footprint座標の有効点のみで、header stampは追加3トピックと共通です。
 カメラからworldへの列優先4×4変換は `/sim/points/info` の `depth_image.optical_to_world` に収録。ロボット配置は `robot_state.base_to_world`、カメラからbase_footprintへの変換は `/sim/tf` に配信します。
 
 ブラウザでは追加描画なし。深度float32をHTTPで追加転送し、ブリッジで逆投影して画素対応XYZを生成します。
-848×480の場合、HTTP追加量は約1.63 MB／フレーム、ROSの画像＋画素対応XYZは約6.51 MB／フレーム（メタデータ除外）。
+848×480の場合、HTTP追加量は約1.63 MB／フレーム、ROSの画像＋画素対応点群は色情報付きで約9.77 MB／フレーム、色情報なしで約6.51 MB／フレーム（メタデータ除外）。
 通信量・CPU処理は増えます。指定Hzは上限であり、負荷に応じて低下します。
 RealSenseの16UC1深度を前提とする購読側では、32FC1［m］への対応が必要です。
 
 ROS環境での回帰試験：`python3 -m unittest discover -s integrations/ros2 -p test_depth_output.py`。
+C++処理の出力・並行実行・不正入力・ROSシリアライズ往復の検証は `python3 -m unittest discover -s integrations/ros2 -p test_native_points.py`。
+実HTTP→ROS受信の検証は `ROS_DOMAIN_ID=224 ROS_LOCALHOST_ONLY=1 python3 -m unittest discover -s integrations/ros2 -p test_pointcloud_native_http.py`。試験専用ブリッジは終了時に停止し、既存ブリッジは操作しません。
+性能比較は `python3 integrations/ros2/benchmark_pointcloud_native.py --backend cpp --output /tmp/points-cpp.json`。`--backend python` は比較専用の従来ループで、配信処理には使用しません。既定は848×480・有効画素約30.5%、`--width`・`--height`・`--seed`で変更可能。初回ビルド・入力生成を除いた、検査・ROSメッセージ生成・シリアライズの時間を記録します。GPU取得・HTTP・DDSの所要時間は含みません。
+
 Humble実受信で848×480全画素の対応・無効値・共通時刻・既存点群との有効点数一致を確認済み。
 
 色はブラウザのdepth→color外部パラメータと遮蔽判定で対応付けたRGBを使用します。取付補正は校正JSONの `mount`、内部パラメータは `depth` に設定。補正済み光学フレームをTFへ反映し、base_footprint点群には変換を適用済みです。実機から校正値を推定する機能ではありません。更新時はブラウザとブリッジの両方を再起動してください。

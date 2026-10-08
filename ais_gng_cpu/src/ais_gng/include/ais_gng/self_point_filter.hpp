@@ -4,11 +4,50 @@
 #include <pointcloud_sampling/stratified.hpp>
 #include <voxel_msgs/msg/voxel.hpp>
 #include <voxel_idx.hpp>
+#include <point_cloud_store.hpp>
 #include <Eigen/Geometry>
 #include <chrono>
 #include <unordered_set>
 
 namespace fuzzrobo::self_point_filter {
+
+// 幾何判定と共有セル判定に共通の抽出方針
+template<class AcceptPoint>
+inline std::vector<uint32_t> select_if(
+    const sensor_msgs::msg::PointCloud2 &cloud, uint32_t max_points, uint32_t seed,
+    PointSamplingMode mode, AcceptPoint accept_point, bool enable_full_scan) {
+  if (mode == PointSamplingMode::Random)
+    return pointcloud_sampling::select_random_if(cloud, max_points, seed, accept_point, enable_full_scan);
+  if (mode == PointSamplingMode::Stratified)
+    return pointcloud_sampling::select_stratified_if(cloud, max_points, seed, accept_point);
+  auto selected = pointcloud_sampling::select_stratified_if(cloud, 0, seed, accept_point);
+  if (max_points && selected.size() > max_points) {
+    if (mode == PointSamplingMode::Uniform) {
+      const uint64_t num_valid = selected.size();
+      for (uint32_t idx = 0; idx < max_points; ++idx)
+        selected[idx] = selected[(2ULL * idx + 1) * num_valid / (2ULL * max_points)];
+    }
+    selected.resize(max_points);
+  }
+  return selected;
+}
+
+// ROI所属番号の参照のみ。GNG側の再ボクセル化・自己形状照合なし
+inline std::vector<uint32_t> select_shared_points(
+    const sensor_msgs::msg::PointCloud2 &cloud, uint32_t max_points, uint32_t seed,
+    PointSamplingMode mode, const voxel_idx::roi_point_membership &membership,
+    std::vector<uint8_t> *labels = nullptr) {
+  const pointcloud_sampling::detail::xyz_reader reader(cloud);
+  if (membership.point_cells.size() != reader.num_points)
+    throw std::invalid_argument("共有ROIの元点数不一致");
+  if (labels) labels->assign(reader.num_points, 2);
+  return select_if(cloud, max_points, seed, mode,
+    [&](uint32_t idx, const std::array<double, 3> &) {
+      const bool is_self = membership.is_self_point(idx);
+      if (labels) (*labels)[idx] = is_self ? 1 : 0;
+      return !is_self;
+    }, labels != nullptr);
+}
 
 // 粗い自己セルの受信時索引。環境側グリッド・点群XYZ複製・最近傍探索なし
 struct mask_snapshot {
@@ -142,20 +181,7 @@ inline std::vector<uint32_t> select_points(
   if (num_points > UINT32_MAX || (num_points && (!cloud.point_step || num_points > cloud.data.size() / cloud.point_step)))
     throw std::invalid_argument("Invalid self filter cloud size");
   if (labels) labels->assign(num_points, 2);
-  if (mode == PointSamplingMode::Random)
-    return pointcloud_sampling::select_random_if(cloud, max_points, seed, accept_point, labels != nullptr);
-  if (mode == PointSamplingMode::Stratified)
-    return pointcloud_sampling::select_stratified_if(cloud, max_points, seed, accept_point);
-  auto selected = pointcloud_sampling::select_stratified_if(cloud, 0, seed, accept_point);
-  if (max_points && selected.size() > max_points) {
-    if (mode == PointSamplingMode::Uniform) {
-      const uint64_t num_valid = selected.size();
-      for (uint32_t idx = 0; idx < max_points; ++idx)
-        selected[idx] = selected[(2ULL * idx + 1) * num_valid / (2ULL * max_points)];
-    }
-    selected.resize(max_points);
-  }
-  return selected;
+  return select_if(cloud, max_points, seed, mode, accept_point, labels != nullptr);
 }
 
 inline sensor_msgs::msg::PointCloud2 make_labelled_cloud(

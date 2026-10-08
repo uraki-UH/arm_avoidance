@@ -103,7 +103,8 @@ void point_frame_channel::release_writer(const void *writer)
 void point_frame_channel::publish(const void *writer, point_frame frame)
 {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (!writer || writer_ != writer || !frame.point_idx || frame.frame_id.empty()) {
+  if (!writer || writer_ != writer || (!frame.point_idx && !(frame.roi_points && frame.source_owner)) ||
+    frame.frame_id.empty()) {
     throw std::logic_error("共有点群のwriterまたはsnapshot不正");
   }
   frame.revision = ++revision_;

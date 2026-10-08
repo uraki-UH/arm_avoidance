@@ -9,10 +9,11 @@ import {createHash} from 'node:crypto';
 import {parseArgs} from 'node:util';
 import {install_graph_fixture} from './performance-fixture.mjs';
 import {verify_depth_readback} from './depth-readback-fixture.mjs';
+import {verify_rgbd_profile} from './rgbd-profile-fixture.mjs';
 
 // 専用ChromeとHTTPサーバーによる有限時間の性能試験。既存ROS・ブラウザへの接続なし。
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const {values:options}=parseArgs({options:{output:{type:'string'},gpu:{type:'string',default:'mesa'},cases:{type:'string',default:'idle,frustum,lidar,rgbd,graph_static,graph_stream'},'duration-ms':{type:'string',default:'3000'},captures:{type:'string',default:'10'},nodes:{type:'string',default:'10000'},profile:{type:'boolean',default:false},'show-preview':{type:'boolean',default:false},baseline:{type:'string'},'depth-readback':{type:'string',default:'auto'},'readback-mode':{type:'string',default:'batch'},'verify-depth':{type:'boolean',default:false},'graph-quality':{type:'string',default:'standard'},'max-regression-percent':{type:'string'}}});
+const {values:options}=parseArgs({options:{output:{type:'string'},gpu:{type:'string',default:'mesa'},cases:{type:'string',default:'idle,frustum,lidar,rgbd,graph_static,graph_stream'},'duration-ms':{type:'string',default:'3000'},captures:{type:'string',default:'10'},nodes:{type:'string',default:'10000'},profile:{type:'boolean',default:false},'show-preview':{type:'boolean',default:false},baseline:{type:'string'},'depth-readback':{type:'string',default:'auto'},'readback-mode':{type:'string',default:'batch'},'verify-depth':{type:'boolean',default:false},'verify-profile':{type:'boolean',default:false},'graph-quality':{type:'string',default:'standard'},'max-regression-percent':{type:'string'}}});
 const duration_ms=Number(options['duration-ms']),num_captures=Number(options.captures),num_nodes=Number(options.nodes);
 assert.ok(duration_ms>=500&&duration_ms<=60000);assert.ok(Number.isInteger(num_captures)&&num_captures>=2&&num_captures<=100);assert.ok(Number.isInteger(num_nodes)&&num_nodes>=102&&num_nodes<=65535);
 assert.ok(['mesa','nvidia','software'].includes(options.gpu));
@@ -122,6 +123,7 @@ try {
    await wait_for('simulator.rgbd.pending_preview_frame===null');
    const is_preview_equal=await evaluate(`(()=>{const sensor=simulator.rgbd,frame=sensor.sensor.lastFrame,canvases=['rgb-preview','depth-preview'].map(id=>document.getElementById(id));const before=canvases.map(canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data);if(!before.every(data=>data.some(value=>value!==0)))return false;sensor.paint(frame);if(!canvases.every((canvas,idx)=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.every((value,idx_byte)=>value===before[idx][idx_byte])))return false;for(const canvas of canvases){canvas.width=1;canvas.height=1;}sensor.paint(frame);return canvases.every((canvas,idx)=>{const after=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;return after.length===before[idx].length&&after.every((value,idx_byte)=>value===before[idx][idx_byte]);});})()`);
    assert.ok(is_preview_equal,'解像度変更後のプレビュー復元失敗');result.is_preview_equal=true;
+   if(options['verify-profile'])result.profile_verification=await evaluate(`(${verify_rgbd_profile.toString()})()`);
    if(options['verify-depth'])result.depth_verification=await evaluate(`(${verify_depth_readback.toString()})()`);
   }
   report.cases[name]=result;console.log(JSON.stringify({case:name,frame_p95_ms:result.frame.p95_ms,render_mean_ms:result.render_submit.mean_ms,capture_mean_ms:result.capture_wall?.mean_ms}));

@@ -47,6 +47,28 @@ TEST(SelfPointFilter, CellBoundsOriginAndNegativeCoordinates) {
   EXPECT_FALSE(shifted.contains({.1, .1, .1}));
 }
 
+TEST(SelfPointFilter, shared_membership_matches_all_sampling_modes_and_labels) {
+  const auto cloud = cloud_message();
+  voxel_idx::roi_point_membership membership;
+  membership.cells = {{1, true, true}};
+  membership.point_cells.resize(cloud.width * cloud.height, voxel_idx::roi_point_membership::no_cell);
+  for (uint32_t idx = 0; idx < membership.point_cells.size(); idx += 2)
+    membership.point_cells[idx] = 1 | voxel_idx::roi_point_membership::self_flag;
+  const sf::mask_snapshot mask(mask_message());
+  for (auto mode : {PointSamplingMode::Head, PointSamplingMode::Uniform,
+      PointSamplingMode::Random, PointSamplingMode::Stratified}) {
+    std::vector<uint8_t> labels, reference_labels;
+    const auto reference = sf::select_points(cloud, 71, 42, mode, mask,
+      Eigen::Isometry3d::Identity(), &reference_labels);
+    const auto selected = sf::select_shared_points(cloud, 71, 42, mode, membership, &labels);
+    EXPECT_EQ(reference, selected);
+    EXPECT_EQ(labels, reference_labels);
+    EXPECT_EQ(selected, sf::select_shared_points(cloud, 71, 42, mode, membership));
+  }
+  membership.point_cells.pop_back();
+  EXPECT_THROW(sf::select_shared_points(cloud, 71, 42, PointSamplingMode::Random, membership), std::invalid_argument);
+}
+
 TEST(SelfPointFilter, SparseMaskNotBoundingBoxRemoval) {
   auto message = mask_message();
   voxel_idx::VoxelIndexingSchema schema{42, 21, 0, 1000000, .25};

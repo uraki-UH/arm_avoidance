@@ -55,6 +55,7 @@ CPUプロファイルは`*.cpuprofile`としてChrome DevToolsへ読込可能。
 RGB-Dの非同期読出しは`--readback-mode batch`が既定。画像群を1つの転送バッファへまとめ、完了待ちとCPUコピーを各1回に集約。
 `--readback-mode separate`で従来の画像別読出しと比較可能。
 `--show-preview`でRGB-Dタブを表示して計測。既定は非表示で、プレビュー描画を保留。
+`--verify-profile`でRGB-D解像度変更後のプレビュー・取得配列・GPU描画サイズ・画角の維持を検査。停止中・取得中・連続取得中・非表示からの復帰・カスタム校正・公称値への復帰が対象。`--cases rgbd --duration-ms 500 --captures 2 --verify-profile`で実行可能。
 表示条件が異なる結果同士の`--baseline`比較は拒否。
 `methods.webgl.getBufferSubData`にCPUコピーの回数・時間、`methods.webgl.getParameter`にGPU状態照会の回数・時間を記録。
 `--verify-depth`では1280×720までの出力一致、外部回転、同時取得、RGBA float代替、バッファ再利用、失敗後の復旧・破棄時の中断、再表示時のプレビュー一致も検査。

@@ -1,6 +1,5 @@
 """同一画素配列・時刻での深度画像と点群の生成。深度の単位はメートル。"""
-import struct
-from array import array
+from native_points import build_depth_points, byte_array, colorize_points
 
 depth_topics = ['/sim/camera/depth/image_rect_raw', '/sim/camera/depth/camera_info',
                 '/sim/camera/depth/points']
@@ -16,7 +15,7 @@ def create_depth_messages(calibration, data, stamp, colors=None):
     image.encoding = '32FC1'
     image.is_bigendian = False
     image.step = width * 4
-    image.data = array('B', data)
+    image.data = byte_array(data)
     info = CameraInfo()
     info.header = image.header
     info.width, info.height = width, height
@@ -26,11 +25,8 @@ def create_depth_messages(calibration, data, stamp, colors=None):
     info.k = [fx, 0., cx, 0., fy, cy, 0., 0., 1.]
     info.r = [1., 0., 0., 0., 1., 0., 0., 0., 1.]
     info.p = [fx, 0., cx, 0., 0., fy, cy, 0., 0., 0., 1., 0.]
-    points = bytearray(width * height * 12)
-    # 画素位置を維持した逆投影。無効深度0に対応するXYZは全成分NaN
-    for idx, (z,) in enumerate(struct.iter_unpack('<f', data)):
-        x, y = ((idx % width - cx) * z / fx, (idx // width - cy) * z / fy) if z > 0 else (float('nan'), float('nan'))
-        struct.pack_into('<fff', points, idx * 12, x, y, z if z > 0 else float('nan'))
+    # 逆投影・色付け・無効画素・パディングをC++の1回の走査で構築。
+    points = build_depth_points(calibration, data, colors)
     cloud = PointCloud2()
     cloud.header = image.header
     cloud.width, cloud.height = width, height
@@ -38,32 +34,50 @@ def create_depth_messages(calibration, data, stamp, colors=None):
                     for idx, name in enumerate(('x', 'y', 'z'))]
     cloud.is_bigendian = False
     cloud.is_dense = False
-    cloud.point_step = 12
-    cloud.row_step = width * 12
-    cloud.data = array('B', points)
+    cloud.point_step = 20 if colors is not None else 12
+    cloud.row_step = width * cloud.point_step
+    cloud.data = points
     if colors is not None:
-        colorize_cloud(cloud, colors, data)
+        add_color_fields(cloud)
     return image, info, cloud
 
 
 def colorize_cloud(cloud, colors, depth=None):
     """RGBのpacked float表現と色有効フラグ。深度配列指定時は画素順を維持。"""
-    from sensor_msgs.msg import PointField
-    num_points = cloud.width * cloud.height
-    packed = bytearray(num_points * 20)
-    xyz = memoryview(cloud.data)
-    color_idx = 0
-    for idx in range(num_points):
-        packed[idx * 20:idx * 20 + 12] = xyz[idx * 12:idx * 12 + 12]
-        if depth is not None and struct.unpack_from('<f', depth, idx * 4)[0] <= 0:
-            continue
-        red, green, blue, valid = colors[color_idx:color_idx + 4]
-        struct.pack_into('<IB', packed, idx * 20 + 12, (red << 16) | (green << 8) | blue, valid)
-        color_idx += 4
-    if color_idx != len(colors):
-        raise ValueError('点群と色の点数が一致しません')
-    cloud.fields.extend([PointField(name='rgb', offset=12, datatype=PointField.FLOAT32, count=1),
-                         PointField(name='color_valid', offset=16, datatype=PointField.UINT8, count=1)])
+    if cloud.point_step != 12 or len(cloud.data) != cloud.width * cloud.height * 12 or cloud.is_bigendian:
+        raise ValueError('色付け元の点群形式が不正です')
+    cloud.data = colorize_points(cloud.data, colors, depth)
+    add_color_fields(cloud)
     cloud.point_step = 20
     cloud.row_step = cloud.width * 20
-    cloud.data = array('B', packed)
+
+
+def add_color_fields(cloud):
+    from sensor_msgs.msg import PointField
+    cloud.fields.extend([PointField(name='rgb', offset=12, datatype=PointField.FLOAT32, count=1),
+                         PointField(name='color_valid', offset=16, datatype=PointField.UINT8, count=1)])
+
+
+def create_point_messages(meta, data, stamp):
+    """通常点群と画素対応点群の生成。撮影データ・時刻・既存トピック形式の保持。"""
+    from sensor_msgs.msg import PointCloud2, PointField
+    payload = memoryview(data)
+    xyz_size = meta['count'] * 12
+    depth_size = meta['depth_image']['width'] * meta['depth_image']['height'] * 4 if meta.get('depth_image') else 0
+    colors = payload[xyz_size + depth_size:] if meta.get('color_format') else None
+    cloud = PointCloud2()
+    cloud.header.stamp = stamp
+    cloud.header.frame_id = meta['frame_id']
+    cloud.height = 1
+    cloud.width = meta['count']
+    cloud.fields = [PointField(name=name, offset=idx * 4, datatype=PointField.FLOAT32, count=1)
+                    for idx, name in enumerate(('x', 'y', 'z'))]
+    cloud.is_bigendian = False
+    cloud.is_dense = True
+    cloud.point_step = 20 if colors is not None else 12
+    cloud.row_step = cloud.width * cloud.point_step
+    cloud.data = colorize_points(payload[:xyz_size], colors) if colors is not None else byte_array(payload[:xyz_size])
+    if colors is not None:
+        add_color_fields(cloud)
+    depth_messages = create_depth_messages(meta['depth_image'], payload[xyz_size:xyz_size + depth_size], stamp, colors) if meta.get('depth_image') else []
+    return cloud, depth_messages

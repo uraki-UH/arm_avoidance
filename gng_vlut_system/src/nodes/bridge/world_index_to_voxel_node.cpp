@@ -30,7 +30,9 @@
 #include "core/indexing/reachability_voxel_accumulator.hpp"
 #include "core/common/viewer_status.hpp"
 #include <point_cloud_store.hpp>
+#include <pointcloud_sampling/stratified.hpp>
 #include "safety_engine/indexing/voxel_id_codec.hpp"
+#include "safety_engine/vlut/voxel_processor.hpp"
 
 namespace robot_sim::bridge
 {
@@ -70,6 +72,10 @@ public:
   {
     declare_parameter<std::string>("input_topic", "/points");
     declare_parameter<std::string>("shared_point_store", "");
+    declare_parameter<std::string>("self_filter.mask_topic", "");
+    declare_parameter<std::string>("self_filter.output_topic", "self_filter_roi_voxels");
+    declare_parameter<double>("self_filter.max_mask_age_sec", 0.5);
+    declare_parameter<double>("self_filter.inflation", 0.02);
     declare_parameter<std::string>("output_topic", "/voxel_ids");
     declare_parameter<std::string>("source_frame_id", "");
     declare_parameter<std::string>("world_frame_id", "world");
@@ -139,10 +145,16 @@ public:
     world_index_ = std::make_shared<voxel_idx::world_point_bucket_index>(bucket_size);
     const auto shared_store = get_parameter("shared_point_store").as_string();
     if (!shared_store.empty()) {
-      if (!enable_world_index_) {
+      if (!enable_world_index_ && get_parameter("self_filter.mask_topic").as_string().empty()) {
         throw rclcpp::exceptions::InvalidParametersException("共有点群にはworld index構築が必要");
       }
       shared_points_ = voxel_idx::shared_point_frames(shared_store);
+    }
+    enable_shared_roi_ = !get_parameter("self_filter.mask_topic").as_string().empty();
+    if (enable_shared_roi_ && (!shared_points_ || enable_world_index_ || enable_roi_query_ ||
+        get_parameter("allow_latest_transform").as_bool() || allow_unconnected_source_as_world_ ||
+        !source_frame_id_.empty())) {
+      throw std::invalid_argument("共有ROIには共有store、直接ROI登録、取得時刻TF、点群の実frameが必要");
     }
 
     reachability_bounds_.enable_filter =
@@ -169,7 +181,7 @@ public:
     parallel_thread_num_ = static_cast<int>(std::max<std::int64_t>(
       1, get_parameter("parallel_thread_num").as_int()));
     voxel_accumulator_ = std::make_unique<robot_sim::indexing::reachability_voxel_accumulator>(
-      voxel_codec_, reachability_bounds_, max_dense_voxel_num);
+      voxel_codec_, reachability_bounds_, max_dense_voxel_num, enable_shared_roi_);
     map_source_ = make_map_bounds_source(
       get_parameter("reachability_map_topic").as_string(),
       reachability_bounds_.enable_filter, max_dense_voxel_num);
@@ -186,6 +198,7 @@ public:
     }
     configureAdditionalConsumers(
       get_parameter("additional_consumers_json").as_string(), max_dense_voxel_num, voxel_qos);
+    if (enable_shared_roi_) {configure_shared_roi(voxel_qos);}
     subscription_ = create_subscription<sensor_msgs::msg::PointCloud2>(
       input_topic_, rclcpp::SensorDataQoS(),
       std::bind(&WorldIndexToVoxelNode::pointCallback, this, std::placeholders::_1));
@@ -214,6 +227,106 @@ public:
   }
 
 private:
+  void configure_shared_roi(const rclcpp::QoS &qos)
+  {
+    max_self_mask_age_sec_ = get_parameter("self_filter.max_mask_age_sec").as_double();
+    self_inflation_ = get_parameter("self_filter.inflation").as_double();
+    const auto filtered_topic = get_parameter("self_filter.output_topic").as_string();
+    if (!std::isfinite(max_self_mask_age_sec_) || max_self_mask_age_sec_ <= 0 ||
+      !std::isfinite(self_inflation_) || self_inflation_ < 0 ||
+      filtered_topic.empty() || filtered_topic == output_topic_ || !reachability_bounds_.enable_filter ||
+      !additional_consumers_.empty()) {
+      throw std::invalid_argument("共有ROIの自己除外設定不正。有限ROI・単一出力グリッドが必要");
+    }
+    filtered_roi_pub_ = create_publisher<voxel_msgs::msg::Voxel>(filtered_topic, qos);
+    self_mask_sub_ = create_subscription<voxel_msgs::msg::Voxel>(
+      get_parameter("self_filter.mask_topic").as_string(), qos,
+      [this](voxel_msgs::msg::Voxel::ConstSharedPtr msg) {
+        try {
+          if (msg->header.frame_id != target_frame_id_ ||
+            (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) ||
+            msg->voxel_size != static_cast<float>(voxel_codec_.voxelSize()) ||
+            msg->x_shift != voxel_codec_.xShift() || msg->y_shift != voxel_codec_.yShift() ||
+            msg->z_shift != voxel_codec_.zShift() || msg->offset != voxel_codec_.offset() ||
+            msg->origin_x != 0 || msg->origin_y != 0 || msg->origin_z != 0) {
+            throw std::invalid_argument("自己マスクのframe・時刻・グリッド不一致");
+          }
+          // 姿勢変化でセル集合が変わった場合だけの膨張・索引再構築
+          if (!self_mask_message_ || self_mask_message_->data != msg->data) {
+            robot_sim::analysis::VoxelProcessor processor(voxel_codec_.voxelSize());
+            processor.getGrid().setIndexingParams(msg->x_shift, msg->y_shift, msg->z_shift, msg->offset);
+            std::vector<long> ids(msg->data.begin(), msg->data.end());
+            for (const auto id : ids) {
+              if (id < 0 || voxel_codec_.toFlatId(voxel_codec_.toIndex(id)) != id) {
+                throw std::invalid_argument("自己マスクのセルID不正");
+              }
+            }
+            auto expanded = processor.dilate(ids, static_cast<float>(self_inflation_));
+            ids.insert(ids.end(), expanded.begin(), expanded.end());
+            self_ids_.clear();
+            self_ids_.insert(ids.begin(), ids.end());
+            self_bounds_.enable_filter = true;
+            self_bounds_.min_corner.setConstant(std::numeric_limits<double>::infinity());
+            self_bounds_.max_corner = -self_bounds_.min_corner;
+            for (const auto id : self_ids_) {
+              const Eigen::Vector3d lower = voxel_codec_.toIndex(id).cast<double>() * msg->voxel_size;
+              self_bounds_.min_corner = self_bounds_.min_corner.cwiseMin(lower);
+              self_bounds_.max_corner = self_bounds_.max_corner.cwiseMax(
+                (lower.array() + msg->voxel_size).matrix());
+            }
+            // float32の量子化境界を含む保守的な粗検索余白
+            self_bounds_.margin.setConstant(msg->voxel_size * 1e-4);
+          }
+          self_mask_message_ = msg;
+          self_mask_received_at_ = std::chrono::steady_clock::now();
+        } catch (const std::exception &error) {
+          self_mask_message_.reset();
+          RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "共有自己マスク無効: %s", error.what());
+        }
+      });
+  }
+
+  void publish_shared_roi(const sensor_msgs::msg::PointCloud2::SharedPtr &msg)
+  {
+    const auto start = std::chrono::steady_clock::now();
+    const auto stamp = rclcpp::Time(msg->header.stamp).nanoseconds();
+    if (!self_mask_message_ || stamp == 0 || msg->header.frame_id.empty() ||
+      std::chrono::duration<double>(start - self_mask_received_at_).count() > max_self_mask_age_sec_ ||
+      std::abs(double(stamp - rclcpp::Time(self_mask_message_->header.stamp).nanoseconds()) * 1e-9) > max_self_mask_age_sec_ ||
+      std::abs((now() - rclcpp::Time(msg->header.stamp)).seconds()) > max_self_mask_age_sec_) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "共有ROI待機: 点群または自己マスクの未受信・失効");
+      return;
+    }
+    if (!update_map_bounds(map_source_.get(), target_frame_id_, *msg, reachability_bounds_,
+        voxel_codec_, voxel_accumulator_)) {return;}
+    Eigen::Isometry3d source_to_world, source_to_target;
+    if (!lookupTransform(world_frame_id_, msg->header.frame_id, *msg, source_to_world) ||
+      !lookupTransform(target_frame_id_, msg->header.frame_id, *msg, source_to_target)) {return;}
+    accumulateDirectPoints(*msg, source_to_target, *voxel_accumulator_);
+    const auto &raw_ids = voxel_accumulator_->finish_voxel_ids();
+    const auto membership = voxel_accumulator_->point_membership();
+    std::vector<long> filtered_ids;
+    filtered_ids.reserve(membership->cells.size());
+    for (const auto &cell : membership->cells) {
+      if (cell.has_roi_point && !cell.is_self) {filtered_ids.push_back(cell.id);}
+    }
+    auto header = msg->header;
+    header.frame_id = target_frame_id_;
+    roi_publisher_->publish(voxel_codec_.makeMessage(header, raw_ids));
+    filtered_roi_pub_->publish(voxel_codec_.makeMessage(header, filtered_ids));
+    voxel_idx::point_frame frame;
+    frame.source_owner = msg;
+    frame.source_type = "sensor_msgs/msg/PointCloud2";
+    frame.source_to_world = source_to_world;
+    frame.frame_id = world_frame_id_;
+    frame.stamp_ns = stamp;
+    frame.roi_points = membership;
+    frame.self_mask_stamp_ns = rclcpp::Time(self_mask_message_->header.stamp).nanoseconds();
+    shared_points_->publish(this, std::move(frame));
+    status_reporter_.report({double(msg->width) * msg->height,
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()});
+  }
+
   std::unique_ptr<map_bounds_source> make_map_bounds_source(
     const std::string &topic, bool enable_filter, std::size_t max_dense_voxel_num)
   {
@@ -286,7 +399,7 @@ private:
       (next.max_corner.array() != bounds.max_corner.array()).any())
     {
       accumulator = std::make_unique<robot_sim::indexing::reachability_voxel_accumulator>(
-        codec, next, source->max_dense_voxel_num);
+        codec, next, source->max_dense_voxel_num, accumulator->has_point_membership());
       bounds = next;
       const Eigen::Vector3d min_roi = bounds.min_corner - bounds.margin;
       const Eigen::Vector3d max_roi = bounds.max_corner + bounds.margin;
@@ -612,6 +725,20 @@ private:
   {
     const bool is_source_to_target_identity = isIdentityTransform(source_to_target);
     accumulator.begin_frame(static_cast<std::size_t>(msg.width) * msg.height);
+    if (accumulator.has_point_membership()) {
+      const pointcloud_sampling::detail::xyz_reader reader(msg);
+      for (uint32_t idx = 0; idx < reader.num_points; ++idx) {
+        std::array<double, 3> xyz{};
+        if (!reader.read(idx, xyz)) {continue;}
+        const Eigen::Vector3d source_point(xyz[0], xyz[1], xyz[2]);
+        const Eigen::Vector3d target_point = is_source_to_target_identity
+          ? source_point : (source_to_target * source_point).eval();
+        accumulator.add_shared_point(target_point, idx,
+          !self_ids_.empty() && self_bounds_.contains(target_point),
+          [this](long id) {return self_ids_.count(id) != 0;});
+      }
+      return;
+    }
     sensor_msgs::PointCloud2ConstIterator<float> point_x(msg, "x");
     sensor_msgs::PointCloud2ConstIterator<float> point_y(msg, "y");
     sensor_msgs::PointCloud2ConstIterator<float> point_z(msg, "z");
@@ -694,6 +821,13 @@ private:
 
   void pointCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
+    if (enable_shared_roi_) {
+      try {publish_shared_roi(msg);}
+      catch (const std::exception &error) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "共有ROI入力無効: %s", error.what());
+      }
+      return;
+    }
     const auto processing_start = std::chrono::steady_clock::now();
     const std::string source_frame = resolveSourceFrameId(*msg);
     if (source_frame.empty()) {
@@ -902,6 +1036,15 @@ private:
   robot_sim::analysis::VoxelIdCodec world_bucket_codec_;
   std::shared_ptr<voxel_idx::world_point_bucket_index> world_index_, spare_world_idx_;
   std::shared_ptr<voxel_idx::point_frame_channel> shared_points_;
+  bool enable_shared_roi_{false};
+  double max_self_mask_age_sec_{0.5};
+  double self_inflation_{0.02};
+  voxel_msgs::msg::Voxel::ConstSharedPtr self_mask_message_;
+  std::chrono::steady_clock::time_point self_mask_received_at_{};
+  std::unordered_set<long> self_ids_;
+  robot_sim::indexing::reachability_bounds self_bounds_;
+  rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr self_mask_sub_;
+  rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr filtered_roi_pub_;
   std::unique_ptr<robot_sim::indexing::reachability_voxel_accumulator> voxel_accumulator_;
   std::vector<additional_consumer> additional_consumers_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

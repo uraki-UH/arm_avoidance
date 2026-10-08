@@ -160,5 +160,40 @@ TEST(reachability_voxel_accumulator_test, falls_back_to_reusable_hash)
   EXPECT_EQ(accumulator.finish_voxel_ids().size(), 1U);
 }
 
+TEST(reachability_voxel_accumulator_test, shared_cells_classify_once_and_preserve_points_outside_roi)
+{
+  robot_sim::analysis::VoxelIdCodec codec(0.1);
+  codec.setIndexingParams(42, 21, 0, 1000000L);
+  reachability_bounds bounds;
+  bounds.enable_filter = true;
+  bounds.min_corner.setConstant(-0.5);
+  bounds.max_corner.setConstant(0.5);
+  for (std::size_t max_dense : {0U, 8000000U}) {
+    reachability_voxel_accumulator accumulator(codec, bounds, max_dense, true);
+    accumulator.begin_frame(5);
+    std::size_t num_checks = 0;
+    const auto classify = [&](long) {++num_checks; return true;};
+    accumulator.add_shared_point({0.01, 0.01, 0.01}, 0, false, classify);
+    accumulator.add_shared_point({0.02, 0.02, 0.02}, 1, false, classify);
+    accumulator.add_shared_point({1.01, 0.01, 0.01}, 2, true, classify);
+    accumulator.add_shared_point({2.01, 0.01, 0.01}, 3, false, classify);
+    accumulator.add_shared_point({NAN, 0, 0}, 4, true, classify);
+    const auto frame = accumulator.point_membership();
+    ASSERT_EQ(frame->cells.size(), 1U);
+    EXPECT_EQ(num_checks, 2U);
+    EXPECT_EQ(accumulator.finish_voxel_ids().size(), 1U);
+    EXPECT_EQ(frame->point_cells[0], frame->point_cells[1]);
+    EXPECT_TRUE(frame->is_self_point(2));
+    EXPECT_FALSE(frame->is_self_point(3));
+    EXPECT_EQ(frame->point_cells[4], voxel_idx::roi_point_membership::no_cell);
+    // 前フレーム保持中のバッファ切替とラベル初期化
+    accumulator.begin_frame(1);
+    accumulator.add_shared_point({0.01, 0.01, 0.01}, 0, false, [](long) {return false;});
+    EXPECT_TRUE(frame->is_self_point(0));
+    EXPECT_FALSE(accumulator.point_membership()->is_self_point(0));
+    EXPECT_EQ(accumulator.finish_voxel_ids().size(), 1U);
+  }
+}
+
 }  // 無名namespace終端
 }  // robot_sim::indexing namespace終端

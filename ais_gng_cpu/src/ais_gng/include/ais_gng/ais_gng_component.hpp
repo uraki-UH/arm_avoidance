@@ -162,6 +162,10 @@ class AiSGNGComponent : public rclcpp::Node {
     bool sampled_indices_valid_{false};
     uint32_t sampling_frame_{};
     bool enable_self_filter_{false};
+    std::shared_ptr<voxel_idx::point_frame_channel> shared_points_;
+    std::shared_ptr<const voxel_idx::point_frame> shared_input_frame_;
+    rclcpp::TimerBase::SharedPtr shared_input_timer_;
+    uint64_t shared_input_revision_{0};
     double max_self_mask_age_sec_{0.5};
     rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr self_mask_sub_;
     rclcpp::Publisher<PC2>::SharedPtr self_labelled_pub_;

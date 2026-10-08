@@ -7,6 +7,23 @@
 
 using namespace voxel_idx;
 
+TEST(point_cloud_store, roi_only_frame_shares_source_without_world_copy)
+{
+  auto channel = shared_point_frames("test_roi_only");
+  channel->claim_writer(channel.get());
+  point_frame frame;
+  frame.source_owner = std::make_shared<int>(42);
+  frame.roi_points = std::make_shared<roi_point_membership>();
+  frame.frame_id = "robot";
+  channel->publish(channel.get(), frame);
+  EXPECT_EQ(channel->latest()->source_owner, frame.source_owner);
+  EXPECT_EQ(channel->latest()->roi_points, frame.roi_points);
+  EXPECT_FALSE(channel->latest()->point_idx);
+  frame.source_owner.reset();
+  EXPECT_THROW(channel->publish(channel.get(), frame), std::logic_error);
+  channel->release_writer(channel.get());
+}
+
 TEST(point_cloud_store, shared_identity_and_writer_exclusion)
 {
   auto writer = shared_point_frames("test_identity");

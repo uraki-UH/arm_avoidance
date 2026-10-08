@@ -568,6 +568,11 @@ void VoxelGridNode::update_shared_points()
     }
     if (frame->revision == shared_revision_) {return;}
     shared_revision_ = frame->revision;
+    if (mode_ != UpdateMode::FROZEN && !frame->point_idx) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+            "ROI専用フレームにはworld索引なし。FVG用shared_point_store名の確認が必要");
+        return;
+    }
     if (mode_ == UpdateMode::FROZEN) {
         if (frame->source_type == "sensor_msgs/msg/PointCloud2" && frame->source_owner) {
             const auto source = std::static_pointer_cast<const sensor_msgs::msg::PointCloud2>(frame->source_owner);

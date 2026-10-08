@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -233,7 +234,28 @@ private:
   std::size_t nonfinite_point_num_{0};
 };
 
-// 不変の公開スナップショット。座標の正本はpoint_idx、元属性の所有元はsource_owner。
+// ROI登録と自己判定の共通結果。元点の細セルIDと上位ビットの自己ラベル
+struct roi_point_membership
+{
+  struct cell
+  {
+    std::int64_t id;
+    bool is_self;
+    bool has_roi_point;
+  };
+  static constexpr std::uint64_t self_flag = std::uint64_t{1} << 63;
+  static constexpr std::uint64_t no_cell = std::numeric_limits<std::uint64_t>::max();
+  std::vector<std::uint64_t> point_cells;
+  std::vector<cell> cells;
+
+  bool is_self_point(std::uint32_t source_idx) const
+  {
+    const auto slot = point_cells.at(source_idx);
+    return slot != no_cell && (slot & self_flag) != 0;
+  }
+};
+
+// 不変の公開スナップショット。ROI専用フレームでは任意のworld索引なし
 struct point_frame
 {
   std::shared_ptr<const world_point_bucket_index> point_idx;
@@ -243,6 +265,9 @@ struct point_frame
   std::string frame_id;
   std::int64_t stamp_ns{0};
   std::uint64_t revision{0};
+  std::shared_ptr<const roi_point_membership> roi_points;
+  std::int64_t self_mask_stamp_ns{0};
+  std::chrono::steady_clock::time_point received_at{std::chrono::steady_clock::now()};
 };
 
 // world座標のセル集計条件。fuzzy属性・ROS・利用者固有ラベルへの依存なし。

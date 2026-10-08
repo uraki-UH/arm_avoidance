@@ -7,10 +7,12 @@
 #include <limits>
 #include <stdexcept>
 #include <unordered_set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <Eigen/Geometry>
+#include <point_cloud_store.hpp>
 
 #include "safety_engine/indexing/voxel_id_codec.hpp"
 
@@ -60,8 +62,8 @@ public:
   reachability_voxel_accumulator(
     const robot_sim::analysis::VoxelIdCodec &codec,
     reachability_bounds bounds,
-    std::size_t max_dense_voxel_num)
-  : codec_(codec), bounds_(std::move(bounds))
+    std::size_t max_dense_voxel_num, bool enable_point_membership = false)
+  : codec_(codec), bounds_(std::move(bounds)), enable_point_membership_(enable_point_membership)
   {
     bounds_.validate();
     configure_dense_bitmap(max_dense_voxel_num);
@@ -71,6 +73,19 @@ public:
   {
     clear_frame_storage();
     stats_ = {};
+    if (enable_point_membership_) {
+      // 読取中フレームの不変性と、解放済みバッファの容量再利用
+      if (!roi_points_ || !roi_points_.unique()) {
+        roi_points_.swap(spare_roi_points_);
+        if (!roi_points_ || !roi_points_.unique()) {
+          roi_points_ = std::make_shared<voxel_idx::roi_point_membership>();
+        }
+      }
+      if (input_point_count > UINT32_MAX) {throw std::length_error("元点数の範囲外");}
+      roi_points_->point_cells.assign(input_point_count, voxel_idx::roi_point_membership::no_cell);
+      roi_points_->cells.clear();
+      return;
+    }
     if (enable_dense_bitmap_) {
       voxel_ids_.reserve(std::min<std::size_t>(input_point_count, 16384U));
     } else {
@@ -99,7 +114,13 @@ public:
 
   const std::vector<long> &finish_voxel_ids()
   {
-    if (!enable_dense_bitmap_) {
+    if (enable_point_membership_) {
+      voxel_ids_.clear();
+      std::sort(roi_points_->cells.begin(), roi_points_->cells.end(),
+        [](const auto &left, const auto &right) {return left.id < right.id;});
+      for (const auto &cell : roi_points_->cells) {voxel_ids_.push_back(cell.id);}
+      return voxel_ids_;
+    } else if (!enable_dense_bitmap_) {
       voxel_ids_.assign(sparse_voxel_ids_.begin(), sparse_voxel_ids_.end());
     }
     std::sort(voxel_ids_.begin(), voxel_ids_.end());
@@ -114,6 +135,54 @@ public:
   bool uses_dense_bitmap() const
   {
     return enable_dense_bitmap_;
+  }
+
+  bool has_point_membership() const {return enable_point_membership_;}
+
+  std::shared_ptr<const voxel_idx::roi_point_membership> point_membership() const
+  {
+    return roi_points_;
+  }
+
+  // ROI占有・元点対応・自己判定の同時登録。ROI外の自己領域のみ追加許可
+  template<class IsSelfCell>
+  void add_shared_point(const Eigen::Vector3d &point, std::uint32_t source_idx,
+    bool allow_outside_roi, IsSelfCell is_self_cell)
+  {
+    if (!enable_point_membership_ || !roi_points_) {
+      throw std::logic_error("共有ROI登録の初期化不足");
+    }
+    auto &point_cell = roi_points_->point_cells.at(source_idx);
+    ++stats_.input_point_count;
+    if (!point.allFinite()) {++stats_.nonfinite_point_count; return;}
+    const bool is_roi = bounds_.contains(point);
+    if (!is_roi && !allow_outside_roi) {++stats_.outside_point_count; return;}
+    const auto idx = ::common::geometry::VoxelUtils::worldToVoxel(
+      point.cast<float>(), static_cast<float>(codec_.voxelSize()));
+    const long id = codec_.toFlatId(idx);
+    const Eigen::Vector3i local = idx - min_dense_idx_;
+    const bool is_dense = enable_dense_bitmap_ && (is_roi ||
+      ((local.array() >= 0).all() && (local.array() < dense_dims_.array()).all()));
+    std::uint8_t *state = nullptr;
+    if (is_dense) {
+      const std::size_t flat = std::size_t(local.x()) + std::size_t(dense_dims_.x()) *
+        (std::size_t(local.y()) + std::size_t(dense_dims_.y()) * std::size_t(local.z()));
+      state = &dense_occupancy_[flat];
+      if (*state == 0) {touched_dense_indices_.push_back(flat);}
+    } else {
+      state = &sparse_cell_states_[id];
+    }
+    // 既存の占有byteへ判定済み・自己・ROI登録済みの3ビットを同居
+    if (*state == 0) {*state = is_self_cell(id) ? 3 : 1;}
+    const bool is_self = (*state & 2) != 0;
+    if (is_roi && (*state & 4) == 0) {
+      roi_points_->cells.push_back({id, is_self, true});
+      *state |= 4;
+    }
+    point_cell = static_cast<std::uint64_t>(id) |
+      (is_self ? voxel_idx::roi_point_membership::self_flag : 0);
+    if (is_roi) {++stats_.accepted_point_count;}
+    else {++stats_.outside_point_count;}
   }
 
 private:
@@ -191,10 +260,14 @@ private:
     touched_dense_indices_.clear();
     voxel_ids_.clear();
     sparse_voxel_ids_.clear();
+    sparse_cell_states_.clear();
   }
 
   const robot_sim::analysis::VoxelIdCodec &codec_;
   reachability_bounds bounds_;
+  bool enable_point_membership_{false};
+  std::shared_ptr<voxel_idx::roi_point_membership> roi_points_, spare_roi_points_;
+  std::unordered_map<long, std::uint8_t> sparse_cell_states_;
   bool enable_dense_bitmap_{false};
   Eigen::Vector3i min_dense_idx_{Eigen::Vector3i::Zero()};
   Eigen::Vector3i dense_dims_{Eigen::Vector3i::Zero()};

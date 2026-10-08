@@ -607,6 +607,11 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     self_filter_descriptor.description = "自己点候補除外の起動時設定";
     const auto self_mask_topic = declare_parameter<std::string>("self_filter.mask_topic", "", self_filter_descriptor);
     enable_self_filter_ = !self_mask_topic.empty();
+    const auto shared_store = declare_parameter<std::string>("input.shared_point_store", "", self_filter_descriptor);
+    if (!shared_store.empty()) {
+        if (enable_self_filter_) throw std::invalid_argument("共有ROIと単独自己フィルタの併用不可");
+        shared_points_ = voxel_idx::shared_point_frames(shared_store);
+    }
     max_self_mask_age_sec_ = declare_parameter<double>("self_filter.max_mask_age_sec", 0.5, self_filter_descriptor);
     const bool enable_self_labels = declare_parameter<bool>("self_filter.enable_labelled_cloud", false, self_filter_descriptor);
     if (!std::isfinite(max_self_mask_age_sec_) || max_self_mask_age_sec_ <= 0)
@@ -634,8 +639,9 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
                     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "自己マスク無効: %s", error.what());
                 }
             });
-        if (enable_self_labels) self_labelled_pub_ = create_publisher<PC2>("scan/self_labelled", rclcpp::SensorDataQoS());
     }
+    if ((enable_self_filter_ || shared_points_) && enable_self_labels)
+        self_labelled_pub_ = create_publisher<PC2>("scan/self_labelled", rclcpp::SensorDataQoS());
     this->declare_parameter("input.base_frame_id", "map");                         // 入力点群の基準フレームID (cpu/gpu)
     this->declare_parameter("input.voxel_grid_unit", 0.02);                         // ボクセルグリッドのサイズ(m) (cpu/gpu)
     this->declare_parameter("input.visualize", true);                              // 位置フィルタの可視化 (cpu/gpu)
@@ -706,7 +712,26 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         throw std::invalid_argument("自己フィルタの入力は1トピック。複数センサは座標・時刻を整合した点群へ統合してください");
     int queue_size = 10;
     const auto pointcloud_qos = rclcpp::SensorDataQoS();
-    if(num_topics == 0){
+    if (shared_points_) {
+        // 最新の完了フレームだけの取得。raw点群subscription・再送・再分類なし
+        shared_input_timer_ = create_wall_timer(std::chrono::milliseconds(5), [this]() {
+            auto frame = shared_points_->latest();
+            if (!frame || frame->revision == shared_input_revision_) return;
+            shared_input_revision_ = frame->revision;
+            if (!frame->roi_points || !frame->source_owner || frame->source_type != "sensor_msgs/msg/PointCloud2" ||
+                frame->stamp_ns == 0 || frame->self_mask_stamp_ns == 0 ||
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - frame->received_at).count() > max_self_mask_age_sec_ ||
+                std::abs(double(now().nanoseconds() - frame->stamp_ns) * 1e-9) > max_self_mask_age_sec_ ||
+                std::abs(double(now().nanoseconds() - frame->self_mask_stamp_ns) * 1e-9) > max_self_mask_age_sec_) return;
+            const auto cloud = std::static_pointer_cast<const PC2>(frame->source_owner);
+            shared_input_frame_ = std::move(frame);
+            try {process_clouds({cloud});}
+            catch (const std::exception &error) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "共有ROI入力無効: %s", error.what());
+            }
+            shared_input_frame_.reset();
+        });
+    } else if(num_topics == 0){
         RCLCPP_ERROR(this->get_logger(), "input.topic_names is empty.");
     }else if(num_topics == 1){ // 通常のサブスクライバ
         pcl_sub_ = this->create_subscription<PC2>(
@@ -829,7 +854,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         bool success = false;
         std::vector<float> flt_array;
         auto name = p.get_name();
-        if (name.rfind("self_filter.", 0) == 0) {continue;}
+        if (name.rfind("self_filter.", 0) == 0 || name == "input.shared_point_store") {continue;}
         if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0 ||
             name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0 ||
             name == "enable_tracking_attention" || name.rfind("tracking_attention.", 0) == 0 ||
@@ -1075,19 +1100,23 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
         // ランダム抽出・層化抽出・一様間引き・行余白のある点群の連続配置。
         const bool requires_repacking =
-            enable_self_filter_ ||
+            enable_self_filter_ || shared_input_frame_ ||
             input_sampling_mode_ == PointSamplingMode::Random ||
             input_sampling_mode_ == PointSamplingMode::Stratified ||
             (input_sampling_mode_ == PointSamplingMode::Uniform && point_count > input_point_cloud_num_) ||
             static_cast<uint64_t>(msg->row_step) != static_cast<uint64_t>(msg->width) * msg->point_step;
         if (requires_repacking) {
-            if (enable_self_filter_) {
+            if (enable_self_filter_ || shared_input_frame_) {
                 try {
                     const bool can_publish_labels = self_labelled_pub_ &&
                         (self_labelled_pub_->get_subscription_count() + self_labelled_pub_->get_intra_process_subscription_count() > 0);
-                    sampled_point_indices_ = self_point_filter::select_points(*msg, input_point_cloud_num_,
-                        ++sampling_frame_, input_sampling_mode_, *self_mask_, mask_from_cloud,
-                        can_publish_labels ? &self_label_buffer_ : nullptr);
+                    auto *labels = can_publish_labels ? &self_label_buffer_ : nullptr;
+                    ++sampling_frame_;
+                    sampled_point_indices_ = shared_input_frame_
+                        ? self_point_filter::select_shared_points(*msg, input_point_cloud_num_, sampling_frame_,
+                            input_sampling_mode_, *shared_input_frame_->roi_points, labels)
+                        : self_point_filter::select_points(*msg, input_point_cloud_num_, sampling_frame_,
+                            input_sampling_mode_, *self_mask_, mask_from_cloud, labels);
                     if (can_publish_labels) self_labelled_pub_->publish(
                         self_point_filter::make_labelled_cloud(*msg, self_label_buffer_));
                 } catch (const std::invalid_argument &error) {
@@ -2100,7 +2129,7 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
     }
     try {
         geometry_msgs::msg::TransformStamped tf_msg;
-        if (enable_strict_transform_ || enable_self_filter_) {
+        if (enable_strict_transform_ || enable_self_filter_ || shared_points_) {
             if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
                 has_input_transform_ = false;
                 return lidar_config;

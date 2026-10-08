@@ -3,9 +3,9 @@ import {create_packed_depth_material,unpack_depth} from './packed-depth.js';
 import {pixel_readback_pool} from './pixel-readback.js';
 
 const rad = Math.PI / 180;
-export function nominalCalibration(width=848,height=480) {
+export function nominalCalibration(width=848,height=480,color_width=1280,color_height=720) {
   const intrinsics=(w,h,hfov,vfov)=>({width:w,height:h,fx:w/(2*Math.tan(hfov*rad/2)),fy:h/(2*Math.tan(vfov*rad/2)),ppx:(w-1)/2,ppy:(h-1)/2,model:'none',coeffs:[0,0,0,0,0]});
-  return {version:1,label:'D435i 公称画角・近似外部パラメータ（未実機校正）',depth:intrinsics(width,height,87,58),color:intrinsics(1280,720,69,42),
+  return {version:1,label:'D435i 公称画角・近似外部パラメータ（未実機校正）',depth:intrinsics(width,height,87,58),color:intrinsics(color_width,color_height,69,42),
     depth_to_color:{rotation:[1,0,0,0,1,0,0,0,1],translation:[.015,0,0]},
     mount:{translation:[0,0,0],rpy:[0,0,0]},baseline_m:.05,depth_scale:.001,min_depth_m:width===848?.195:width===424?.105:.28,max_depth_m:3};
 }
