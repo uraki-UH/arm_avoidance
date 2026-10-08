@@ -3,6 +3,7 @@ import * as THREE from 'three';
 const labels={direct:'直接配置',pick_place:'把持して移動',push:'押して移動・回転'};
 const visible=object=>{for(let p=object;p;p=p.parent)if(!p.visible)return false;return true;};
 const descendant=(object,parent)=>{for(let p=object;p;p=p.parent)if(p===parent)return true;return false;};
+const is_same_transform=(left,right)=>left.elements.every((value,idx)=>Math.abs(value-right.elements[idx])<=1e-8);
 
 // 配置編集のプレビュー専用。ロボット実行や物理的な可否保証との分離。
 export class ObjectInteraction {
@@ -121,7 +122,7 @@ export class ObjectInteraction {
   ghost.traverse(object=>{if(object.isMesh){object.material=Array.isArray(object.material)?object.material.map(preview_material):preview_material(object.material);object.castShadow=false;object.receiveShadow=false;}});
   const matrix=item.group.matrixWorld.clone();matrix.decompose(ghost.position,ghost.quaternion,ghost.scale);
   this.environment.overlay.add(ghost);
-  this.pending={item,ghost,materials,source:matrix,has_surface:true,support_z:null};
+  this.pending={item,ghost,materials,source:matrix,has_source_changed:false,has_surface:true,support_z:null};
   this.preview_box.visible=true;this.refresh();
  }
  move_preview(event){
@@ -154,25 +155,38 @@ export class ObjectInteraction {
   if(!pending)return '物体を選択してドラッグしてください';
   if(!env.items.includes(pending.item)||!visible(pending.item.group))return '元の物体が削除または非表示になりました';
   pending.item.group.updateWorldMatrix(true,true);
-  if(pending.source.elements.some((v,i)=>Math.abs(v-pending.item.group.matrixWorld.elements[i])>1e-8))return '元の配置が変更されています。取消して再選択してください';
-  if(window.simulator?.physics_panel?.socket)return '物理実行中です。物理を停止してから配置してください';
+  if(pending.has_source_changed||!is_same_transform(pending.source,pending.item.group.matrixWorld))return '元の配置が変更されています。取消して再選択してください';
   if(!pending.has_surface)return '配置面がありません。床や水平な天板に合わせてください';
   const ghost=pending.ghost;
   if(!ghost.position.toArray().every(v=>Number.isFinite(v)&&Math.abs(v)<=100))return '配置範囲外です（±100 m）';
-  if(this.mode!=='direct')return labels[this.mode]+'：計画器未接続。IK・衝突・把持／接触の可否は未判定';
   return '';
+ }
+ execution_reason(){
+  if(this.mode!=='direct')return labels[this.mode]+'：計画器未接続（目標指定のみ）';
+  if(this.environment.physics_panel?.socket)return '目標指定は可能です。直接配置の確定には物理の停止が必要です';
+  return '';
+ }
+ sync_physics_pose(item,previous_world){
+  const pending=this.pending;
+  if(pending?.item!==item||!previous_world)return;
+  if(!is_same_transform(pending.source,previous_world)){pending.has_source_changed=true;return;}
+  // 物理更新だけを元姿勢へ反映。目標の世界座標と手動編集の検出は保持
+  pending.source.copy(item.group.matrixWorld);
  }
  refresh(){
   this.apply_button.textContent=this.mode==='direct'?'確定':'未接続';
-  if(!this.pending){this.apply_button.disabled=true;return;}
-  const reason=this.reason();this.apply_button.disabled=!!reason;
+  const execution_reason=this.execution_reason();
+  this.apply_button.title=execution_reason||'配置を確定（Enter）';
+  if(!this.pending){this.apply_button.disabled=true;this.set_status('');return;}
+  const reason=this.reason();this.apply_button.disabled=!!(reason||execution_reason);
+  if(reason)this.apply_button.title=reason;
   this.preview_box.box.setFromObject(this.pending.ghost,true);
   this.preview_box.material.color.set(reason?0xffa330:0x35d5bc);
-  this.set_status(reason||'配置プレビュー：確定で直接移動（衝突・支持の安全保証なし）',reason?'blocked':'preview');
+  this.set_status(reason,reason?'blocked':'preview');
  }
  apply(){
   if(!this.pending)return;
-  const reason=this.reason();if(reason){this.refresh();return;}
+  const reason=this.reason()||this.execution_reason();if(reason){this.refresh();this.set_status(reason,'blocked');return;}
   const {item,ghost}=this.pending;
   ghost.updateWorldMatrix(true,true);item.group.parent.updateWorldMatrix(true,false);
   const local=item.group.parent.matrixWorld.clone().invert().multiply(ghost.matrixWorld);

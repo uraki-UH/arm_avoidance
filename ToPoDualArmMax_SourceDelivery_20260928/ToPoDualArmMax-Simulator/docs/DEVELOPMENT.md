@@ -21,6 +21,41 @@ Three.jsは `app/index.html` のimport mapによる固定版を共用し、UIバ
 ViewerとはThree.jsの版が異なるため、共有部品を変更した場合は両方の型検査・ビルド・描画テストが必要です。
 依存追加・更新時は `npm audit` を確認してください。脆弱性検出0件は安全性全体の保証ではありません。
 
+## ブラウザの処理コスト計測
+
+```bash
+npm run test:performance -- --output /tmp/topo-perf-before
+npm run test:performance -- --output /tmp/topo-perf-after --baseline /tmp/topo-perf-before/report.json
+# CPUプロファイルを伴う原因調査。通常計測とは別の実行。
+npm run test:performance -- --output /tmp/topo-perf-profile --profile
+```
+
+Node.js 22以上、ビルド済みUI、Chromeが必要。`CHROME_BIN`で実行ファイルを指定可能。
+専用HTTPサーバーと一時プロファイルのChromeを起動し、終了・失敗時に両方を停止。
+既存ブラウザ・ROSノードへの接続なし。出力先は毎回別のディレクトリを指定。
+既定GPUはMesa。NVIDIAは`--gpu nvidia`、描画環境なしでの動作確認は`--gpu software`。
+実GPU指定時のソフトウェア描画への代替は失敗扱い。GPU名・ブラウザ版・画面寸法・モデル・ソースのSHA-256を`report.json`へ保存。
+
+既定の試験は通常描画、画角表示、LiDAR、RGB-D、GNG静止表示、GNGの10 Hz更新。
+`--cases idle,lidar,rgbd,graph_static,graph_stream`で選択可能。
+各条件は新しいページから開始。Longモデル、1440×1000のウィンドウ、既定校正、センサの既定品質を使用。
+GNGは`--nodes 10000`が既定で、1万ノード・3万辺の固定入力。
+WS v2バイナリを受信ハンドラへ渡し、実際の復号・React更新・共有Rendererを測定。
+ネットワーク転送・DDS・ROS側の計算時間は含まない。
+
+`--duration-ms 3000`で各条件の計測期間、`--captures 10`でセンサの取得回数を指定。
+センサは両方を満たすまで逐次取得。初回のBVH・シェーダー構築は`warmup`へ別記。
+LiDARは同じ走査開始位置を使用。センサ出力配列のSHA-256も保存し、基準結果との比較時に完全一致を確認。
+フレーム間隔のp50/p95/max、50 ms超の回数、メインスレッドのタスク時間、描画呼出し時間、センサ処理時間、GC後のヒープ差分を記録。
+`render_submit`はCPUからの描画送信とそこで生じた待機の時間であり、GPU単体の実行時間ではない。
+RGB-Dの`render_ms`は描画・非同期読出し完了までの経過時間。CPU画像処理は`compute_ms - render_ms`。
+CPUプロファイルは`*.cpuprofile`としてChrome DevToolsへ読込可能。
+
+性能はGPU負荷や温度により変動するため、同条件で3回以上の反復を推奨。
+`--baseline`は計測条件・描画環境とセンサ出力を照合し、各条件の増減率を保存。
+`--max-regression-percent 20`を併記すると、フレームp95またはセンサ平均取得時間の悪化が許容率を超えた場合に終了コード1。
+既定では機種依存の時間上限なし。入力・描画の成立と例外の有無だけを合否判定。
+
 ## URDF / STLの変更とキャッシュ再生成
 
 Python 3.10以上とNumPyは、この工程だけで使用します。

@@ -16,8 +16,6 @@ import {
     Server,
     Trash2,
     UploadCloud,
-    Wifi,
-    WifiOff,
 } from 'lucide-react';
 import { Tabs, CollapsibleSection } from '../layout/MainLayout';
 import { ServerFileBrowser } from '../features/io/ServerFileBrowser';
@@ -103,7 +101,6 @@ interface SidebarContentProps {
     getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
     applyTemplateMatchConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
 
-    totalPoints: number;
     pointClouds: PointCloudData[];
     selectedLayerId: string | null;
     onSelectLayer: (id: string | null) => void;
@@ -199,7 +196,8 @@ const ColorActionButton: React.FC<{
 };
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
-    const hasGngLayer = Object.keys(props.graphData).length > 0;
+    const has_scene_layers = props.pointClouds.length > 0 ||
+        [props.graphData, props.robotData, props.markerData, props.voxelData].some(data => Object.keys(data).length > 0);
     const isLayerActionDisabled = props.isEditMode;
     const [labelContext, setLabelContext] = useState<{ tag: string; title: string } | null>(null);
     const [isObjectMatchDialogOpen, setIsObjectMatchDialogOpen] = useState(false);
@@ -218,55 +216,41 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     };
 
     const layersTab = (
-        <div className="space-y-3">
-            <div className="surface-soft grid grid-cols-2 gap-2 p-3">
-                <div className="surface-muted p-2">
-                    <p className="panel-title mb-1">Connection</p>
-                    <span className={`status-pill ${props.isConnected ? 'is-connected' : 'is-disconnected'}`}>
-                        {props.isConnected ? 'Online' : 'Offline'}
-                    </span>
-                </div>
-                <div className="surface-muted p-2">
-                    <p className="panel-title mb-1">Workspace</p>
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">{props.pointClouds.length} Layers</p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">{props.totalPoints.toLocaleString()} points</p>
-                </div>
-            </div>
-
-            <CollapsibleSection title="Connection & Streams" icon={<Database size={16} />} defaultOpen={true}>
-                <div className="surface-muted space-y-3 p-3">
-                    <button
-                        onClick={props.isConnected ? props.disconnect : props.connect}
-                        className={`w-full px-4 py-2 text-sm font-semibold ${props.isConnected ? 'btn-danger text-white' : 'btn-primary'}`}
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            {props.isConnected ? <WifiOff size={16} /> : <Wifi size={16} />}
-                            {props.isConnected ? 'Disconnect WebSocket' : 'Connect WebSocket'}
-                        </span>
-                    </button>
-                    {props.wsError && (
-                        <div className="rounded-md border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-xs text-red-200">
-                            {props.wsError}
-                        </div>
-                    )}
-                    <SourceSelector
-                        is_read_only={props.is_read_only}
-                        isConnected={props.isConnected}
-                        sources={props.sources}
-                        getSources={props.getSources}
-                        subscribeSource={props.subscribeSource}
-                        unsubscribeSource={props.unsubscribeSource}
-                        startGng={props.startGng}
-                        stopGng={props.stopGng}
-                        getGngStatus={props.getGngStatus}
-                        listGngConfigs={props.listGngConfigs}
-                        onSourceToggled={props.onSourceToggled}
-                    />
-                </div>
-            </CollapsibleSection>
+        <div className="space-y-2">
+            <section aria-label="Connection & Streams" className="space-y-1.5">
+                {props.wsError && (
+                    <div role="alert" className="rounded bg-[var(--danger)]/10 px-2 py-1 text-xs text-red-200">
+                        {props.wsError}
+                    </div>
+                )}
+                <SourceSelector
+                    connection_control={
+                        <button
+                            onClick={props.isConnected ? props.disconnect : props.connect}
+                            aria-label={props.isConnected ? 'ROS表示から切断' : 'ROS表示に接続'}
+                            title={props.isConnected ? 'クリックで切断' : 'クリックで接続'}
+                            className="inline-flex min-h-7 shrink-0 items-center gap-1.5 rounded px-2 text-xs hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"
+                        >
+                            <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${props.isConnected ? 'bg-emerald-400' : 'bg-slate-400'}`} />
+                            <span role="status" aria-live="polite">{props.isConnected ? 'Online' : 'Offline'}</span>
+                        </button>
+                    }
+                    is_read_only={props.is_read_only}
+                    isConnected={props.isConnected}
+                    sources={props.sources}
+                    getSources={props.getSources}
+                    subscribeSource={props.subscribeSource}
+                    unsubscribeSource={props.unsubscribeSource}
+                    startGng={props.startGng}
+                    stopGng={props.stopGng}
+                    getGngStatus={props.getGngStatus}
+                    listGngConfigs={props.listGngConfigs}
+                    onSourceToggled={props.onSourceToggled}
+                />
+            </section>
 
             <CollapsibleSection title="Scene Layers" icon={<Layers size={16} />} defaultOpen={true}>
-                <div className="surface-muted space-y-2 px-3 pt-2.5 pb-5">
+                <div className="space-y-2 pb-1">
                     <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                         {props.isEditMode && (
                             <div className="rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
@@ -469,8 +453,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         )}
                     </div>
 
-                    {props.pointClouds.length === 0 && !hasGngLayer && (
-                        <p className="py-4 text-center text-xs italic text-[var(--text-secondary)]">No layers available.</p>
+                    {!has_scene_layers && (
+                        <p className="py-2 text-center text-xs text-[var(--text-secondary)]">No layers available.</p>
                     )}
                 </div>
             </CollapsibleSection>

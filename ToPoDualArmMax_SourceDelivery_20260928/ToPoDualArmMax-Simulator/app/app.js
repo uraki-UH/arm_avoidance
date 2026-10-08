@@ -189,7 +189,11 @@ function bindUI(){
  $('photo').onclick=()=>setPhoto(!photoMode);$('screenshot').onclick=()=>{const prev=photoMode;setPhoto(true);draw();renderer.domElement.toBlob(b=>{if(b)download(model.exportName+'.png',b,'image/png');setPhoto(prev);},'image/png');};
  $('show-grid').onchange=e=>grid.visible=e.target.checked;$('show-trails').onchange=e=>{for(const t of Object.values(trails)){t.line.visible=e.target.checked;if(!e.target.checked){t.points=[];t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry();}}};
  $('show-markers').onchange=e=>{markersVisible=e.target.checked;updateMarkerVisibility();};
- $('studio').onchange=e=>{const dark=e.target.value==='dark';document.body.classList.toggle('dark-studio',dark);scene.background.set(dark?'#19231e':'#edf0ed');scene.fog.color.copy(scene.background);floor.material.color.set(dark?'#253329':'#e0e3e0');scene.environmentIntensity=dark?.6:.65;renderer.shadowMap.needsUpdate=true;};
+ $('studio').onchange=e=>{const dark=e.target.value==='dark';document.body.classList.toggle('dark-studio',dark);scene.background.set(dark?'#1e1e1e':'#edf0ed');scene.fog.color.copy(scene.background);floor.material.color.set(dark?'#292929':'#e0e3e0');scene.environmentIntensity=dark?.6:.65;renderer.shadowMap.needsUpdate=true;};
+ $('enable-shadows').onclick=()=>{const enable_shadows=!renderer.shadowMap.enabled;renderer.shadowMap.enabled=enable_shadows;renderer.shadowMap.needsUpdate=enable_shadows;
+  // 影の有無に対応するシェーダーの再選択。更新は切り替え時のみ
+  const shadow_materials=new Set();scene.traverse(object=>{if(object.material)for(const material of Array.isArray(object.material)?object.material:[object.material])shadow_materials.add(material);});for(const material of shadow_materials)material.needsUpdate=true;
+  const button=$('enable-shadows');button.classList.toggle('active',enable_shadows);button.setAttribute('aria-pressed',String(enable_shadows));button.textContent=enable_shadows?'影 ON':'影 OFF';};
  $('quality').onchange=e=>{ao.enabled=e.target.value==='high';renderer.setPixelRatio(Math.min(devicePixelRatio,e.target.value==='high'?1.5:1));composer.setPixelRatio(renderer.getPixelRatio());resize();};
  $('exposure').oninput=e=>renderer.toneMappingExposure=+e.target.value;$('help-button').onclick=()=>$('help').showModal();$('close-help').onclick=()=>$('help').close();
  $('add-keyframe').onclick=()=>{if(keyframes.length>=50){toast('記録できるポーズは50個までです。');return;}keyframes.push(robot.getPose());renderKeyframes();toast(`ポーズ ${keyframes.length} を記録しました`);};$('play').onclick=playSequence;$('clear-frames').onclick=()=>{stopPlayback();keyframes.length=0;renderKeyframes();};
@@ -274,7 +278,7 @@ async function switchModel(id){
  }finally{
   switchingModel=false;ready=true;diagnostics.ready=true;document.querySelector('aside').inert=false;document.querySelector('footer').inert=false;
   lidar.live=wasLive.lidar; if(rgbd)rgbd.live=wasLive.rgbd;if(ai)ai.running=wasLive.ai;
-  $('lidar-live').textContent=lidar.live?'■ 停止':'▶ 連続取得';if(rgbd)$('sensor-live').textContent=rgbd.live?'■ RGB-D停止':'▶ RGB-D開始';if(ai)$('ai-start').textContent=ai.running?'■ 入力を停止':'▶ VM処理を開始';
+  if(rgbd)$('sensor-live').textContent=rgbd.live?'■ RGB-D停止':'▶ RGB-D開始';if(ai)$('ai-start').textContent=ai.running?'■ 入力を停止':'▶ VM処理を開始';
   $('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');updateModelUI();updateUI();lidar.publish();ai?.publish();
   if(restoreTabFocus)document.querySelector(`[data-model=${model.id}]`).focus({preventScroll:true});
  }

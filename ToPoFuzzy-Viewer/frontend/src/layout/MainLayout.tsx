@@ -104,9 +104,9 @@ export function Tabs({ tabs, defaultTabId, className = '' }: TabsProps) {
 
     return (
         <div className={`flex h-full min-h-0 flex-col ${className}`}>
-            <div className="sticky top-0 z-20 -mx-1 mb-3 rounded-xl bg-[rgba(8,19,29,0.7)] px-1 pb-2 pt-3 backdrop-blur-sm">
+            <div className="sticky top-0 z-20 mb-2 border-b border-white/10 bg-[var(--bg-primary)] pb-1">
                 <div
-                    className="grid gap-1.5"
+                    className="grid gap-1"
                     style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
                 >
                     {tabs.map(tab => (
@@ -116,7 +116,7 @@ export function Tabs({ tabs, defaultTabId, className = '' }: TabsProps) {
                                 setActiveTabId(tab.id);
                                 tab.onActivate?.();
                             }}
-                            className={`relative flex min-h-[40px] items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all ${activeTabId === tab.id
+                            className={`relative flex min-h-8 items-center justify-center gap-1 rounded px-1 py-1 text-[11px] font-semibold transition-all ${activeTabId === tab.id
                                 ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)] ring-1 ring-[var(--accent-color)]/40'
                                 : 'text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)]'
                                 }`}
@@ -191,11 +191,11 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         <section className={`surface-soft overflow-hidden ${className}`}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex w-full items-center justify-between px-4 py-3 text-left transition-colors ${headerClassName} ${isOpen ? 'bg-white/5' : 'hover:bg-white/5'
+                className={`flex w-full items-center justify-between px-2 py-2 text-left transition-colors ${headerClassName} ${isOpen ? 'bg-white/5' : 'hover:bg-white/5'
                     }`}
                 aria-expanded={isOpen}
             >
-                <div className={`flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)] ${titleClassName}`}>
+                <div className={`flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)] ${titleClassName}`}>
                     {icon && <span className="text-[var(--text-secondary)]">{icon}</span>}
                     <span>{title}</span>
                 </div>
@@ -207,7 +207,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
                 className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
                 style={{ maxHeight, opacity: isOpen ? 1 : 0 }}
             >
-                <div ref={contentRef} className="space-y-4 px-4 pb-4">
+                <div ref={contentRef} className="space-y-2 px-2 pb-2">
                     {children}
                 </div>
             </div>

@@ -39,8 +39,9 @@ ros2 run topo_fuzzy_viewer viewer_edit_node
 ros2 run topo_fuzzy_viewer viewer_vehicle_registration_node.py
 ```
 
-「ROS 2連携 → ROS Scene Layers」の接続先は `ws://127.0.0.1:9001/observe`。
-`Connection & Streams → Topics` のチェックボックスでトピックの購読・表示を切り替えます。
+「ROS 2連携 → ROS Scene Layers」の既定接続先は `ws://127.0.0.1:9001/observe`。変更時だけ「接続・座標設定」を開きます。
+パネルの初回表示と接続先変更時に自動接続します。Topics行の `Online` をクリックすると切断し、手動切断後は `Offline` をクリックして再接続します。右端の更新アイコンで一覧を再取得できます。
+`Topics` のチェックボックスでトピックの購読・表示を切り替えます。
 `Scene Layers` は従来の目アイコンと、色・透明度などの表示設定です。
 ToPoFuzzy-Viewerの `App`・通信フック・各Renderer・設定パネルを共用しています。
 

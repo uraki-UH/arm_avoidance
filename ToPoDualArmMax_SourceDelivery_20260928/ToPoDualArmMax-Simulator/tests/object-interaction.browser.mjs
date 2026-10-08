@@ -45,6 +45,16 @@ try{
  let is_ready=false;
  for(let i=0;i<150;i++){is_ready=await evaluate('!!window.simulator?.diagnostics.ready');if(is_ready)break;await pause(200);}
  assert.ok(is_ready,'アプリ起動失敗');
+
+ // 影切り替えの画素比較と、ON復帰時の描画一致
+ const shadow_result=await evaluate(`(()=>{
+  const r=simulator.renderer,button=document.getElementById('enable-shadows'),gl=r.getContext();
+  const capture=()=>{r.shadowMap.needsUpdate=true;r.render(simulator.scene,simulator.camera);const pixels=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,pixels);return pixels;};
+  const before=capture();button.click();const off=capture();button.click();const after=capture();
+  let changed=0,restored=0;for(let i=0;i<before.length;i+=4){if(before[i]!==off[i]||before[i+1]!==off[i+1]||before[i+2]!==off[i+2])changed++;if(before[i]!==after[i]||before[i+1]!==after[i+1]||before[i+2]!==after[i+2])restored++;}
+  return {changed_pixels:changed,restore_diff:restored};
+ })()`);
+ assert.ok(shadow_result.changed_pixels>100,'影OFFで画素変化が必要');assert.equal(shadow_result.restore_diff,0,'ON復帰で元の画像へ一致');console.log(JSON.stringify(shadow_result));
  assert.equal(await evaluate(`(async()=>{
   const panel=simulator.physics_panel,robot=simulator.robot,saved=robot.getPose(),prepare=panel.prepare_motion;
   let num_attempts=0;panel.prepare_motion=async()=>{num_attempts++;throw Error('試験用の未接続ブリッジ');};
@@ -154,6 +164,68 @@ try{
  assert.equal(await evaluate(`(()=>{ui.begin(bottle);bottle.group.position.x+=.01;ui.refresh();const ok=ui.apply_button.disabled&&ui.reason().includes('変更');ui.cancel();return ok;})()`),true,'元配置変更');
  assert.equal(await evaluate(`(()=>{ui.begin(bottle);env.items=env.items.filter(x=>x!==bottle);ui.refresh();const ok=ui.apply_button.disabled;ui.cancel();return ok;})()`),true,'削除済み対象');
  await evaluate('env.items.push(bottle);env.updateList()');
+ // 模擬WebSocketによる目標プレビュー・物理受信・確定の分離。外部ブリッジへの送信なし
+ assert.deepEqual(await evaluate(`(()=>{
+  const panel=env.physics_panel,robot=simulator.robot,saved_pose=robot.getPose(),saved_socket=window.WebSocket;
+  bottle.group.updateWorldMatrix(true,true);const saved_world=bottle.group.matrixWorld.clone();
+  const select=ui.panel.querySelector('select'),results=[];
+  class PreviewSocket {
+   static OPEN=1;
+   readyState=1;bufferedAmount=0;num_closed=0;messages=[];
+   send(message){this.messages.push(JSON.parse(message));}
+   close(){this.num_closed++;this.readyState=3;}
+  }
+  window.WebSocket=PreviewSocket;
+  const has_same_transform=(left,right)=>left.elements.every((value,idx)=>Math.abs(value-right.elements[idx])<1e-8);
+  const check=(condition,message)=>{if(!condition)throw Error(message);};
+  try{
+   for(const mode of ['direct','pick_place','push']){
+    select.value=mode;select.dispatchEvent(new Event('change'));ui.begin(bottle);panel.start();
+    const socket=panel.socket;check(socket instanceof PreviewSocket,'物理開始');socket.onopen();
+    check(socket.messages[0].type==='start'&&ui.apply_button.disabled,'接続開始時の確定制限');
+    const original=bottle.group.matrixWorld.clone();
+    const point=screenPoint(new THREE.Vector3(-.16,.1,.001).applyMatrix4(env.root.matrixWorld));
+    ui.move_preview({clientX:point.x,clientY:point.y});ui.rotate(15);
+    const goal=ui.pending.ghost.matrixWorld.clone();
+    check(!ui.reason()&&ui.status.hidden&&ui.status.dataset.state==='preview','物理実行中の目標指定');
+    check(!has_same_transform(goal,original)&&has_same_transform(bottle.group.matrixWorld,original),'目標と元物体の分離');
+    check(ui.preview_box.material.color.getHex()===0x35d5bc,'有効な目標の枠色');
+    check(mode==='direct'?ui.apply_button.title.includes('直接配置'):ui.apply_button.title.includes('未接続')&&!ui.apply_button.title.includes('停止'),'操作別の未実行理由');
+    ui.apply();
+    check(ui.status.dataset.state==='blocked'&&has_same_transform(bottle.group.matrixWorld,original)&&panel.socket===socket&&!socket.num_closed,'物理実行中の確定防止');
+    if(mode!=='direct')check(ui.status.textContent.includes('未接続')&&!ui.status.textContent.includes('停止'),'計画器未接続時の表示');
+    ui.refresh();
+    const position=bottle.group.getWorldPosition(new THREE.Vector3()),quaternion=bottle.group.getWorldQuaternion(new THREE.Quaternion());
+    const receive=()=>{
+     panel.latest={type:'physics',poses:[{id:'object_'+bottle.id,position:position.toArray(),quaternion:quaternion.toArray()}],time_sec:1,contacts:0};
+     panel.tick(performance.now());
+    };
+    for(let iter=0;iter<3;iter++){
+     position.z+=.01;quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),.1));receive();
+     check(bottle.group.getWorldPosition(new THREE.Vector3()).distanceTo(position)<1e-8,'元物体の物理姿勢反映');
+     check(bottle.group.getWorldQuaternion(new THREE.Quaternion()).angleTo(quaternion)<1e-7,'元物体の物理回転反映');
+     check(!ui.reason()&&has_same_transform(ui.pending.ghost.matrixWorld,goal)&&ui.status.hidden,'物理更新中の目標保持');
+    }
+    check(panel.socket===socket&&!socket.num_closed,'プレビュー中の接続維持');
+    if(mode==='direct'){
+     panel.stop();check(socket.num_closed===1&&!ui.apply_button.disabled&&ui.status.hidden,'停止後の確定解禁');
+     ui.apply();check(!ui.pending&&has_same_transform(bottle.group.matrixWorld,goal),'停止後だけ直接配置');
+    }else{
+     bottle.group.position.x+=.02;receive();receive();
+     check(ui.reason().includes('変更'),'物理更新で手動編集の検出を無効化しない');
+     panel.stop();check(ui.apply_button.disabled,'停止後も未接続の計画実行は禁止');
+    }
+    ui.cancel();results.push(mode);
+   }
+   return results;
+  }finally{
+   panel.stop();window.WebSocket=saved_socket;ui.cancel();select.value='direct';select.dispatchEvent(new Event('change'));
+   bottle.group.parent.updateWorldMatrix(true,false);
+   bottle.group.parent.matrixWorld.clone().invert().multiply(saved_world).decompose(bottle.group.position,bottle.group.quaternion,bottle.group.scale);
+   bottle.group.updateMatrixWorld(true);robot.setPose(saved_pose);env.syncObject();env.changed();
+  }
+ })()`),['direct','pick_place','push'],'物理中の目標指定・姿勢受信・停止後の直接配置・未接続保護');
+ console.log('PASS physics preview / fixed goal / pose updates / commit guard / manual edit detection');
  // 右クリック時の選択保持と、選択対象だけの一括削除
  await evaluate('env.select(bottle.id)');await ctrl_click(box_point);
  await mouse('mouseMoved',box_point);

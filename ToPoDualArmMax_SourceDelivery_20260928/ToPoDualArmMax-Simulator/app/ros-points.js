@@ -14,7 +14,7 @@ export class RosPointsPanel{
   ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（MID-360）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
   <label><input id="ros-depth" type="checkbox" checked> 深度画像・CameraInfo・画素対応点群も送信</label>
   <div class="row-actions"><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
-  <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>
+  <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。取得開始時に対応トピックを自動選択。「連続送信」で送信開始。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>
 </section>`;
   if(location.port==='8879')$('ros-endpoint').value=location.origin;
   this.object_capture=new ObjectCapturePanel({environment,rgbd});
@@ -22,6 +22,15 @@ export class RosPointsPanel{
   for(const id of ['ros-endpoint','ros-depth',...sources.map(source=>'ros-send-'+source)])$(id).onchange=()=>{this.generation++;};
   $('ros-endpoint').addEventListener('change',()=>{this.last_sent_frames={};});
   $('ros-depth').addEventListener('change',()=>{delete this.last_sent_frames.rgbd;});
+  // 取得開始時だけ送信候補を選択。送信開始と手動の選択解除は独立
+  const select_source=source=>{const checkbox=$('ros-send-'+source);if(checkbox&&!checkbox.checked){checkbox.checked=true;this.generation++;}};
+  $('sensor-live').addEventListener('click',()=>{if(rgbd.live)select_source('rgbd');});
+  $('sensor-once').addEventListener('click',()=>select_source('rgbd'));
+  $('lidar-enable').addEventListener('change',()=>{if(lidar.config.enabled)select_source('mid360');});
+  $('lidar-once').addEventListener('click',()=>select_source('mid360'));
+  $('object-capture-live').addEventListener('click',()=>{if(this.object_capture.is_running)select_source($('object-capture-source').value);});
+  $('object-capture-once').addEventListener('click',()=>select_source($('object-capture-source').value));
+  $('object-capture-source').addEventListener('change',()=>{if(this.object_capture.is_running)select_source($('object-capture-source').value);});
   this.robot_panel=new RosRobotPanel({rgbd,toast});
  }
  update_button(){$('ros-start').textContent=this.is_running?'送信を停止':'連続送信';}

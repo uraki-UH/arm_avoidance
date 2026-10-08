@@ -248,10 +248,11 @@ function App({ host }: { host?: viewer_host } = {}) {
         mesh_base_url: wsUrl.replace(/^ws/, 'http').replace(/\/$/, '') + '/meshes/',
     }, [host, wsUrl]);
 
+    // 初回表示・接続先変更時の自動接続。手動切断後の再描画による再接続なし。
     useEffect(() => {
-        if (!host) connect();
+        connect();
         return () => disconnect();
-    }, [connect, disconnect, host]);
+    }, [connect, disconnect]);
 
     const clipping = useClippingPlanes();
   const zoneMonitor = useZoneMonitor();
@@ -566,7 +567,6 @@ function App({ host }: { host?: viewer_host } = {}) {
         setSelectedLayerId(id);
     };
 
-    const totalPoints = pointClouds.reduce((sum, pc) => sum + pc.count, 0);
     const selectedCloud = pointClouds.find((pc) => pc.id === selectedLayerId);
     const renderClouds = isEditMode && editLayerId
         ? pointClouds.filter((pc) => pc.id === editLayerId)
@@ -677,7 +677,6 @@ function App({ host }: { host?: viewer_host } = {}) {
                             getRosbagStatus={getRosbagStatus}
                             listPointCloudFiles={listPointCloudFiles}
                             loadPointCloudFile={loadPointCloudFile}
-                            totalPoints={totalPoints}
                             pointClouds={pointClouds}
                             selectedLayerId={selectedLayerId}
                             onSelectLayer={handleSelectLayer}

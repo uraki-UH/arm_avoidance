@@ -54,6 +54,7 @@ export class PhysicsPanel {
  }
  stop(message='物理OFF'){
   const socket=this.socket;this.socket=null;if(socket)socket.close();this.latest=null;this.scene.userData.physics_time_sec=null;$('physics-status').textContent=message;
+  this.environment.object_interaction?.refresh();
  }
  start(){
   this.stop();
@@ -73,6 +74,7 @@ export class PhysicsPanel {
    socket.onmessage=event=>{if(this.socket!==socket)return;try{const value=JSON.parse(event.data);if(value.type==='error')throw Error(value.error);if(value.type==='physics')this.latest=value;if(value.type==='ready')$('physics-status').textContent='MuJoCo接続済み';}catch(error){this.stop('物理エラー：'+error.message);}};
    socket.onerror=()=>{if(this.socket===socket)this.stop('物理ブリッジに接続できません。一括起動とMuJoCoの導入を確認してください');};
    socket.onclose=()=>{if(this.socket===socket)this.stop('物理接続が切れました');};
+   environment.object_interaction?.refresh();
   }catch(error){this.stop('物理エラー：'+error.message);}
  }
  async prepare_motion(){
@@ -108,7 +110,18 @@ export class PhysicsPanel {
   if(this.latest){
    const frame=this.latest;this.latest=null;
    if(frame.joints){this.actual_joints=frame.joints;for(const [name,value] of Object.entries(frame.joints))current_robot.setJoint(name,value,false);current_robot.updateMatrixWorld(true);this.actual=current_robot.getPose();}
-   for(const pose of frame.poses){const item=this.environment.items.find(x=>'object_'+x.id===pose.id);if(!item){this.stop('物体構成変更のため停止');return;}const world=new THREE.Matrix4().compose(new THREE.Vector3(...pose.position),new THREE.Quaternion(...pose.quaternion),item.group.getWorldScale(new THREE.Vector3()));item.group.parent.updateWorldMatrix(true,false);const local=item.group.parent.matrixWorld.clone().invert().multiply(world);local.decompose(item.group.position,item.group.quaternion,item.group.scale);item.group.updateMatrixWorld(true);}
+   for(const pose of frame.poses){
+    const item=this.environment.items.find(x=>'object_'+x.id===pose.id);
+    if(!item){this.stop('物体構成変更のため停止');return;}
+    const interaction=this.environment.object_interaction;
+    item.group.updateWorldMatrix(true,false);
+    const previous_world=interaction?.pending?.item===item?item.group.matrixWorld.clone():null;
+    const world=new THREE.Matrix4().compose(new THREE.Vector3(...pose.position),new THREE.Quaternion(...pose.quaternion),item.group.getWorldScale(new THREE.Vector3()));
+    item.group.parent.updateWorldMatrix(true,false);
+    const local=item.group.parent.matrixWorld.clone().invert().multiply(world);
+    local.decompose(item.group.position,item.group.quaternion,item.group.scale);item.group.updateMatrixWorld(true);
+    interaction?.sync_physics_pose(item,previous_world);
+   }
    this.environment.renderer.shadowMap.needsUpdate=true;this.environment.syncObject();this.environment.refresh_selection();
    this.scene_signature=JSON.stringify(this.environment.getState());
    this.scene.userData.physics_time_sec=frame.time_sec;$('physics-status').textContent=`MuJoCo実行中 · ${frame.time_sec.toFixed(2)} s · 接触 ${frame.contacts}件`;

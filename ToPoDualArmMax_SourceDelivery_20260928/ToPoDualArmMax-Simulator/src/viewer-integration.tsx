@@ -44,21 +44,24 @@ export function mount_viewer(container: HTMLElement, options: scene_options) {
                 on_transforms: (items, is_static) => scene.frames.update(items, is_static),
                 on_clear: () => scene.frames.clear(), on_state: state => { api = state; } };
         }, [endpoint]);
-        return <section className="viewer-shell"><h3 className="text-sm font-bold">ROS Scene Layers</h3>
-            <div className="viewer-connection">
-                <label>表示サーバー<input className="input-field" aria-label="ROS結果の接続先" defaultValue={endpoint}
-                    onBlur={event => {
-                        try {
-                            const url = new URL(event.target.value);
-                            if (!['ws:', 'wss:'].includes(url.protocol) || url.pathname !== '/observe' || url.username || url.password || url.search || url.hash) throw Error('ws(s)://ホスト:ポート/observe を指定してください');
-                            if (endpoint !== url.href) { api?.disconnect(); set_endpoint(url.href); }
-                            set_error('');
-                        } catch (error) { set_error(String(error)); }
-                    }} /></label>
-                <label>シーン原点に対応するROSフレーム<input className="input-field" value={fixed_frame}
-                    onChange={event => { set_fixed_frame(event.target.value); scene.frames.fixed_frame = event.target.value.trim(); }} /></label>
-                {error && <p role="alert">{error}</p>}
-            </div>
+        return <section className="viewer-shell">
+            <details className="viewer-connection">
+                <summary><strong>ROS Scene Layers</strong><span>接続・座標設定</span></summary>
+                <div className="viewer-connection-fields">
+                    <label>表示サーバー<input className="input-field" aria-label="ROS結果の接続先" defaultValue={endpoint}
+                        onBlur={event => {
+                            try {
+                                const url = new URL(event.target.value);
+                                if (!['ws:', 'wss:'].includes(url.protocol) || url.pathname !== '/observe' || url.username || url.password || url.search || url.hash) throw Error('ws(s)://ホスト:ポート/observe を指定してください');
+                                if (endpoint !== url.href) { api?.disconnect(); set_endpoint(url.href); }
+                                set_error('');
+                            } catch (error) { set_error(String(error)); }
+                        }} /></label>
+                    <label>シーン原点に対応するROSフレーム<input className="input-field" value={fixed_frame}
+                        onChange={event => { set_fixed_frame(event.target.value); scene.frames.fixed_frame = event.target.value.trim(); }} /></label>
+                </div>
+            </details>
+            {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
             <FrameStatus on_select_frame={frame => {
                 set_fixed_frame(frame); scene.frames.fixed_frame = frame; scene.request_focus();
             }} />

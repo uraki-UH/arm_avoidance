@@ -3,8 +3,13 @@
 @source './';
 @import '../../../ToPoFuzzy-Viewer/frontend/src/index.css';
 :host { display: block; font-family: system-ui, sans-serif; color: var(--text-primary); }
-.viewer-shell { background: var(--bg-primary); padding: 8px; border-radius: 10px; height: 680px; min-height: 400px; display: flex; flex-direction: column; }
+.viewer-shell { background: var(--bg-primary); padding: 6px; border-radius: 8px; height: 680px; min-height: 400px; display: flex; flex-direction: column; }
 .viewer-sidebar { flex: 1; min-height: 0; }
 .viewer-dialog-layer { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
 .viewer-dialog-layer > * { pointer-events: auto; }
-.viewer-connection { display: grid; gap: 8px; padding: 8px 0; font-size: 12px; }
+.viewer-connection { margin-bottom: 4px; font-size: 12px; }
+.viewer-connection summary { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; list-style: none; }
+.viewer-connection summary::before { content: '▸'; }
+.viewer-connection[open] summary::before { content: '▾'; }
+.viewer-connection summary span { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
+.viewer-connection-fields { display: grid; gap: 6px; padding: 4px 0 8px; }

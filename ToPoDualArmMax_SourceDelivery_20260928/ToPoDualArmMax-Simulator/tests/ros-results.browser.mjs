@@ -68,9 +68,7 @@ try{
  await evaluate(`document.querySelector('[data-panel=ros]').click();simulator.ros_results.open()`);
  await wait_for('!!simulator.ros_results.api');
  await evaluate(`(()=>{const input=document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="ROS結果の接続先"]');input.value='ws://127.0.0.1:${ws_port}/observe';input.dispatchEvent(new FocusEvent('focusout',{bubbles:true,composed:true}));})()`);
- await pause(300);
- await evaluate('simulator.ros_results.api.connect()');
- await wait_for('simulator.ros_results.api.sources.length>=8');
+ await wait_for(`simulator.ros_results.api.isConnected&&simulator.ros_results.api.sources.some(source=>source.id==='/test/Tmap_robot')`);
  console.log('READY: Viewer sources');
  // 実際のTopicsチェックボックスで購読開始。
  await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelectorAll('input[type=checkbox][aria-label^="Topic: "]').forEach(input=>{if(!input.checked)input.click();})`);

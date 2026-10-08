@@ -68,7 +68,7 @@ export class RGBDWorkspace {
   finally{this.is_capture_pending=false;}
  }
  paint(f){
-  const rgb=$('rgb-preview'),d=$('depth-preview'),kc=f.calibration.color,k=f.calibration.depth;rgb.width=kc.width;rgb.height=kc.height;rgb.previousElementSibling.querySelector('span').textContent=`${kc.width} × ${kc.height}`;rgb.getContext('2d').putImageData(new ImageData(f.rgba,kc.width,kc.height),0,0);d.width=k.width;d.height=k.height;
+  const rgb=$('rgb-preview'),d=$('depth-preview'),kc=f.calibration.color,k=f.calibration.depth;if(rgb.width!==kc.width)rgb.width=kc.width;if(rgb.height!==kc.height)rgb.height=kc.height;rgb.previousElementSibling.querySelector('span').textContent=`${kc.width} × ${kc.height}`;rgb.getContext('2d').putImageData(new ImageData(f.rgba,kc.width,kc.height),0,0);if(d.width!==k.width)d.width=k.width;if(d.height!==k.height)d.height=k.height;
   const rgba=new Uint8ClampedArray(k.width*k.height*4),lo=f.calibration.min_depth_m,hi=f.calibration.max_depth_m;
   for(let i=0;i<f.depth.length;i++){const z=f.depth[i],a=i*4;if(z){const t=THREE.MathUtils.clamp((z-lo)/(hi-lo),0,1);rgba[a]=255*Math.max(0,1-Math.abs(t*3-2));rgba[a+1]=255*Math.max(0,1-Math.abs(t*3-1));rgba[a+2]=255*Math.max(0,1-Math.abs(t*3));}else{rgba[a]=18;rgba[a+1]=20;rgba[a+2]=29;}rgba[a+3]=255;}d.getContext('2d').putImageData(new ImageData(rgba,k.width,k.height),0,0);
   $('depth-near').textContent=lo+' m';$('depth-far').textContent=hi+' m';$('pixel-u').max=k.width-1;$('pixel-v').max=k.height-1;if(+$('pixel-u').value>=k.width)$('pixel-u').value=Math.floor(k.width/2);if(+$('pixel-v').value>=k.height)$('pixel-v').value=Math.floor(k.height/2);

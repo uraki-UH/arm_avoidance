@@ -4,5 +4,5 @@
 #model-tabs button[aria-selected=true]{background:#8c1c8c;color:white;border-color:#8c1c8c;font-weight:650}
 #model-tabs button:focus-visible{outline:2px solid #8c1c8c;outline-offset:2px}
 #model-tabs .model-status{font-size:10px;color:#99869f;margin-left:auto}
-main{height:calc(100dvh - 220px)}
+main{height:calc(100dvh - 196px)}
 @media(max-width:700px){#model-tabs{height:50px;padding:0 15px;gap:8px}#model-tabs .model-tabs-label{display:none}#model-tabs button{padding:7px 19px;min-width:101px}#model-tabs .model-status{font-size:9px}main{height:auto}}
