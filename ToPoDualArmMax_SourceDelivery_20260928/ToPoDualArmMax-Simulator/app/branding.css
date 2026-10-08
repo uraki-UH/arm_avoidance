@@ -17,3 +17,5 @@ dialog{background:#fff;border-color:#d8c3e1;color:#685371;box-shadow:0 20px 100p
 .export-link{display:block;color:#8c1c8c;font-size:9px;line-height:1.6;margin-top:10px}.export-link[hidden]{display:none}
 @media(max-width:1150px){header{gap:15px}.company-logo{width:155px}.product-header strong{font-size:21px}.company-footer{display:none}.camera-bar{top:105px;left:22px;right:auto}}
 @media(max-width:700px){header{height:86px;padding:12px 15px 0;gap:12px}.product-header strong{font-size:16px;letter-spacing:-.7px}.product-header>span{font-size:9px}.company-logo{width:117px;margin-left:auto}header .icon{display:none}main{height:auto}#viewport{height:70vh;min-height:480px}.view-top h1{font-size:18px}.company-footer{display:none}.view-top{left:20px}.camera-bar{top:auto;bottom:12px;left:17px}.bottom-info{display:none}.timeline-title{display:none}footer{padding:0 12px;gap:8px}}
+
+.camera-bar #studio{width:auto;min-width:0;margin:0;padding:5px 6px;border:1px solid #dfd6e4;border-radius:5px;background:#fff;color:#685371;color-scheme:light;font-size:10px}
