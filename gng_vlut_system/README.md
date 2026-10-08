@@ -132,7 +132,18 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py
 
 
 `gng.enable_independent_arms: true`では左右各7関節を別々に学習します。
-上限は片腕10,000ノード、初期240万回・衝突回避付き追加10万回・TCP辺構築10万回が片腕ごとの設定です。
+上限は片腕10,000ノード、初期240万回・追加10万回の配置更新が片腕ごとの設定です。
+既定の`gng.enable_batched_collision_filter: true`では配置確定後に全ノードを検査し、
+学習で得られた関節空間の候補辺から、各ノードの近傍6候補と最小全域森を選びます。
+選んだ辺だけを最大関節差0.025 radの間隔で検査し、非干渉の接続をTCP層にも共有します。
+TCP位置だけから別の辺を追加する処理はなく、この方式では`coord_edge_iterations`は未使用です。
+`gng.collision_worker_num`は既定16、`gng.num_local_neighbors`は既定6です。
+近傍・全域森の選択外となった候補辺は、衝突検査前に省略します。
+全ての非干渉辺を保存する設定ではなく、検査対象を局所的な接続へ絞る設定です。
+`omitted_unchecked_edges`が未検査の省略数、`colliding_edges`が検査で干渉した辺数です。
+`mean_num_neighbors`は無向辺数の2倍をノード数で割った平均次数です。
+workerは不変な衝突形状を共有し、姿勢・探索キャッシュ・FK出力をそれぞれ保持します。
+干渉除去後に分かれたグラフは無理に接続せず、成分数を`[SparseFilter] Result`へ出力します。
 干渉ノードを除去するため、保存されるノード数は上限を下回る場合があります。
 各ノードが持つ姿勢はその腕の7関節角1組です。左右の全組合せを事前生成する構成ではありません。
 
@@ -149,7 +160,8 @@ VLUTには対象腕の可動リンクと、その先の固定外装・指を収�
 Viewer用launchは`Tmap_left_arm`・`Tmap_right_arm`と、
 `/<robot_name>/check_arm_pair`サービスを起動します。
 `left_arm/topological_node_features`・`right_arm/topological_node_features`の`weight_angle`は各7要素です。
-ノードIDは各腕のグラフ内でのみ有効です。
+ノードIDは各腕のグラフ内でのみ有効です。環境ROIを有効にした場合の既定範囲は、
+左右VLUTの占有範囲を合わせたBBoxです。`min_reachability_*`・`max_reachability_*`の明示設定を優先します。
 
 ```bash
 ros2 service call /topo_dual_arm_max_long/check_arm_pair \
@@ -165,16 +177,18 @@ IDは配信グラフから選択します。`start_state`なしは終点のみ�
 環境障害物・実機への送信・既存の制御経路への自動介入はこのサービスの対象外です。
 
 
-オフライン学習では`gng_params.enable_static_collision_cache: true`が既定です。
+従来方式（`enable_batched_collision_filter:=false`）では、追加学習中にも衝突回避を行い、
+TCP辺を別に構築します。この方式の`gng_params.enable_static_collision_cache: true`は、
 同一の関節角を持つ非干渉ノードと、両端の姿勢が変わっていない検査済みの辺を、
-複数回の`strictFilter()`間で再利用します。量子化や許容差による一致判定はなく、
+複数回の`strictFilter()`間で再利用する設定です。量子化や許容差による一致判定はなく、
 姿勢変更・未検査の辺には従来と同じ検査を適用します。
 メッシュ・ボクセルの判定精度と、辺の補間間隔（最大関節差0.025 rad）は従来どおりです。
 初回の検査や、追加学習中に変わる姿勢の衝突判定は引き続き必要です。
 比較時は次の引数でフィルタ結果の再利用を無効化できます。
 
 ```bash
-ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py enable_static_collision_cache:=false
+ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
+  enable_batched_collision_filter:=false enable_static_collision_cache:=false
 ```
 
 この再利用は、ロボット形状・固定姿勢・運動連鎖・除外規則・環境が不変のオフライン学習用です。
@@ -183,9 +197,9 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py enable_static_co
 モデル読込みでは自動的に破棄され、キャッシュ自体はモデルに保存されません。
 
 現在の`use_voxel_collision: true`は、全身のメッシュ表面とボクセルによる内部干渉検査の選択です。
-voxel-ball近似への切替ではありません。衝突回避付きの追加学習にも、この判定を使用します。
+ボクセルはメッシュに完全に内包された形状の検出にも使用します。辺の検査にも同じ判定を使用します。
 
-追加学習と辺の検査では、FCLのメッシュ探索境界をリンクペアごとに再利用します。
+衝突検査では、FCLのメッシュ探索境界をリンクペアごとに再利用します。
 直前の非交差検査で得た範囲から探索を再開し、各範囲を現在の姿勢で再検査します。
 元の三角形・包絡判定・内部判定・関節補間間隔を維持します。
 保持量の上限と定期的な再構築があり、衝突検出時の未完了範囲は再利用しません。

@@ -1,0 +1,234 @@
+{
+  "unit": "m",
+  "parent_link": "torso_link",
+  "cad_to_torso_translation_mm": [
+    245,
+    0,
+    93.5
+  ],
+  "reference": "腰カバー: STEP [-245,0,-140] mm、URDF Z=0.185 m。腰軸 Z=0.2315 m。",
+  "mesh_unit": "mm",
+  "chord_tolerance_mm": 0.08,
+  "angular_tolerance_rad": 0.15,
+  "sensor_cad_to_link_rotation": [
+    [
+      0,
+      0,
+      -1
+    ],
+    [
+      -1,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0
+    ]
+  ],
+  "bracket_cad_to_link_rotation": [
+    [
+      0,
+      0,
+      1
+    ],
+    [
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0
+    ]
+  ],
+  "sensor_mesh": {
+    "file": "meshes/chest_lidar.stl",
+    "triangles": 437393,
+    "sha256": "ca683f41c1676bb2dc0fc0f1a91864d3023f04bf6feb82146d85a90c58d363fe",
+    "collision_xyz_m": [
+      0.0,
+      -0.003931539598852396,
+      0.004131449852138758
+    ],
+    "collision_size_m": [
+      0.06503384560346603,
+      0.07289692759513855,
+      0.06025709956884384
+    ]
+  },
+  "sensor_visual_color_space": "linear_rgb",
+  "sensor_visual_color_source": "STEPの部品・ソリッド・面の色継承。sRGBからlinear RGBへのOpenCASCADE変換値。反射率・実機の光学材質とは別。",
+  "sensor_visuals": [
+    {
+      "file": "meshes/chest_lidar_color_0.stl",
+      "rgba": [0.005605392, 0.000303527, 0.309468925, 1.0],
+      "source_rgb_u8": [17, 1, 151],
+      "triangles": 2604,
+      "sha256": "a93da22faf86cd7d54e1fadb5ad46c9a0e24084b18b80544aac4d9c738ca041b"
+    },
+    {
+      "file": "meshes/chest_lidar_color_1.stl",
+      "rgba": [0.351532608, 0.351532608, 0.351532608, 1.0],
+      "source_rgb_u8": [160, 160, 160],
+      "triangles": 367577,
+      "sha256": "11b2380e790200f47bfd635d0f4fdacf00954a52a2984a23f8944ad91d870358"
+    },
+    {
+      "file": "meshes/chest_lidar_color_2.stl",
+      "rgba": [0.715693474, 0.715693474, 0.715693474, 1.0],
+      "source_rgb_u8": [220, 220, 220],
+      "triangles": 23876,
+      "sha256": "1f65df58ed0d0db06ea2280bb6ce1f71f07bac67272dc38fd0d35e513e1fc7db"
+    },
+    {
+      "file": "meshes/chest_lidar_color_3.stl",
+      "rgba": [0.745404184, 0.887923121, 1.0, 1.0],
+      "source_rgb_u8": [224, 242, 255],
+      "triangles": 43336,
+      "sha256": "e6c6253ff07bc3fb4f0b00f5e2f480f89e35049bdcb63eb33b0b2637bb9ac598"
+    }
+  ],
+  "sensor_cover_repair": {
+    "method": "元球面の半径・中心・上下境界を保持した軸合わせと面接合",
+    "source_part": "MID-360_4_1",
+    "radius_mm": 22.0,
+    "center_mm": [0.0, 0.0, 13.48],
+    "min_z_mm": 13.48,
+    "max_z_mm": 34.08487804877,
+    "merge_tolerance_mm": 0.0001,
+    "generator": "scripts/rebuild_chest_lidar_cover.py"
+  },
+  "variants": {
+    "45": {
+      "source": "ToPoDualArm-Max (long)45d.step",
+      "source_sha256": "2d4fcd4c5f018a7fb9e1e27b7b0916267562682a94d7833109daa7f797eaf26e",
+      "mount_xyz_m": [
+        0.02799999999999099,
+        0.0,
+        0.10252109797278536
+      ],
+      "sensor_xyz_m": [
+        0.04132615715869002,
+        0.0,
+        0.018326157158689852
+      ],
+      "sensor_rpy_rad": [
+        0,
+        0.7853981633974483,
+        0
+      ],
+      "mount_mesh": {
+        "file": "meshes/chest_lidar_mount_45.stl",
+        "triangles": 7224,
+        "sha256": "1377eeb32fbd8f8bb1e83afae91ab28ae4b70d8b10bf8b4bdaabfbac92085b0b"
+      },
+      "cad_mount_matrix_mm": [
+        [
+          -2.22044604925031e-16,
+          -5.55111512312578e-16,
+          1.0,
+          -217.000000000009
+        ],
+        [
+          1.0,
+          -2.465190328815659e-31,
+          2.22044604925031e-16,
+          1.33226762955019e-14
+        ],
+        [
+          1.23259516440783e-31,
+          1.0,
+          5.55111512312578e-16,
+          9.02109797278535
+        ]
+      ],
+      "cad_sensor_matrix_mm": [
+        [
+          3.086402105485804e-16,
+          0.707106781186547,
+          -0.707106781186548,
+          -175.673842841319
+        ],
+        [
+          -1.0,
+          1.5700924586837695e-16,
+          -2.79473925783113e-16,
+          4.66293670342566e-14
+        ],
+        [
+          -8.659560562354962e-17,
+          0.707106781186548,
+          0.707106781186547,
+          27.3472551314752
+        ]
+      ]
+    },
+    "60": {
+      "source": "ToPoDualArm-Max (long)60d.step",
+      "source_sha256": "ed73d590ba6334e01b3552edf6eb9a70d2535b047dad2913397310668d7c7090",
+      "mount_xyz_m": [
+        0.02799999999999099,
+        0.0,
+        0.09735708027492379
+      ],
+      "sensor_xyz_m": [
+        0.03869534366608002,
+        0.0,
+        0.012958550000000011
+      ],
+      "sensor_rpy_rad": [
+        0,
+        1.0471975511965976,
+        0
+      ],
+      "mount_mesh": {
+        "file": "meshes/chest_lidar_mount_60.stl",
+        "triangles": 6996,
+        "sha256": "d52d1b1f573af0440228283543752f7a399b8d925d7666cd6349b5ecc8d9c5da"
+      },
+      "cad_mount_matrix_mm": [
+        [
+          -2.22044604925032e-16,
+          -6.81125841247302e-16,
+          1.0,
+          -217.000000000009
+        ],
+        [
+          1.0,
+          -2.2519602818845617e-31,
+          2.22044604925032e-16,
+          -1.11022302462516e-14
+        ],
+        [
+          7.395570986446894e-32,
+          1.0,
+          6.81125841247302e-16,
+          3.85708027492379
+        ]
+      ],
+      "cad_sensor_matrix_mm": [
+        [
+          1.6081226496766492e-16,
+          0.8660254037844385,
+          -0.5000000000000003,
+          -178.304656333929
+        ],
+        [
+          -1.0,
+          1.9229626863835776e-16,
+          1.1442377452219406e-17,
+          -2.22044604925031e-14
+        ],
+        [
+          1.060575238724912e-16,
+          0.5000000000000003,
+          0.8660254037844385,
+          16.8156302749238
+        ]
+      ]
+    }
+  }
+}

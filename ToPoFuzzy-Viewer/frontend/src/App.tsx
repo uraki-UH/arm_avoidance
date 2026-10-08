@@ -1,3 +1,4 @@
+import { ViewerEnvironment, type viewer_host, type scene_surface_props } from './embedding';
 import { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
@@ -112,13 +113,44 @@ function useClippingPlanes() {
 
 function ClippingPlaneSync({ planes }: { planes: THREE.Plane[] }) {
     const { gl, invalidate } = useThree();
-
     useEffect(() => {
         gl.clippingPlanes = planes;
         invalidate();
     }, [gl, invalidate, planes]);
-
     return null;
+}
+
+function ContextRecovery() {
+    const { gl, invalidate } = useThree();
+    useEffect(() => {
+        const canvas = gl.domElement;
+        const on_lost = (event: Event) => { event.preventDefault(); };
+        const on_restored = () => invalidate();
+        canvas.addEventListener('webglcontextlost', on_lost);
+        canvas.addEventListener('webglcontextrestored', on_restored);
+        return () => {
+            canvas.removeEventListener('webglcontextlost', on_lost);
+            canvas.removeEventListener('webglcontextrestored', on_restored);
+        };
+    }, [gl, invalidate]);
+    return null;
+}
+
+const viewer_canvas_options = { localClippingEnabled: false, powerPreference: 'high-performance' as const, antialias: false };
+
+function standalone_scene({ children, clipping_planes }: scene_surface_props) {
+    return <Canvas frameloop="demand" dpr={1}
+        camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
+        gl={viewer_canvas_options}>
+        <ContextRecovery />
+        <ClippingPlaneSync planes={clipping_planes} />
+        <ambientLight intensity={0.3} />
+        <pointLight position={[10, 10, 10]} intensity={0.5} />
+        <pointLight position={[-10, -10, -10]} intensity={0.3} />
+        {children}
+        <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
+        <OrbitControls makeDefault />
+    </Canvas>;
 }
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
@@ -137,7 +169,12 @@ type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: stri
 type point_cloud_view_settings = Pick<PointCloudData,
     'visible' | 'opacity' | 'position' | 'rotation' | 'scale' | 'matrix'>;
 
-function App() {
+function App({ host }: { host?: viewer_host } = {}) {
+    const SceneSurface = host?.scene_surface ?? standalone_scene;
+    const Layout = host?.layout ?? MainLayout;
+    const SidebarShell = host?.sidebar ?? Sidebar;
+    const is_read_only = !!host;
+
     const local_meshes = useLocalMeshes();
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
     // 配信元の停止を跨ぐ表示設定のみの保持。点群バッファの保持なし。
@@ -163,7 +200,8 @@ function App() {
     const [colorContext, setColorContext] = useState<ColorContext | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
-    const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
+    const wsUrl = host?.endpoint ?? `ws://${window.location.hostname}:${viewerPort}`;
+    const api = useWebSocket(wsUrl, { is_read_only, on_transforms: host?.on_transforms, on_clear: host?.on_clear });
     const {
         pointClouds: wsPointClouds,
         markerData,
@@ -204,25 +242,22 @@ function App() {
         register_vehicle,
         inspect_graph,
         inspect_graph_bounds,
-    } = useWebSocket(wsUrl);
+    } = api;
+    useEffect(() => { host?.on_state(api); });
+    const environment = useMemo(() => host?.environment ?? {
+        mesh_base_url: wsUrl.replace(/^ws/, 'http').replace(/\/$/, '') + '/meshes/',
+    }, [host, wsUrl]);
 
     useEffect(() => {
-        connect();
+        if (!host) connect();
         return () => disconnect();
-    }, [connect, disconnect]);
+    }, [connect, disconnect, host]);
 
     const clipping = useClippingPlanes();
   const zoneMonitor = useZoneMonitor();
   const { getZoneCounts } = zoneMonitor;
 
     const threeClippingPlanes = clipping.threePlanes;
-
-    // Stable gl config: clipping planes are synchronized inside the Canvas.
-    const canvasGl = useMemo(() => ({
-        localClippingEnabled: false,
-        powerPreference: 'high-performance' as const,
-        antialias: false,
-    }), []);
 
     const {
         layerSettings,
@@ -298,6 +333,7 @@ function App() {
     };
 
     const removeEntity = (type: EntityType, tag: string) => {
+        if (is_read_only) { updateEntitySettings(type, tag, { visible: false }); return; }
         const updaters: Record<string, any> = { robot: setRobotSettings, marker: setMarkerSettings, voxel: setVoxelSettings };
         updaters[type]?.((prev: any) => { const n = { ...prev }; delete n[tag]; return n; });
 
@@ -308,6 +344,7 @@ function App() {
     };
 
     const removeLayer = (tag: string) => {
+        if (is_read_only) { handleUpdateLayerSettings(tag, { visible: false }); return; }
         deleteGraphLayer(tag);
         removeLayerSettings(tag);
     };
@@ -616,12 +653,13 @@ function App() {
     };
 
     return (
-        <>
-            <MainLayout
+        <ViewerEnvironment.Provider value={environment}>
+            <Layout
                 isSidebarOpen={isSidebarOpen}
                 sidebar={
-                    <Sidebar isOpen={isSidebarOpen} onToggle={toggleSidebar}>
+                    <SidebarShell isOpen={isSidebarOpen} onToggle={toggleSidebar}>
                         <SidebarContent
+                            is_read_only={is_read_only}
                             local_meshes={local_meshes}
                             isConnected={isConnected}
                             connect={connect}
@@ -706,36 +744,14 @@ function App() {
                                 setColorContext(prev => (prev?.type === type && prev?.id === id ? null : { type, id, title }));
                             }}
                         />
-                    </Sidebar>
+                    </SidebarShell>
                 }
             >
-                <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
+                <div className={host ? "viewer-dialog-layer" : "w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black"}>
                     <WebGLErrorBoundary>
-                    <Canvas
-                        frameloop="demand"
-                        dpr={1}
-                        camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
-                        gl={canvasGl}
-                        onCreated={({ gl, invalidate }) => {
-                            gl.domElement.addEventListener('webglcontextlost', (e) => {
-                                e.preventDefault();
-                                console.warn('[WebGL] context lost; waiting for browser restoration', {
-                                    time: new Date().toISOString(),
-                                    statusMessage: (e as WebGLContextEvent).statusMessage,
-                                });
-                            });
-                            gl.domElement.addEventListener('webglcontextrestored', () => {
-                                console.info('[WebGL] context restored', new Date().toISOString());
-                                invalidate();
-                            });
-                        }}
-                    >
-                        <ClippingPlaneSync planes={threeClippingPlanes} />
-                        <ambientLight intensity={0.3} />
+                    <SceneSurface clipping_planes={threeClippingPlanes}>
                         {local_meshes.items.map(item => <LocalMeshRenderer key={item.id} item={item}
                             focus_req={local_meshes.focus?.id === item.id ? local_meshes.focus.req : undefined} />)}
-                        <pointLight position={[10, 10, 10]} intensity={0.5} />
-                        <pointLight position={[-10, -10, -10]} intensity={0.3} />
 
                         {renderClouds.map((pc) => {
                             const tf = pc.frameId && pc.frameId !== 'world' ? (transforms[pc.frameId] ?? null) : null;
@@ -814,9 +830,7 @@ function App() {
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
                     <CandidateHoverFrame is_enabled={!isEditMode && !zoneMonitor.isDrawing} get_bounds={get_hover_bounds} on_inspect={handle_inspect}
                         transforms={transforms} layer_settings={layerSettings} />
-                    <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
-                    <OrbitControls makeDefault />
-                </Canvas>
+                </SceneSurface>
                     </WebGLErrorBoundary>
                 {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={close_inspection}
                     on_refresh={refresh_inspection} is_loading={is_inspecting} error={inspection_error} register_vehicle={register_vehicle} />}
@@ -827,7 +841,7 @@ function App() {
                     </div>}
                 {selectedManipSnapshot && <GraphNodeDetailPanel snapshot={selectedManipSnapshot} onClose={() => setSelectedManipSnapshot(null)} />}
             </div>
-        </MainLayout>
+        </Layout>
 
             <GenericTransformModal
                 open={!!transformContext}
@@ -941,7 +955,7 @@ function App() {
                     }
                 }}
             />
-        </>
+        </ViewerEnvironment.Provider>
     );
 }
 

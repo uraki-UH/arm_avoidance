@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import net from 'node:net';
 import path from 'node:path';
-import {unlink, mkdtemp, rm} from 'node:fs/promises';
+import {unlink, mkdtemp, rm, readFile, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 
@@ -32,6 +32,10 @@ try {
     args: ['--use-gl=angle', '--use-angle=' + (process.env.CAMERA_TEST_SOFTWARE ? 'swiftshader' : 'gl-egl'), '--enable-unsafe-swiftshader'],
     env: {...process.env, __NV_PRIME_RENDER_OFFLOAD: '0', __GLX_VENDOR_LIBRARY_NAME: 'mesa', __EGL_VENDOR_LIBRARY_FILENAMES: '/usr/share/glvnd/egl_vendor.d/50_mesa.json'}});
   const page = await browser.newPage({viewport: {width: 1400, height: 1000}});
+  if (process.env.CAMERA_BENCHMARK_BASELINE) {
+    const baseline_source = await readFile(process.env.CAMERA_BENCHMARK_BASELINE, 'utf8');
+    await page.route('**/camera-baseline.js', route => route.fulfill({contentType: 'text/javascript', body: baseline_source}));
+  }
   const errors = [];
   let num_vm_unavailable = 0;
   page.on('pageerror', error => errors.push(error.message));
@@ -42,8 +46,62 @@ try {
     errors.push(message.text() + ' ' + message.location().url);
   });
   await page.goto(base + '/?model=long');
-  await page.waitForFunction(() => window.simulator?.diagnostics.ready, null, {timeout: 90000});
+  assert.deepEqual(errors, [], '起動時のブラウザエラー');
+  await page.waitForFunction(() => window.simulator?.diagnostics.ready || document.getElementById('load-status')?.textContent === '読み込みエラー', null, {timeout: 90000});
+  assert.equal(await page.evaluate(() => !!window.simulator?.diagnostics.ready), true,
+    await page.locator('#loading-text').textContent());
   console.log('モデル起動: Long');
+  if (process.env.CAMERA_BENCHMARK_BASELINE && process.argv[2]) {
+    await page.click('[data-panel=sensors]');
+    await page.click('[data-sensor-panel=camera]');
+    await page.click('#camera-aim'); await pause(1800);
+    const metrics = await page.evaluate(async seed => {
+      const baseline = await import('/camera-baseline.js'), current = await import('/camera-core.js');
+      const panel = simulator.color_camera_panel;
+      simulator.robot.updateWorldMatrix(true, true);
+      const optical_to_world = simulator.robot.links.camera_optical_frame.matrixWorld.clone();
+      const metrics = {}, modes = ['mono', 'stereo', 'fisheye'];
+      const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+      for (let mode_idx = 0; mode_idx < modes.length; mode_idx++) {
+        const mode = modes[(mode_idx + seed) % modes.length], config = current.camera_preset(mode);
+        const sensors = [new baseline.color_camera(simulator.renderer, simulator.scene, config), new current.color_camera(simulator.renderer, simulator.scene, config)];
+        const times = [[], []], submitted = [[], []], frames = [];
+        try {
+          for (let iter = 0; iter < 22; iter++) {
+            for (const idx of (iter + seed) % 2 ? [1, 0] : [0, 1]) {
+              const start = performance.now();
+              const pending = sensors[idx].capture(optical_to_world, panel.exclude);
+              const submit_ms = performance.now() - start;
+              frames[idx] = await pending;
+              if (iter >= 2) { times[idx].push(performance.now() - start); submitted[idx].push(submit_ms); }
+            }
+          }
+          let num_different = 0, max_pixel_error = 0;
+          for (const side of Object.keys(frames[0].images)) {
+            const original = frames[0].images[side].rgba, result = frames[1].images[side].rgba;
+            for (let idx = 0; idx < original.length; idx++) {
+              const error = Math.abs(original[idx] - result[idx]);
+              if (error) num_different++;
+              max_pixel_error = Math.max(max_pixel_error, error);
+            }
+          }
+          metrics[mode + '_baseline_ms'] = median(times[0]);
+          metrics[mode + '_optimized_ms'] = median(times[1]);
+          metrics[mode + '_baseline_submit_ms'] = median(submitted[0]);
+          metrics[mode + '_optimized_submit_ms'] = median(submitted[1]);
+          metrics[mode + '_num_different'] = num_different;
+          metrics[mode + '_max_pixel_error'] = max_pixel_error;
+          metrics[mode + '_scene_passes'] = frames[1].num_scene_passes;
+          metrics[mode + '_render_pixels'] = frames[1].num_render_pixels;
+          if (max_pixel_error > 1) throw Error(`${mode}: 画素値差 ${max_pixel_error} / ${num_different}要素`);
+        } finally { sensors.forEach(sensor => sensor.dispose()); }
+      }
+      return metrics;
+    }, Number(process.argv[3] || 0));
+    assert.deepEqual(errors, []);
+    await writeFile(process.argv[2], JSON.stringify(metrics, null, 2));
+    console.log(JSON.stringify(metrics));
+  } else {
   const projection = await page.evaluate(async () => {
     const three = await import('/vendor/three/build/three.module.js');
     const {camera_preset, color_camera} = await import('/camera-core.js');
@@ -82,6 +140,7 @@ try {
       try { sensor.configure(config); } catch { has_rejected = true; }
       check(has_rejected, '取得中の校正変更拒否');
       const stereo = await pending;
+      check(stereo.num_scene_passes === 2, '左右各1面の描画');
       for (const [side, image] of Object.entries(stereo.images)) {
         const lens = config[side], offset = side === 'right' ? 0.12 : 0;
         check(has_color(image, lens.cx - lens.fx * offset / 2, lens.cy, 0), side + '赤色中心・基線 ' + JSON.stringify({pixel: pixel(image, lens.cx - lens.fx * offset / 2, lens.cy), error: renderer.getContext().getError()}));
@@ -95,6 +154,15 @@ try {
       check(pixel(wide, 119.5 + 70 * theta, 119.5).slice(0, 3).every(value => value > 220), '魚眼80°側方の可視性');
       check(pixel(wide, 0, 0)[3] === 0, '魚眼画角外の透明マスク');
       check(has_color(wide, 119.5, 119.5, 0), '魚眼中心の赤色');
+      const saved_pixels = wide.rgba.slice(), cached_resource = sensor.resources[0];
+      sensor.configure({...fish, color_mode: 'monochrome', rate_hz: 10});
+      check(sensor.resources[0] === cached_resource, '出力方式・Hz変更時の描画資源再利用');
+      const gray = (await sensor.capture(new three.Matrix4(), [excluded])).images.left;
+      check(gray.rgba.every((value, idx, data) => idx % 4 >= 2 || value === data[idx - idx % 4 + 2]), 'モノクロ全画素のRGB一致');
+      check(pixel(gray, 119.5, 119.5)[0] > 100 && pixel(gray, 119.5, 119.5)[0] < 160, '線形輝度変換');
+      check(pixel(gray, 0, 0)[3] === 0, 'モノクロ魚眼の画角外マスク');
+      check(wide.rgba.every((value, idx) => value === saved_pixels[idx]), '保存済みフレームの非破壊');
+      sensor.configure(fish);
       const red = marker(2, 0, 0, 0xff0000);
       const rotated = (await sensor.capture(new three.Matrix4().makeRotationY(Math.PI / 2), [excluded])).images.left;
       check(has_color(rotated, 119.5, 119.5, 0), '取付回転の反映');
@@ -104,14 +172,52 @@ try {
       let has_failed = false;
       try { await sensor.capture(new three.Matrix4(), [excluded]); } catch { has_failed = true; }
       renderer.render = original_render;
-      check(has_failed && !sensor.is_pending && excluded.visible && !renderer.autoClear && renderer.shadowMap.needsUpdate, '描画例外後の復旧');
+      check(has_failed && !sensor.is_pending && excluded.visible && !renderer.autoClear && renderer.shadowMap.needsUpdate && scene.matrixWorldAutoUpdate, '描画例外後の復旧');
       return {stereo: '左右の投影・視差', fisheye: '80°側方・画角外', transform: '回転', restoration: '正常・例外'};
     } finally {
       sensor.dispose(); resources.forEach(resource => resource.dispose()); renderer.dispose();
     }
   });
   console.log(JSON.stringify(projection));
-  await page.click('[data-panel=camera]');
+  await page.click('[data-panel=sensors]');
+  await page.click('[data-sensor-panel=camera]');
+  await page.selectOption('#camera-mode', 'fisheye');
+  assert.equal(await page.locator('#camera-capture-settings').evaluate(node => node.open), false, '撮影設定は既定で折りたたみ');
+  await page.click('#camera-capture-settings > summary');
+  await page.selectOption('#camera-size', '320,240');
+  await page.selectOption('#camera-color', 'monochrome');
+  await page.selectOption('#camera-quality', '256');
+  await page.locator('#camera-left-settings summary').click();
+  await page.fill('#camera-left-d-0', '0.02');
+  await page.fill('#camera-left-d-3', '0.0001');
+  await page.click('#camera-settings-apply');
+  const edited = await page.evaluate(async () => {
+    const panel = simulator.color_camera_panel, frame = await panel.capture();
+    return {config: panel.sensor.config, width: frame.images.left.width, height: frame.images.left.height,
+      is_gray: frame.images.left.rgba.every((value, idx, data) => idx % 4 >= 2 || value === data[idx - idx % 4 + 2])};
+  });
+  assert.equal(edited.width, 320); assert.equal(edited.height, 240);
+  assert.equal(edited.config.left.d[0], 0.02); assert.equal(edited.config.left.d[3], 0.0001);
+  assert.equal(edited.config.color_mode, 'monochrome'); assert.ok(edited.is_gray);
+  assert.equal(edited.config.cube_size, 256); assert.equal(edited.config.left.cx, 159.5);
+  await page.selectOption('#camera-mode', 'stereo');
+  await page.evaluate(() => {
+    const before = simulator.color_camera_panel.sensor.config.right.fx;
+    const field = document.getElementById('camera-right-width'); field.value = 800; field.dispatchEvent(new Event('change'));
+    document.getElementById('camera-right-fx').value = 600;
+    document.getElementById('camera-baseline').value = 80;
+    document.getElementById('camera-settings-apply').click();
+    const config = simulator.color_camera_panel.sensor.config;
+    if (config.left.width !== 640 || config.right.width !== 800 || config.right.fx !== 600 || config.right_in_left.translation_m[0] !== 0.08) throw Error('左右独立校正・基線の反映');
+    const previous = JSON.stringify(config);
+    document.getElementById('camera-left-fx').value = '';
+    document.getElementById('camera-settings-apply').click();
+    if (JSON.stringify(simulator.color_camera_panel.sensor.config) !== previous) throw Error('不正入力による校正変更');
+  });
+  await page.selectOption('#camera-color', 'rgb');
+  await page.selectOption('#camera-quality', '512');
+  await page.click('#camera-settings-apply');
+  console.log('フォーム編集: 解像度・左右別校正・歪み・品質・モノクロ・不正値拒否 成功');
   await page.click('#camera-aim');
   await pause(1800);
   for (const mode of ['mono', 'stereo', 'fisheye']) {
@@ -208,6 +314,7 @@ try {
   assert.deepEqual(errors, [], 'ブラウザエラー');
   console.log(`既存VM未接続の404（カメラ試験対象外）: ${num_vm_unavailable}件`);
   console.log('カメラUI・WebGL検証: 成功');
+  }
 } finally {
   clearTimeout(deadline);
   try {

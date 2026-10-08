@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { ViewerEnvironment } from '../../embedding';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Layers, X } from 'lucide-react';
 import { LAYER_COLORS, LAYER_LABELS } from '../../types';
@@ -61,6 +63,7 @@ export function GngLabelModal({
     onClose,
     onUpdate,
 }: GngLabelModalProps) {
+    const { portal_target } = useContext(ViewerEnvironment);
     if (!open) return null;
     const settings = normalize_node_label_settings(label_settings);
     const ordered_labels = get_node_label_groups(settings.node_label_priority);
@@ -235,6 +238,6 @@ export function GngLabelModal({
                 </div>
             </div>
         </div>,
-        document.body
+        portal_target ?? document.body
     );
 }

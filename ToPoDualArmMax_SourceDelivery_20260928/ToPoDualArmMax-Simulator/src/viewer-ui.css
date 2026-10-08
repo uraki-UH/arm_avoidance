@@ -1,0 +1,10 @@
+@import 'tailwindcss' source(none);
+@source '../../../ToPoFuzzy-Viewer/frontend/src';
+@source './';
+@import '../../../ToPoFuzzy-Viewer/frontend/src/index.css';
+:host { display: block; font-family: system-ui, sans-serif; color: var(--text-primary); }
+.viewer-shell { background: var(--bg-primary); padding: 8px; border-radius: 10px; height: 680px; min-height: 400px; display: flex; flex-direction: column; }
+.viewer-sidebar { flex: 1; min-height: 0; }
+.viewer-dialog-layer { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+.viewer-dialog-layer > * { pointer-events: auto; }
+.viewer-connection { display: grid; gap: 8px; padding: 8px 0; font-size: 12px; }

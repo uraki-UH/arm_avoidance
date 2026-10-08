@@ -25,7 +25,7 @@ def check_service(port, endpoint, key, expected):
     except Exception as error:
         raise RuntimeError(f'{port}番は使用中ですが、対象サービスの応答がありません') from error
     if value.get(key) == expected:
-        if expected == 'topo-pointcloud-bridge' and value.get('protocol_version', 1) < 3:
+        if expected == 'topo-pointcloud-bridge' and value.get('protocol_version', 1) < 4:
             raise RuntimeError(f'{port}番のROSブリッジは旧版です。bash start_ros.sh --restartで再起動してください')
         return True
     raise RuntimeError(f'{port}番は別サービスが使用中です')
@@ -88,17 +88,62 @@ def restart_existing(port, bridge_port):
 
 def bridge_revision():
     return tuple((Path(__file__).parent / name).stat().st_mtime_ns for name in
-                 ('pointcloud_bridge.py', 'robot_exchange.py', 'depth_output.py', 'joint_stream.py', 'physics_scene.py', 'physics_stream.py'))
+                 ('pointcloud_bridge.py', 'robot_exchange.py', 'depth_output.py', 'joint_stream.py', 'physics_scene.py', 'physics_stream.py', 'physics_robot.py'))
+
+
+def ensure_services(args):
+    """起動済みサービスの再利用と、未起動サービスのバックグラウンド起動。"""
+    import fcntl
+
+    log_path = Path(f'/tmp/topo-simulator-{os.getuid()}-{args.port}-{args.bridge_port}.log')
+    lock_path = log_path.with_suffix('.lock')
+
+    def is_ready():
+        has_server = check_service(args.port, '/api/health', 'app', 'topo-motion-studio')
+        has_bridge = check_service(args.bridge_port, '/api/points/status', 'service', 'topo-pointcloud-bridge')
+        return has_server and has_bridge
+
+    # 複数ランチャーの同時起動による管理プロセス重複の防止
+    with lock_path.open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if is_ready():
+            print('サーバー・ROS/物理ブリッジ: 起動済みサービスを再利用', flush=True)
+            return
+        with log_path.open('w') as log:
+            child = subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve()), '--port', str(args.port),
+                 '--bridge-port', str(args.bridge_port)],
+                cwd=root, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                start_new_session=True)
+        try:
+            end = time.monotonic() + 45
+            while not is_ready():
+                if child.poll() is not None:
+                    raise RuntimeError(f'一括起動に失敗しました。ログ: {log_path}\n{log_path.read_text()}')
+                if time.monotonic() >= end:
+                    raise RuntimeError(f'一括起動がタイムアウトしました。ログ: {log_path}')
+                time.sleep(.2)
+        except BaseException:
+            # 起動失敗時は今回の管理プロセスのみ終了。子サービスの停止は管理側へ委任
+            if child.poll() is None:
+                child.send_signal(signal.SIGINT)
+                child.wait(timeout=20)
+            raise
+        print(f'バックグラウンド起動完了: PID={child.pid} / ログ: {log_path}', flush=True)
+        print(f'停止: docker compose exec gng_cpu kill -INT {child.pid}', flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--restart', action='store_true', help='同じ配置・ポートの旧起動を停止して再起動')
+    parser.add_argument('--ensure', action='store_true', help='未起動サービスを背景起動し、応答確認後に終了')
     parser.add_argument('--port', type=int, default=8877)
     parser.add_argument('--bridge-port', type=int, default=8879)
     args = parser.parse_args()
     if args.port == args.bridge_port or any(not 1024 <= p <= 65535 for p in (args.port, args.bridge_port)):
         parser.error('異なる1024〜65535のポート番号が必要です')
+    if args.ensure and args.restart:
+        parser.error('--ensureと--restartの同時指定はできません')
     children = []
 
     def stop(signum, frame):
@@ -108,6 +153,9 @@ def main():
     signal.signal(signal.SIGINT, stop)
     try:
         import rclpy
+        if args.ensure:
+            ensure_services(args)
+            return 0
         if args.restart:
             restart_existing(args.port, args.bridge_port)
         bridge_child = None

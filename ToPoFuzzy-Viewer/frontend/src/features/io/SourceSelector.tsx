@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { DataSource, GngStatus, GngParams, GngConfigInfo } from '../../hooks/useWebSocket';
 
 interface SourceSelectorProps {
+    is_read_only?: boolean;
     isConnected: boolean;
     sources: DataSource[];
     getSources: () => Promise<DataSource[]>;
@@ -15,6 +16,7 @@ interface SourceSelectorProps {
 }
 
 export function SourceSelector({
+    is_read_only = false,
     isConnected,
     sources,
     getSources,
@@ -76,6 +78,7 @@ export function SourceSelector({
     useEffect(() => {
         if (isConnected) {
             refreshSources();
+            if (is_read_only) return;
             refreshGngStatus();
             refreshConfigs();
             const interval = setInterval(refreshGngStatus, 5000);
@@ -84,7 +87,7 @@ export function SourceSelector({
 
         setGngStatus({ isRunning: false });
         setConfigs([]);
-    }, [isConnected, refreshSources, refreshGngStatus, refreshConfigs]);
+    }, [isConnected, refreshSources, refreshGngStatus, refreshConfigs, is_read_only]);
 
     const handleToggleSource = async (source: DataSource) => {
         try {
@@ -172,6 +175,7 @@ export function SourceSelector({
                 </div>
             )}
 
+            {!is_read_only && <>
             <div className={`rounded-lg border px-3 py-2 text-xs ${gngStatus.isRunning ? 'border-green-500/40 bg-green-500/10' : 'border-white/20 bg-black/25'}`}>
                 <div className="flex items-center justify-between gap-2">
                     <span className="text-[var(--text-primary)]">
@@ -193,6 +197,7 @@ export function SourceSelector({
                 </div>
             </div>
 
+            </>}
             {error && (
                 <div className="rounded border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
                     {error}
@@ -213,6 +218,7 @@ export function SourceSelector({
                                 <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10">
                                     <input
                                         type="checkbox"
+                                        aria-label={`Topic: ${source.id}`}
                                         checked={source.active}
                                         onChange={() => handleToggleSource(source)}
                                         className="h-4 w-4 rounded border-gray-500 bg-transparent text-[var(--accent-color)] focus:ring-[var(--accent-color)]"
@@ -222,7 +228,7 @@ export function SourceSelector({
                                     </span>
                                 </label>
 
-                                {isPointCloud && (
+                                {!is_read_only && isPointCloud && (
                                     <button
                                         onClick={(e) => handleStartGng(e, source.id)}
                                         disabled={processingSource === source.id || gngStatus.isRunning}

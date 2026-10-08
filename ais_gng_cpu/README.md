@@ -28,9 +28,26 @@ cb
 ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input_topic:=/lidar_points
 ```
 
-`input_topic`の明示指定は、センサー別YAMLの`input.topic_names`より優先。
+`input_topic`の明示指定は、センサ別YAMLの`input.topic_names`より優先。
 省略時はYAMLのトピック配列をそのまま使用。保存用元点群の`source_point_cloud_topic:=auto`も同じ指定に追従。
 [パラメータ適用順の修正と起動検証](../gng_vlut_system/docs/releases/2026-09-23_gng_input_topic_override.md)。
+
+点群のトピックと座標系は別設定。`input_topic`だけの変更では、YAMLの`input.base_frame_id`も維持。
+変換先を変更する場合は`base_frame_id`を指定。この明示指定は`input.local_coordinates: false`も適用。
+ブラウザシミュレータの`/sim/lidar/points`は、MID-360の点を`base_footprint`座標で配信。
+Viewerとシミュレータの共通基準は`world`。AT128用の学習パラメータで`world`座標へ変換する起動例:
+
+```bash
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml \
+  input_topic:=/sim/lidar/points base_frame_id:=world
+```
+
+入力と出力の座標系が同じ場合はTF不要。異なる場合は、両座標系を接続するTFが必要。
+TF取得失敗時は、その入力組の学習・出力を抑止。変換前の座標を別フレーム名で配信するフォールバックなし。
+`input.enable_strict_transform: true`では点群取得時刻、既定の`false`では通常は最新のTFを使用。
+CPUの観測支持機能が有効な場合は、`false`でも点群取得時刻のTFを使用。
+シミュレータの`world → base_footprint`のTF配信が必要。Viewerの表示基準は`world`。
+`base_frame_id:=base_footprint`はロボット基準での処理を意図する場合の指定であり、Viewerの基準変更ではない。
 
 getBase2LidarFrameのTF取得失敗メッセージ`Could not transform ...`はDEBUGログ。通常起動での警告行の割込みなし。ノード直接起動時の`--ros-args --log-level ais_gng_node:=debug`で診断可能。[表示変更・検証](../gng_vlut_system/docs/releases/2026-09-30_gng_tf_log.md)。
 
@@ -92,7 +109,7 @@ CPUの学習配分と追加条件の評価は[共通サンプラー](docs/sampli
 
 ## CPU直結の平面クラスタリング（既定OFF）
 
-`lidar:=at128.yaml`などで選ぶセンサー別YAMLの`ais_gng_node.ros__parameters`で、Pl・Curveの計算ON/OFFを指定可能。`at128.yaml`には両方falseで明記。
+`lidar:=at128.yaml`などで選ぶセンサ別YAMLの`ais_gng_node.ros__parameters`で、Pl・Curveの計算ON/OFFを指定可能。`at128.yaml`には両方falseで明記。
 
 ```yaml
 ais_gng_node:
@@ -101,9 +118,9 @@ ais_gng_node:
     curve_clustering: false # Curveの別ノード曲面計算
 ```
 
-優先順位は共通設定、センサー別YAML、対応するlaunch引数の順。省略時は`config/plane_cluster_incremental.yaml`と`config/surface_model.yaml`の共通設定を使用。`nonplane_component.*`もCPUセンサー別YAMLを優先。[設定経路と検証](../gng_vlut_system/docs/releases/2026-09-23_gng_clustering_yaml.md)。
+優先順位は共通設定、センサ別YAML、対応するlaunch引数の順。省略時は`config/plane_cluster_incremental.yaml`と`config/surface_model.yaml`の共通設定を使用。`nonplane_component.*`もCPUセンサ別YAMLを優先。[設定経路と検証](../gng_vlut_system/docs/releases/2026-09-23_gng_clustering_yaml.md)。
 
-`plane_clustering`はCPUノードでも直接指定できる平面計算の切替。共通設定よりセンサー別YAMLを優先。`curve_clustering`はlaunch側で`surface_model.enable`へ変換し、併記時は前者を優先。値は引用符なしの`true`／`false`。旧`plane_cluster.direct_enabled`は廃止のため`plane_clustering`へ置換が必要。
+`plane_clustering`はCPUノードでも直接指定できる平面計算の切替。共通設定よりセンサ別YAMLを優先。`curve_clustering`はlaunch側で`surface_model.enable`へ変換し、併記時は前者を優先。値は引用符なしの`true`／`false`。旧`plane_cluster.direct_enabled`は廃止のため`plane_clustering`へ置換が必要。
 
 `plane_clustering: false`ではCPU直結の平面クラスタ計算と、その結果に依存する非平面成分抽出・Publisherを停止。通常の自動入力構成では平面可視化・曲面ノードも起動せず、保存ノードの平面購読も無効化。GNG学習・`/topological_map`のノード・エッジ出力は継続。GPU構成では独立平面ノードの起動条件へ適用。設定反映にはlaunchの再起動が必要。
 
@@ -111,7 +128,7 @@ OFF時に`start_plane_cluster:=false`を追加する必要なし。平面計算O
 
 ## 曲面検出（既定OFF）
 
-`curve_clustering: false`により、曲面検出・追跡・曲面出力を無効化。GNG学習と平面検出は継続。`ais_gng.launch.py`ではセンサー別YAMLを優先し、未指定時は`config/surface_model.yaml`を使用。設定の反映はlaunchの再起動後。共通設定はCPU・GPU・単独の曲面launchに適用。
+`curve_clustering: false`により、曲面検出・追跡・曲面出力を無効化。GNG学習と平面検出は継続。`ais_gng.launch.py`ではセンサ別YAMLを優先し、未指定時は`config/surface_model.yaml`を使用。設定の反映はlaunchの再起動後。共通設定はCPU・GPU・単独の曲面launchに適用。
 
 曲面OFFまたは曲面ノード未起動時はGNG側の`/curved_surface_clusters/update_ms`購読も未生成。Viewerの補助平面購読は発行元の存在中だけ有効。Viewer更新前の既存プロセスにはViewerの再起動も必要。他の独立ノードによる同名トピックの購読・発行は停止対象外。
 
@@ -125,7 +142,7 @@ GNGの位置・法線・実エッジだけで滑らかな連結成分をまと�
 ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml surface_method:=smooth_graph
 ```
 
-`surface_method:=model` で従来方式へ復帰。省略時はセンサー別YAMLの`surface_model.method`を優先し、未指定時は`config/surface_model.yaml`の設定（既定`model`）を使用。
+`surface_method:=model` で従来方式へ復帰。省略時はセンサ別YAMLの`surface_model.method`を優先し、未指定時は`config/surface_model.yaml`の設定（既定`model`）を使用。
 新方式は `smooth_surface` と所属を出力し、球・円柱の係数や曲率フィットは出力しない。
 実入力で高速化を確認した一方、背景平面まで大きく統合する場合があるため比較用の選択肢。
 設定・出力契約・測定値は[仕様と検証記録](../gng_vlut_system/docs/releases/2026-09-15_smooth_surface_graph.md)を参照。

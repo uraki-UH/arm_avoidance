@@ -27,7 +27,7 @@
 - GNG平均wall時間2.51～2.71 ms、現行平面平均thread CPU時間0.22～0.29 ms。CSV I/O・採点除外。実運用の2万ノード・ROS配信との比較不可。
 - 評価器・生成器12テスト成功。床の種1でcapture ON/OFFとGTのみ変更した場合のグラフバイト一致を確認。
 - 基本9条件は予測45秒・実測81.18秒、追加3条件は予測30秒・実測27.51秒。全12条件成功・cleanup_ok、試験プロセス終了、既存ROS維持。
-- 通常ROS入力・重点サンプリングではなくGNG学習核の直接実行。移動物体・実センサー・曲面クラスタリングは評価対象外。
+- 通常ROS入力・重点サンプリングではなくGNG学習核の直接実行。移動物体・実センサ・曲面クラスタリングは評価対象外。
 
 [仕様・指標・起動コマンド](../../../benchmarks/plane_ground_truth_20260929/README.md)。結果正本は`artifacts/plane_ground_truth_20260929/{batch,noise_batch}/report.json`。
 データ例：`artifacts/plane_ground_truth_20260929/batch/001_step_and_wall/dataset/step_and_wall.csv`、票分布例：同試行`after/node_gt_votes.csv`。

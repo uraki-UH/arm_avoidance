@@ -51,6 +51,18 @@ def start_joint_stream(node, exchange, host, port, origins):
                     self.timer = tornado.ioloop.PeriodicCallback(self.flush_latest, 1000 / hz)
                     self.timer.start()
                     self.write_message({'type': 'ready'})
+                elif data.get('type') == 'state' and self.model is not None:
+                    state = data.get('state')
+                    if not isinstance(state, dict) or state.get('robot_model') != self.model:
+                        raise ValueError('状態のモデルが一致しません')
+                    outputs = data.get('outputs')
+                    if not isinstance(outputs, list) or any(value not in ('base', 'tf', 'joints') for value in outputs):
+                        raise ValueError('状態送信項目が不正です')
+                    now = time.monotonic()
+                    if now - self.last_publish >= 1 / self.hz * .9:
+                        exchange.publish(state, outputs=outputs)
+                        self.last_publish = now
+                    self.write_message({'type': 'ack'})
                 elif data.get('type') == 'joints' and self.model is not None:
                     pose = data.get('pose')
                     if not isinstance(pose, dict) or not pose or not set(pose) <= exchange.joint_names[self.model] or any(type(v) not in (int, float) or not math.isfinite(v) for v in pose.values()):

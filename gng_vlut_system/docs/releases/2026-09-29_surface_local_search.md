@@ -11,7 +11,7 @@
 - ノード・元平面の添字と保持曲面IDを元入力へ復元。保持中の平面枚数減少でも候補を保護。
 - `surface_model.enable_plane_local_search`の既定値は`false`。`model`方式専用、起動時設定。
 
-有効化は、使用するセンサーYAMLの`ais_gng_node.ros__parameters`へ以下を指定してlaunchを再起動。
+有効化は、使用するセンサYAMLの`ais_gng_node.ros__parameters`へ以下を指定してlaunchを再起動。
 
 ```yaml
 plane_clustering: true

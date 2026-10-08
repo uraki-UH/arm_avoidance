@@ -987,12 +987,10 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
     // 全入力の座標変換成立後の学習開始。複数入力の途中失敗による部分投入の防止
     std::vector<LiDAR_Config> cloud_transforms;
-    if (enable_strict_transform_) {
-        cloud_transforms.reserve(clouds.size());
-        for (const auto &cloud : clouds) {
-            cloud_transforms.push_back(getBase2LidarFrame(cloud));
-            if (!has_input_transform_) {return;}
-        }
+    cloud_transforms.reserve(clouds.size());
+    for (const auto &cloud : clouds) {
+        cloud_transforms.push_back(getBase2LidarFrame(cloud));
+        if (!has_input_transform_) {return;}
     }
     std::size_t cloud_idx = 0;
 
@@ -1096,8 +1094,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             }
         }
 
-        auto lidar_config = enable_strict_transform_
-            ? cloud_transforms[cloud_idx++] : getBase2LidarFrame(gng_input_msg);
+        auto lidar_config = cloud_transforms[cloud_idx++];
         lidar_config.point_step = gng_input_msg->point_step;
         gng_setPointCloud(
             gng_input_msg->data.data(),
@@ -2016,6 +2013,7 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
 #if defined(AIS_GNG_BACKEND_CPU)
         if (enable_observation_support_) {
             if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
+                has_input_transform_ = false;
                 has_observation_cloud_transform_ = false;
                 RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
                     "Observation support skipped: missing cloud transform timestamp");
@@ -2045,7 +2043,7 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
         RCLCPP_DEBUG_THROTTLE(
             this->get_logger(), *this->get_clock(), 5000,
             "Could not transform %s to %s: %s",
-            base_frame_id_.c_str(), msg->header.frame_id.c_str(), ex.what());
+            msg->header.frame_id.c_str(), base_frame_id_.c_str(), ex.what());
     }
     return lidar_config;
 }

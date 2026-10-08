@@ -80,7 +80,14 @@ export class Robot extends THREE.Group {
       // Reference-image finish: green gripper shells are named *_green in the supplied CAD,
       // but their URDF visual materials are black. This affects appearance only.
       if (filename.includes('gripper_base_green')) materialName = 'green';
-      const mesh = new THREE.Mesh(cache.get(filename), materials[materialName] || materials.black);
+      // 既存の外観パレットを優先、新規材質はURDFのlinear RGBAを使用
+      let material = materials[materialName];
+      if (!material) {
+        const rgba = vector(element.querySelector('material color')?.getAttribute('rgba'), [0.14,0.15,0.145,1]);
+        material = new THREE.MeshStandardMaterial({color: new THREE.Color().setRGB(...rgba.slice(0,3)),
+          opacity: rgba[3], transparent: rgba[3] < 1, metalness: .35, roughness: .4});
+      }
+      const mesh = new THREE.Mesh(cache.get(filename), material);
       mesh.name = filename; origin(element.querySelector('origin'), mesh);
       mesh.scale.fromArray(vector(meshElement.getAttribute('scale'), [1,1,1]));
       mesh.castShadow = true; mesh.receiveShadow = true; link.add(mesh); this.renderMeshes.push(mesh);

@@ -155,7 +155,7 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
                    for kind in ('cloud', 'voxels', 'graph', 'joints'))
 
     def on_real_joints(self, message):
-        # 自己除去の根拠となる実機全関節。センサー校正値の丸め・URDF制限への置換なし
+        # 自己除去の根拠となる実機全関節。センサ校正値の丸め・URDF制限への置換なし
         if len(message.name) != len(message.position) or len(set(message.name)) != len(message.name):
             return
         positions = dict(zip(message.name, message.position))

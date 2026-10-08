@@ -33,6 +33,10 @@ def launch_setup(context, *args, **kwargs):
     refine_iterations = LaunchConfiguration("refine_iterations").perform(context)
     coord_edge_iterations = LaunchConfiguration("coord_edge_iterations").perform(context)
 
+    enable_batched_collision_filter = LaunchConfiguration("enable_batched_collision_filter").perform(context)
+    collision_worker_num = LaunchConfiguration("collision_worker_num").perform(context)
+    num_local_neighbors = LaunchConfiguration("num_local_neighbors").perform(context)
+
     # 上書き用パラメータの準備
     overrides = {}
     if robot_urdf_path:
@@ -72,6 +76,14 @@ def launch_setup(context, *args, **kwargs):
         overrides["gng.profile_names"] = gng_profile_names
     use_task_density_bias_value = (use_task_density_bias.lower() == "true")
     overrides["gng_params.use_task_density_bias"] = use_task_density_bias_value
+    if enable_batched_collision_filter:
+        if enable_batched_collision_filter.lower() not in ("true", "false"):
+            raise ValueError("enable_batched_collision_filter must be true or false")
+        overrides["gng.enable_batched_collision_filter"] = enable_batched_collision_filter.lower() == "true"
+    if collision_worker_num:
+        overrides["gng.collision_worker_num"] = int(collision_worker_num)
+    if num_local_neighbors:
+        overrides["gng.num_local_neighbors"] = int(num_local_neighbors)
     if enable_independent_arms:
         if enable_independent_arms.lower() not in ("true", "false"):
             raise ValueError("enable_independent_arms must be true or false")
@@ -113,6 +125,9 @@ def generate_launch_description():
     
     return LaunchDescription([
         DeclareLaunchArgument("enable_independent_arms", default_value=""),
+        DeclareLaunchArgument("enable_batched_collision_filter", default_value=""),
+        DeclareLaunchArgument("collision_worker_num", default_value=""),
+        DeclareLaunchArgument("num_local_neighbors", default_value=""),
         DeclareLaunchArgument("coord_edge_iterations", default_value=""),
         DeclareLaunchArgument(
             "params_file",

@@ -21,6 +21,7 @@ from ais_gng_msgs.msg import TopologicalMap
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--transform-mode', choices=('stamped', 'latest'), default='stamped')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     if os.environ.get('ROS_DOMAIN_ID') != '193' or os.environ.get('ROS_LOCALHOST_ONLY') != '1':
@@ -40,7 +41,8 @@ def main():
                    '-r', '__ns:=/base_frame_test', '-r', '__node:=gng']
         for parameter in ['input.topic_names:=[/base_frame_test/points]',
                           'input.base_frame_id:=robot_base', 'input.local_coordinates:=false',
-                          'input.enable_strict_transform:=true', 'input.point_cloud_num:=2000',
+                          'input.enable_strict_transform:='+str(args.transform_mode == 'stamped').lower(),
+                          'input.point_cloud_num:=2000',
                           'node.num_max:=128', 'node.learning_num:=1000',
                           'classify.human:=false', 'classify.car:=false',
                           'plane_clustering:=false', 'nonplane_component.direct_enabled:=false']:
@@ -57,12 +59,12 @@ def main():
                              for y in np.linspace(.1, .3, 16)], dtype=np.float32)
         translation = np.array([.04, .03, .51])
 
-        def phase(yaw, has_transform, is_future=False):
+        def phase(yaw, has_transform, is_future=False, frame_id='head_camera'):
             clouds.clear()
             graphs.clear()
             rotation = np.array([[math.cos(yaw), -math.sin(yaw), 0.],
                                  [math.sin(yaw), math.cos(yaw), 0.], [0., 0., 1.]])
-            raw = (expected-translation)@rotation
+            raw = expected if frame_id == 'robot_base' else (expected-translation)@rotation
             end = time.monotonic()+3.
             while time.monotonic() < end:
                 assert process.poll() is None, 'GNGノードの異常終了'
@@ -77,7 +79,7 @@ def main():
                     tf.transform.rotation.z, tf.transform.rotation.w = math.sin(yaw/2), math.cos(yaw/2)
                     broadcaster.sendTransform(tf)
                 cloud = PointCloud2(height=1, width=len(raw), point_step=12, row_step=len(raw)*12, is_dense=True)
-                cloud.header.frame_id, cloud.header.stamp = 'head_camera', stamp
+                cloud.header.frame_id, cloud.header.stamp = frame_id, stamp
                 cloud.fields = [PointField(name=name, offset=idx*4, datatype=PointField.FLOAT32, count=1)
                                 for idx, name in enumerate(('x', 'y', 'z'))]
                 cloud.data = raw.astype('<f4').tobytes()
@@ -88,6 +90,9 @@ def main():
 
         phase(0., False)
         assert not clouds and not graphs, 'TF未取得入力の誤配信'
+        phase(0., False, frame_id='robot_base')
+        assert clouds and graphs, '同一座標系の入力の誤抑止'
+        assert all(message.header.frame_id == 'robot_base' for message in clouds+graphs)
         errors = []
         for yaw in (0., .8):
             phase(yaw, True)
@@ -103,10 +108,15 @@ def main():
         until = time.monotonic()+.5
         while time.monotonic() < until:
             rclpy.spin_once(node, timeout_sec=.05)
-        phase(.8, False, True)
-        assert not clouds and not graphs, '過去TFによる未来入力の誤配信'
+        phase(.8, False, frame_id='missing_sensor')
+        assert not clouds and not graphs, 'TF欠測後の古い変換による誤配信'
+        if args.transform_mode == 'stamped':
+            phase(.8, False, True)
+            assert not clouds and not graphs, '過去TFによる未来入力の誤配信'
         report.update(result='passed', max_centroid_errors_m=errors,
-                      has_missing_tf_rejection=True, has_timestamp_rejection=True)
+                      transform_mode=args.transform_mode,
+                      has_same_frame_acceptance=True, has_missing_tf_rejection=True,
+                      has_timestamp_rejection=args.transform_mode == 'stamped')
     finally:
         if process is not None and process.poll() is None:
             os.killpg(process.pid, signal.SIGINT)

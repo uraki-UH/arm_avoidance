@@ -7,3 +7,5 @@ __pycache__/
 .env
 .env.*
 integrations/ros2/live/
+
+app/generated/

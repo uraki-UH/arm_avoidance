@@ -69,7 +69,7 @@ void write_edges(std::ofstream &output, const std::vector<edge_type> &edges) {
 
 // 正規load経路用の角度1層・座標2層のGNG v9。中間ノード欠落時の不正参照も検証対象。
 void write_fixture(const std::string &path, bool has_angle_collision_edge = true,
-                   bool has_middle_node = true) {
+                   bool has_middle_node = true, bool enable_complete_graph = false) {
   static_assert(sizeof(bool) == 1 && sizeof(int) == sizeof(std::int32_t));
   std::ofstream output(path, std::ios::binary);
   if (!output) throw std::runtime_error("Fixture file creation failed");
@@ -99,8 +99,8 @@ void write_fixture(const std::string &path, bool has_angle_collision_edge = true
     write_scalar(output, false);
   }
   const std::vector<edge_type> coordinate_edges{{0, 1}, {1, 2}};
-  write_edges(output, has_angle_collision_edge ? coordinate_edges
-                                               : std::vector<edge_type>{{1, 2}});
+  write_edges(output, enable_complete_graph ? std::vector<edge_type>{{0, 1}, {0, 2}, {1, 2}}
+      : has_angle_collision_edge ? coordinate_edges : std::vector<edge_type>{{1, 2}});
   write_edges(output, coordinate_edges);
   write_edges(output, coordinate_edges);
   if (!output) throw std::runtime_error("Fixture write failed");
@@ -478,4 +478,71 @@ TEST(gng_collision_filter, static_cache_checks_coordinate_edges_added_after_filt
   ASSERT_TRUE(cached.save(files.path("cached.bin")));
   ASSERT_TRUE(reference.save(files.path("reference.bin")));
   EXPECT_EQ(read_bytes(files.path("cached.bin")), read_bytes(files.path("reference.bin")));
+}
+
+
+TEST(gng_collision_filter, sparse_batch_checks_interiors_and_projects_only_safe_edges) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  std::vector<char> reference;
+  for (int num_workers : {1, 4}) {
+    gng_type graph(1, 3, &chain);
+    ASSERT_TRUE(graph.load(files.path("input.bin")));
+    std::vector<std::function<bool(const Eigen::VectorXf &)>> queries(num_workers,
+        [](const Eigen::VectorXf &angles) { return is_in_narrow_collision_band(angles[0]); });
+    graph.build_sparse_safe_graph(1, queries);
+    expect_only_safe_edge(graph);
+    ASSERT_TRUE(graph.save(files.path("sparse.bin")));
+    const auto bytes = read_bytes(files.path("sparse.bin"));
+    if (reference.empty()) reference.assign(bytes.begin(), bytes.end());
+    else EXPECT_EQ(std::vector<char>(bytes.begin(), bytes.end()), reference);
+  }
+}
+
+TEST(gng_collision_filter, sparse_batch_removes_colliding_nodes_before_edge_queries) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  graph.build_sparse_safe_graph(1, {[](const Eigen::VectorXf &angles) {
+    return std::abs(angles[0]-.16f) < .001f;
+  }});
+  EXPECT_EQ(graph.getActiveIndices(), std::vector<int>({0, 2}));
+  for (int idx : graph.getActiveIndices()) {
+    EXPECT_TRUE(graph.getNeighborsAngle(idx).empty());
+    EXPECT_TRUE(graph.getNeighborsCoord(idx, 0).empty());
+    EXPECT_TRUE(graph.getNeighborsCoord(idx, 1).empty());
+  }
+}
+
+TEST(gng_collision_filter, sparse_batch_propagates_worker_failure) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"));
+  auto chain = make_chain();
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  EXPECT_THROW(graph.build_sparse_safe_graph(1, {[](const Eigen::VectorXf &) -> bool {
+    throw std::runtime_error("collision worker failure");
+  }}), std::runtime_error);
+  EXPECT_THROW(graph.build_sparse_safe_graph(1, {}), std::invalid_argument);
+  EXPECT_THROW(graph.build_sparse_safe_graph(0, {[](const Eigen::VectorXf &) { return false; }}), std::invalid_argument);
+}
+
+
+TEST(gng_collision_filter, sparse_batch_removes_redundant_edges_and_preserves_connection) {
+  temporary_files files;
+  write_fixture(files.path("input.bin"), true, true, true);
+  auto chain = make_chain();
+  gng_type graph(1, 3, &chain);
+  ASSERT_TRUE(graph.load(files.path("input.bin")));
+  graph.build_sparse_safe_graph(1, {[](const Eigen::VectorXf &) { return false; }});
+  EXPECT_EQ(graph.getNeighborsAngle(0), std::vector<int>({1}));
+  EXPECT_EQ(graph.getNeighborsAngle(2), std::vector<int>({1}));
+  EXPECT_EQ(graph.getNeighborsAngle(1).size(), 2U);
+  for (int idx : graph.getActiveIndices()) {
+    for (int layer = 0; layer < 2; ++layer)
+      EXPECT_EQ(graph.getNeighborsAngle(idx), graph.getNeighborsCoord(idx, layer));
+  }
 }

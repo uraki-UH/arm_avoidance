@@ -92,6 +92,9 @@ public:
   FCLCollisionDetector();
   ~FCLCollisionDetector();
 
+  // 不変な衝突形状の共有と、姿勢・探索状態の分離
+  void copy_robot_geometry(const FCLCollisionDetector &source);
+
   // --- Obstacle Management ---
 
   // Add obstacles to the collision world

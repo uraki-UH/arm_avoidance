@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ToPoDualArm Max Long · Motion Studio</title><link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="branding.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="models.css">
+<link rel="stylesheet" href="generated/ros-results.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="branding.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="models.css">
 <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
 </head><body>
 <header><div class="product-header"><strong>ToPoDualArm-Max Long</strong><span>URDF ロボットシミュレータ</span></div><div class="live"><i></i><span id="load-status">モデルを準備中</span></div><img class="company-logo" src="branding/FuzzRoBo-logo.png" alt="FuzzRoBo"><button id="help-button" class="icon" aria-label="操作ガイド">?</button></header>
@@ -16,7 +16,7 @@
 <div id="toast" role="status"></div>
 </section>
 <aside>
-<nav class="workspace-tabs" aria-label="操作パネル"><button data-panel="robot" class="active">ロボット</button><button data-panel="environment">環境</button><button data-panel="sensor">RGB-D</button><button data-panel="camera">カメラ</button><button data-panel="lidar">LiDAR</button><button data-panel="ai">VM・AI</button><button data-panel="ros">ROS2連携</button></nav>
+<nav class="workspace-tabs" aria-label="操作パネル"><button data-panel="robot" class="active">ロボット</button><button data-panel="environment">環境</button><button data-panel="sensors">センサ</button><button data-panel="physics" title="物理シミュレーション">物理</button><button data-panel="ai">VM・AI</button><button data-panel="ros">ROS2連携</button></nav>
 <div id="robot-panel" class="workspace-panel">
 <div class="panel-heading"><div><span class="eyebrow">INTERACTIVE CONTROL</span><h2>手先を操作</h2></div><span class="chip">7 + 7 DOF</span></div>
 <div class="segmented arm-select"><button data-arm="L" class="active"><i class="left-dot"></i>左アーム</button><button data-arm="R"><i class="right-dot"></i>右アーム</button></div>
@@ -36,7 +36,11 @@
 <div class="pose-files"><button id="save-pose">↓ ポーズ保存</button><button id="load-pose">↑ 読み込み</button><input id="pose-file" type="file" accept=".json,application/json" hidden></div>
 
 <p class="scope-note">関節可動範囲を反映した運動学シミュレーション。衝突・重力・接触力の計算は含みません。</p>
-</div><div id="environment-panel" class="workspace-panel" hidden></div><div id="sensor-panel" class="workspace-panel" hidden></div><div id="camera-panel" class="workspace-panel" hidden></div><div id="lidar-panel" class="workspace-panel" hidden></div><div id="ai-panel" class="workspace-panel" hidden></div><div id="ros-panel" class="workspace-panel" hidden></div><a id="export-link" class="export-link" hidden target="_blank" rel="noopener"></a></aside></main>
+</div><div id="environment-panel" class="workspace-panel" hidden></div>
+<div id="sensors-panel" class="workspace-panel" hidden>
+<nav class="sensor-tabs" aria-label="センサ種別"><button data-sensor-panel="sensor" class="active" aria-pressed="true">RGB-D</button><button data-sensor-panel="camera" aria-pressed="false">カメラ</button><button data-sensor-panel="lidar" aria-pressed="false">LiDAR</button></nav>
+<div id="sensor-panel" class="workspace-panel"></div><div id="camera-panel" class="workspace-panel" hidden></div><div id="lidar-panel" class="workspace-panel" hidden></div>
+</div><div id="physics-panel" class="workspace-panel" hidden></div><div id="ai-panel" class="workspace-panel" hidden></div><div id="ros-panel" class="workspace-panel" hidden></div><a id="export-link" class="export-link" hidden target="_blank" rel="noopener"></a></aside></main>
 <footer><div class="timeline-title"><span class="eyebrow">MOTION SEQUENCE</span><strong>ポーズをつなぐ</strong></div><button id="add-keyframe" class="outline">＋ 記録</button><div id="keyframes"><span class="empty-timeline">手先を動かしてポーズを記録</span></div><label class="duration-label"><input id="duration" type="number" value="2" min="0.5" max="15" step="0.5" aria-label="ポーズ間の秒数">秒 / 区間</label><button id="play" class="primary">▶ 再生</button><button id="clear-frames" class="icon" title="シーケンスをクリア">×</button><div class="company-footer">東京都公立大学法人ベンチャー<br>(株)東海林ファジィロボット研究所</div></footer>
 <dialog id="help"><button id="close-help" class="dialog-close">×</button><span class="eyebrow">QUICK GUIDE</span><h2>マーカーで手先を動かす</h2><p>左／右アームを選び、手先に表示された矢印・平面をドラッグします。中央の小さな球は画面に平行な平面内を自由に移動できます。</p><ol><li><b>W：移動</b> — 赤 X・緑 Y・青 Z の矢印で軸方向に移動。</li><li><b>E：回転</b> — リングをドラッグして手先の向きを変更。</li><li><b>L / R：左右切り替え</b> — TCPラベルのクリックでも切り替え。</li><li><b>F：全体表示 / H：ホーム / P：撮影表示</b></li></ol><p>姿勢維持をオフにすると、位置を優先して腕が追従します。目標が届かない場合は黄色表示と位置誤差が残ります。可動範囲内でも、姿勢や初期姿勢によってIKが収束しない場合があります。</p><p>回転表示はURDF基準のRoll・Pitch・Yaw（度）。TCP位置はbase_footprint基準（mm）です。</p><p class="scope-note">URDFの関節制限と指のmimicを使用。continuous関節のスライダーは操作用に±180°を表示します。衝突回避・動力学・実機制御は行いません。</p></dialog>
 <script type="module" src="app.js"></script></body></html>

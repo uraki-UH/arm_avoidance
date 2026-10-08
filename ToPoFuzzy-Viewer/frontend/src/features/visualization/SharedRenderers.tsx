@@ -1,5 +1,6 @@
-import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { ThreeEvent, useThree } from '@react-three/fiber';
+import { ViewerEnvironment } from '../../embedding';
+import { ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { ThreeEvent, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Transform } from '../../types';
 import { EllipsoidInstance, updateEllipsoidInstances } from './ellipsoid';
@@ -53,17 +54,36 @@ export function use_click_pick(on_pick?: (event: ThreeEvent<MouseEvent>) => void
 }
 
 // 共通の表示座標系。適用順はTFまたは基準姿勢、手動変換、子要素の姿勢
-export function DisplayFrame({ tf, manual_transform, name, is_visible = true, children }: {
+export function DisplayFrame({ tf, frame_id, base_pose, manual_transform, name, is_visible = true, children }: {
     tf?: { pos: number[]; quat: number[] } | null;
+    frame_id?: string;
+    base_pose?: { pos: number[]; quat: number[] };
     manual_transform?: Transform | null;
     name?: string;
     is_visible?: boolean;
     children: ReactNode;
 }) {
+    const { resolve_frame } = useContext(ViewerEnvironment);
+    const root = useRef<THREE.Group>(null);
+    const pose_matrix = useMemo(() => base_pose ? new THREE.Matrix4().compose(
+        new THREE.Vector3().fromArray(base_pose.pos), new THREE.Quaternion().fromArray(base_pose.quat),
+        new THREE.Vector3(1, 1, 1)) : null, [base_pose]);
+    useFrame(() => {
+        if (!resolve_frame || !root.current) return;
+        const matrix = resolve_frame(frame_id ?? '');
+        root.current.visible = is_visible && matrix !== null;
+        root.current.userData.has_transform = matrix !== null;
+        if (matrix) {
+            root.current.matrix.copy(matrix);
+            if (pose_matrix) root.current.matrix.multiply(pose_matrix);
+            root.current.matrixWorldNeedsUpdate = true;
+        }
+    });
     useDemandUpdate([tf, manual_transform, is_visible]);
-    return <group name={name} visible={is_visible}
-        position={tf ? [tf.pos[0], tf.pos[1], tf.pos[2]] : [0, 0, 0]}
-        quaternion={tf ? [tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]] : [0, 0, 0, 1]}>
+    const pose = tf ?? base_pose;
+    return <group ref={root} matrixAutoUpdate={!resolve_frame} name={name} visible={is_visible}
+        position={pose ? [pose.pos[0], pose.pos[1], pose.pos[2]] : [0, 0, 0]}
+        quaternion={pose ? [pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]] : [0, 0, 0, 1]}>
         <group position={manual_transform?.position ?? [0, 0, 0]}
             rotation={manual_transform?.rotation ?? [0, 0, 0]} scale={manual_transform?.scale ?? [1, 1, 1]}>
             {children}

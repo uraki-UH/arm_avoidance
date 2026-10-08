@@ -75,7 +75,7 @@ class Client:
         self.sock = socket.create_connection(('127.0.0.1', port), timeout=10)
         key = base64.b64encode(os.urandom(16)).decode()
         self.sock.sendall(('GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n'
-                           'Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n'
+                           'Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\nOrigin: http://localhost:5173\r\n'
                            f'Sec-WebSocket-Key: {key}\r\n\r\n').encode())
         header = b''
         while not header.endswith(b'\r\n\r\n'):

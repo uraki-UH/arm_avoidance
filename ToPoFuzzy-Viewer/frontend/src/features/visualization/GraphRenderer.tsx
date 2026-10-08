@@ -381,5 +381,5 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
         </>
     );
 
-    return <DisplayFrame name={tag} tf={tf} manual_transform={transform}>{content}</DisplayFrame>;
+    return <DisplayFrame frame_id={graph.frameId} name={tag} tf={tf} manual_transform={transform}>{content}</DisplayFrame>;
 }

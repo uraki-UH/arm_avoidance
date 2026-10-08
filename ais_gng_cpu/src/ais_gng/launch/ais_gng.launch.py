@@ -54,6 +54,10 @@ def generate_launch_description():
         default_value='',
         description='入力PointCloud2トピックの上書き'
     )
+    declar_base_frame_id = DeclareLaunchArgument(
+        'base_frame_id', default_value='',
+        description='点群・GNGの変換先座標系。空文字はセンサ別YAML設定'
+    )
     declar_enable_grasp_attention = DeclareLaunchArgument(
         'enable_grasp_attention', default_value='auto',
         description='把持候補近傍の重点学習。autoはYAML設定、未指定は無効（CPU専用）'
@@ -135,7 +139,7 @@ def generate_launch_description():
         with open(gng_config_path, encoding='utf-8') as config_file:
             gng_parameters = yaml.safe_load(config_file).get(
                 'ais_gng_node', {}).get('ros__parameters', {})
-        # センサー別YAMLの切替型の検証。曲面のみ内部名への変換。
+        # センサ別YAMLの切替型の検証。曲面のみ内部名への変換。
         for name in ('plane_clustering', 'curve_clustering'):
             if name in gng_parameters and not isinstance(gng_parameters[name], bool):
                 raise RuntimeError(f'{name} must be a YAML boolean (true/false)')
@@ -155,7 +159,7 @@ def generate_launch_description():
         with open(surface_config_path, encoding='utf-8') as config_file:
             surface_parameters = yaml.safe_load(config_file).get(
                 '/**', {}).get('ros__parameters', {})
-        # センサー設定と短名変換の統合。同一セレクターへの展開による共通設定との優先順維持。
+        # センサ設定と短名変換の統合。同一セレクターへの展開による共通設定との優先順維持。
         parameters = [surface_config_path, gng_parameters]
         launch_parameter_overrides = {}
         grasp_attention = LaunchConfiguration('enable_grasp_attention').perform(context)
@@ -167,6 +171,10 @@ def generate_launch_description():
         input_topic = LaunchConfiguration('input_topic').perform(context)
         if input_topic:
             launch_parameter_overrides['input.topic_names'] = [input_topic]
+        base_frame_id = LaunchConfiguration('base_frame_id').perform(context).strip()
+        if base_frame_id:
+            launch_parameter_overrides['input.base_frame_id'] = base_frame_id
+            launch_parameter_overrides['input.local_coordinates'] = False
         source_point_cloud_topic = LaunchConfiguration(
             'source_point_cloud_topic').perform(context)
         if source_point_cloud_topic == 'auto':
@@ -190,7 +198,7 @@ def generate_launch_description():
         enable_plane_clustering = bool(gng_parameters.get('plane_clustering', True))
         enable_nonplane_component = False
         if backend == 'cpu':
-            # 共通設定のCPU直結名前空間への転写。センサー別YAML、起動引数の順で優先。
+            # 共通設定のCPU直結名前空間への転写。センサ別YAML、起動引数の順で優先。
             plane_parameter_overrides = {
                 f'plane_cluster.{name}': value for name, value in plane_parameters.items()
             }
@@ -234,7 +242,7 @@ def generate_launch_description():
             gng_parameters.get('surface_model.enable',
                                surface_parameters.get('surface_model.enable', True)))
 
-        # センサー・平面設定より明示launch引数を優先。
+        # センサ・平面設定より明示launch引数を優先。
         parameters.append(launch_parameter_overrides)
         nodes = [
             Node(
@@ -260,7 +268,7 @@ def generate_launch_description():
         ]
 
         if enable_plane_node:
-            # センサー別の曲面設定を実際の計算ノードへも転送。
+            # センサ別の曲面設定を実際の計算ノードへも転送。
             surface_parameter_overrides = {
                 name: value for name, value in gng_parameters.items()
                 if name.startswith('surface_model.')
@@ -299,6 +307,7 @@ def generate_launch_description():
         declar_lidar,
         declar_backend,
         declar_input_topic,
+        declar_base_frame_id,
         declar_enable_grasp_attention,
         declar_source_point_cloud_topic,
         declar_source_camera_info_topic,

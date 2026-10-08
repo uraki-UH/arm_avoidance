@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 
 
 def pipeline_config(config):
-    """旧デモ互換の既定値と機体別センサー設定。"""
+    """旧デモ互換の既定値と機体別センサ設定。"""
     return config.get('pipeline', {
         'base_frame': 'base_link', 'points_topic': 'lidar_points', 'enable_lidar': True,
         'voxel_size': 0.02, 'publish_hz': 10.0,

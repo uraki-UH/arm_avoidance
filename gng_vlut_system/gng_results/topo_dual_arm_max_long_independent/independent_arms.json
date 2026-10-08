@@ -1,0 +1,14 @@
+{
+  "mode": "independent_arms",
+  "profiles": [
+    {
+      "metadata": "left_arm/model.json",
+      "name": "left_arm"
+    },
+    {
+      "metadata": "right_arm/model.json",
+      "name": "right_arm"
+    }
+  ],
+  "version": 1
+}

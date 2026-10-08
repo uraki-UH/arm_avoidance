@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "collision/geometric_self_collision_checker.hpp"
+#include "common/parallel_queries.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/stl_loader.hpp"
 
@@ -433,3 +434,34 @@ TEST(mesh_collision_front, preserves_late_contacts_after_large_noncolliding_mesh
 }
 
 }  // 無名名前空間の終端
+
+
+TEST(geometric_solid_containment, query_clones_share_geometry_and_keep_independent_poses) {
+  const temporary_binary_stl outer_file(make_box_mesh({.08, -.025, -.025}, {.12, .025, .025}));
+  auto tool = make_primitive_shape(simulation::GeometryType::SPHERE, {.008, 0, 0});
+  tool.origin.translation() = Eigen::Vector3d(.1, 0, 0);
+  const auto model = make_model(make_mesh_shape(outer_file), tool);
+  auto chain = simulation::createMultiArmKinematicChain(model, {{"body", "tool", ""}});
+  simulation::GeometricSelfCollisionChecker original(model, *chain, true, .001);
+  std::vector<std::unique_ptr<simulation::GeometricSelfCollisionChecker>> workers;
+  for (int idx = 0; idx < 4; ++idx) {
+    workers.push_back(original.clone_for_queries());
+    ASSERT_NE(workers.back()->getFCLObject(0), original.getFCLObject(0));
+    EXPECT_EQ(workers.back()->getFCLObject(0)->collisionGeometry(), original.getFCLObject(0)->collisionGeometry());
+  }
+  const auto query = [&](simulation::GeometricSelfCollisionChecker &checker, double angle) {
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
+    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
+    chain->forwardKinematicsAt(std::vector<double>{angle, 0}, positions, orientations);
+    checker.updateBodyPoses(positions, orientations);
+    return checker.checkCollision();
+  };
+  std::vector<unsigned char> expected(128), actual(128);
+  for (std::size_t idx = 0; idx < expected.size(); ++idx) expected[idx] = query(original, idx%2 ? 0.0 : 1.2);
+  ASSERT_NE(expected[0], expected[1]);
+  robot_sim::common::parallel_queries(actual.size(), workers.size(), [&](std::size_t worker_idx, std::size_t idx) {
+    actual[idx] = query(*workers[worker_idx], idx%2 ? 0.0 : 1.2);
+  });
+  EXPECT_EQ(actual, expected);
+  EXPECT_TRUE(original.checkCollision());
+}

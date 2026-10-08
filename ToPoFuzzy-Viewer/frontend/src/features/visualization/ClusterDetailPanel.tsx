@@ -1,3 +1,4 @@
+import { ViewerEnvironment } from '../../embedding';
 import { VehicleRegistrationControls, VehicleRegistrationLayer } from '../vehicleRegistration/VehicleRegistration';
 import { useVehicleRegistration } from '../vehicleRegistration/use_vehicle_registration';
 import type { register_vehicle as register_vehicle_fn } from '../vehicleRegistration/types';
@@ -126,7 +127,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
         {error && <p role="alert" className="px-2 py-1 text-xs text-red-300">{error}</p>}
         <div className="relative min-h-0 flex-1 bg-black/20">
             <WebGLErrorBoundary>
-                <Canvas frameloop="demand" dpr={1} gl={{ antialias: false }}
+                <ViewerEnvironment.Provider value={{ mesh_base_url: '' }}><Canvas frameloop="demand" dpr={1} gl={{ antialias: false }}
                     camera={{ up: [0, 0, 1], fov: 45 }}>
                     <ambientLight intensity={1.5} />
                     <directionalLight position={[3, -3, 5]} intensity={2} />
@@ -137,7 +138,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
                     {enable_axes && <axesHelper args={[Math.max(...extent, 0.03) * 0.4]} position={center} />}
                     {enable_bounding_box && <box3Helper args={[bounds, '#ffe8a1']} renderOrder={2000}
                         material-depthTest={false} material-depthWrite={false} material-toneMapped={false} />}
-                </Canvas>
+                </Canvas></ViewerEnvironment.Provider>
             </WebGLErrorBoundary>
         </div>
         <footer className="shrink-0 overflow-x-auto whitespace-nowrap border-t border-white/10 p-2 text-[11px] text-[var(--text-secondary)]">

@@ -533,6 +533,18 @@ bool FCLCollisionCallback(fcl::CollisionObject<double> *o1,
   return result.isCollision();
 }
 
+void FCLCollisionDetector::copy_robot_geometry(const FCLCollisionDetector &source) {
+  if (!robot_links_.empty()) throw std::logic_error("Collision worker already initialized");
+  for (const auto &original : source.robot_links_) {
+    auto object = std::make_shared<fcl::CollisionObject<double>>(*original);
+    object->setUserData(original->getUserData());
+    robot_links_.push_back(object);
+    robot_manager_.registerObject(object.get());
+  }
+  robot_manager_.setup();
+  robot_manager_dirty_ = false;
+}
+
 bool FCLCollisionDetector::checkRobotCollision() const {
   if (robot_links_.empty() || obstacles_.empty())
     return false;

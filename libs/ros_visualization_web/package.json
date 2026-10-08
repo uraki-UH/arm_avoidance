@@ -1,0 +1,5 @@
+{
+  "name": "@topo/ros-visualization-web",
+  "private": true,
+  "type": "module"
+}

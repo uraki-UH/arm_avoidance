@@ -7,14 +7,18 @@ import os
 from pathlib import Path
 import random
 import signal
+import struct
 import subprocess
 import time
 
 import rclpy
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from ais_gng_msgs.msg import TopologicalMap
 from ais_gng_feature_msgs.msg import TopologicalNodeFeatureArray
 from gng_control_msgs.srv import CheckArmPair
+from rcl_interfaces.srv import GetParameters
+from sensor_msgs.msg import PointCloud2, PointField
+from voxel_msgs.msg import Voxel
 
 
 def main():
@@ -23,6 +27,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--domain', type=int, default=187)
     parser.add_argument('--max_pairs', type=int, default=500)
+    parser.add_argument('--enable-environment', action='store_true')
     args = parser.parse_args()
     os.environ['ROS_DOMAIN_ID'] = str(args.domain)
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
@@ -33,6 +38,8 @@ def main():
                 for item in manifest['profiles']}
     command = ['ros2', 'launch', 'gng_vlut_system', 'gng_viewer_bridge.launch.py',
                'enable_independent_arms:=true', 'dir:='+str(models.parent), 'id:='+models.name]
+    if args.enable_environment:
+        command.append('enable_environment_voxelization:=true')
     print('launch_command:', ' '.join(command), flush=True)
     rclpy.init()
     def handle_stop(signum, frame):
@@ -122,10 +129,46 @@ def main():
                 paths.append({'left': next_left, 'right': next_right,
                               'is_collision_free': response.is_collision_free,
                               'pairs': response.collision_pairs})
+            roi_result = None
+            if args.enable_environment:
+                parameter_client = node.create_client(GetParameters,
+                    '/topo_dual_arm_max_long/viewer_environment_voxelization/get_parameters')
+                assert parameter_client.wait_for_service(timeout_sec=10)
+                names = [direction+'_reachability_'+axis for direction in ('min', 'max') for axis in 'xyz']
+                future = parameter_client.call_async(GetParameters.Request(names=names))
+                rclpy.spin_until_future_complete(node, future, timeout_sec=10)
+                assert future.done()
+                actual_bounds = [value.double_value for value in future.result().values]
+                headers = []
+                for arm in ('left_arm', 'right_arm'):
+                    with (models/arm/metadata[arm]['vlut_file']).open('rb') as stream:
+                        headers.append(struct.unpack('<II7f', stream.read(36)))
+                expected_bounds = [min(header[3+idx] for header in headers) for idx in range(3)] + [
+                    max(header[6+idx] for header in headers) for idx in range(3)]
+                assert actual_bounds == expected_bounds, actual_bounds
+                assert actual_bounds[0] < -.1
+                # 従来の固定ROIで除去されていた後方点の保持確認
+                point = ((actual_bounds[0]-.1)/2, (actual_bounds[1]+actual_bounds[4])/2,
+                         (actual_bounds[2]+actual_bounds[5])/2)
+                messages = []
+                node.create_subscription(Voxel, '/topo_dual_arm_max_long/roi_voxels', messages.append,
+                                         qos_profile_sensor_data)
+                publisher = node.create_publisher(PointCloud2, '/camera/camera/depth/color/points', 1)
+                cloud = PointCloud2(height=1, width=1, is_dense=True, point_step=12, row_step=12,
+                    fields=[PointField(name=axis, offset=idx*4, datatype=PointField.FLOAT32, count=1)
+                            for idx, axis in enumerate('xyz')], data=struct.pack('<fff', *point))
+                cloud.header.frame_id = 'topo_dual_arm_max_long/base_link'
+                deadline = time.monotonic()+10
+                while not any(message.data for message in messages) and time.monotonic() < deadline:
+                    cloud.header.stamp = node.get_clock().now().to_msg()
+                    publisher.publish(cloud)
+                    rclpy.spin_once(node, timeout_sec=.1)
+                assert any(len(message.data) == 1 for message in messages), '左右VLUT範囲内の点がROIで消失'
+                roi_result = {'bounds': actual_bounds, 'point': point, 'is_retained': True}
             report = {'result': 'pass', 'nodes': {a: metadata[a]['num_nodes'] for a in metadata},
                       'joint_dimensions': [7, 7], 'num_safe_pairs': len(safe_pairs),
                       'colliding_pairs': colliding_pairs, 'paths': paths,
-                      'invalid_inputs_rejected': True, 'launch_command': command}
+                      'invalid_inputs_rejected': True, 'roi': roi_result, 'launch_command': command}
             (args.output/'result.json').write_text(json.dumps(report, indent=2)+'\n')
             print(json.dumps(report), flush=True)
     finally:

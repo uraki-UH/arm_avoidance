@@ -119,7 +119,7 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
                 except ValueError as error:
                     return self.respond(400, {'error': str(error)})
             if urlsplit(self.path).path == '/api/points/status':
-                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 3, 'topics': topics})
+                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 4, 'topics': topics})
             super().do_GET()
 
         def do_POST(self):

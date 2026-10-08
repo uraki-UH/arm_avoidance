@@ -3,7 +3,7 @@ let socket=null,timer=null,pose=null,is_ready=false,is_pending=false,latest=null
 self.onmessage=event=>{
  const data=event.data;
  if(data.type==='poll'){if(latest){self.postMessage(latest);latest=null;}return;}
- if(data.type==='pose'){pose=data.pose;return;}
+ if(data.type==='pose'){pose={type:'state',state:data.state,outputs:data.outputs};return;}
  if(data.type!=='connect')return;
  socket=new WebSocket(data.url);
  socket.onopen=()=>socket.send(JSON.stringify(data.config));
@@ -20,6 +20,6 @@ self.onmessage=event=>{
  socket.onclose=()=>{clearInterval(timer);self.postMessage({type:'error',error:'関節WebSocketの接続が切れました'});};
  if(data.send)timer=setInterval(()=>{
   if(!pose||!is_ready||is_pending||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>0)return;
-  is_pending=true;socket.send(JSON.stringify({type:'joints',pose}));
+  is_pending=true;socket.send(JSON.stringify(pose));
  },1000/data.config.hz);
 };

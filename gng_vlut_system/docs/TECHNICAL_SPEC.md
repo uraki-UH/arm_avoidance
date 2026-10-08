@@ -993,6 +993,13 @@ profileの`voxel_exclude`はこの自動収録後にも適用する。
 
 ### 左右独立の7関節モデル
 
+既定の一括検査方式は`gng.enable_batched_collision_filter: true`。
+ノード配置完了後の全姿勢検査と、距離順の近傍候補・最小全域森の和による疎な接続。
+辺の検査は最大関節差0.025 radの離散補間、TCP層の接続は検査済み関節辺との共有。
+衝突形状はworker間で共有し、姿勢・FCL探索状態・FK出力はworkerごとに分離。
+追加学習中の各候補経路検査と、TCP距離だけによる辺の再構築は従来方式のみ。
+干渉ノード・辺の除去後の成分数をログへ出力し、全域連結の無条件保証は対象外。
+
 `gng.enable_independent_arms`が有効な`offline_urdf_trainer_dual.launch.py`は、
 選択profileごとに独立GNG・VLUTを保存する。`topo_dual_arm_max_long`の左右は各7次元。
 各profileのroot以下で可動jointを経たリンク集合を抽出し、反対腕の集合だけを
@@ -1245,7 +1252,7 @@ matcherはテンプレートごとに異なる物体へ対応する可能性が�
 制御した形状からCPU GNGを生成する初期検証では、箱への車クラス誤支持、車種間の重複支持、
 小物のグリッド密度不足を確認。現段階の適合度だけで細分類の確定には使用しない。
 小物のグリッド細分化ではマグカップの別観測を支持できたが、取っ手のない円筒も支持するため、
-密度だけでは識別性能の不足は解消しない。実測センサー・実環境での精度は未評価。
+密度だけでは識別性能の不足は解消しない。実測センサ・実環境での精度は未評価。
 
 実入力検証は[`check_object_class_recognition.py`](../test/check_object_class_recognition.py)。
 CPU GNG → C++ matcher → ROS非依存のクラス評価部品を通す試験。

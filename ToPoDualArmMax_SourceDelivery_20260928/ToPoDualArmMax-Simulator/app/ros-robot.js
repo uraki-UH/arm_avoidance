@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import {RosJointStream} from './ros-joints.js';
-import {robot_snapshot,attach_camera} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 
 export function validate_trajectory(command,robot){
@@ -25,7 +24,7 @@ export class RosRobotPanel{
   this.rgbd=rgbd;this.toast=toast;this.is_busy=false;this.last_ms=0;this.sequence=null;this.generation=0;this.active=null;this.model=null;
   const placement_panel=document.createElement('section');placement_panel.innerHTML=`<h2>ロボット配置</h2><p>world基準の配置。XYZはm、角度はdeg。</p><div class="field-grid">${['x','y','z','roll','pitch','yaw'].map(name=>`<label>${name}<input id="ros-base-${name}" type="number" value="0" step="0.1"></label>`).join('')}</div><button id="ros-base-apply" class="wide-button">配置を適用</button>`;
   $('robot-panel').append(placement_panel);
-  const panel=document.createElement('section');panel.id='ros-receive-panel';panel.innerHTML=`<h3>ROS → ブラウザ：受信</h3><label><input id="ros-command-enable" type="checkbox"> 関節軌道を受信して再生</label><p class="sub-note">表示モデルに対応する /sim/command/standard/joint_trajectory または /sim/command/long/joint_trajectory を受信。</p><button id="ros-command-stop" class="wide-button">軌道停止・受信OFF</button><pre id="ros-robot-status">受信OFF</pre><p class="sub-note">JointState受信は上の高速通信設定。TF・Poseによるベース位置の受信は未対応。</p><p class="sub-note">軌道は位置のみの線形補間、受信後の相対時刻で再生。実機への指令なし。</p>`;
+  const panel=document.createElement('section');panel.id='ros-receive-panel';panel.innerHTML=`<h3>ROS → ブラウザ：受信</h3><label><input id="ros-command-enable" type="checkbox"> 関節軌道を受信して再生</label><p class="sub-note">表示モデルに対応する /sim/command/standard/joint_trajectory または /sim/command/long/joint_trajectory を受信。</p><button id="ros-command-stop" class="wide-button">軌道停止・受信OFF</button><pre id="ros-robot-status">受信OFF</pre><p class="sub-note">JointState受信は上の「姿勢・TFの送受信」で設定。TF・Poseによるベース位置の受信は未対応。</p><p class="sub-note">軌道は位置のみの線形補間、受信後の相対時刻で再生。実機への指令なし。</p>`;
   $('ros-panel').append(panel);
   this.joint_stream=new RosJointStream(this);
   $('ros-base-apply').onclick=()=>{try{const values=['x','y','z','roll','pitch','yaw'].map(name=>Number($('ros-base-'+name).value));if(values.some(v=>!Number.isFinite(v))||values.slice(0,3).some(v=>Math.abs(v)>100))throw Error('配置は有限値、XYZは±100 mです');this.stop();window.simulator.set_robot_placement(values);$('ros-robot-status').textContent='配置を更新';}catch(error){toast(error.message);}};
@@ -48,20 +47,19 @@ export class RosRobotPanel{
    command.joint_names.forEach((name,j)=>pose[name]=a.positions[j]+u*(b.positions[j]-a.positions[j]));window.simulator.apply_ros_pose(pose);
    if(t>=points.at(-1).time_sec){this.active=null;$('ros-robot-status').textContent='軌道再生完了';}
   }
-  if(!this.is_busy&&now-this.last_ms>=100&&($('ros-state-enable').checked||$('ros-command-enable').checked)){this.last_ms=now;this.exchange();}
+  if(!this.is_busy&&now-this.last_ms>=100&&$('ros-command-enable').checked){this.last_ms=now;this.exchange();}
  }
  async exchange(){
   this.is_busy=true;const generation=this.generation,model=this.rgbd.robot.modelId;
   try{
    const endpoint=new URL($('ros-endpoint').value);
-   if($('ros-state-enable').checked){const state=robot_snapshot(this.rgbd.robot);attach_camera(state,this.rgbd.sensor.opticalToWorld(this.rgbd.opticalWorld()).toArray());const response=await fetch(new URL('/api/state',endpoint),{method:'POST',headers:{'Content-Type':'application/json','X-ToPo-Points':'1'},body:JSON.stringify(state),signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error(await response.text());}
    if($('ros-command-enable').checked){
     const response=await fetch(new URL('/api/trajectory?model='+model,endpoint),{signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error(await response.text());const result=await response.json();
     if(generation!==this.generation||this.rgbd.robot.modelId!==model)return;
     if(this.sequence===null){this.sequence=result.sequence;return;}
     if(result.sequence!==this.sequence){this.sequence=result.sequence;if(result.command){const command=validate_trajectory(result.command,this.rgbd.robot);this.active={command,start:performance.now()};$('ros-robot-status').textContent='ROS軌道を再生中';}}
    }
-  }catch(error){if(generation===this.generation){this.stop();$('ros-state-enable').checked=false;$('ros-robot-status').textContent='ROS接続／軌道エラー：'+error.message;}}
+  }catch(error){if(generation===this.generation){this.stop();$('ros-robot-status').textContent='ROS接続／軌道エラー：'+error.message;}}
   finally{this.is_busy=false;}
  }
 }

@@ -46,6 +46,21 @@ def read_vlut_voxel_size(vlut_file: str):
     return voxel_size
 
 
+
+def read_vlut_bounds(vlut_file: str):
+    # VLUT全占有範囲。TCP位置だけで切り落とさない環境ROIの基準
+    with open(vlut_file, "rb") as stream:
+        header = stream.read(36)
+    if len(header) != 36:
+        raise ValueError("VLUTの占有範囲ヘッダが不足しています")
+    file_id, version, _, *bounds = struct.unpack("<II7f", header)
+    if file_id != int.from_bytes(b"VLUT", byteorder="big") or version < 2:
+        raise ValueError("占有範囲を持つVLUTが必要です")
+    if not all(math.isfinite(value) for value in bounds) or any(bounds[idx] > bounds[idx+3] for idx in range(3)):
+        raise ValueError("VLUTの占有範囲が不正です")
+    return bounds[:3], bounds[3:]
+
+
 def safe_float(value, default):
     try:
         if value is None or value == "":
@@ -136,6 +151,7 @@ def launch_setup(context, *args, **kwargs):
     yaml_realsense_mount_config = "package://gng_vlut_system/config/realsense_mount.yaml"
     yaml_vlut_resolution = 0.0
     yaml_enable_independent_arms = False
+    yaml_gng_sampling = {}
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
@@ -190,6 +206,7 @@ def launch_setup(context, *args, **kwargs):
                 )
                 gng_ns = root_ros_params.get('gng', {}) if isinstance(root_ros_params.get('gng', {}), dict) else {}
                 yaml_enable_independent_arms = safe_bool(gng_ns.get('enable_independent_arms'), False)
+                yaml_gng_sampling = root_ros_params.get('gng_params', {})
                 yaml_data_dir = gng_ns.get('data_directory', yaml_data_dir)
                 yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
                 gng_model_filename = gng_ns.get('gng_model_filename', gng_model_filename)
@@ -382,6 +399,7 @@ def launch_setup(context, *args, **kwargs):
     gng_file = resolve_result_path(gng_model_path, gng_model_filename)
     missing_result_files = [path for path in (gng_file, vlut_file) if not os.path.isfile(path)]
     independent_profiles = []
+    independent_bounds = None
     if enable_independent_arms:
         if gng_model_path or vlut_path:
             raise ValueError("独立学習モデルはdir・idで指定してください。単体モデルの指定にはenable_independent_arms:=falseが必要です")
@@ -415,6 +433,11 @@ def launch_setup(context, *args, **kwargs):
                 if sizes[0] is None or sizes[0] != sizes[1]:
                     raise ValueError("左右VLUTのボクセル幅が一致しません")
                 self_recognition_resolution = sizes[0]
+                bounds = [read_vlut_bounds(item["vlut_path"]) for item in independent_profiles]
+                independent_bounds = {
+                    "min": [min(item[0][idx] for item in bounds) for idx in range(3)],
+                    "max": [max(item[1][idx] for item in bounds) for idx in range(3)],
+                }
     has_learning_data = not missing_result_files
 
     actions = [
@@ -673,10 +696,15 @@ def launch_setup(context, *args, **kwargs):
         }
         for key, default in (('x_shift', 42), ('y_shift', 21), ('z_shift', 0), ('offset', 1000000)):
             roi_params[key] = int(yaml_voxel_idx.get(key, default))
-        for axis in 'xyz':
+        for idx, axis in enumerate('xyz'):
             for direction, default in (('min', -0.1 if axis == 'x' else -1.0), ('max', 0.5 if axis == 'x' else 1.0)):
                 key = direction + '_reachability_' + axis
-                roi_params[key] = float(environment.get(key, gng_ns.get(direction + '_' + axis, default)))
+                fallback = gng_ns.get(direction + '_' + axis,
+                    yaml_gng_sampling.get(direction + '_' + axis, default))
+                if enable_independent_arms:
+                    fallback = (independent_bounds[direction][idx] if independent_bounds else
+                                yaml_gng_sampling.get(direction + '_' + axis, default))
+                roi_params[key] = float(environment.get(key, fallback))
             key = 'reachability_margin_' + axis
             roi_params[key] = float(environment.get(key, 0.2))
         actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',

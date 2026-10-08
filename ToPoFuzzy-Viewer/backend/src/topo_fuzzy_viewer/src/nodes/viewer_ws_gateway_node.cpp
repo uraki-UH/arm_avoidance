@@ -3,6 +3,7 @@
 #include "topo_fuzzy_viewer/protocol/rpc.h"
 #include "topo_fuzzy_viewer/common/topic_names.h"
 #include "topo_fuzzy_viewer/common/nonplane_graph.h"
+#include "topo_fuzzy_viewer/common/plane_graph.h"
 #include "topo_fuzzy_viewer/protocol/protocol.h"
 #include "topo_fuzzy_viewer/protocol/topological_map_protocol.h"
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
@@ -46,7 +47,12 @@
 
 namespace {
 using json = nlohmann::json;
-struct PerSocketData {};
+struct PerSocketData {
+    bool is_observer = false;
+    std::chrono::steady_clock::time_point window_start = std::chrono::steady_clock::now();
+    unsigned int num_messages = 0;
+    unsigned int num_requests = 0;
+};
 using WebSocket = uWS::WebSocket<false, true, PerSocketData>;
 
 struct VoxelStreamState {
@@ -81,7 +87,7 @@ namespace topic_utils {
     bool isBrowsableSourceType(const std::string& type) {
         return type == "pointcloud" ||
                type == "topological_map" ||
-               type == "nonplane_component" ||
+               type == "nonplane_component" || type == "plane_cluster" ||
                type == "marker" ||
                type == "voxel";
     }
@@ -93,6 +99,7 @@ namespace topic_utils {
             {
                 return "nonplane_component";
             }
+            if (t == "ais_gng_msgs/msg/PlaneClusterArray") return "plane_cluster";
             if (t.find("TopologicalMap") != std::string::npos) return "topological_map";
             if (t.find("TopologicalNodeFeature") != std::string::npos) return "topological_node_feature";
             if (t.find("TopologicalClusterFeature") != std::string::npos) return "topological_cluster_feature";
@@ -319,6 +326,9 @@ class ViewerWsGatewayNode : public rclcpp::Node {
 public:
     ViewerWsGatewayNode() : Node("viewer_ws_gateway_node") {
         const int port = declare_parameter<int>("port", 9001);
+        allowed_origins_ = declare_parameter<std::vector<std::string>>("allowed_origins", {
+            "http://127.0.0.1:5173", "http://localhost:5173",
+            "http://127.0.0.1:8877", "http://localhost:8877"});
         pointCloudMaxPoints_ = static_cast<size_t>(std::max<int64_t>(
             0, declare_parameter<int64_t>("pointcloud_max_points", 100000)));
         pointCloudMaxHz_ = std::max(
@@ -350,7 +360,9 @@ public:
                         (void)child_frame_id;
                         transforms.push_back(transform);
                     }
-                    payload = converter::to_json(transforms).dump();
+                    auto payload_json = converter::to_json(transforms);
+                    payload_json["is_static"] = true;
+                    payload = payload_json.dump();
                     lastStaticTfPayload_ = payload;
                 }
                 broadcastText(payload);
@@ -393,7 +405,52 @@ public:
 
 private:
     void onWsMessage(WebSocket* ws, std::string_view msg) {
-        json in = json::parse(msg, nullptr, false); if (in.is_discarded()) return;
+        auto& client = *ws->getUserData();
+        const auto now = std::chrono::steady_clock::now();
+        if (now - client.window_start >= std::chrono::seconds(1)) {
+            client.window_start = now; client.num_messages = client.num_requests = 0;
+        }
+        if (++client.num_messages > 2000) { ws->end(1008, "Message rate exceeded"); return; }
+        if (msg.size() > 1024 * 1024) { ws->end(1009, "Message too large"); return; }
+        json in = json::parse(msg, nullptr, false);
+        if (!in.is_object()) { ws->end(1007, "Invalid JSON object"); return; }
+        for (const auto* key : {"id", "method", "type", "tag", "topic"}) {
+            if (in.contains(key) && !in[key].is_string()) { ws->end(1007, "Invalid field type"); return; }
+        }
+        if (in.contains("params") && !in["params"].is_object()) {
+            ws->end(1007, "Invalid params"); return;
+        }
+        if (in.contains("method") && ++client.num_requests > 100) {
+            ws->end(1008, "Request rate exceeded"); return;
+        }
+        // 表示用入口では購読開始・描画確認・詳細計算のみ許可。ROS操作・共有購読の停止は禁止。
+        if (ws->getUserData()->is_observer) {
+            const auto method = in.value("method", "");
+            const auto type = in.value("type", "");
+            const auto params = in.value("params", json::object());
+            const bool is_subscription = method == "sources.setActive" &&
+                params.contains("active") && params["active"] == true &&
+                params.contains("sourceId") && params["sourceId"].is_string() &&
+                !params.value("sourceId", "").empty() &&
+                (!params.contains("removeLayer") || params["removeLayer"] == false);
+            // 入力スナップショットの切り出し・幾何照合のみ。編集セッションやROS制御への委譲なし。
+            const bool is_inspection = method == "edit.inspect_graph" || method == "vehicle.register";
+            const bool is_ack = type == "request.state" || type == "stream.marker_array.ready" ||
+                type == "stream.topological_map.applied" || type == "stream.marker_array.applied";
+            if (!((type.empty() && (method == "sources.list" || is_inspection || is_subscription)) || (method.empty() && is_ack))) {
+                ws->send(viewer_internal::makeErrorResponse(in.value("id", ""),
+                    "READ_ONLY", "This endpoint only permits visualization subscriptions"), uWS::OpCode::TEXT);
+                return;
+            }
+        }
+        if (in.value("method", "") == "sources.setActive") {
+            const auto params = in.value("params", json::object());
+            if (!params.contains("sourceId") || !params["sourceId"].is_string() ||
+                !params.contains("active") || !params["active"].is_boolean() ||
+                (params.contains("removeLayer") && !params["removeLayer"].is_boolean())) {
+                ws->end(1007, "Invalid subscription"); return;
+            }
+        }
         std::string type = in.value("type", ""), method = in.value("method", ""), id = in.value("id", ""), tag = in.value("tag", "");
         if (type == "request.state") { sendCurrentState(ws); return; }
         if (type == "stream.marker_array.ready") {
@@ -577,6 +634,16 @@ private:
     // 三入力の到着順に依存しない同一フレーム照合。各ソースの未配信最新1件のみ保持
     void flush_nonplane_components_locked() {
         if (!latest_nonplane_source_map_) return;
+        for (auto it = pending_plane_maps_.begin(); it != pending_plane_maps_.end();) {
+            const auto graph = plane_graph::build(*it->second, *latest_nonplane_source_map_);
+            if (!graph) { ++it; continue; }
+            try {
+                broadcastTopologicalMap(it->first, topological_map_protocol::serialize(*graph, it->first));
+            } catch (const std::exception& error) {
+                RCLCPP_ERROR(get_logger(), "Plane graph serialization failed: %s", error.what());
+            }
+            it = pending_plane_maps_.erase(it);
+        }
         for (auto it = pending_nonplane_components_.begin(); it != pending_nonplane_components_.end();) {
             const auto graph = nonplane_graph::build(*it->second, *latest_nonplane_source_map_,
                 latest_nonplane_source_plane_clusters_.get());
@@ -625,6 +692,15 @@ private:
                         m->header.frame_id,
                         utils::convertToProtocolMessage(
                             utils::convertFromRosMsg(m, pointCloudMaxPoints_)).serialize());
+                });
+        } else if (st == "plane_cluster") {
+            activeSubTypes_[sid] = st;
+            activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
+                sid, rclcpp::QoS(1).reliable().transient_local(),
+                [this, sid](const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr message) {
+                    std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+                    pending_plane_maps_[sid] = message;
+                    flush_nonplane_components_locked();
                 });
         } else if (st == "nonplane_component") {
             activeSubTypes_[sid] = "nonplane_component";
@@ -729,6 +805,7 @@ private:
                 {
                     std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
                     pending_nonplane_components_.erase(sid);
+                    pending_plane_maps_.erase(sid);
                 }
                 if (remove_layer) sendStreamDelete(sid);
                 if (activeDynamicSubs_.count(sid)) {
@@ -1021,6 +1098,7 @@ private:
         {
             std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
             pending_nonplane_components_.erase(id);
+            pending_plane_maps_.erase(id);
         }
         broadcastText(json({{"type", "stream.delete"}, {"id", id}, {"tag", id}, {"topic", id}}).dump());
         broadcastText(json({{"type", "stream.remove_layer"}, {"id", id}, {"tag", id}, {"topic", id}}).dump());
@@ -1084,7 +1162,20 @@ private:
     void runServerLoop(int port) {
         loop_ = uWS::Loop::get(); serverRunning_ = true;
         uWS::App::WebSocketBehavior<PerSocketData> behavior;
-        behavior.maxPayloadLength = 64 * 1024 * 1024;
+        behavior.maxPayloadLength = 1024 * 1024;
+        behavior.upgrade = [this](auto* response, auto* request, auto* context) {
+            const std::string origin(request->getHeader("origin"));
+            if (std::find(allowed_origins_.begin(), allowed_origins_.end(), origin) == allowed_origins_.end()) {
+                response->writeStatus("403 Forbidden")->end("Origin denied"); return;
+            }
+            const auto path = request->getUrl();
+            if (path != "/" && path != "/observe") {
+                response->writeStatus("404 Not Found")->end(); return;
+            }
+            response->template upgrade<PerSocketData>({path == "/observe"},
+                request->getHeader("sec-websocket-key"), request->getHeader("sec-websocket-protocol"),
+                request->getHeader("sec-websocket-extensions"), context);
+        };
         behavior.maxBackpressure = websocketMaxBackpressureBytes_;
         behavior.closeOnBackpressureLimit = false;
         behavior.drain = [this](auto*) { flush_pending_render_streams(); };
@@ -1115,7 +1206,7 @@ private:
                 unsubscribeStreamingTopics();
             }
         };
-        uWS::App().get("/*", [this](auto* res, auto* req) { meshServer_.handle(res, req); }).ws<PerSocketData>("/*", std::move(behavior)).listen(port, [this, port](auto* s) { if (s) { listenSocket_ = s; RCLCPP_INFO(get_logger(), "WS Server on %d", port); } }).run();
+        uWS::App().get("/*", [this](auto* res, auto* req) { meshServer_.handle(res, req); }).ws<PerSocketData>("/*", std::move(behavior)).listen("127.0.0.1", port, [this, port](auto* s) { if (s) { listenSocket_ = s; RCLCPP_INFO(get_logger(), "WS Server on %d", port); } }).run();
     }
 
     void subscribeStreamingTopics() {
@@ -1138,6 +1229,7 @@ private:
         {
             std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
             pending_nonplane_components_.clear();
+            pending_plane_maps_.clear();
         }
         lastNodeFeaturePayloads_.clear();
         lastClusterFeaturePayloads_.clear();
@@ -1341,6 +1433,7 @@ private:
     std::unordered_map<WebSocket*, TopologicalMapClientState> topologicalMapClientStates_;
     std::string lastStaticTfPayload_;
     std::unordered_map<std::string, geometry_msgs::msg::TransformStamped> staticTransforms_;
+    std::unordered_map<std::string, ais_gng_msgs::msg::PlaneClusterArray::SharedPtr> pending_plane_maps_;
     ais_gng_msgs::msg::TopologicalMap::SharedPtr latest_nonplane_source_map_;
     std::unordered_map<std::string, std_msgs::msg::UInt32MultiArray::SharedPtr> pending_nonplane_components_;
     ais_gng_msgs::msg::PlaneClusterArray::SharedPtr latest_nonplane_source_plane_clusters_;
@@ -1351,6 +1444,7 @@ private:
     std::string lastSourcesSnapshot_;
     std::shared_ptr<const std::string> pendingRobotPosePayload_;
     std::vector<WebSocket*> connections_;
+    std::vector<std::string> allowed_origins_;
     std::thread serverThread_, graphWatchThread_; us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false}, graphWatchRunning_{true}; uWS::Loop* loop_ = nullptr;
     rclcpp::TimerBase::SharedPtr livenessTimer_;

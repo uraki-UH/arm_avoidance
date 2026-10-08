@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "topo_fuzzy_viewer/common/nonplane_graph.h"
+#include "topo_fuzzy_viewer/common/plane_graph.h"
 #include "topo_fuzzy_viewer/protocol/topological_map_protocol.h"
 #include "topo_fuzzy_viewer/common/graph_inspection.h"
 
@@ -159,4 +160,23 @@ TEST(nonplane_graph, inspection_and_bounds_exclude_plane_anchors_from_component_
     const auto bounds = graph_inspection::bounds_list(request)["bounds"];
     ASSERT_EQ(bounds.size(), 2U);
     for (const auto& box : bounds) EXPECT_LT(box["max_position"][0].get<double>(), 100);
+}
+
+
+TEST(plane_graph, preserves_observed_edges_and_rejects_frame_or_membership_mismatch) {
+    fixture input;
+    auto graph = plane_graph::build(input.planes, input.map);
+    ASSERT_TRUE(graph);
+    ASSERT_EQ(graph->nodes.size(), 2U);
+    EXPECT_EQ(graph->nodes[0].id, 90U);
+    EXPECT_EQ(graph->nodes[1].id, 500U);
+    EXPECT_EQ(graph->edges, (std::vector<uint16_t>{0, 1}));
+    EXPECT_EQ(graph->clusters[0].nodes, (std::vector<uint16_t>{90, 500}));
+    input.planes.frame_number++;
+    EXPECT_FALSE(plane_graph::build(input.planes, input.map));
+    input.planes.frame_number--;
+    input.planes.clusters[0].node_indices.push_back(0);
+    EXPECT_FALSE(plane_graph::build(input.planes, input.map));
+    input.planes.clusters[0].node_indices = {999};
+    EXPECT_FALSE(plane_graph::build(input.planes, input.map));
 }

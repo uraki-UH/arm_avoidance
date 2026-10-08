@@ -3,6 +3,9 @@
 .workspace-tabs{flex-wrap:wrap}.workspace-tabs button{flex:0 0 auto}
 #camera-panel .sensor-images canvas{aspect-ratio:auto}#camera-panel figure[hidden]{display:none}
 #camera-panel .field-label,#camera-panel .field-grid label,#camera-panel button{font-size:12px}
+#camera-panel .field-grid label{min-width:0;align-items:stretch;text-align:left}
+#camera-panel .field-grid select{width:100%;min-width:0;font-size:12px}
+#camera-panel summary{justify-content:flex-start;text-align:left;font-size:13px}
 #camera-panel .sensor-stats{display:block;font-size:12px}
 #camera-calibration{width:100%;height:320px;resize:vertical;font:12px/1.5 monospace}
 #camera-live,#camera-once{background:#197a45;color:#fff;border-color:#197a45}
@@ -11,7 +14,11 @@
 #lidar-panel details{margin:12px 0}
 #lidar-panel a{color:#7a187a;font-size:11px}
 .field-grid select{max-width:100%;font-size:11px}
-.workspace-tabs{grid-template-columns:repeat(4,1fr)!important}
+.workspace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.workspace-tabs button{min-width:0;white-space:normal}
+.sensor-tabs{display:flex;gap:6px;margin:0 0 18px}
+.sensor-tabs button{flex:1;min-width:0;padding:8px 4px;font-size:12px;background:#f7f2f9;color:#795384;border:1px solid #e0d2e6;border-radius:5px}
+.sensor-tabs button.active{background:#8c1c8c;color:#fff;border-color:#8c1c8c}
 [hidden]{display:none!important}
 .lidar-pattern-preview{margin:14px 0}.lidar-pattern-preview figcaption{font-size:11px;color:#70477d;display:flex;justify-content:space-between;gap:8px}.lidar-pattern-preview figcaption span{font-size:8px;color:#937c9c}.lidar-pattern-preview canvas{display:block;width:100%;height:auto;border:1px solid #e5dbea;border-radius:8px;margin-top:7px}.lidar-pattern-preview .sub-note{margin:5px 0 10px}
 
@@ -30,3 +37,25 @@ aside{padding-inline:12px}
 .ros-connection span{flex:none;font-size:11px;color:#73537d}
 .ros-connection input{flex:1;min-width:0;width:100%;margin:0;padding:3px 0;border:0;border-radius:0;background:transparent;color:#52335f;font:11px/1.5 ui-monospace,monospace}
 .ros-connection:focus-within{outline:2px solid #a16aad;outline-offset:1px}
+
+#ros-panel #ros-joints-hz{color:#202020;background:#fff;color-scheme:light;border:1px solid #b8a9c0;border-radius:5px;padding:5px 7px;width:76px;font-variant-numeric:tabular-nums}
+
+/* 物理設定の入力欄と、未選択時にも読める無効状態 */
+#physics-panel input:not([type=checkbox]),#physics-panel select{color:#27222c;background:#fff;border:1px solid #b8a9c0;border-radius:5px;padding:6px 8px;color-scheme:light}
+#physics-panel input:disabled,#physics-panel select:disabled{color:#625a68;background:#eeebf0;opacity:1;cursor:not-allowed}
+
+/* 物体の右クリックメニューと削除ボタンの明色表示 */
+.object-context-menu{position:fixed;z-index:10000;background:#fff;color:#27222c;border:1px solid #c8b7d0;padding:8px;border-radius:6px;box-shadow:0 2px 12px #0003;color-scheme:light}
+.object-context-menu>div{padding:2px 4px 8px;font-weight:600}
+.object-context-menu button{width:100%;background:#fff5f5;color:#9b2424;border:1px solid #dca9a9}
+.object-context-menu button:hover{background:#ffe6e6;border-color:#b85a5a}
+.object-context-menu button:focus-visible{outline:2px solid #8c1c8c;outline-offset:2px}
+.object-context-physics{display:grid;gap:6px;margin-bottom:10px}
+.object-context-physics label{display:grid;gap:4px;font-size:12px}
+.object-context-physics select{max-width:280px;padding:6px;color:#27222c;background:#fff;border:1px solid #c8b7d0}
+.object-context-physics button{background:#f7f2f9;color:#65367b;border-color:#c8b7d0}
+.object-context-physics small{font-size:11px;color:#675b6d}
+
+.object-context-physics>label{display:flex;align-items:center;gap:8px}.object-context-physics details{margin:0;padding:6px 0 0}.object-context-physics details summary{color:#65367b}.object-context-physics details[open]{display:grid;gap:6px}
+
+.object-context-physics details:not([open])>:not(summary){display:none}.object-context-menu{max-height:calc(100vh - 16px);overflow-y:auto}

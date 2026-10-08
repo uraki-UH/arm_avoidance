@@ -52,7 +52,7 @@ try {
                 models:window.meshes.items.map(item=>{const box=new THREE.Box3().setFromObject(item.asset.object);
                     return {bounds:[box.min.toArray(),box.max.toArray()],num_triangles:item.asset.num_triangles};})};
         };
-    ` }, bundle: true, write: false, format: 'iife', jsx: 'automatic',
+    ` }, bundle: true, nodePaths: [resolve('node_modules')], write: false, format: 'iife', jsx: 'automatic',
         define: { 'process.env.NODE_ENV': '"production"' } });
     const command = ['/opt/google/chrome/chrome', '--headless=new', '--use-gl=angle', '--use-angle=swiftshader',
         '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check', '--remote-debugging-pipe',

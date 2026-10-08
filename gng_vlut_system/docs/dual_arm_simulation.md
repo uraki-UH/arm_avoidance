@@ -284,7 +284,7 @@ GZ_PARTITION=uraki_rolling_check ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 \
 ```
 
 Isaacは実USD APIによる構造検証まで。本体での物理実行は下記のGPUコンテナ制約により未検証。
-環境のセンサー点群・GNG/VLUT回避への入力・ToPoFuzzy-Viewerでの環境物体表示は、この配置生成には未接続。
+環境のセンサ点群・GNG/VLUT回避への入力・ToPoFuzzy-Viewerでの環境物体表示は、この配置生成には未接続。
 
 ## 標準ROS 2トピックとViewerの接続
 
@@ -450,7 +450,7 @@ ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=topodualarm
 
 操作: 起動後はホールド。Aで回避開始／ホールド復帰、Spaceでソフト停止、停止後のLで解除後ホールド、Ctrl+Cで終了。Lのリーダー追従開始には新鮮な`/leader/joint_states`が必要。USBドライバの自動起動なし。
 
-- 回避方式: URDF外接球と左右の模擬前腕カプセルによる幾何探索。Gazebo状態による入力で、実センサー点群・GNG/VLUT回避とは別方式。
+- 回避方式: URDF外接球と左右の模擬前腕カプセルによる幾何探索。Gazebo状態による入力で、実センサ点群・GNG/VLUT回避とは別方式。
 - 既定設定: `ToPoDualArm.yaml`、`topodualarm_gazebo_demo.yaml`、`topodualarm_avoidance_demo.yaml`。ToPoDualArmの寸法・直動グリッパーに対応。max系の既定GNG/VLUTデモは維持。
 - 保存済みGNG: `ToPoDualArm10000`は左腕用。14関節角を必要とする双腕GNGデモへの流用なし。
 - 物理設定: ODE quick、有限力／有限トルクの位置追従。直動関節の`effort`は軸方向力 [N]、回転関節はトルク [N m]。
@@ -486,7 +486,7 @@ ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 ROS2CLI_NO_DAEMON=1 \
 | Gazebo → 実機 | 補間済み目標のUDP送信あり、既定OFF | 受信機仕様、独立19関節の順序・符号・原点、停止・watchdog |
 | Gazebo → Viewer | `/sim_topo_dual_arm_max/joint_states`の表示あり | 現行URDFでの追従・更新の通し確認 |
 | 実機 → Viewer | UDP応答の内部保持のみ、ROS配信なし | 実測JointState配信、表示元の分離、未受信・失効表示 |
-| 回避 | Gazebo外置きLiDAR／[頭部深度カメラ](#頭部深度カメラ)とGNG/VLUTの接続あり | 現行URDFでの回避・停止試験。実センサーによる実機回避は未統合 |
+| 回避 | Gazebo外置きLiDAR／[頭部深度カメラ](#頭部深度カメラ)とGNG/VLUTの接続あり | 現行URDFでの回避・停止試験。実センサによる実機回避は未統合 |
 
 ### 必須の描画経路
 
@@ -556,7 +556,7 @@ ros2 topic echo --once /sim_topo_dual_arm_max/avoidance/status
 3. 模擬UDP: [切替単体試験](#切替条件の単体試験)と[localhost通し試験](#gazebo目標のudp出力)。H前の無送信、送信目標との照合、Space・入力失効時の遮断、再許可条件の確認。出力先は未使用のディレクトリ。
 4. 実機追従: 受信側停止・watchdogと、PC/ROS/通信に依存しない停止手段の動作確認後。人のいない可動範囲・支持条件・実機に適した速度制限で小範囲から確認。ホールド・静止・初期姿勢差の確認→H→L。描画元はフォロワー実測を選択し、受信実測との一致を確認。リーダーとの追従遅れ・姿勢差を隠す補完なし。実測と指令の偏差、Lでの保持、停止後の非再開を別々に判定。
 5. Gazebo回避: 実機UDP OFF。ホールド→Aで左右の模擬前腕接近→退避、Aでホールド。回避中Lの拒否、点群更新、自己除去、GNG/VLUT入力、最小距離、探索失敗時停止を確認。見た目の移動だけでは合格判定なし。
-6. 実機回避への移行: 実センサーのtopic・TF・時刻、フォロワー実測に基づく自己除去・衝突判定の接続後。最初は人腕ではなく試験物体。Gazebo内の模擬前腕への回避指令転送と、実機周辺の障害物への回避を別試験として記録。
+6. 実機回避への移行: 実センサのtopic・TF・時刻、フォロワー実測に基づく自己除去・衝突判定の接続後。最初は人腕ではなく試験物体。Gazebo内の模擬前腕への回避指令転送と、実機周辺の障害物への回避を別試験として記録。
 
 回避指令速度の既定値: 2.5 rad/s。UDP指令速度の既定上限: 0.3 rad/s。
 実機回避前に両経路の速度設定の整合が必要。監視の無効化や閾値の緩和だけによる通過判定は不可。
@@ -568,10 +568,43 @@ ros2 topic echo --once /sim_topo_dual_arm_max/avoidance/status
 記録項目: 使用URDF・GNG/VLUT・設定、実行コマンド、入力/実測topic、指令角・実測角・受信時刻、姿勢偏差［rad］、表示遅延［ms、測定可能範囲のみ］、最小距離［m］、停止要求・停止確認の時刻、成功/失敗/未検証、起動プロセスの終了確認。
 合格基準未定の項目は測定結果のみ。パケット送信成功と実機停止成功の混同なし。
 
+## 胸部LiDARの取り付け形状
+
+対象: [max_long URDF](../../urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf)。既定: 45 deg。
+元形状: `urdf/ToPoDualArm-Max (long)45d.step` / `ToPoDualArm-Max (long)60d.step`。
+固定リンク: `torso_link` → `chest_lidar_mount_link` → `chest_lidar_link`。腰Yawに追従、首の関節運動から独立。
+
+| 取り付け角度 [deg] | 本体原点X [mm] | 本体原点Y [mm] | 本体原点Z [mm] |
+| ---: | ---: | ---: | ---: |
+| 45 | 69.326 | 0 | 120.847 |
+| 60 | 66.695 | 0 | 110.316 |
+
+座標基準: `torso_link`。位置・ブラケット形状は角度別。単純なPitch変更による代用は不可。
+`chest_lidar_link`は機械取付フレームで、実機の計測原点・IMU原点とは未校正。
+STEPの座標変換・変換精度・入力/出力ハッシュ: [chest_lidar.json](../../urdf/topo_dual_arm_max_long/meshes/chest_lidar.json)。
+
+60度版の生成（ワークスペース直下、出力先は未使用のファイル名）:
+
+```bash
+python3 scripts/chest_lidar_urdf.py --angle 60 --output /tmp/topo_dual_arm_max_long_60.urdf
+```
+
+45度版は`--angle 45`。元URDF・既存出力の上書きなし。生成物のメッシュ参照は絶対URIのため、ROSを実行するホスト／Docker内での生成が必要。
+Gazebo Harmonicの指定例: `ros2 launch gng_vlut_system dual_arm_gz.launch.py urdf:=/tmp/topo_dual_arm_max_long_60.urdf`。
+
+表示形状: STEP由来STL。本体は元CADの面色4種類（銀・灰・青・淡青）、URDF材質値はlinear RGB。実機の光学材質・透過・反射特性とは別。
+青色カバー: 元球面の半径・中心・上下境界を保持した軸合わせ後の三角形化。再生成は`python3 scripts/rebuild_chest_lidar_cover.py --output-dir <未作成の出力ディレクトリ>`（OCP・NumPyが必要、既存ファイルの上書きなし）。生成後はROS側とSimulator同梱STLを更新し、Simulatorの`tools/rebuild_meshes.py --model long`で描画キャッシュを再生成。
+形状検証: `python3 -B -m unittest discover -s scripts -p test_chest_lidar_urdf.py -v`。球面の全周108方向・面間接合・同梱キャッシュの一致を含む確認。
+Viewerへの反映: launch再起動後にモデルを再読み込み。色設定は`URDF COLOR`、`chest_lidar_link`の色上書きは解除。既存の60度版は再生成が必要。
+衝突形状: ブラケットSTL、本体・コネクタの包含直方体。色分割による形状・取り付け座標の変更なし。
+質量・慣性: 既存値を維持、追加部品の動力学は未反映。
+HTML Simulator: 同梱Longモデルへ45度版と4色材質を反映。ページ再読み込みで更新、取得無効時も本体を表示。旧配置の復帰は「センサ → LiDAR → ロボットの既定取付位置に戻す」。[配置・制限](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/docs/SENSOR_FIDELITY.md#腰上の近接取付)。HTML側の60度切替・通常maxのURDF・LiDARの点群配信／入力設定は変更なし。
+保存済みGNG/VLUT・自己形状キャッシュは未再生成。回避検証前に新しい取り付け形状との整合確認が必要。
+
 ## 頭部深度カメラ
 
-対象: max / max_longのURDF上のRealSense取付位置。`camera_link`配下に仮想深度センサーを追加し、首・腰の関節運動に追従。元URDFの変更なし。
-入力選択: `point_cloud_source:=head_depth`。未指定時は従来の`external_lidar`、両センサーの同時起動なし。
+対象: max / max_longのURDF上のRealSense取付位置。`camera_link`配下に仮想深度センサを追加し、首・腰の関節運動に追従。元URDFの変更なし。
+入力選択: `point_cloud_source:=head_depth`。未指定時は従来の`external_lidar`、両センサの同時起動なし。
 
 既存のROS環境を読み込んだ対話端末で起動:
 

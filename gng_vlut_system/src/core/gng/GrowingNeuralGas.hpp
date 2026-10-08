@@ -123,6 +123,10 @@ public:
   void trainCoordEdgesOnTheFly(int max_iter, int coord_layer_index);
 
   void strictFilter();
+
+  // 確定した姿勢の一括検査、近傍辺と最小全域森の検査、TCP層への接続共有
+  void build_sparse_safe_graph(int num_local_neighbors,
+      const std::vector<std::function<bool(const T_angle &)>> &collision_queries);
   void removeInactiveElements();
   void pruneToLargestComponent();
 

@@ -28,7 +28,7 @@ GNG内部索引・persistent depth固有履歴・新しい重点サンプリン�
 | 新規launch | `fuzzy_voxel_grid shared_world_voxel.launch.py` |
 | world出力 | `/world_index/buckets`・`/roi_voxels`。YAMLで変更可能 |
 | Tmap | 共有点群と同じframe、非未来、`max_tmap_age_sec`以内。既定1秒 |
-| TF | センサー→world、world→targetが必要。未接続時の座標流用なし |
+| TF | センサ→world、world→targetが必要。未接続時の座標流用なし |
 | freeze出力 | 判定はworld座標、出力は元入力の座標・header・属性 |
 | 配送 | FVG周期で最新1件。遅延時の全フレーム処理保証なし |
 | 配列上限 | `max_dense_voxel_num: 8000000`。0でhash。出力の切捨てなし |

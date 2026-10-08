@@ -1,4 +1,5 @@
 import {install_object_actions} from './object-actions.js';
+import {EnvironmentAssets} from './environment-assets.js';
 import * as THREE from 'three';
 import {WorkEnvironment,OBJECTS,TABLES} from './environment.js';
 import {VEHICLES,createVehicle} from './vehicles.js';
@@ -34,39 +35,43 @@ export class SceneEnvironment extends WorkEnvironment{
   $('scene-focus').onclick=()=>{const b=new THREE.Box3().setFromObject(this.root);for(const item of this.items)if(item.group.visible)b.expandByObject(item.group);b.expandByPoint(new THREE.Vector3(-.3,-.3,-.14));b.expandByPoint(new THREE.Vector3(.3,.3,.75));this.focusBounds(b);};
   for(const [key,i] of [['length',0],['width',1],['height',2]]){const el=$('vehicle-'+key);el.oninput=el.onchange=()=>{const g=this.selected?.group,s=g?.userData.nativeSize;if(!s||!Number.isFinite(el.valueAsNumber))return;g.scale.setComponent(i,THREE.MathUtils.clamp(el.valueAsNumber/1000,.05,50)/s[i]);this.syncObject();this.changed();};}
   $('object-copy').onclick=async()=>{const old=this.selected;if(!old)return;try{const n=VEHICLES[old.type]?await this.addVehicle(old.type):this.add(old.type);this.applyItem(n,{...this.itemState(old),position:old.group.position.toArray().map((x,i)=>x+(i<2?.1:0))});this.syncObject();this.changed();}catch(e){this.toast(e.message);}};
-  $('object-delete').onclick=()=>{if(!this.selected)return;const old=this.selected;this.select(null);old.group.removeFromParent();this.disposeItem(old);this.items=this.items.filter(x=>x!==old);this.updateList();this.changed();};
+  $('object-delete').onclick=()=>{const removed=this.items.filter(x=>this.selected_ids.has(x.id));if(!removed.length)return;this.object_interaction?.cancel();this.select(null);for(const item of removed){item.group.removeFromParent();this.disposeItem(item);}this.items=this.items.filter(x=>!removed.includes(x));this.updateList();this.changed();};
   this.gizmo.addEventListener('objectChange',()=>{if(this.selected&&!this.editTable){for(const k of ['x','y','z']){this.selected.group.position[k]=THREE.MathUtils.clamp(this.selected.group.position[k],-100,100);this.selected.group.scale[k]=THREE.MathUtils.clamp(this.selected.group.scale[k],.001,1000);}this.syncObject();this.changed();}});
   $('scene-load').parentElement.insertAdjacentHTML('afterend','<details><summary>配置設定の検証</summary><button id="environment-verify" class="wide-button">保存・座標変換を検証</button><output id="environment-qa"></output></details>');
   $('environment-verify').onclick=async()=>{const b=$('environment-verify');b.disabled=true;try{const {runEnvironmentQA}=await import('./environment-qa.js'),r=await runEnvironmentQA(this);$('environment-qa').textContent=(r.passed?'PASS':'FAIL')+' · '+r.tests.filter(t=>t.passed).length+'/'+r.tests.length;document.documentElement.dataset.environmentQa=JSON.stringify(r);}catch(e){$('environment-qa').textContent=e.message;}finally{b.disabled=false;}};
   install_object_actions(this);
+  this.environment_assets=new EnvironmentAssets(this);
  }
  syncTable(){for(const k of ['x','y','z','roll','pitch','yaw','width','depth','height']){const el=$('table-'+k);if(el&&document.activeElement!==el)el.value=(this.state[k]*(['roll','pitch','yaw'].includes(k)?1/rad:1000)).toFixed(1);}}
  buildTable(){super.buildTable();this.syncTable();if($('table-color')){$('table-color').value=this.state.color||'#ffffff';$('table-visible').checked=this.state.visible!==false;}if(this.state.type==='steel')this.table.traverse(o=>{if(o.isMesh&&o.geometry.type==='BoxGeometry'&&o.position.z===-.016)o.material.color.set(this.state.color||'#abb6ba');});}
  add(type,xy){const n=super.add(type,xy);if(!n)return n;n.parent='table';n.group.rotation.order='ZYX';if(type==='wall'||type==='cabinet'){this.scene.attach(n.group);n.parent='world';n.group.position.set(2,type==='wall'?2:-2,-.14);this.setColor(n,'#a5afb9');}n.color=n.color||'#e69331';this.syncObject();return n;}
  async addVehicle(type){if(this.items.length>=30)throw Error('配置は30個までです');const g=await createVehicle(type,type==='ferrari'?'#bd1726':'#b9c5d0'),id=this.nextId++;g.name=VEHICLES[type]+' '+id;g.rotation.order='ZYX';g.position.set(2.8,-1.6,-.14);const item={id,type,color:type==='ferrari'?'#bd1726':'#b9c5d0',parent:'world',group:g};this.scene.add(g);this.items.push(item);this.updateList();this.select(id);this.changed();return item;}
  setColor(item,color){item.color=color;const mats=item.group.userData.paint||[item.group.userData.primary];for(const m of mats)if(m?.color)m.color.set(color);}
- select(id){super.select(id);if(this.selected)this.syncObject();}
+ select(id,is_toggle=false){super.select(id,is_toggle);if(this.selected)this.syncObject();}
  setEditing(value){this.editTable=false;if($('table-edit'))$('table-edit').textContent='テーブルのマーカー';super.setEditing(value);}
  syncObject(){if(!this.selected)return;super.syncObject();const g=this.selected.group;for(const [k,v] of [['roll',g.rotation.x/rad],['pitch',g.rotation.y/rad],['sx',g.scale.x],['sy',g.scale.y],['sz',g.scale.z]]){const el=$('object-'+k);if(el&&document.activeElement!==el)el.value=v.toFixed(3);}if(!$('object-parent'))return;$('object-parent').value=this.selected.parent||'table';$('object-visible').checked=g.visible;const size=g.userData.nativeSize;$('vehicle-dimensions').hidden=!size;if(size)for(const [k,i]of[['length',0],['width',1],['height',2]])if(document.activeElement!==$('vehicle-'+k))$('vehicle-'+k).value=(size[i]*g.scale.getComponent(i)*1000).toFixed(1);for(const k of ['x','y','z'])$('object-'+k).parentElement.firstChild.textContent=(this.selected.parent==='world'?'世界 ':'天板 ')+k.toUpperCase()+' mm';}
  focus(){if(this.selected)this.focusBounds(new THREE.Box3().setFromObject(this.selected.group));}
  focusBounds(b){const c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3()).length(),distance=Math.max(.4,s/(2*Math.sin(THREE.MathUtils.degToRad(this.camera.fov)/2)));this.orbit.target.copy(c);this.camera.position.copy(c).add(new THREE.Vector3(1,-1,.65).normalize().multiplyScalar(distance));this.orbit.update();}
  changed(){super.changed();this.scene.updateMatrixWorld(true);}
  itemState(x){return{type:x.type,color:x.color||'#ffffff',parent:x.parent||'table',position:x.group.position.toArray(),rpy:[x.group.rotation.x,x.group.rotation.y,x.group.rotation.z],scaleXYZ:x.group.scale.toArray(),visible:x.group.visible,physics:x.physics||{mode:'none',mass:.2}};}
- getState(){return{format:'topo-workspace/2',table:{...this.state},objects:this.items.map(x=>this.itemState(x)),mid360:this.getSensorState?.()||null};}
+ getState(){return{format:'topo-workspace/2',table:{...this.state},objects:this.items.map(x=>this.itemState(x)),mid360:this.getSensorState?.()||null,environment_asset:this.environment_assets?.asset_id||'none'};}
  applyItem(item,o){item.physics=o.physics?{...o.physics}:{mode:'none',mass:.2};const g=item.group;(o.parent==='world'?this.scene:this.objectRoot).add(g);item.parent=o.parent||'table';g.position.fromArray(o.position);g.rotation.set(...(o.rpy||[0,0,o.yaw]),'ZYX');g.scale.fromArray(o.scaleXYZ||[o.scale,o.scale,o.scale]);g.visible=o.visible!==false;this.setColor(item,o.color);}
  disposeItem(x){x.group.traverse(o=>{if(o.isMesh){o.geometry.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material])if(!m.userData.shared)m.dispose();}});}
  async load(v){
   const t=v?.table;if(!['topo-workspace/1','topo-workspace/2'].includes(v?.format)||!t||!TABLES[t.type]||!['x','y','z','yaw','width','depth'].every(k=>Number.isFinite(t[k]))||['x','y','z'].some(k=>Math.abs(t[k])>100)||t.width<.06||t.width>50||t.depth<.06||t.depth>50||!Array.isArray(v.objects)||v.objects.length>30)throw Error('シーンの形式・寸法が不正です');
   const objects=v.objects.map(o=>({...o,parent:o.parent||'table',rpy:o.rpy||[0,0,o.yaw],scaleXYZ:o.scaleXYZ||[o.scale,o.scale,o.scale]}));
   for(const o of objects)if(!(OBJECTS[o.type]||VEHICLES[o.type])||!/^#[0-9a-f]{6}$/i.test(o.color)||!finite3(o.position)||o.position.some(x=>Math.abs(x)>100)||!finite3(o.rpy)||!finite3(o.scaleXYZ)||o.scaleXYZ.some(x=>x<.001||x>1000)||!['world','table'].includes(o.parent))throw Error('物体の設定が不正です');
-  for(const o of objects)if(o.physics&&(!['none','static','dynamic','kinematic'].includes(o.physics.mode)||!Number.isFinite(o.physics.mass)||o.physics.mass<.001||o.physics.mass>1000))throw Error('物理設定が不正です');
+  for(const o of objects)if(o.physics&&(!['none','static','dynamic','kinematic','hinge','slide'].includes(o.physics.mode)||!Number.isFinite(o.physics.mass)||o.physics.mass<.001||o.physics.mass>1000))throw Error('物理設定が不正です');
+  for(const o of objects){const c=o.physics?.constraint;if(c&&(!finite3(c.axis)||c.axis.some(x=>Math.abs(x)>1)||c.axis.reduce((sum,x)=>sum+x*x,0)<.000001||!finite3(c.pivot)||c.pivot.some(x=>Math.abs(x)>100)||!Array.isArray(c.range)||c.range.length!==2||!c.range.every(x=>Number.isFinite(x)&&Math.abs(x)<=100)||c.range[0]>=c.range[1]||c.range[0]>0||c.range[1]<0))throw Error('物体拘束の設定が不正です');}
   for(const k of ['roll','pitch','height'])if(t[k]!==undefined&&!Number.isFinite(t[k]))throw Error('テーブル設定が不正です');
   if(t.height!==undefined&&(t.height<.06||t.height>50))throw Error('テーブルの高さが不正です');if(t.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(t.color))throw Error('テーブル色が不正です');
   if(v.mid360)this.validateSensorState?.(v.mid360);
-  // Preload assets before changing the current scene; failed loads leave it intact.
-  const prepared=await Promise.all(objects.map(o=>VEHICLES[o.type]?createVehicle(o.type,o.color):Promise.resolve(null)));
+  // シーン変更前のアセット読込。読込失敗時の現在配置の保持。
+  const asset_id=v.environment_asset??'none';
+  const [prepared,background]=await Promise.all([Promise.all(objects.map(o=>VEHICLES[o.type]?createVehicle(o.type,o.color):Promise.resolve(null))),this.environment_assets.prepare(asset_id)]);
   this.select(null);for(const x of this.items){x.group.removeFromParent();this.disposeItem(x);}this.items=[];this.state={roll:0,pitch:0,height:Math.max(.06,t.z+.14),color:'#ffffff',visible:true,...t};this.buildTable();
   for(let i=0;i<objects.length;i++){const o=objects[i];let item;if(prepared[i]){const id=this.nextId++;item={id,type:o.type,group:prepared[i]};item.group.name=VEHICLES[o.type]+' '+id;this.items.push(item);}else item=this.add(o.type);this.applyItem(item,o);}
+  this.environment_assets.apply(asset_id,background);
   this.updateList();this.select(null);if(v.mid360)await this.loadSensorState?.(v.mid360);this.changed();
  }
 }

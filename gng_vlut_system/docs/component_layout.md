@@ -75,7 +75,7 @@ Pythonシミュレーションは`scripts`内を維持。制御の共通入口�
 | --- | --- |
 | `test/test_avoidance_motion.py` | 動作選択・部品差替え・復帰継続・停止優先・指令周期 |
 | `test/test_pointcloud_avoidance.py` | 機体設定・Viewer環境入力・外部点群・座標変換・鮮度検査 |
-| `test/test_dual_arm_launch.py` | 機種別launch設定・頭部深度センサー・光学座標 |
+| `test/test_dual_arm_launch.py` | 機種別launch設定・頭部深度センサ・光学座標 |
 | `test/test_dual_arm_collision_geometry.py` | URDF衝突形状・外接球包囲・自己干渉・退避余裕 |
 
 設定検査の`robot_config`フィクスチャは点群回避テスト内で共有。テストモジュールを経由した設定フィクスチャのimportなし。launchファイルの読込みは起動設定テスト内の`load`へ集約。

@@ -6,6 +6,9 @@
 #include "collision/voxel_collision_checker.hpp"
 #include "safety_engine/vlut/iself_collision_checker.hpp"
 #include "common/resource_utils.hpp"
+#include "common/parallel_queries.hpp"
+#include <numeric>
+#include <tuple>
 #include <Eigen/Core>
 #include <algorithm>
 #include <chrono>
@@ -1158,6 +1161,124 @@ void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
       active_indices_.push_back(i);
     }
   }
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::build_sparse_safe_graph(
+    int num_local_neighbors,
+    const std::vector<std::function<bool(const T_angle &)>> &collision_queries) {
+  if (num_local_neighbors < 1 || collision_queries.empty() ||
+      std::any_of(collision_queries.begin(), collision_queries.end(),
+          [](const auto &query) { return !query; }))
+    throw std::invalid_argument("Invalid sparse collision filter configuration");
+  invalidate_collision_cache();
+  const auto started = std::chrono::steady_clock::now();
+  const auto active = active_indices_;
+  std::vector<unsigned char> is_colliding_node(active.size(), 0);
+  std::cout << "[SparseFilter] Checking nodes=" << active.size()
+            << " workers=" << collision_queries.size() << std::endl;
+  robot_sim::common::parallel_queries(active.size(), collision_queries.size(),
+      [&](std::size_t worker_idx, std::size_t idx) {
+        const auto &angles = nodes[active[idx]].weight_angle;
+        if (angles.size() != angle_dimension || !angles.allFinite())
+          throw std::invalid_argument("Invalid graph node angles");
+        is_colliding_node[idx] = collision_queries[worker_idx](angles);
+      });
+  std::size_t num_removed_nodes = 0;
+  for (std::size_t idx = 0; idx < active.size(); ++idx) {
+    if (!is_colliding_node[idx]) continue;
+    const int node_idx = active[idx];
+    const auto neighbors = edges_angle_per_node[node_idx];
+    for (int other : neighbors) remove_edge_angle(node_idx, other);
+    remove_node(node_idx);
+    ++num_removed_nodes;
+  }
+  struct candidate_edge { int first; int second; double squared_dist; bool is_selected = false; };
+  std::vector<candidate_edge> candidates;
+  for (int first : active_indices_) {
+    for (int second : edges_angle_per_node[first]) {
+      if (first < second && nodes[second].id != -1)
+        candidates.push_back({first, second,
+            static_cast<double>((nodes[first].weight_angle - nodes[second].weight_angle).squaredNorm())});
+    }
+  }
+  std::sort(candidates.begin(), candidates.end(), [](const auto &first, const auto &second) {
+    return std::tie(first.squared_dist, first.first, first.second) <
+           std::tie(second.squared_dist, second.first, second.second);
+  });
+  std::vector<int> roots(nodes.size()), num_neighbors(nodes.size(), 0);
+  std::iota(roots.begin(), roots.end(), 0);
+  const auto root_of = [&](int idx) {
+    while (roots[idx] != idx) { roots[idx] = roots[roots[idx]]; idx = roots[idx]; }
+    return idx;
+  };
+  std::vector<std::size_t> selected;
+  for (std::size_t idx = 0; idx < candidates.size(); ++idx) {
+    auto &edge = candidates[idx];
+    const int first_root = root_of(edge.first), second_root = root_of(edge.second);
+    edge.is_selected = first_root != second_root ||
+        num_neighbors[edge.first] < num_local_neighbors || num_neighbors[edge.second] < num_local_neighbors;
+    if (first_root != second_root) roots[first_root] = second_root;
+    // 各ノードの距離順候補数。全域森による追加接続は別枠。
+    ++num_neighbors[edge.first];
+    ++num_neighbors[edge.second];
+    if (edge.is_selected) selected.push_back(idx);
+  }
+  std::cout << "[SparseFilter] candidates=" << candidates.size()
+            << " selected=" << selected.size() << " removed_nodes=" << num_removed_nodes << std::endl;
+  std::vector<unsigned char> is_colliding_edge(selected.size(), 0);
+  robot_sim::common::parallel_queries(selected.size(), collision_queries.size(),
+      [&](std::size_t worker_idx, std::size_t idx) {
+        const auto &edge = candidates[selected[idx]];
+        const auto &first = nodes[edge.first].weight_angle;
+        const auto &second = nodes[edge.second].weight_angle;
+        is_colliding_edge[idx] = simulation::has_joint_segment_collision(first, second, .025,
+            [&](const T_angle &angles) {
+              // 同じ静的条件で検査済みの端点。補間姿勢は従来と同じ刻み。
+              if (has_same_angles(angles, first) || has_same_angles(angles, second)) return false;
+              return collision_queries[worker_idx](angles);
+            });
+      });
+  // 検査済み接続だけによる全層の再構築。途中例外では保存経路へ到達不可。
+  for (int idx : active_indices_) {
+    edges_angle[idx].clear();
+    edges_angle_per_node[idx].clear();
+    edges_coord[idx].clear();
+    edges_coord_per_node[idx].clear();
+    for (int layer = 0; layer < coord_layer_count_; ++layer) {
+      edges_coord_per_layer_[layer][idx].clear();
+      edges_coord_per_layer_nodes_[layer][idx].clear();
+    }
+  }
+  std::iota(roots.begin(), roots.end(), 0);
+  std::size_t num_edges = 0;
+  for (std::size_t idx = 0; idx < selected.size(); ++idx) {
+    if (is_colliding_edge[idx]) continue;
+    const auto &edge = candidates[selected[idx]];
+    add_edge_angle(edge.first, edge.second);
+    for (int layer = 0; layer < coord_layer_count_; ++layer) add_edge_coord(layer, edge.first, edge.second);
+    roots[root_of(edge.first)] = root_of(edge.second);
+    ++num_edges;
+  }
+  std::size_t num_components = 0;
+  for (int idx : active_indices_) if (root_of(idx) == idx) ++num_components;
+  const double elapsed_sec = std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
+  std::size_t min_num_neighbors = active_indices_.empty() ? 0 : nodes.size();
+  std::size_t max_num_neighbors = 0;
+  for (int idx : active_indices_) {
+    min_num_neighbors = std::min(min_num_neighbors, edges_angle_per_node[idx].size());
+    max_num_neighbors = std::max(max_num_neighbors, edges_angle_per_node[idx].size());
+  }
+  const double mean_num_neighbors = active_indices_.empty() ? 0.0 :
+      2.0 * num_edges / active_indices_.size();
+  std::cout << "[SparseFilter] Result: nodes=" << active_indices_.size()
+            << " edges=" << num_edges << " components=" << num_components
+            << " omitted_unchecked_edges=" << candidates.size() - selected.size()
+            << " colliding_edges=" << selected.size() - num_edges
+            << " mean_num_neighbors=" << mean_num_neighbors
+            << " min_num_neighbors=" << min_num_neighbors
+            << " max_num_neighbors=" << max_num_neighbors
+            << " elapsed_sec=" << elapsed_sec << std::endl;
 }
 
 template <typename T_angle, typename T_coord>

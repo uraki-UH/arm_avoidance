@@ -15,11 +15,10 @@ export class RosPointsPanel{
   <label><input id="ros-depth" type="checkbox" checked> 深度画像・CameraInfo・画素対応点群も送信</label>
   <div class="row-actions"><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
   <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>
-  <label><input id="ros-state-enable" type="checkbox"> 配置・TF・関節角の一式を送信（上限10 Hz）</label>
-  <p class="sub-note">高速な関節角の送受信は下の専用設定。こちらは /sim/joint_states、/sim/base_pose、/tf、/sim/tf。点群送信時は取得時の姿勢・TFも送信。</p></section>`;
+</section>`;
   if(location.port==='8879')$('ros-endpoint').value=location.origin;
   this.object_capture=new ObjectCapturePanel({environment,rgbd});
-  $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='新しい取得結果を送信します。取得の開始・停止はセンサー側で操作してください';};
+  $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='新しい取得結果を送信します。取得の開始・停止はセンサ側で操作してください';};
   for(const id of ['ros-endpoint','ros-depth',...sources.map(source=>'ros-send-'+source)])$(id).onchange=()=>{this.generation++;};
   $('ros-endpoint').addEventListener('change',()=>{this.last_sent_frames={};});
   $('ros-depth').addEventListener('change',()=>{delete this.last_sent_frames.rgbd;});
@@ -45,7 +44,7 @@ export class RosPointsPanel{
   try{
    const endpoint=new URL($('ros-endpoint').value);if(!['http:','https:'].includes(endpoint.protocol))throw Error('送信先はHTTPのURLを指定してください');
    const captured=this.latest_frame(source);
-   if(!captured){$('ros-status').textContent='取得済み点群がありません。センサーまたは環境タブで取得してください';return null;}
+   if(!captured){$('ros-status').textContent='取得済み点群がありません。センサまたは環境タブで取得してください';return null;}
    const is_object=source==='object_full'||source==='object_visible',frame=is_object?captured.frame:captured;
    const item=is_object?captured.item:null,object_pose=is_object?captured.object_pose:null;
    const robot_state=structuredClone(frame.robot_state),robot_pose=frame.robotPose,robot_model=frame.robotModel,captured_at_ms=robot_state.captured_at_ms;

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ViewerEnvironment } from '../../embedding';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { graph_bounds, graph_selection, LayerSettings } from '../../types';
@@ -16,6 +17,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
     layer_settings: Record<string, LayerSettings>;
 }) {
     const { gl, scene, camera, invalidate } = useThree();
+    const { resolve_frame } = useContext(ViewerEnvironment);
     const [bounds, set_bounds] = useState<graph_bounds | null>(null);
     const settings_ref = useRef({ transforms, layer_settings });
     settings_ref.current = { transforms, layer_settings };
@@ -61,7 +63,13 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
                 if (!can_pick_source(candidate.source_id)) continue;
                 const tf = candidate.frame_id === 'world' ? undefined : settings.transforms[candidate.frame_id];
                 const manual = settings.layer_settings[candidate.source_id]?.graphTransform;
-                matrix.compose(position.fromArray(tf?.pos ?? [0, 0, 0]), rotation.fromArray(tf?.quat ?? [0, 0, 0, 1]), scale.set(1, 1, 1));
+                if (resolve_frame) {
+                    const resolved = resolve_frame(candidate.frame_id);
+                    if (!resolved) continue;
+                    matrix.copy(resolved);
+                } else {
+                    matrix.compose(position.fromArray(tf?.pos ?? [0, 0, 0]), rotation.fromArray(tf?.quat ?? [0, 0, 0, 1]), scale.set(1, 1, 1));
+                }
                 manual_matrix.compose(position.fromArray(manual?.position ?? [0, 0, 0]),
                     rotation.setFromEuler(euler.fromArray(manual?.rotation ?? [0, 0, 0])), scale.fromArray(manual?.scale ?? [1, 1, 1]));
                 matrix.multiply(manual_matrix);
@@ -176,7 +184,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
             canvas.removeEventListener('wheel', wheel);
             window.removeEventListener('blur', leave);
         };
-    }, [enable_picking, get_bounds, on_inspect, gl, scene, camera]);
+    }, [resolve_frame, enable_picking, get_bounds, on_inspect, gl, scene, camera]);
 
     if (!is_enabled || !bounds || bounds.source_id === '/topological_map' ||
         layer_settings[bounds.source_id]?.enable_bounding_box !== true) return null;
@@ -184,7 +192,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
     const padding = bounds_padding(bounds, layer_settings);
     const size = bounds.max_position.map((value, idx) => value - bounds.min_position[idx] + padding * 2) as [number, number, number];
     const center = bounds.max_position.map((value, idx) => (value + bounds.min_position[idx]) / 2) as [number, number, number];
-    return <DisplayFrame tf={bounds.frame_id !== 'world' ? transforms[bounds.frame_id] : null} manual_transform={transform}>
+    return <DisplayFrame frame_id={bounds.frame_id} tf={bounds.frame_id !== 'world' ? transforms[bounds.frame_id] : null} manual_transform={transform}>
         <lineSegments name="candidate-hover-frame" geometry={geometry} material={material}
             position={center} scale={size} renderOrder={2000} dispose={null} />
     </DisplayFrame>;

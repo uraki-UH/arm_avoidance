@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Matrix4} from '../app/vendor/three/build/three.module.js';
-import {camera_preset, validate_camera, pixel_ray, project_ray, camera_transforms} from '../app/camera-core.js';
+import {camera_preset, validate_camera, pixel_ray, project_ray, camera_transforms, camera_ray_map} from '../app/camera-core.js';
 
 function close(actual, expected, tolerance = 1e-6) {
   assert.equal(actual.length, expected.length);
@@ -82,4 +82,26 @@ test('取付姿勢とロボット姿勢の合成・右眼回転の維持', () =>
   close(matrices.left.elements.slice(12, 15), [1.1, 2.2, 3.3]);
   close(matrices.right.elements.slice(12, 15), [1.1, 2.26, 3.3]);
   close(matrices.right.elements.slice(0, 3), [-1, 0, 0]);
+});
+
+test('旧校正のカラー互換とモノクロ設定の検証', () => {
+  const config = camera_preset(); delete config.color_mode;
+  assert.equal(validate_camera(config).color_mode, 'rgb');
+  config.color_mode = 'monochrome';
+  assert.equal(validate_camera(config).color_mode, 'monochrome');
+  config.color_mode = 'infrared';
+  assert.throws(() => validate_camera(config), /出力方式/);
+});
+
+test('画角に対応する面・描画領域だけの選択', () => {
+  for (const [mode, num_faces] of [['mono', 1], ['fisheye', 5]]) {
+    const map = camera_ray_map(camera_preset(mode).left, 512);
+    assert.equal(map.faces.length, num_faces);
+    assert.ok(map.faces.every(face => face.face !== 5));
+    for (const face of map.faces) {
+      assert.ok(face.x >= 0 && face.y >= 0 && face.width > 0 && face.height > 0);
+      assert.ok(face.x + face.width <= 512 && face.y + face.height <= 512);
+    }
+    assert.ok(map.faces.reduce((sum, face) => sum + face.width * face.height, 0) < num_faces * 512 ** 2);
+  }
 });

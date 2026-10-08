@@ -63,7 +63,7 @@ export class RGBDSensor {
     const num_channels=depth&&target.texture.format===THREE.RedFormat?1:4;
     const raw=depth?new Float32Array(k.width*k.height*num_channels):new Uint8Array(k.width*k.height*4);
     let read_result;
-    // センサー専用の非表示状態による表示用シャドウマップの更新を抑止
+    // センサ専用の非表示状態による表示用シャドウマップの更新を抑止
     try {r.shadowMap.autoUpdate=false;r.shadowMap.needsUpdate=false;s.overrideMaterial=depth?this.depthMaterial:null;if(depth){s.background=null;s.fog=null;r.toneMapping=THREE.NoToneMapping;r.shadowMap.enabled=false;}r.autoClear=true;r.setClearColor(0,0);r.setRenderTarget(target);r.clear();r.render(s,camera);read_result=enable_async_read?r.readRenderTargetPixelsAsync(target,0,0,k.width,k.height,raw):r.readRenderTargetPixels(target,0,0,k.width,k.height,raw);}
     finally {const gl=r.getContext();gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);r.setRenderTarget(state.target);s.overrideMaterial=state.override;s.background=state.background;s.fog=state.fog;r.setClearColor(state.clear,state.alpha);r.toneMapping=state.tone;r.autoClear=state.auto;r.shadowMap.enabled=state.shadows;r.shadowMap.autoUpdate=state.shadow_auto;r.shadowMap.needsUpdate=state.shadow_pending;}
     const finish_read=()=>{

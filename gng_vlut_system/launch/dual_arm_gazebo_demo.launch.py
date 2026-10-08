@@ -145,7 +145,7 @@ def build_forearm(config):
 
 
 def build_avoidance_world(world_xml, config, namespace, add_lidar=None):
-    """回避用worldの生成。センサー追加処理だけを差し替える構成。"""
+    """回避用worldの生成。センサ追加処理だけを差し替える構成。"""
     physics_solver = config.get('physics_solver', 'quick')
     if physics_solver not in ('quick', 'world'):
         raise ValueError('physics_solverはquickまたはworldが必要です')

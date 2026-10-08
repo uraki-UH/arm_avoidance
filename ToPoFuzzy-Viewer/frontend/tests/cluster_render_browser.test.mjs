@@ -67,7 +67,7 @@ try {
                 mean_pixel_dev:pixel_dev/pixels.length,max_pixel_dev};
         };
         window.cleanup=()=>{root.unmount();renderer.dispose();renderer.forceContextLoss();};
-    ` }, bundle: true, write: false, format: 'iife', jsx: 'automatic',
+    ` }, bundle: true, nodePaths: [resolve('node_modules')], write: false, format: 'iife', jsx: 'automatic',
         define: { 'process.env.NODE_ENV': '"production"' },
         plugins: [{ name: 'baseline', setup(plugin) {
             plugin.onResolve({ filter: /^cluster-baseline$/ }, () => ({ path: 'baseline', namespace: 'baseline' }));

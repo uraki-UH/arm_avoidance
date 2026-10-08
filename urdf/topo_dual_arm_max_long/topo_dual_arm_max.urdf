@@ -108,6 +108,57 @@
     <axis xyz="0 0 1"/>
     <limit effort="10" velocity="2"/>
   </joint>
+  <!-- STEP由来の胸部MID-360取り付け。質量・慣性は既存胴体の値を維持。 -->
+  <link name="chest_lidar_mount_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/chest_lidar_mount_45.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="green"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/chest_lidar_mount_45.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
+  </link>
+  <joint name="chest_lidar_mount_fixed" type="fixed">
+    <parent link="torso_link"/>
+    <child link="chest_lidar_mount_link"/>
+    <origin xyz="0.028 0 0.102521097973" rpy="0 0 0"/>
+  </joint>
+  <link name="chest_lidar_link">
+    <!-- STEPの面色による4材質。RGBAはViewerと同じlinear RGB、形状・原点は共通。 -->
+    <visual name="chest_lidar_cad_blue">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/chest_lidar_color_0.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="chest_lidar_cad_blue"><color rgba="0.005605392 0.000303527 0.309468925 1"/></material>
+    </visual>
+    <visual name="chest_lidar_cad_gray">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/chest_lidar_color_1.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="chest_lidar_cad_gray"><color rgba="0.351532608 0.351532608 0.351532608 1"/></material>
+    </visual>
+    <visual name="chest_lidar_cad_silver">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/chest_lidar_color_2.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="chest_lidar_cad_silver"><color rgba="0.715693474 0.715693474 0.715693474 1"/></material>
+    </visual>
+    <visual name="chest_lidar_cad_pale_blue">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/chest_lidar_color_3.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="chest_lidar_cad_pale_blue"><color rgba="0.745404184 0.887923121 1 1"/></material>
+    </visual>
+    <!-- 本体・コネクタを包含する簡略衝突形状。表面近似余白: 0.08 mm。 -->
+    <collision>
+      <origin xyz="0 -0.003931539599 0.004131449852" rpy="0 0 0"/>
+      <geometry><box size="0.065033845603 0.072896927595 0.060257099569"/></geometry>
+    </collision>
+  </link>
+  <joint name="chest_lidar_fixed" type="fixed">
+    <parent link="chest_lidar_mount_link"/>
+    <child link="chest_lidar_link"/>
+    <!-- 機械取付フレーム。実機の計測原点・IMU原点の校正値とは別。 -->
+    <origin xyz="0.041326157159 0 0.018326157159" rpy="0 0.785398163397 0"/>
+  </joint>
   <link name="neck_pan_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>

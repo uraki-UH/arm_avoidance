@@ -17,6 +17,10 @@
     # GNG学習とVLUT生成
     gng:
       enable_independent_arms: true # 左右別7関節モデルの学習・読込み
+      # 配置確定後の一括検査と、関節空間の近傍・全域森による接続
+      enable_batched_collision_filter: true
+      collision_worker_num: 16
+      num_local_neighbors: 6 # 各ノードの距離順近傍候補数。全域森による接続は別枠。
       experiment_id: "topo_dual_arm_max_long_independent" # 学習結果の保存先ディレクトリ名
       data_directory: "/ros2_ws/src/gng_vlut_system/gng_results" #保存先ディレクトリまでのパス
       gng_model_filename: "gng.bin"
@@ -85,8 +89,8 @@
       # 未接続センサ座標系のworld扱い防止
       allow_unconnected_source_as_world: false
       base_frame: "base_link"
-      # ROI範囲の基準マップ。全ノードのBBoxと各軸の余白。空文字列で従来の固定範囲
-      reachability_map_topic: "Tmap_static"
+      # 左右別GNG用の固定ROI。Viewer統合起動では左右VLUTの占有範囲を使用
+      reachability_map_topic: ""
       # BBoxの各面から外側への余白 [m]
       reachability_margin_x: 0.1
       reachability_margin_y: 0.1

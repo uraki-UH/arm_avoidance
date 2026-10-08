@@ -98,11 +98,14 @@ class RobotExchange:
         if actual != expected or set(state['robot_pose']) != self.joint_names[model]:
             raise ValueError('URDFと状態の構成が一致しません')
 
-    def publish(self, state, stamp=None):
+    def publish(self, state, stamp=None, outputs=None):
         from geometry_msgs.msg import TransformStamped, PoseStamped
         from tf2_msgs.msg import TFMessage
         from sensor_msgs.msg import JointState
         from std_msgs.msg import String
+        outputs = ['base', 'tf', 'joints'] if outputs is None else outputs
+        if not isinstance(outputs, list) or any(value not in ('base', 'tf', 'joints') for value in outputs):
+            raise ValueError('状態送信項目が不正です')
         self.validate(state)
         stamp = stamp or self.node.get_clock().now().to_msg()
         transforms = []
@@ -112,20 +115,22 @@ class RobotExchange:
             msg.transform.translation.x, msg.transform.translation.y, msg.transform.translation.z = map(float, value['translation'])
             msg.transform.rotation.x, msg.transform.rotation.y, msg.transform.rotation.z, msg.transform.rotation.w = map(float, value['rotation'])
             transforms.append(msg)
-            if value['child'] == 'base_footprint':
+            if value['child'] == 'base_footprint' and 'base' in outputs:
                 base = PoseStamped()
                 base.header = msg.header
                 base.pose.position.x, base.pose.position.y, base.pose.position.z = map(float, value['translation'])
                 base.pose.orientation = msg.transform.rotation
                 self.base_pose.publish(base)
-        self.tf.publish(TFMessage(transforms=transforms))
-        if self.standard_tf is not None:
+        if 'tf' in outputs:
+            self.tf.publish(TFMessage(transforms=transforms))
+        if self.standard_tf is not None and 'tf' in outputs:
             self.standard_tf.publish(TFMessage(transforms=transforms))
         joints = JointState()
         joints.header.stamp, joints.header.frame_id = stamp, 'base_footprint'
         joints.name = list(state['robot_pose'])
         joints.position = list(map(float, state['robot_pose'].values()))
-        self.joints.publish(joints)
+        if 'joints' in outputs:
+            self.joints.publish(joints)
         if self.model != state['robot_model']:
             self.model = state['robot_model']
             self.description.publish(String(data=self.descriptions[self.model]))

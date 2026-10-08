@@ -1,0 +1,42 @@
+{
+  "collision_voxel_size": 0.001,
+  "eef_link": "L_tcp",
+  "enable_batched_collision_filter": true,
+  "enable_pair_collision_check": true,
+  "fixed_joints": {
+    "L_gripper_joint": 0.0,
+    "L_gripper_mimic": 0.0,
+    "R_gripper_joint": 0.0,
+    "R_gripper_mimic": 0.0,
+    "R_joint1": 0.0,
+    "R_joint2": 0.0,
+    "R_joint3": 0.0,
+    "R_joint4": 0.0,
+    "R_joint5": 0.0,
+    "R_joint6": 0.0,
+    "R_joint7": 0.0,
+    "neck_pan_joint": 0.0,
+    "neck_tilt_joint": 0.0,
+    "waist_joint": 0.0
+  },
+  "gng_file": "gng.bin",
+  "joint_names": [
+    "L_joint1",
+    "L_joint2",
+    "L_joint3",
+    "L_joint4",
+    "L_joint5",
+    "L_joint6",
+    "L_joint7"
+  ],
+  "max_joint_step": 0.025,
+  "mode": "independent_arm",
+  "num_local_neighbors": 6,
+  "num_nodes": 9988,
+  "profile": "left_arm",
+  "root_link": "L_shoulder_mount",
+  "urdf_path": "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf",
+  "version": 1,
+  "vlut_file": "vlut.bin",
+  "voxel_size": 0.02
+}

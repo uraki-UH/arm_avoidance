@@ -698,8 +698,16 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
     };
 }
 
-export function useWebSocket(url: string): UseWebSocketReturn {
+interface connection_options {
+    is_read_only?: boolean;
+    on_transforms?: (items: TransformData[], is_static: boolean) => void;
+    on_clear?: () => void;
+}
+export function useWebSocket(url: string, { is_read_only = false, on_transforms, on_clear }: connection_options = {}): UseWebSocketReturn {
     const [sources, setSources] = useState<DataSource[]>([]);
+    const hidden_sources = useRef(new Set<string>());
+    const update_sources = useCallback((items: DataSource[]) => setSources(items.map(item =>
+        hidden_sources.current.has(item.id) ? { ...item, active: false } : item)), []);
     const [pointClouds, setPointClouds] = useState<Record<string, PointCloudData>>({});
     const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
@@ -906,7 +914,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     const deleteGraphLayer = useCallback((tag: string) => {
         const socket = wsRef.current;
-        if (!socket || socket.readyState !== WebSocket.OPEN) {
+        if (is_read_only || !socket || socket.readyState !== WebSocket.OPEN) {
             clearGraphLayer(tag);
             return;
         }
@@ -916,7 +924,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             type: 'stream.graph.delete',
             tag,
         }));
-    }, [clearGraphLayer]);
+    }, [clearGraphLayer, is_read_only]);
 
     const connect = useCallback(() => {
         const currentSocket = wsRef.current;
@@ -942,10 +950,12 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 flushScheduledRef.current = null;
             }
 
+            intentionalCloseRef.current = false;
             const socket = new WebSocket(url);
             socket.binaryType = 'arraybuffer';
 
             socket.onopen = () => {
+                if (wsRef.current !== socket) return;
                 setIsConnected(true);
                 setError(null);
                 reconnectCountRef.current = 0;
@@ -953,32 +963,27 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                     window.clearTimeout(reconnectTimerRef.current);
                     reconnectTimerRef.current = null;
                 }
-                // Challenge: periodically request state until data arrives
-                const challengeInterval = window.setInterval(() => {
-                    if (socket.readyState === WebSocket.OPEN) {
-                        socket.send(JSON.stringify({ type: 'request.state' }));
-                    } else {
-                        window.clearInterval(challengeInterval);
-                    }
+                // 初期状態の再要求。受信・切断・期限到達によるタイマー解放。
+                const challenge_interval = window.setInterval(() => {
+                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'request.state' }));
                 }, 3000);
-
-                // Stop challenging as soon as we get any data
-                const stopChallenge = () => window.clearInterval(challengeInterval);
-                socket.addEventListener('message', (e) => {
-                    if (typeof e.data === 'string' && (e.data.includes('stream.graph') || e.data.includes('stream.robot') || e.data.includes('stream.marker_array'))) {
-                        stopChallenge();
-                    }
-                }, { once: true });
-
-                // Safety timeout: stop challenging after 15s regardless
-                window.setTimeout(stopChallenge, 15000);
-                
-                // Send immediately on connect too
-                console.log('WebSocket connected. Sending initial request.state challenge...');
+                const challenge_timeout = window.setTimeout(stop_challenge, 15000);
+                function stop_challenge() {
+                    window.clearInterval(challenge_interval);
+                    window.clearTimeout(challenge_timeout);
+                    socket.removeEventListener('message', on_initial_state);
+                    socket.removeEventListener('close', stop_challenge);
+                }
+                function on_initial_state(event: MessageEvent) {
+                    if (event.data instanceof ArrayBuffer || (typeof event.data === 'string' && /stream\.(graph|robot|marker_array)/.test(event.data))) stop_challenge();
+                }
+                socket.addEventListener('message', on_initial_state);
+                socket.addEventListener('close', stop_challenge, { once: true });
                 socket.send(JSON.stringify({ type: 'request.state' }));
             };
 
             socket.onmessage = (event) => {
+                if (wsRef.current !== socket) return;
                 if (event.data instanceof ArrayBuffer) {
                     try {
                         const buffer = event.data;
@@ -1022,7 +1027,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                     if (payload && payload.id === 'sync_sources' && payload.ok === true) {
                         const newSources = payload.result?.sources;
                         if (Array.isArray(newSources)) {
-                            setSources(newSources);
+                            update_sources(newSources);
                         }
                         return;
                     }
@@ -1188,6 +1193,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         },
                         'stream.tf': (p) => {
                             if (Array.isArray(p.transforms)) {
+                                on_transforms?.(p.transforms, p.is_static === true);
                                 p.transforms.forEach((ts: TransformData) => {
                                     relativeTransformsRef.current[ts.childFrameId] = ts;
                                 });
@@ -1245,15 +1251,18 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             };
 
             socket.onerror = () => {
+                if (wsRef.current !== socket) return;
                 setError('WebSocket connection error');
             };
 
             socket.onclose = () => {
-                if (wsRef.current === socket) {
-                    wsRef.current = null;
-                }
+                if (wsRef.current !== socket) return;
+                wsRef.current = null;
                 setIsConnected(false);
                 setSources([]);
+                setPointClouds({}); setGraphData({}); setMarkerData({}); setRobotData({}); setVoxelData({});
+                setTransforms({}); relativeTransformsRef.current = {};
+                on_clear?.();
                 pendingTopicQueueRef.current = [];
                 pointCloudFrameIdsRef.current.clear();
                 pendingGraphUpdatesRef.current.clear();
@@ -1271,7 +1280,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 }
                 flushPendingWithError('WebSocket closed');
                 
-                if (intentionalCloseRef.current) {
+                if (intentionalCloseRef.current || is_read_only) {
                     intentionalCloseRef.current = false;
                     return;
                 }
@@ -1293,13 +1302,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Connection failed');
         }
-    }, [clearGraphLayer, flushPendingWithError, scheduleStreamFlush, url]);
+    }, [clearGraphLayer, flushPendingWithError, scheduleStreamFlush, url, is_read_only, on_transforms, on_clear, update_sources]);
 
     const disconnect = useCallback(() => {
+        if (reconnectTimerRef.current !== null) { window.clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
         const socket = wsRef.current;
         if (socket) {
             intentionalCloseRef.current = true;
-            wsRef.current = null;
             socket.close();
         }
     }, []);
@@ -1315,6 +1324,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
         return () => {
             intentionalCloseRef.current = true;
+            if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current);
             flushPendingWithError('WebSocket hook disposed');
             pendingGraphUpdates.clear();
             pending_marker_updates.clear();
@@ -1366,10 +1376,23 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         []
     );
 
-    const rpcApi = useMemo(
-        () => createViewerRpcApi(sendRpc, setSources),
-        [sendRpc]
-    );
+    const rpcApi = useMemo(() => {
+        const api = createViewerRpcApi(sendRpc, update_sources);
+        if (!is_read_only) return api;
+        return { ...api,
+            subscribeSource: async (source_id: string) => {
+                const result = await api.subscribeSource(source_id);
+                hidden_sources.current.delete(source_id);
+                setSources(items => items.map(item => item.id === source_id ? { ...item, active: true } : item));
+                return result;
+            },
+            unsubscribeSource: async (source_id: string) => {
+                hidden_sources.current.add(source_id);
+                setSources(items => items.map(item => item.id === source_id ? { ...item, active: false } : item));
+                return { success: true, sourceId: source_id, active: false };
+            },
+        };
+    }, [sendRpc, update_sources, is_read_only]);
 
     return {
         sources,

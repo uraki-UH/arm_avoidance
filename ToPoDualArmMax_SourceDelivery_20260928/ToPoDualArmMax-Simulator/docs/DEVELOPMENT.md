@@ -2,12 +2,24 @@
 
 ## ソース変更
 
-1. READMEの手順でHTTPサーバーを起動する。
-2. `app/` 内のソースを編集する。UIは `index.html` とCSS、動作は各JSモジュール。
-3. ブラウザを再読み込みする。自動ビルド・ホットリロードはありません。`server.mjs` 自体を変更した場合は、HTTPサーバーも停止・再起動してください。
-4. `node --test tests/server.test.mjs` と、変更に応じたブラウザ検証を行う。
+1. `npm ci` でlockfile通りに依存を導入し、`npm run build` で型検査とUI生成を実行。
+2. READMEの手順でHTTPサーバーを起動。
+3. 新しいROS UIは `src/` のTypeScript/React、既存シーン・センサは `app/` のJavaScript。
+4. `npm run dev` はUIの監視ビルド。更新後はブラウザ再読み込み。`server.mjs` 自体の変更はサーバー再起動が必要。
+5. `npm run typecheck`・`npm run test:ros`・`npm test` と、変更に応じたブラウザ検証。
 
-ブラウザのimport mapは `app/index.html` にあります。ライブラリの版を変更する場合は互換性を検証し、該当ライセンスも更新してください。実行時の依存物はすべて `app/vendor/` に固定版を同梱しており、`npm install` で版が変わる構成ではありません。
+Viewerの操作UI・各Renderer・WS通信は `ToPoFuzzy-Viewer/frontend/src/`、共通型・WS v2復号・GNG描画補助は `libs/ros_visualization_web/`。
+Simulatorはこれらのソースを直接参照します。npm依存はSimulator側へ固定し、Viewerのnode_modulesは不要です。
+`src/ros-results.tsx` は遅延起動、`viewer-integration.tsx` は画面の接続、`graph-scene.ts` はFiberと既存描画の接続、`frame-tree.ts` はTF合成を担当します。
+Viewerの `embedding.tsx` がScene・レイアウト・TF・メッシュURLの差し替え口です。Simulator固有のRendererを複製しないでください。
+生成先 `app/generated/` はGit管理対象外であり、配布時にはビルド済みファイルも同梱してください。
+単体ZIPでの起動には生成済みファイルを使用し、ソースの再ビルドにはワークスペースの共有ソース配置も必要です。
+ビルド成果物にはReact・Fiber・Viewer UIを含み、ブラウザ実行時のnpm・CDN参照はありません。UIのCSSはShadow DOM内へ限定しています。
+依存更新時は `THIRD_PARTY_NOTICES.md` と `licenses/ROS-VIEWER-LICENSES.txt` の同梱版・本文も更新してください。
+
+Three.jsは `app/index.html` のimport mapによる固定版を共用し、UIバンドルへの二重収録を防いでいます。
+ViewerとはThree.jsの版が異なるため、共有部品を変更した場合は両方の型検査・ビルド・描画テストが必要です。
+依存追加・更新時は `npm audit` を確認してください。脆弱性検出0件は安全性全体の保証ではありません。
 
 ## URDF / STLの変更とキャッシュ再生成
 
@@ -22,7 +34,7 @@ python tools/qa_reference.py --standard
 
 標準のみは `--model standard`、Longのみは `--model long`。元のZIPや開発者のDownloadsフォルダーは不要です。各URDFに対する相対パスでSTLを読み、現在の配置を保ったまま描画キャッシュを作成します。旧キャッシュを自動削除する処理はありません。
 
-URDFに記載された関節名、左右7軸、首・腰・カメラ/TCPリンク名はフロントエンドの設定と対応しています。別機種へ移植するときは、`robot.js` の `chain()` / `tcp()`、`app.js` のホーム・プリセット・軸操作、各センサーの取付先も更新してください。
+URDFに記載された関節名、左右7軸、首・腰・カメラ/TCPリンク名はフロントエンドの設定と対応しています。別機種へ移植するときは、`robot.js` の `chain()` / `tcp()`、`app.js` のホーム・プリセット・軸操作、各センサの取付先も更新してください。
 
 `qa_reference.py` はNumPyで独立にリンク変換を計算します。ブラウザ側の順運動学と突き合わせる基準です。URDF更新時は基準も再生成してください。
 

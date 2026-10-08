@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { ViewerEnvironment } from '../../embedding';
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { createPortal, useThree } from '@react-three/fiber';
@@ -32,7 +34,8 @@ interface RobotRendererProps {
 
 type MeshLoadFunction = URDFLoader['loadMeshCb'];
 
-const meshObjectCache = new Map<string, Promise<THREE.Object3D>>();
+// URLごとの最新形状のみ保持。参照中の旧形状は各ロボットの寿命に追従。
+const meshObjectCache = new Map<string, { revision: string; pending: Promise<THREE.Object3D> }>();
 
 function cloneMeshObject(source: THREE.Object3D): THREE.Object3D {
     const clone = source.clone(true);
@@ -49,11 +52,13 @@ function cloneMeshObject(source: THREE.Object3D): THREE.Object3D {
 
 function loadCachedMesh(
     path: string,
+    revision: string,
     manager: THREE.LoadingManager,
     loadMesh: MeshLoadFunction,
     onComplete: Parameters<MeshLoadFunction>[2],
 ): void {
-    let pending = meshObjectCache.get(path);
+    const cached = meshObjectCache.get(path);
+    let pending = cached?.revision === revision ? cached.pending : undefined;
     if (!pending) {
         pending = new Promise<THREE.Object3D>((resolve, reject) => {
             loadMesh(path, manager, (obj, err) => {
@@ -64,13 +69,13 @@ function loadCachedMesh(
                 }
             });
         });
-        meshObjectCache.set(path, pending);
+        meshObjectCache.set(path, { revision, pending });
     }
 
     pending.then(
         (source) => onComplete(cloneMeshObject(source)),
         (err: Error) => {
-            if (meshObjectCache.get(path) === pending) {
+            if (meshObjectCache.get(path)?.pending === pending) {
                 meshObjectCache.delete(path);
             }
             onComplete(new THREE.Object3D(), err);
@@ -104,7 +109,8 @@ function RobotInstanceRenderer({
     const mountedRef = useRef(true);
     const { invalidate } = useThree();
 
-    const viewerPort = 9001;
+    const { mesh_base_url } = useContext(ViewerEnvironment);
+    const mesh_url = mesh_base_url || `http://${window.location.hostname}:9001/meshes/`;
     const effectiveOpacity = data.opacity ?? opacity;
     const manipGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
     const translationalMaterial = useMemo(() => new THREE.MeshStandardMaterial({
@@ -241,15 +247,15 @@ function RobotInstanceRenderer({
     // --- Load URDF ---
     useEffect(() => {
         if (!data?.urdf) return;
-        const loadSignature = data.urdf;
+        const loadSignature = mesh_url + data.urdf;
         if (loadSignature === lastLoadSignatureRef.current) return;
         lastLoadSignatureRef.current = loadSignature;
 
         const urdfLoader = new URDFLoader();
-        urdfLoader.packages = (pkg) => `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
+        urdfLoader.packages = (pkg) => `${mesh_url}${encodeURIComponent(pkg)}`;
         const defaultLoadMeshCb = urdfLoader.loadMeshCb.bind(urdfLoader);
         urdfLoader.loadMeshCb = (path, manager, onComplete) => {
-            loadCachedMesh(path, manager, defaultLoadMeshCb, (obj, err) => {
+            loadCachedMesh(path, loadSignature, manager, defaultLoadMeshCb, (obj, err) => {
                 onComplete(obj, err);
                 if (!err && obj) {
                     applyCurrentAppearanceRef.current(obj);
@@ -267,7 +273,7 @@ function RobotInstanceRenderer({
             console.error("Failed to parse URDF:", err);
             lastLoadSignatureRef.current = null;
         }
-    }, [data?.urdf, scheduleInvalidate, tag]);
+    }, [data?.urdf, mesh_url, scheduleInvalidate, tag]);
 
     // --- Update Joints ---
     useEffect(() => {
@@ -290,8 +296,8 @@ function RobotInstanceRenderer({
     if (!visible || !robot) return null;
 
     return (
-        <DisplayFrame name={tag} tf={tf ?? { pos: data.basePosition ?? [0, 0, 0],
-            quat: data.baseOrientation ?? [0, 0, 0, 1] }} manual_transform={manualTransform}>
+        <DisplayFrame frame_id={data.frameId} name={tag} tf={tf} base_pose={!tf ? { pos: data.basePosition ?? [0, 0, 0],
+            quat: data.baseOrientation ?? [0, 0, 0, 1] } : undefined} manual_transform={manualTransform}>
             {robot && <primitive key={tag} object={robot} />}
             {showManipulabilityEllipsoid && selectedManipInfo && selectedManipInfo.map((info) => {
                 const scaleVec: [number, number, number] = [
@@ -360,7 +366,7 @@ function RobotRenderer({
             : Number.isFinite(max_visible_candidates) && max_visible_candidates >= 1
                 ? instances.slice(0, Math.floor(max_visible_candidates)) : instances;
         return (
-            <DisplayFrame name={tag} tf={tf} manual_transform={manualTransform} is_visible={visible}>
+            <DisplayFrame frame_id={data.frameId} name={tag} tf={tf} manual_transform={manualTransform} is_visible={visible}>
                 {visible_instances.map((instance, index) => {
                     const instanceData: RobotData = {
                         ...data,

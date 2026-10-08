@@ -72,6 +72,7 @@ import {
 } from '../types';
 
 interface SidebarContentProps {
+    is_read_only?: boolean;
     local_meshes: ReturnType<typeof useLocalMeshes>;
     isConnected: boolean;
     connect: () => void;
@@ -249,6 +250,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         </div>
                     )}
                     <SourceSelector
+                        is_read_only={props.is_read_only}
                         isConnected={props.isConnected}
                         sources={props.sources}
                         getSources={props.getSources}
@@ -473,19 +475,19 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Server Files" icon={<Server size={16} />} defaultOpen={false}>
+            {!props.is_read_only && <CollapsibleSection title="Server Files" icon={<Server size={16} />} defaultOpen={false}>
                 <ServerFileBrowser
                     isConnected={props.isConnected}
                     listPointCloudFiles={props.listPointCloudFiles}
                     loadPointCloudFile={props.loadPointCloudFile}
                 />
-            </CollapsibleSection>
+            </CollapsibleSection>}
 
             <CollapsibleSection title="Mesh Models" icon={<Box size={16} />} defaultOpen={false}>
                 <LocalMeshPanel meshes={props.local_meshes} />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Rosbag Playback" icon={<PlayCircle size={16} />} defaultOpen={false}>
+            {!props.is_read_only && <CollapsibleSection title="Rosbag Playback" icon={<PlayCircle size={16} />} defaultOpen={false}>
                 <RosbagPlayer
                     isConnected={props.isConnected}
                     listRosbags={props.listRosbags}
@@ -493,7 +495,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     stopRosbag={props.stopRosbag}
                     getRosbagStatus={props.getRosbagStatus}
                 />
-            </CollapsibleSection>
+            </CollapsibleSection>}
 
             <CollapsibleSection title="Export" icon={<UploadCloud size={16} />} defaultOpen={false}>
                 <ExportPanel pointClouds={props.pointClouds} selectedLayerId={props.selectedLayerId} />
@@ -561,7 +563,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
 
     const editTab = (
         <div className="space-y-3">
-            {props.selectedCloud ? (
+            {!props.is_read_only && props.selectedCloud ? (
                 <div className="surface-soft p-3">
                     <p className="panel-title mb-1">Target Layer</p>
                     <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{props.selectedCloud.name}</p>
@@ -613,6 +615,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </CollapsibleSection>
             )}
 
+            {!props.is_read_only && <>
             <CollapsibleSection title="Point Editing" icon={<Trash2 size={16} />} defaultOpen={false}>
                 <div className="surface-muted space-y-4 p-3">
                     {props.isEditMode && (
@@ -733,6 +736,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </div>
             </CollapsibleSection>
 
+            </>}
             <CollapsibleSection title="Clipping Planes" icon={<Scissors size={16} />} defaultOpen={true} headerClassName="py-4">
                 <ClippingControls
                     planes={props.clipping.planes}
@@ -774,14 +778,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     onZRangeChange={props.zoneMonitor.setZRange}
                 />
             </CollapsibleSection>
-            <CollapsibleSection title="Downsampling" icon={<Database size={16} />} defaultOpen={false}>
+            {!props.is_read_only && <CollapsibleSection title="Downsampling" icon={<Database size={16} />} defaultOpen={false}>
                 <GngDownsamplingPanel
                     isConnected={props.isConnected}
                     getGngStatus={props.getGngStatus}
                     getParameters={props.getParameters}
                     setParameter={props.setParameter}
                 />
-            </CollapsibleSection>
+            </CollapsibleSection>}
         </div>
     );
 
@@ -791,15 +795,15 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 tabs={[
                     { id: 'layers', label: 'Data', icon: <Layers size={14} />, content: layersTab },
                     { id: 'display', label: 'View', icon: <Eye size={14} />, content: displayTab },
-                    { id: 'edit', label: 'Edit', icon: <Move size={14} />, content: editTab },
+                    { id: 'edit', label: props.is_read_only ? 'Clip' : 'Edit', icon: <Move size={14} />, content: editTab },
                     { id: 'analysis', label: 'Analyze', icon: <Activity size={14} />, content: analysisTab },
-                    {
+                    ...(!props.is_read_only ? [{
                         id: 'object-match',
                         label: 'Match',
                         icon: <ScanSearch size={14} />,
                         content: null,
                         onActivate: () => setIsObjectMatchDialogOpen(true),
-                    },
+                    }] : []),
                 ]}
             />
 

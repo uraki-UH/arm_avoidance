@@ -1,8 +1,10 @@
+import { useContext } from 'react';
+import { ViewerEnvironment } from '../../embedding';
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
 import { RobotData, Transform } from '../../types';
-import { useDemandUpdate } from './SharedRenderers';
+import { DisplayFrame, useDemandUpdate } from './SharedRenderers';
 
 interface CollisionRendererProps {
     tag: string;
@@ -23,12 +25,12 @@ function CollisionRenderer({
     tf = null,
     manualTransform,
 }: CollisionRendererProps) {
-    const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
     const lastUrdfRef = useRef<string | null>(null);
     const lastJointSignatureRef = useRef<string | null>(null);
 
-    const viewerPort = 9001;
+    const { mesh_base_url } = useContext(ViewerEnvironment);
+    const mesh_url = mesh_base_url || `http://${window.location.hostname}:9001/meshes/`;
 
     useDemandUpdate([robot, data, visible, color, opacity, tf, manualTransform]);
 
@@ -88,11 +90,11 @@ function CollisionRenderer({
     }, [robot, applyCollisionMaterial]);
 
     useEffect(() => {
-        if (!data?.urdf || data.urdf === lastUrdfRef.current) return;
-        lastUrdfRef.current = data.urdf;
+        if (!data?.urdf || mesh_url + data.urdf === lastUrdfRef.current) return;
+        lastUrdfRef.current = mesh_url + data.urdf;
 
         const urdfLoader = new URDFLoader();
-        urdfLoader.packages = (pkg) => `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
+        urdfLoader.packages = (pkg) => `${mesh_url}${encodeURIComponent(pkg)}`;
         urdfLoader.parseVisual = false;
         urdfLoader.parseCollision = true;
         const defaultLoadMeshCb = urdfLoader.loadMeshCb.bind(urdfLoader);
@@ -113,7 +115,7 @@ function CollisionRenderer({
             console.error('Failed to parse URDF collision model:', err);
             lastUrdfRef.current = null;
         }
-    }, [data?.urdf, applyCollisionMaterial, tag]);
+    }, [data?.urdf, mesh_url, applyCollisionMaterial, tag]);
 
     useEffect(() => {
         if (!robot || !data?.jointNames || !data?.jointValues) return;
@@ -128,26 +130,11 @@ function CollisionRenderer({
         });
     }, [robot, data?.jointNames, data?.jointValues]);
 
-    useEffect(() => {
-        if (!groupRef.current) return;
-        if (tf) {
-            groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
-            groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-        } else {
-            groupRef.current.position.set(
-                data.basePosition?.[0] || 0,
-                data.basePosition?.[1] || 0,
-                data.basePosition?.[2] || 0
-            );
-            const orient = data.baseOrientation || [0, 0, 0, 1];
-            groupRef.current.quaternion.set(orient[0], orient[1], orient[2], orient[3]);
-        }
-    }, [tf, data.basePosition, data.baseOrientation]);
-
     if (!visible || !robot) return null;
 
     return (
-        <group ref={groupRef} name={`${tag}-collision`} visible={visible}>
+        <DisplayFrame frame_id={data.frameId} name={`${tag}-collision`} tf={tf} is_visible={visible}
+            base_pose={!tf ? { pos: data.basePosition ?? [0, 0, 0], quat: data.baseOrientation ?? [0, 0, 0, 1] } : undefined}>
             <group
                 position={effectiveTransform.position}
                 rotation={effectiveTransform.rotation}
@@ -155,7 +142,7 @@ function CollisionRenderer({
             >
                 {robot && <primitive key={`${tag}-collision`} object={robot} />}
             </group>
-        </group>
+        </DisplayFrame>
     );
 }
 

@@ -3,7 +3,7 @@
 This document describes the **v2** WebSocket API exposed by `viewer_ws_gateway_node`.
 
 ## Endpoint
-- URL: `ws://<host>:9001`
+- URL: `ws://127.0.0.1:9001`（localhost待受）。Simulatorの表示専用入口は `/observe`。Origin・要求制限・対応操作は [WS v2仕様](../common/ws_protocol_v2.md#transport)。
 - Transport:
   - Binary: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
   - Text: JSON request/response + async events

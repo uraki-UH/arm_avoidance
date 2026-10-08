@@ -19,6 +19,8 @@ A high-performance web-based Point Cloud Viewer and Editor built with React, Thr
 
 ## メッシュモデルの直接表示
 
+ロボットURDFのメッシュ更新は`robot_viewer_bridge_node`の再起動で反映。参照STLの更新情報も形状キャッシュの判定対象。Long双腕のROS・ブラウザ共通描画原本と同期手順は[アセット仕様](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/docs/ASSET_SOURCES.md#livox-mid-360)を参照。
+
 メッシュを点群化せずに追加する場合は `Data → Mesh Models`。
 OBJ・PLY・STL・GLB/glTF・FBXに対応。[直接表示の手順・取得済み車両モデルの例](doc/MESH_MODELS.md)。
 

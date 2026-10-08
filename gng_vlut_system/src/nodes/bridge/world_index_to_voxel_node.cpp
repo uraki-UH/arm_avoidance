@@ -75,7 +75,7 @@ public:
     declare_parameter<std::string>("world_frame_id", "world");
     declare_parameter<std::string>("target_frame_id", "world");
     declare_parameter<bool>("allow_unconnected_source_as_world", false);
-    // 移動センサーの取得時刻不整合を避けるための最新TF代替許可
+    // 移動センサの取得時刻不整合を避けるための最新TF代替許可
     declare_parameter<bool>("allow_latest_transform", true);
     declare_parameter<bool>("enable_world_index", true);
     declare_parameter<bool>("enable_roi_query", true);

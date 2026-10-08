@@ -1,4 +1,4 @@
-"""機体選択・Gazebo起動設定・頭部深度センサー・光学座標の検証。"""
+"""機体選択・Gazebo起動設定・頭部深度センサ・光学座標の検証。"""
 from pathlib import Path
 from unittest.mock import patch
 import importlib.util

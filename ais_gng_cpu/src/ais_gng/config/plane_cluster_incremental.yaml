@@ -126,7 +126,7 @@ plane_cluster_incremental_node:
 
 ais_gng_node:
   ros__parameters:
-    # 平面クラスタ計算の共通既定値。センサー別YAMLのplane_clusteringを優先。
+    # 平面クラスタ計算の共通既定値。センサ別YAMLのplane_clusteringを優先。
     plane_clustering: false
 
     # 単独nodeを含む全平面クラスタ未所属nodeへの連結成分ID付与。

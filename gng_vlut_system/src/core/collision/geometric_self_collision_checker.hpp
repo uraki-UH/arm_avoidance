@@ -40,6 +40,9 @@ public:
 
   bool checkCollision() override;
 
+  // 不変な形状だけを共有する、並列問い合わせ用の独立した姿勢・探索状態
+  std::unique_ptr<GeometricSelfCollisionChecker> clone_for_queries() const;
+
   /**
    * @brief 現在の姿勢で自己衝突しているリンクペアを列挙する
    * 既に除外済みのペアは含めない。
@@ -92,6 +95,7 @@ public:
   }
 
 private:
+  GeometricSelfCollisionChecker(const GeometricSelfCollisionChecker &source);
   // 内部チェッカー
   collision::SelfCollisionChecker checker_;
 

@@ -1422,6 +1422,11 @@ public:
     gng_profile_names_ = this->declare_parameter<std::string>("gng.profile_names", "");
     gng_profile_name_ = this->declare_parameter<std::string>("gng.profile_name", "");
     enable_independent_arms_ = declare_parameter<bool>("gng.enable_independent_arms", false);
+    enable_batched_collision_filter_ = declare_parameter<bool>("gng.enable_batched_collision_filter", false);
+    collision_worker_num_ = declare_parameter<int>("gng.collision_worker_num", 16);
+    num_local_neighbors_ = declare_parameter<int>("gng.num_local_neighbors", 6);
+    if (collision_worker_num_ < 1 || collision_worker_num_ > 64 || num_local_neighbors_ < 1)
+      throw std::invalid_argument("Invalid batched collision configuration");
     eef_link_names_ = this->declare_parameter<std::string>("robot.eef_link_names", "");
     arm_leaf_link_names_ = this->declare_parameter<std::string>("robot.arm_leaf_link_names", "");
     this->declare_parameter<std::string>("robot.voxel_link_names", "");
@@ -1667,6 +1672,13 @@ public:
       if (skip_collision_checks_ || !enable_self_collision_) {
         throw std::invalid_argument("Independent arm training requires collision checks");
       }
+      // 左右の処理中に編集されたURDFによる、異なる形状条件の混在防止。
+      const auto read_urdf_source = [this]() {
+        std::ifstream stream(robot_sim::common::resolvePath(robot_urdf_path_), std::ios::binary);
+        if (!stream) throw std::runtime_error("Cannot read independent arm URDF");
+        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+      };
+      const auto urdf_source = read_urdf_source();
       const auto selected_profiles = selected_gng_profile_names_;
       const auto parent_id = experiment_id_;
       // 再学習途中の新旧モデル混在を避ける公開manifestの無効化
@@ -1685,6 +1697,8 @@ public:
           selected_gng_profile_names_ = {profile};
           experiment_id_ = parent_id + "/" + profile;
           run_training_pipeline();
+          if (read_urdf_source() != urdf_source)
+            throw std::runtime_error("URDF changed during independent arm training; manifest withheld");
           manifest["profiles"].push_back({{"name", profile}, {"metadata", profile + "/model.json"}});
         }
       } catch (...) {
@@ -2155,6 +2169,38 @@ public:
           delete model;
         throw std::runtime_error("Failed to load GNG map.");
       }
+    } else if (enable_batched_collision_filter_) {
+      if (skip_collision_checks_ || !enable_self_collision_ || !self_checker)
+        throw std::invalid_argument("Batched graph construction requires collision checks");
+      RCLCPP_INFO(get_logger(), "[Step 1] Node placement before final collision validation...");
+      gng.setCollisionAware(false);
+      gng.gngTrainOnTheFly(gng_params_.max_iterations);
+      gng.gngTrainOnTheFly(gng_params_.refine_iterations);
+      pruneNodesOutsideTcpThreshold(gng, gng_chain_ptr, tcp_threshold_,
+                                    "before batched filter", get_logger());
+      gng.refresh_coord_weights();
+      // FKの入力・出力と衝突姿勢はworkerごとに分離。不変な運動連鎖と形状だけの共有。
+      std::vector<std::function<bool(const Eigen::VectorXf &)>> queries;
+      for (int worker_idx = 0; worker_idx < collision_worker_num_; ++worker_idx) {
+        auto worker_self = std::shared_ptr<simulation::GeometricSelfCollisionChecker>(self_checker->clone_for_queries());
+        auto worker = std::make_shared<simulation::CompositeCollisionChecker>();
+        worker->setSelfCollisionChecker(worker_self);
+        worker->setEnvironmentCollisionChecker(env_checker);
+        worker->setEnableSelfCollision(enable_self_collision_);
+        if (apply_environment_ignore_links_)
+          for (const auto &name : environment_ignore_links_) worker->addEnvironmentIgnoreLink(name);
+        queries.emplace_back([worker, gng_chain_ptr, values = std::vector<double>{},
+            positions = std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>{},
+            orientations = std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>{}]
+            (const Eigen::VectorXf &angles) mutable {
+              gng_chain_ptr->forwardKinematicsAt(angles, values, positions, orientations);
+              worker->updateBodyPoses(positions, orientations);
+              return worker->checkCollision();
+            });
+      }
+      RCLCPP_INFO(get_logger(), "[Step 2] Sparse graph validation; TCP layers reuse validated joint edges...");
+      gng.build_sparse_safe_graph(num_local_neighbors_, queries);
+      gng.triggerBatchUpdates();
     } else {
       RCLCPP_INFO(this->get_logger(), "[Step 1] Initial Exploration...");
       gng.setCollisionAware(false);
@@ -2416,7 +2462,9 @@ public:
           {"urdf_path", resolved_path}, {"joint_names", learning_joint_names},
           {"fixed_joints", fixed_joints}, {"gng_file", gng_model_filename_}, {"vlut_file", vlut_filename_},
           {"num_nodes", gng.getActiveIndices().size()}, {"voxel_size", vlut_resolution_},
-          {"collision_voxel_size", collision_voxel_size_}, {"enable_pair_collision_check", true}};
+          {"collision_voxel_size", collision_voxel_size_}, {"enable_pair_collision_check", true},
+          {"enable_batched_collision_filter", enable_batched_collision_filter_},
+          {"num_local_neighbors", num_local_neighbors_}, {"max_joint_step", .025}};
       const auto path = output_dir_path / "model.json";
       std::ofstream stream(path.string() + ".tmp");
       stream << metadata.dump(2) << '\n';
@@ -2455,6 +2503,9 @@ private:
   std::vector<std::string> selected_gng_profile_names_;
   std::vector<std::string> all_gng_profile_names_;
   bool enable_independent_arms_ = false;
+  bool enable_batched_collision_filter_ = false;
+  int collision_worker_num_ = 16;
+  int num_local_neighbors_ = 6;
   std::string active_independent_profile_;
   double spatial_map_resolution_;
   double vlut_resolution_;
