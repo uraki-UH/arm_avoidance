@@ -8,25 +8,29 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {parseArgs} from 'node:util';
 import {install_graph_fixture} from './performance-fixture.mjs';
+import {verify_depth_readback} from './depth-readback-fixture.mjs';
 
 // 専用ChromeとHTTPサーバーによる有限時間の性能試験。既存ROS・ブラウザへの接続なし。
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const {values:options}=parseArgs({options:{output:{type:'string'},gpu:{type:'string',default:'mesa'},cases:{type:'string',default:'idle,frustum,lidar,rgbd,graph_static,graph_stream'},'duration-ms':{type:'string',default:'3000'},captures:{type:'string',default:'10'},nodes:{type:'string',default:'10000'},profile:{type:'boolean',default:false},baseline:{type:'string'},'max-regression-percent':{type:'string'}}});
+const {values:options}=parseArgs({options:{output:{type:'string'},gpu:{type:'string',default:'mesa'},cases:{type:'string',default:'idle,frustum,lidar,rgbd,graph_static,graph_stream'},'duration-ms':{type:'string',default:'3000'},captures:{type:'string',default:'10'},nodes:{type:'string',default:'10000'},profile:{type:'boolean',default:false},'show-preview':{type:'boolean',default:false},baseline:{type:'string'},'depth-readback':{type:'string',default:'auto'},'readback-mode':{type:'string',default:'batch'},'verify-depth':{type:'boolean',default:false},'graph-quality':{type:'string',default:'standard'},'max-regression-percent':{type:'string'}}});
 const duration_ms=Number(options['duration-ms']),num_captures=Number(options.captures),num_nodes=Number(options.nodes);
 assert.ok(duration_ms>=500&&duration_ms<=60000);assert.ok(Number.isInteger(num_captures)&&num_captures>=2&&num_captures<=100);assert.ok(Number.isInteger(num_nodes)&&num_nodes>=102&&num_nodes<=65535);
 assert.ok(['mesa','nvidia','software'].includes(options.gpu));
+assert.ok(['auto','packed','float'].includes(options['depth-readback']));
+assert.ok(['batch','separate'].includes(options['readback-mode']));
+assert.ok(['standard','compact'].includes(options['graph-quality']));
 if(options['max-regression-percent']!==undefined)assert.ok(Number.isFinite(Number(options['max-regression-percent']))&&Number(options['max-regression-percent'])>=0);
-const case_names=options.cases.split(','),allowed_cases=['idle','frustum','lidar','rgbd','graph_static','graph_stream'];
+const case_names=options.cases.split(','),allowed_cases=['idle','frustum','lidar','rgbd','graph_static','graph_stream','graph_stream_all'];
 assert.ok(case_names.every(name=>allowed_cases.includes(name)));
 const output=options.output?path.resolve(options.output):await fs.mkdtemp('/tmp/topo-performance-');
 await fs.mkdir(output,{recursive:true});
 await fs.writeFile(path.join(output,'run.lock'),String(process.pid),{flag:'wx'});
 const profile_directory=await fs.mkdtemp('/tmp/topo-performance-chrome-');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const source_files=['app/app.js','app/lidar-core.js','app/lidar-ui.js','app/rgbd-core.js','app/rgbd-ui.js','app/generated/ros-results.js'];
+const source_files=['app/app.js','app/lidar-core.js','app/lidar-ui.js','app/rgbd-core.js','app/packed-depth.js','app/pixel-readback.js','app/rgbd-ui.js','app/generated/ros-results.js'];
 const read_source_hashes=async()=>Object.fromEntries(await Promise.all(source_files.map(async filename=>[filename,createHash('sha256').update(await fs.readFile(path.join(root,filename))).digest('hex')])));
 
-const processes=[],report={schema:1,created_at:new Date().toISOString(),enable_profile:options.profile,config:{gpu:options.gpu,duration_ms,num_captures,num_nodes,case_names,viewport:[1440,1000],model:'long'},cases:{},commands:[]};
+const processes=[],report={schema:1,created_at:new Date().toISOString(),enable_profile:options.profile,depth_readback:options['depth-readback'],readback_mode:options['readback-mode'],enable_preview:options['show-preview'],graph_quality:options['graph-quality'],config:{gpu:options.gpu,duration_ms,num_captures,num_nodes,case_names,viewport:[1440,1000],model:'long'},cases:{},commands:[]};
 let socket,deadline;
 const stop=async child=>{
  if(!child||child.exitCode!==null||child.signalCode!==null)return;
@@ -34,7 +38,7 @@ const stop=async child=>{
  let timer;await Promise.race([exited,new Promise(resolve=>{timer=setTimeout(resolve,3000);})]);clearTimeout(timer);
  if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}
 };
-const cleanup=async()=>{socket?.close();for(const child of [...processes].reverse())await stop(child);await fs.rm(profile_directory,{recursive:true,force:true});};
+const cleanup=async()=>{socket?.close();for(const child of [...processes].reverse())await stop(child);await fs.rm(profile_directory,{recursive:true,force:true,maxRetries:5,retryDelay:200});};
 for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{void cleanup().finally(()=>process.exit(130));});
 try {
  report.source_sha256_start=await read_source_hashes();
@@ -59,15 +63,24 @@ try {
   await call('Page.navigate',{url:`http://127.0.0.1:${port}/?model=long`});await wait_for('!!window.simulator?.diagnostics.ready');await pause(600);
   const environment=await evaluate(`(()=>{const gl=simulator.renderer.getContext(),ext=gl.getExtension('WEBGL_debug_renderer_info');return {renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):'unknown',user_agent:navigator.userAgent,triangles:simulator.robot.triangles,viewport:[innerWidth,innerHeight],canvas:[gl.drawingBufferWidth,gl.drawingBufferHeight]};})()`);
   if(options.gpu!=='software')assert.ok(!/SwiftShader|llvmpipe|softpipe|unknown/i.test(environment.renderer),'指定GPUが使用されていません: '+environment.renderer);
+  if(options.gpu==='nvidia')assert.match(environment.renderer,/NVIDIA/i,'NVIDIA GPUが選択されていません');
   report.environment=environment;
+  await evaluate(`simulator.rgbd.sensor.depth_readback='${options['depth-readback']}';simulator.rgbd.sensor.enable_batched_readback=${options['readback-mode']==='batch'}`);
   if(name.startsWith('graph_')){
-   await evaluate(`(${install_graph_fixture.toString()})(${num_nodes},${name==='graph_stream'?10:0});simulator.ros_results.open()`);
+   await evaluate(`(${install_graph_fixture.toString()})(${num_nodes},${name.startsWith('graph_stream')?10:0},${name==='graph_stream_all'});simulator.ros_results.open()`);
    await wait_for('!!simulator.ros_results.api');await evaluate('simulator.ros_results.api.connect()');
    await wait_for(`simulator.ros_results.api.graphData['/performance/graph']?.nodes.length===${num_nodes}`);
    await wait_for(`!!simulator.ros_results.scene.root_scene.getObjectByName('/performance/graph')`);
-   const graph=await evaluate(`(()=>{const group=simulator.ros_results.scene.root_scene.getObjectByName('/performance/graph');let num_instances=0;group.traverse(object=>{if(object.isInstancedMesh&&object.visible)num_instances+=object.count;});return {num_nodes:simulator.ros_results.api.graphData['/performance/graph'].nodes.length,num_edges:simulator.ros_results.api.graphData['/performance/graph'].edges.length/2,num_instances,has_transform:group.userData.has_transform,packet_bytes:performance_fixture.packet_bytes};})()`);
+   await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="表示: /performance/graph"]').closest('.surface-muted').querySelector('[title="Graph colors"]').click()`);
+   await wait_for(`!!document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Graph geometry"]')`);
+   await evaluate(`(()=>{const input=document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Graph geometry"]');input.value='${options['graph-quality']}';input.dispatchEvent(new Event('change',{bubbles:true,composed:true}));})()`);
+   await pause(200);
+   await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('h2').closest('.surface-panel').querySelector('button').click()`);
+   await wait_for(`(()=>{const group=simulator.ros_results.scene.root_scene.getObjectByName('/performance/graph');if(!group?.userData.has_transform)return false;let num_instances=0;group.traverse(object=>{if(object.isInstancedMesh&&object.visible)num_instances+=object.count;});return num_instances===${num_nodes*4};})()`);
+   const graph=await evaluate(`(()=>{const group=simulator.ros_results.scene.root_scene.getObjectByName('/performance/graph');let num_instances=0,num_triangles=0;group.traverse(object=>{if(object.isInstancedMesh&&object.visible){num_instances+=object.count;num_triangles+=object.count*object.geometry.index.count/3;}});return {num_triangles,num_nodes:simulator.ros_results.api.graphData['/performance/graph'].nodes.length,num_edges:simulator.ros_results.api.graphData['/performance/graph'].edges.length/2,num_instances,has_transform:group.userData.has_transform,packet_bytes:performance_fixture.packet_bytes};})()`);
    assert.ok(graph.has_transform&&graph.num_instances>=num_nodes);report.cases[name]={graph};await evaluate('performance_fixture.start()');
   }
+  if(name==='rgbd'&&options['show-preview'])await evaluate(`document.querySelector('[data-panel=sensors]').click();document.querySelector('[data-sensor-panel=sensor]').click()`);
   if(name==='frustum')await evaluate('simulator.rgbd.frustum.visible=true');
   if(name==='lidar')await evaluate('simulator.lidar.config.enabled=true;simulator.lidar.apply();simulator.lidar.sequence=0;simulator.lidar.scanTime=0');
   // 初回のシェーダー・BVH構築を定常計測から分離。
@@ -78,7 +91,7 @@ try {
   await pause(500);await call('HeapProfiler.collectGarbage');
   const heap_before=await call('Runtime.getHeapUsage'),metrics_before=await call('Performance.getMetrics');
   // 描画呼出し時間はCPU送信・待機込み。GPU単体の実行時間とは別の値。
-  await evaluate(`(()=>{window.performance_samples={frames:[],render:[],methods:{},is_running:true};const samples=performance_samples;let last;const tick=now=>{if(!samples.is_running)return;if(last!==undefined)samples.frames.push(now-last);last=now;requestAnimationFrame(tick);};requestAnimationFrame(tick);const renderer=simulator.renderer,render=renderer.render;renderer.render=function(...args){const start=performance.now();try{return render.apply(this,args);}finally{samples.render.push(performance.now()-start);}};for(const [object,method] of [[simulator.rgbd,'paint'],[simulator.rgbd,'updateFrustum'],[simulator.rgbd,'updateCloud'],[simulator.lidar,'updateCloud'],[simulator.lidar,'drawPattern']]){const original=object[method],key=(object===simulator.rgbd?'rgbd.':'lidar.')+method;samples.methods[key]=[];object[method]=function(...args){const start=performance.now();try{return original.apply(this,args);}finally{samples.methods[key].push(performance.now()-start);}};}})()`);
+  await evaluate(`(()=>{window.performance_samples={frames:[],render:[],methods:{},is_running:true};const samples=performance_samples;let last;const tick=now=>{if(!samples.is_running)return;if(last!==undefined)samples.frames.push(now-last);last=now;requestAnimationFrame(tick);};requestAnimationFrame(tick);const renderer=simulator.renderer,render=renderer.render;renderer.render=function(...args){const start=performance.now();try{return render.apply(this,args);}finally{samples.render.push(performance.now()-start);}};for(const [object,method] of [[simulator.rgbd,'paint'],[simulator.rgbd,'updateFrustum'],[simulator.rgbd,'updateCloud'],[simulator.lidar,'updateCloud'],[simulator.lidar,'drawPattern'],[simulator.renderer.getContext(),'getBufferSubData'],[simulator.renderer.getContext(),'getParameter'],[simulator.renderer.getContext(),'readPixels']]){const original=object[method],key=(object===simulator.rgbd?'rgbd.':object===simulator.lidar?'lidar.':'webgl.')+method;samples.methods[key]=[];object[method]=function(...args){const start=performance.now();try{return original.apply(this,args);}finally{samples.methods[key].push(performance.now()-start);}};}})()`);
   if(options.profile){await call('Profiler.enable');await call('Profiler.start');}
   const started=Date.now();let captures;
   if(name==='lidar'||name==='rgbd')captures=await evaluate(`(async()=>{const values=[],capture_start=performance.now();for(let idx=0;idx<${num_captures}||performance.now()-capture_start<${duration_ms};idx++){${name==='lidar'?'simulator.lidar.sequence=0;simulator.lidar.scanTime=0;':''}const start=performance.now(),frame=await simulator.${name}.capture();if(!frame)throw Error('センサ取得失敗');values.push({wall_ms:performance.now()-start,compute_ms:frame.ms,render_ms:frame.renderMs??null,num_points:frame.count??frame.valid});await new Promise(resolve=>requestAnimationFrame(resolve));}return values;})()`);
@@ -90,9 +103,10 @@ try {
   const before=Object.fromEntries(metrics_before.metrics.map(value=>[value.name,value.value])),after=Object.fromEntries(metrics_after.metrics.map(value=>[value.name,value.value]));
   const result={...report.cases[name],frame:stats(samples.frames),render_submit:stats(samples.render),methods:Object.fromEntries(Object.entries(samples.methods).map(([key,value])=>[key,stats(value)])),num_frames_over_50_ms:samples.frames.filter(value=>value>50).length,main_thread_task_ms:(after.TaskDuration-before.TaskDuration)*1000,elapsed_ms:Date.now()-started,heap_delta_bytes:heap_after.usedSize-heap_before.usedSize,geometry_count:samples.geometry_count,texture_count:samples.texture_count,num_messages:samples.num_messages};
   if(captures){
+   if(name==='rgbd')result.targets=await evaluate(`Object.fromEntries(Object.entries(simulator.rgbd.sensor.targets).map(([key,value])=>[key,{width:value.width,height:value.height,type:value.texture.type,format:value.texture.format}]))`);
    result.output_signature=await evaluate(`(async()=>{const frame=${name==='lidar'?'simulator.lidar.last':'simulator.rgbd.sensor.lastFrame'},signatures={};for(const key of ${JSON.stringify(name==='lidar'?['xyz','range','slotStatus','objectId']:['xyz','depth','z16','colors','pixels'])}){const value=frame[key];signatures[key]=[value.length,Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',value))).map(byte=>byte.toString(16).padStart(2,'0')).join('')];}return signatures;})()`);
    result.captures=captures;result.capture_wall=stats(captures.map(value=>value.wall_ms));result.capture_compute=stats(captures.map(value=>value.compute_ms));assert.ok(captures.every(value=>value.num_points>0));}
-  assert.ok(result.frame.num>=2);assert.deepEqual(samples.errors,[]);if(name==='graph_stream')assert.ok(result.num_messages>=2);
+  assert.ok(result.frame.num>=2);assert.deepEqual(samples.errors,[]);if(name.startsWith('graph_stream'))assert.ok(result.num_messages>=2);
   // 非表示中の遅延更新と再表示時の内容一致。計測区間外での確認。
   if(name==='lidar'){
    await evaluate(`simulator.lidar.drawPattern(.3,simulator.lidar.config.duration,60000);document.querySelector('[data-panel=sensors]').click();document.querySelector('[data-sensor-panel=lidar]').click()`);
@@ -101,15 +115,21 @@ try {
    assert.ok(is_preview_equal,'遅延描画と直接描画の不一致');result.is_preview_equal=true;
   }
   if(name==='rgbd'){
-   const is_preview_equal=await evaluate(`(()=>{const sensor=simulator.rgbd,frame=sensor.sensor.lastFrame,canvases=['rgb-preview','depth-preview'].map(id=>document.getElementById(id));sensor.paint(frame);const before=canvases.map(canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data);for(const canvas of canvases){canvas.width=1;canvas.height=1;}sensor.paint(frame);return canvases.every((canvas,idx)=>{const after=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;return after.length===before[idx].length&&after.every((value,idx_byte)=>value===before[idx][idx_byte]);});})()`);
+   await evaluate(`document.querySelector('[data-panel=robot]').click();simulator.rgbd.paint(simulator.rgbd.sensor.lastFrame)`);
+   const has_deferred_preview=await evaluate('simulator.rgbd.pending_preview_frame===simulator.rgbd.sensor.lastFrame');
+   assert.ok(has_deferred_preview,'非表示RGB-Dプレビューの保留失敗');
+   await evaluate(`document.querySelector('[data-panel=sensors]').click();document.querySelector('[data-sensor-panel=sensor]').click()`);
+   await wait_for('simulator.rgbd.pending_preview_frame===null');
+   const is_preview_equal=await evaluate(`(()=>{const sensor=simulator.rgbd,frame=sensor.sensor.lastFrame,canvases=['rgb-preview','depth-preview'].map(id=>document.getElementById(id));const before=canvases.map(canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data);if(!before.every(data=>data.some(value=>value!==0)))return false;sensor.paint(frame);if(!canvases.every((canvas,idx)=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.every((value,idx_byte)=>value===before[idx][idx_byte])))return false;for(const canvas of canvases){canvas.width=1;canvas.height=1;}sensor.paint(frame);return canvases.every((canvas,idx)=>{const after=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;return after.length===before[idx].length&&after.every((value,idx_byte)=>value===before[idx][idx_byte]);});})()`);
    assert.ok(is_preview_equal,'解像度変更後のプレビュー復元失敗');result.is_preview_equal=true;
+   if(options['verify-depth'])result.depth_verification=await evaluate(`(${verify_depth_readback.toString()})()`);
   }
   report.cases[name]=result;console.log(JSON.stringify({case:name,frame_p95_ms:result.frame.p95_ms,render_mean_ms:result.render_submit.mean_ms,capture_mean_ms:result.capture_wall?.mean_ms}));
  }
  assert.deepEqual(exceptions,[]);
  report.source_sha256=await read_source_hashes();assert.deepEqual(report.source_sha256,report.source_sha256_start,'計測中のソース変更');
  if(options.baseline){
-  const baseline=JSON.parse(await fs.readFile(options.baseline,'utf8'));assert.equal(report.enable_profile,baseline.enable_profile??false,'プロファイル条件の不一致');assert.deepEqual(report.config,baseline.config,'比較条件の不一致');assert.deepEqual(report.environment,baseline.environment,'描画環境の不一致');
+  const baseline=JSON.parse(await fs.readFile(options.baseline,'utf8'));assert.equal(report.enable_profile,baseline.enable_profile??false,'プロファイル条件の不一致');assert.equal(report.enable_preview,baseline.enable_preview??false,'プレビュー条件の不一致');assert.deepEqual(report.config,baseline.config,'比較条件の不一致');assert.deepEqual(report.environment,baseline.environment,'描画環境の不一致');
   report.comparison={};for(const [name,result] of Object.entries(report.cases)){
    const reference=baseline.cases[name];if(result.output_signature)assert.deepEqual(result.output_signature,reference.output_signature,name+': 出力の不一致');const metric=result.capture_wall?'capture_wall':'frame',key=metric==='frame'?'p95_ms':'mean_ms';
    const change_percent=(result[metric][key]/reference[metric][key]-1)*100;report.comparison[name]={metric:metric+'.'+key,change_percent};

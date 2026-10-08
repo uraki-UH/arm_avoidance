@@ -249,6 +249,13 @@ class test_clustering_yaml(unittest.TestCase):
         self.assertEqual(params[2]['clusters_input_topic'], '')
         self.assertEqual(params[1]['plane_clusters_topic'], '/plane_clusters')
 
+    def test_self_mask_argument_overrides_yaml(self):
+        params = self.resolve_parameters({'self_filter.mask_topic': '/yaml/self'},
+                                         arguments={'self_mask_topic': '/robot/self_voxel'})
+        self.assertEqual(params[0]['self_filter.mask_topic'], '/robot/self_voxel')
+        params = self.resolve_parameters({'self_filter.mask_topic': '/yaml/self'})
+        self.assertEqual(params[0]['self_filter.mask_topic'], '/yaml/self')
+
     def test_gpu_switch_controls_plane_node(self):
         for enable_plane in (False, True):
             params = self.resolve_parameters({'plane_clustering': enable_plane},

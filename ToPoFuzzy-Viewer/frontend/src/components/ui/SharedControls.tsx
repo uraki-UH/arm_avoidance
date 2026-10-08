@@ -10,7 +10,7 @@ interface ControlSliderProps { label: string; value: number; min: number; max: n
 
 export const LayerItem: React.FC<any> = ({ id, displayName, type, visible, onToggleVisibility, onRemove, onOpenTransform, statusLabel, isSelected, onSelect, isActionDisabled, children, headerOnly }) => {
     const c = (
-        <div className="flex items-start justify-between gap-1.5">
+        <div data-layer-id={id} className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
                 <div className="mb-0.5 flex items-start gap-2">
                     <button aria-label={`表示: ${id}`} aria-pressed={!!visible} disabled={isActionDisabled}
@@ -29,7 +29,7 @@ export const LayerItem: React.FC<any> = ({ id, displayName, type, visible, onTog
                 </div>
                 {children}
             </div>
-            <button onClick={e => { e.stopPropagation(); if (!isActionDisabled) onRemove(); }} className="btn-icon btn-icon-danger self-start mt-0.5"><Trash2 size={13} /></button>
+            <button aria-label={`削除: ${id}`} disabled={isActionDisabled} onClick={e => { e.stopPropagation(); if (!isActionDisabled) onRemove(); }} className="btn-icon btn-icon-danger self-start mt-0.5"><Trash2 size={13} /></button>
         </div>
     );
     return headerOnly ? c : <div onClick={onSelect} className={`rounded-lg border px-2 py-1 mb-1 ${isSelected ? 'border-[var(--accent-color)]/70 bg-[var(--accent-soft)]' : 'border-white/10 bg-white/5 hover:bg-white/10'} ${isActionDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}>{c}</div>;

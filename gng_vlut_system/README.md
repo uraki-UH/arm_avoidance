@@ -317,6 +317,12 @@ ToPoDualArmの自己領域除去が有効な構成では、環境ボクセルの
 | `/ToPoDualArm/roi_voxels` | 自己ロボット領域の除去前（旧`roi_voxel_ids_raw`） |
 | `/ToPoDualArm/self_filter_roi_voxels` | 自己ロボット領域と除去余裕幅を除いた結果（旧`roi_voxel_ids`） |
 
+自己マスクのURDF直方体（Box）は、初期構築時にセルとの交差・境界接触を判定してボクセル化します。
+セル中心が形状の外側にある端部も収録対象です。判定用の軸・射影範囲はBoxごとに初期構築時だけ計算します。
+関節角度変更後は従来どおり、初期セルをリンク姿勢で変換して更新します。
+既存の更新処理には、格子と一致しない並進を伴う90°回転などで境界セルが不足する場合があります。
+初期構築の変更を稼働中の自己マスクへ反映するには、再ビルド後に`self_recognition_viz_node`の再起動が必要です。
+
 VLUT用の占有・危険ボクセルへの変換には除去後のトピックを使用します。
 入力・出力名は`self_recognition.raw_environment_voxel_topic`と
 `self_recognition.filtered_environment_voxel_topic`、後段の購読先は

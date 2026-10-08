@@ -118,6 +118,7 @@ function homePose(){const p=Object.fromEntries(robot.actuated.map(j=>[j.name,0])
 function presetPose(name){const p=homePose();if(name==='ready'){Object.assign(p,{L_joint1:-.18,R_joint1:.18,L_joint2:-1.35,R_joint2:1.35,L_joint4:-1.15,R_joint4:1.15,L_joint6:.4,R_joint6:-.4,L_gripper_joint:.32,R_gripper_joint:.32});}if(name==='spread'){Object.assign(p,{L_joint2:-.65,R_joint2:.65,L_joint4:-.65,R_joint4:.65,L_joint6:.35,R_joint6:-.35});}return p;}
 let motion_req=0,motion_requires_physics=false;
 async function run_motion(begin){
+ if(robot.pose_source==='ros'){toast('ROS追従中です。シミュレータ操作へ切り替えてください');return;}
  stopPlayback();const req=motion_req;
  try{const has_physics=physics_panel.socket?await physics_panel.prepare_motion():false;if(req!==motion_req)return;motion_requires_physics=has_physics;begin();}
  catch(error){if(req===motion_req)toast('動作を開始できません：'+error.message);}
@@ -203,7 +204,7 @@ function bindUI(){
 }
 
 function updateIK(dt){
- if(!activeTarget||playing)return false;
+ if(robot.pose_source==='ros'||!activeTarget||playing)return false;
  const side=activeSide,hold=$('hold-orientation').checked,chain=robot.chain(side),before=chain.map(j=>j.q),start=performance.now();
  if(targetDirty[side]||!ikGoals[side]){
   // Solve a stable destination, then interpolate to it; avoid re-solving intermediate
@@ -293,7 +294,7 @@ async function init(){
   $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');$('load-status').textContent='LOCAL · READY';
   ready=true;diagnostics.ready=true;toast('手先の矢印をドラッグして操作できます');
   window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,ros_results,color_camera_panel,get physics_panel(){return physics_panel;},diagnostics,keyframes,
-   apply_ros_pose:pose=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;robot.setPose(pose);syncTargets();renderer.shadowMap.needsUpdate=true;},
+   apply_ros_pose:pose=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;robot.set_received_pose(pose);syncTargets();renderer.shadowMap.needsUpdate=true;},
    set_robot_placement:values=>{stopPlayback();activeTarget=false;robot.position.fromArray(values);robot.quaternion.setFromEuler(new THREE.Euler(...values.slice(3).map(v=>v*RAD),'ZYX'));robot.updateMatrixWorld(true);syncTargets();renderer.shadowMap.needsUpdate=true;},setSide,setMode,solveIK,homePose,presetPose,animatePose,syncTargets,validatePose,switchModel,
    getState:()=>({ready,model:model.id,modelTitle:model.title,source:model.urdf,switchingModel,activeSide,mode,workspace:workspace?.getState(),rgbd:rgbd?.lastSummary,dragging:gizmo.dragging,playing:!!playing,quality:$('quality').value,holdOrientation:$('hold-orientation').checked,appearance:{greenBaseHex:'#'+materials.green.color.getHexString(),toneMapping:'Neutral, chroma preserved',logo:'branding/FuzzRoBo-logo.png'},joints:robot.getPose(),tcp:Object.fromEntries(['L','R'].map(s=>{const p=robot.tcp(s);return[s,{position:p.position.toArray(),quaternion:p.quaternion.toArray(),target:targets[s].position.toArray(),errorMm:p.position.distanceTo(targets[s].position)*1000,errorDeg:orientationError(targets[s].quaternion,p.quaternion).length()*DEG}]})),diagnostics:{...diagnostics},triangles:robot.triangles}),
    setTarget:(side,xyz,rpy)=>{setSide(side);targets[side].position.fromArray(xyz);if(rpy){targets[side].quaternion.setFromEuler(new THREE.Euler(...rpy,'ZYX'));$('hold-orientation').checked=true;}targetDirty[side]=true;activeTarget=true;solveFrames=0;syncTargetInputs();},

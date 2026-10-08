@@ -76,6 +76,41 @@ export function configure_node_material(material: THREE.MeshStandardMaterial) {
     return material;
 }
 
+type instance_cache = {
+    positions: Float64Array;
+    scale: number;
+    matrix_attribute: THREE.InstancedBufferAttribute;
+    matrix_version: number;
+    colors: string[];
+    color_attribute: THREE.InstancedBufferAttribute | null;
+    color_version: number;
+};
+const node_instance_cache = new WeakMap<THREE.InstancedMesh, instance_cache>();
+const edge_instance_cache = new WeakMap<THREE.InstancedMesh, instance_cache>();
+
+/** 前回の表示入力。属性差替え・外部更新時は再生成。 */
+function get_instance_cache(mesh: THREE.InstancedMesh, caches: WeakMap<THREE.InstancedMesh, instance_cache>, num_values: number) {
+    let cache = caches.get(mesh);
+    if (!cache || cache.positions.length < num_values || cache.matrix_attribute !== mesh.instanceMatrix ||
+        cache.matrix_version !== mesh.instanceMatrix.version || cache.color_attribute !== mesh.instanceColor ||
+        cache.color_version !== (mesh.instanceColor?.version ?? -1)) {
+        cache = { positions: new Float64Array(num_values).fill(NaN), scale: NaN,
+            matrix_attribute: mesh.instanceMatrix, matrix_version: mesh.instanceMatrix.version,
+            colors: [], color_attribute: mesh.instanceColor, color_version: mesh.instanceColor?.version ?? -1 };
+        caches.set(mesh, cache);
+    }
+    return cache;
+}
+
+/** 変更のある属性だけのGPU転送要求。 */
+function finish_instance_update(mesh: THREE.InstancedMesh, cache: instance_cache, has_matrix_changes: boolean, has_color_changes: boolean) {
+    if (has_matrix_changes) mesh.instanceMatrix.needsUpdate = true;
+    if (has_color_changes && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    cache.matrix_version = mesh.instanceMatrix.version;
+    cache.color_attribute = mesh.instanceColor;
+    cache.color_version = mesh.instanceColor?.version ?? -1;
+}
+
 /** GNGノードInstancedMeshの姿勢・色の更新。 */
 export function updateNodeInstances(
     mesh: THREE.InstancedMesh,
@@ -96,26 +131,35 @@ export function updateNodeInstances(
     const palette = buildNodePalette(options?.baseColor, options?.palette);
     const useSemanticColors = options?.useSemanticColors ?? true;
     mesh.count = nodes.length;
+    const cache = get_instance_cache(mesh, node_instance_cache, nodes.length * 3);
+    const has_scale_changes = cache.scale !== nodeScale;
+    let has_matrix_changes = false, has_color_changes = false;
 
     nodes.forEach((node, i) => {
-        tempMatrix.makeTranslation(node.x, node.y, node.z);
-        tempVec3.set(nodeScale, nodeScale, nodeScale);
-        tempMatrix.scale(tempVec3);
-        mesh.setMatrixAt(i, tempMatrix);
+        const offset = i * 3, previous = cache.positions;
+        if (has_scale_changes || previous[offset] !== node.x || previous[offset + 1] !== node.y || previous[offset + 2] !== node.z) {
+            tempMatrix.makeTranslation(node.x, node.y, node.z);
+            tempVec3.set(nodeScale, nodeScale, nodeScale);
+            tempMatrix.scale(tempVec3);
+            mesh.setMatrixAt(i, tempMatrix);
+            previous[offset] = node.x; previous[offset + 1] = node.y; previous[offset + 2] = node.z;
+            has_matrix_changes = true;
+        }
 
         const colorHex = options?.node_colors?.get(node) ?? (colorMode === 'uniform'
             ? uniformColor
             : (() => {
                 return resolveGraphNodeColor(node, palette, i, useSemanticColors);
             })());
-        tempColor.set(colorHex);
-        mesh.setColorAt(i, tempColor);
+        if (cache.colors[i] !== colorHex) {
+            tempColor.set(colorHex);
+            mesh.setColorAt(i, tempColor);
+            cache.colors[i] = colorHex;
+            has_color_changes = true;
+        }
     });
-
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) {
-        mesh.instanceColor.needsUpdate = true;
-    }
+    cache.scale = nodeScale;
+    finish_instance_update(mesh, cache, has_matrix_changes, has_color_changes);
 }
 
 /**
@@ -134,6 +178,9 @@ export function updateEdgeInstances(
         : 0.001;
     const edgePairCount = Math.floor(edges.length / 2);
     mesh.count = edgePairCount;
+    const cache = get_instance_cache(mesh, edge_instance_cache, edgePairCount * 6);
+    const has_scale_changes = cache.scale !== safeEdgeWidth;
+    let has_matrix_changes = false, has_color_changes = false;
 
     for (let i = 0; i < edgePairCount; i++) {
         const srcIdx = edges[i * 2];
@@ -142,16 +189,30 @@ export function updateEdgeInstances(
         if (srcIdx >= nodes.length || tgtIdx >= nodes.length) {
             tempMatrix.identity().scale(tempVec3.set(0, 0, 0));
             mesh.setMatrixAt(i, tempMatrix);
+            cache.positions.fill(NaN, i * 6, i * 6 + 6);
+            has_matrix_changes = true;
             continue;
         }
 
         const srcNode = nodes[srcIdx];
         const tgtNode = nodes[tgtIdx];
         if (node_colors || mesh.instanceColor) {
-            tempColor.set(node_colors?.get(srcNode.id ?? srcIdx) ?? '#ffffff');
-            mesh.setColorAt(i, tempColor);
+            const color = node_colors?.get(srcNode.id ?? srcIdx) ?? '#ffffff';
+            if (cache.colors[i] !== color) {
+                tempColor.set(color);
+                mesh.setColorAt(i, tempColor);
+                cache.colors[i] = color;
+                has_color_changes = true;
+            }
         }
 
+        const offset = i * 6, previous = cache.positions;
+        if (!has_scale_changes && previous[offset] === srcNode.x && previous[offset + 1] === srcNode.y &&
+            previous[offset + 2] === srcNode.z && previous[offset + 3] === tgtNode.x &&
+            previous[offset + 4] === tgtNode.y && previous[offset + 5] === tgtNode.z) continue;
+        previous[offset] = srcNode.x; previous[offset + 1] = srcNode.y; previous[offset + 2] = srcNode.z;
+        previous[offset + 3] = tgtNode.x; previous[offset + 4] = tgtNode.y; previous[offset + 5] = tgtNode.z;
+        has_matrix_changes = true;
         startVec.set(srcNode.x, srcNode.y, srcNode.z);
         endVec.set(tgtNode.x, tgtNode.y, tgtNode.z);
 
@@ -169,8 +230,8 @@ export function updateEdgeInstances(
         mesh.setMatrixAt(i, tempMatrix);
     }
 
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    cache.scale = safeEdgeWidth;
+    finish_instance_update(mesh, cache, has_matrix_changes, has_color_changes);
 }
 
 /** 確定した人・車の所属ノードID別ラベル。元ノードの幾何ラベルの変更なし。 */

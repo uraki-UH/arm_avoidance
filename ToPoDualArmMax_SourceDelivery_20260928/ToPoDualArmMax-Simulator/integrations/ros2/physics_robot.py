@@ -149,3 +149,10 @@ class PhysicsRobot:
 
     def state(self):
         return {name: float(self.data.qpos[idx]) for name, idx in self.state_entries}
+
+    def motion_state(self):
+        """関節速度と関節自由度へ作用するアクチュエータ駆動力。接触力を除外。"""
+        return {
+            'velocity': {name: float(self.data.qvel[self.model.jnt_dofadr[idx]]) for name, idx in self.ids.items()},
+            'effort': {name: float(self.data.qfrc_actuator[self.model.jnt_dofadr[idx]]) for name, idx in self.ids.items()},
+        }

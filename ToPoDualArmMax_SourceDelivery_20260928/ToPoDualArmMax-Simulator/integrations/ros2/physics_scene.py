@@ -21,7 +21,7 @@ def text(values):
 
 
 class PhysicsScene:
-    def __init__(self, bodies, robot=None):
+    def __init__(self, bodies, robot=None, avoidance=None):
         import mujoco
         self.mujoco = mujoco
         if not isinstance(bodies, list) or not 0 <= len(bodies) <= 512:
@@ -77,6 +77,12 @@ class PhysicsScene:
             self.robot.bind(self.model, self.data)
         self.body_ids = {name: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in ids}
         mujoco.mj_forward(self.model, self.data)
+        self.avoidance = None
+        if avoidance and avoidance.get('mode', 'none') != 'none':
+            if avoidance.get('mode') != 'oscbf' or not self.robot:
+                raise ValueError('OSCBFには関節動力学ロボットが必要です')
+            from oscbf_avoidance import create_filter
+            self.avoidance = create_filter(self, avoidance)
 
     def move(self, poses):
         if not isinstance(poses, list) or len(poses) > 512:
@@ -89,9 +95,13 @@ class PhysicsScene:
             self.data.mocap_quat[idx] = quaternion(pose['quaternion'])
 
     def step(self):
+        if self.avoidance:
+            self.avoidance.update()
         for _ in range(5):
             if self.robot:
                 self.robot.control()
+                if self.avoidance:
+                    self.avoidance.apply()
             self.mujoco.mj_step(self.model, self.data)
         self.mujoco.mj_forward(self.model, self.data)
         poses = []
@@ -99,4 +109,4 @@ class PhysicsScene:
             idx = self.body_ids[name]
             q = self.data.xquat[idx]
             poses.append(dict(id=name, position=self.data.xpos[idx].tolist(), quaternion=[*q[1:].tolist(), float(q[0])]))
-        return dict(type='physics', time_sec=float(self.data.time), contacts=int(self.data.ncon), poses=poses, joints=self.robot.state() if self.robot else None)
+        return dict(avoidance=self.avoidance.status if self.avoidance else None, type='physics', time_sec=float(self.data.time), contacts=int(self.data.ncon), poses=poses, joints=self.robot.state() if self.robot else None, motion=self.robot.motion_state() if self.robot else None)

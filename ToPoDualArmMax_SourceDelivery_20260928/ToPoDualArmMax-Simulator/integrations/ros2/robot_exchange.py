@@ -16,6 +16,10 @@ def validate_state(state):
     pose = state.get('robot_pose')
     if not isinstance(pose, dict) or len(pose) > 64 or any(not isinstance(k, str) or type(v) not in (int, float) or not math.isfinite(v) for k, v in pose.items()):
         raise ValueError('関節状態が不正です')
+    for field in ('joint_velocity', 'joint_effort'):
+        values = state.get(field)
+        if values is not None and (not isinstance(values, dict) or set(values) != set(pose) or any(type(v) not in (int, float) or not math.isfinite(v) for v in values.values())):
+            raise ValueError('関節速度・駆動力が不正です')
     transforms = state.get('transforms')
     if not isinstance(transforms, list) or not 1 <= len(transforms) <= 256:
         raise ValueError('TFの数が不正です')
@@ -129,6 +133,10 @@ class RobotExchange:
         joints.header.stamp, joints.header.frame_id = stamp, 'base_footprint'
         joints.name = list(state['robot_pose'])
         joints.position = list(map(float, state['robot_pose'].values()))
+        for field in ('velocity', 'effort'):
+            values = state.get('joint_' + field)
+            if values is not None:
+                setattr(joints, field, [float(values[name]) for name in joints.name])
         if 'joints' in outputs:
             self.joints.publish(joints)
         if self.model != state['robot_model']:

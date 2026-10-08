@@ -81,7 +81,6 @@ interface SidebarContentProps {
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
     unsubscribeSource: (sourceId: string, removeLayer?: boolean) => Promise<{ success: boolean; sourceId: string }>;
-    onSourceToggled: (sourceId: string, active: boolean) => void;
     onLoadCloud: (data: PointCloudData) => void;
 
     listRosbags: () => Promise<RosbagInfo[]>;
@@ -245,7 +244,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     stopGng={props.stopGng}
                     getGngStatus={props.getGngStatus}
                     listGngConfigs={props.listGngConfigs}
-                    onSourceToggled={props.onSourceToggled}
                 />
             </section>
 

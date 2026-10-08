@@ -87,8 +87,8 @@ def restart_existing(port, bridge_port):
 
 
 def bridge_revision():
-    return tuple((Path(__file__).parent / name).stat().st_mtime_ns for name in
-                 ('pointcloud_bridge.py', 'robot_exchange.py', 'depth_output.py', 'joint_stream.py', 'physics_scene.py', 'physics_stream.py', 'physics_robot.py'))
+    names = ('pointcloud_bridge.py', 'robot_exchange.py', 'depth_output.py', 'joint_stream.py', 'physics_scene.py', 'physics_stream.py', 'physics_robot.py', 'oscbf_avoidance/__init__.py', 'oscbf_avoidance/filter.py', 'oscbf_avoidance/defaults.json')
+    return tuple((Path(__file__).parent / name).stat().st_mtime_ns for name in names)
 
 
 def ensure_services(args):

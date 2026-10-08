@@ -4,6 +4,7 @@
 #include <ais_gng/plugin/visualize_filter.hpp>
 #include <ais_gng/plugin/cluster_classification.hpp>
 #include <ais_gng/point_selection.hpp>
+#include <ais_gng/self_point_filter.hpp>
 
 #include <fuzzrobo/libgng/api.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -160,6 +161,16 @@ class AiSGNGComponent : public rclcpp::Node {
     PointSamplingMode sampled_mode_{PointSamplingMode::Head};
     bool sampled_indices_valid_{false};
     uint32_t sampling_frame_{};
+    bool enable_self_filter_{false};
+    double max_self_mask_age_sec_{0.5};
+    rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr self_mask_sub_;
+    rclcpp::Publisher<PC2>::SharedPtr self_labelled_pub_;
+    voxel_msgs::msg::Voxel::ConstSharedPtr self_mask_message_;
+    std::shared_ptr<self_point_filter::mask_snapshot> self_mask_;
+    std::vector<uint8_t> self_label_buffer_;
+    std::unique_ptr<tf2_ros::Buffer> input_transform_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> input_transform_listener_;
+    bool prepare_self_filter(const PC2 &cloud, Eigen::Isometry3d &mask_from_cloud);
     std::vector<uint8_t> semantic_label_buffer_;
     std::vector<uint32_t> source_point_index_buffer_;
 

@@ -21,7 +21,7 @@ def physics_handler(origins, clients):
             try:
                 value = json.loads(raw)
                 if value['type'] == 'start' and self.scene is None:
-                    self.scene = PhysicsScene(value['bodies'], value.get('robot'))
+                    self.scene = PhysicsScene(value['bodies'], value.get('robot'), value.get('avoidance'))
                     self.timer = tornado.ioloop.PeriodicCallback(self.step, 10)
                     self.timer.start()
                     self.write_message({'type': 'ready', 'engine': 'MuJoCo', 'timestep_sec': .002})
@@ -31,7 +31,7 @@ def physics_handler(origins, clients):
                         self.scene.robot.targets = self.scene.robot.validate(value['joints'])
                 else:
                     raise ValueError('未対応の物理操作です')
-            except (ValueError, TypeError, KeyError, ImportError) as error:
+            except (ValueError, TypeError, KeyError, ImportError, RuntimeError) as error:
                 self.write_message({'type': 'error', 'error': str(error)})
                 self.close()
 

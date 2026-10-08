@@ -49,7 +49,9 @@ RPC・stream・ROS topicの追加なし。[操作と範囲](../doc/MESH_MODELS.m
 { "type": "stream.robot.delete", "tag": "sim_ToPoDualArm" }
 ```
 
-削除対象: 該当ロボットの描画データと未描画の姿勢更新。表示設定のリセットなし。同じ`tag`の新しいdescriptionによる再表示。ROS発見情報の反映遅延あり。
+削除対象: 該当ロボットの描画データ・モデルキャッシュ・未描画の姿勢更新・入力一覧の項目。表示設定のリセットなし。同じ`tag`の新しいdescriptionで入力を再登録し、選択済みの場合に再表示。description未受信時のpose単独登録なし。ROS発見情報の反映遅延あり。
+
+Viewer内の入力選択: `robot:<tag>` を論理入力IDとしてTopics一覧へ追加し、初期状態は未選択。descriptionと最新poseを保持し、選択したロボットのみScene Layersへ反映。これはフロントエンド内のIDであり、ROSトピック名や `sources.setActive` の引数への追加なし。チェック解除はこの画面の描画を停止し、ゲートウェイの共有購読を維持。
 
 ### Point Cloud Metadata
 ```json

@@ -20,12 +20,13 @@ function body_description(id,group,mode,mass=.2){
 export class PhysicsPanel {
  constructor({environment,robot,scene}){
   this.environment=environment;this.robot=robot;this.scene=scene;this.socket=null;this.latest=null;this.last_ms=0;this.robot_model=null;this.kinematic=[];
-  const controls=document.createElement('section');controls.innerHTML=`<h2>MuJoCo</h2><label>ロボット<select id="physics-robot-mode"><option value="dynamic">関節動力学（基台固定）</option><option value="kinematic">姿勢指定（接触のみ）</option></select></label><details><summary>関節固定・自己接触</summary><label><input type="checkbox" id="physics-self-collision">自己接触を計算</label><div id="physics-locks"></div></details><label>選択物体のモード<select id="physics-mode">${Object.entries(physics_modes).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label><label>質量 kg<input id="physics-mass" type="number" min="0.001" max="1000" step="0.1" value="0.2"></label><details id="physics-constraint"><summary>物体の拘束軸・範囲</summary><label>ローカル軸<select id="physics-axis"><option>X</option><option>Y</option><option selected>Z</option></select></label><label>支点 x y z（物体ローカル m）<input id="physics-pivot" value="0 0 0"></label><label>下限・上限（ヒンジ deg / スライド m）<input id="physics-range" value="-90 90"></label><button id="physics-constraint-apply">拘束を適用</button></details><div class="row-actions"><button id="physics-start">物理を開始</button><button id="physics-stop">停止</button><button id="physics-demo">落下する箱を追加</button></div><pre id="physics-status">物理OFF</pre><p class="sub-note">物体は箱近似、ロボットはURDF衝突メッシュの凸包。関節動力学はURDFの慣性・可動範囲・トルク上限を使用。固定した関節は開始時の角度を保持。物理なしの物体もセンサには映ります。編集後は停止して再開始。停止時の配置を保持。</p>`;
+  const controls=document.createElement('section');controls.innerHTML=`<h2>MuJoCo</h2><label>回避モジュール<select id="physics-avoidance"><option value="none">なし</option><option value="oscbf">OSCBF（実験・速度フィルタ）</option></select></label><label>ロボット<select id="physics-robot-mode"><option value="dynamic">関節動力学（基台固定）</option><option value="kinematic">姿勢指定（接触のみ）</option></select></label><details><summary>関節固定・自己接触</summary><label><input type="checkbox" id="physics-self-collision">自己接触を計算</label><div id="physics-locks"></div></details><label>選択物体のモード<select id="physics-mode">${Object.entries(physics_modes).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label><label>質量 kg<input id="physics-mass" type="number" min="0.001" max="1000" step="0.1" value="0.2"></label><details id="physics-constraint"><summary>物体の拘束軸・範囲</summary><label>ローカル軸<select id="physics-axis"><option>X</option><option>Y</option><option selected>Z</option></select></label><label>支点 x y z（物体ローカル m）<input id="physics-pivot" value="0 0 0"></label><label>下限・上限（ヒンジ deg / スライド m）<input id="physics-range" value="-90 90"></label><button id="physics-constraint-apply">拘束を適用</button></details><div class="row-actions"><button id="physics-start">物理を開始</button><button id="physics-stop">停止</button><button id="physics-demo">落下する箱を追加</button></div><pre id="physics-status">物理OFF</pre><p class="sub-note">物体は箱近似、ロボットはURDF衝突メッシュの凸包。関節動力学はURDFの慣性・可動範囲・トルク上限を使用。固定した関節は開始時の角度を保持。物理なしの物体もセンサには映ります。編集後は停止して再開始。停止時の配置を保持。</p>`;
   $('physics-panel').append(controls);environment.physics_panel=this;
   $('physics-mode').onchange=()=>{const item=environment.selected;if(item)this.set_object_mode([item],$('physics-mode').value);};
   $('physics-mass').onchange=()=>{const item=environment.selected;const mass=Number($('physics-mass').value);if(item&&Number.isFinite(mass)&&mass>=.001&&mass<=1000){this.stop();item.physics={...(item.physics||{}),mode:item.physics?.mode||'none',mass};}};
   $('physics-constraint-apply').onclick=()=>{const item=environment.selected;if(!item)return;const pivot=$('physics-pivot').value.trim().split(/\s+/).map(Number),range=$('physics-range').value.trim().split(/\s+/).map(Number),axis=[0,0,0];axis[$('physics-axis').selectedIndex]=1;if(pivot.length!==3||range.length!==2||![...pivot,...range].every(Number.isFinite)||range[0]>=range[1]||range[0]>0||range[1]<0){$('physics-status').textContent='拘束値が不正です。範囲は0を含む昇順で指定してください';return;}this.stop();item.physics.constraint={axis,pivot,range:range.map(x=>item.physics.mode==='hinge'?x*Math.PI/180:x)};};
   $('physics-robot-mode').onchange=()=>this.set_robot_mode(this.robot(),$('physics-robot-mode').value);$('physics-self-collision').onchange=()=>this.stop();
+  $('physics-avoidance').onchange=()=>this.stop();
   $('physics-start').onclick=()=>this.start();$('physics-stop').onclick=()=>this.stop();
   $('physics-demo').onclick=()=>{this.stop();const item=environment.add('box',[0,0]);if(item){item.group.position.z=.35;item.physics={mode:'dynamic',mass:.2};environment.syncObject();environment.changed();this.start();}};
   const previous=environment.onChange;environment.onChange=()=>{previous?.();if(this.socket&&JSON.stringify(environment.getState())!==this.scene_signature)this.stop('配置変更のため停止。再開始で反映します');};
@@ -53,11 +54,12 @@ export class PhysicsPanel {
   return true;
  }
  stop(message='物理OFF'){
-  const socket=this.socket;this.socket=null;if(socket)socket.close();this.latest=null;this.scene.userData.physics_time_sec=null;$('physics-status').textContent=message;
+  const socket=this.socket;this.socket=null;if(socket)socket.close();this.latest=null;this.scene.userData.physics_time_sec=null;this.motion_state=null;$('physics-status').textContent=message;
   this.environment.object_interaction?.refresh();
  }
  start(){
   this.stop();
+  if(this.robot().pose_source==='ros'){$('physics-status').textContent='ROS追従中です。姿勢の入力元をシミュレータ操作へ切り替えてください';return;}
   try{
    const environment=this.environment,robot=this.robot();this.robot_model=robot;this.targets=robot.getPose();this.actual={...this.targets};this.base_signature=JSON.stringify([robot.position.toArray(),robot.quaternion.toArray()]);
    environment.setEditing(false);const bodies=[];this.kinematic=[];
@@ -70,7 +72,7 @@ export class PhysicsPanel {
    const endpoint=new URL($('ros-endpoint').value);endpoint.protocol=endpoint.protocol==='https:'?'wss:':'ws:';endpoint.port=String(Number(endpoint.port||8879)+1);endpoint.pathname='/physics';endpoint.search='';endpoint.hash='';
    this.scene_signature=JSON.stringify(environment.getState());
    const socket=this.socket=new WebSocket(endpoint);
-   socket.onopen=()=>{if(this.socket===socket)socket.send(JSON.stringify({type:'start',bodies,robot:robot_config}));};
+   socket.onopen=()=>{if(this.socket===socket)socket.send(JSON.stringify({type:'start',bodies,robot:robot_config,avoidance:{mode:$('physics-avoidance').value}}));};
    socket.onmessage=event=>{if(this.socket!==socket)return;try{const value=JSON.parse(event.data);if(value.type==='error')throw Error(value.error);if(value.type==='physics')this.latest=value;if(value.type==='ready')$('physics-status').textContent='MuJoCo接続済み';}catch(error){this.stop('物理エラー：'+error.message);}};
    socket.onerror=()=>{if(this.socket===socket)this.stop('物理ブリッジに接続できません。一括起動とMuJoCoの導入を確認してください');};
    socket.onclose=()=>{if(this.socket===socket)this.stop('物理接続が切れました');};
@@ -108,8 +110,8 @@ export class PhysicsPanel {
   if(this.base_signature!==JSON.stringify([current_robot.position.toArray(),current_robot.quaternion.toArray()])){this.stop('基台配置の変更により停止。再開始で反映します');return;}
   this.sync_robot_pose();
   if(this.latest){
-   const frame=this.latest;this.latest=null;
-   if(frame.joints){this.actual_joints=frame.joints;for(const [name,value] of Object.entries(frame.joints))current_robot.setJoint(name,value,false);current_robot.updateMatrixWorld(true);this.actual=current_robot.getPose();}
+   const frame=this.latest;this.latest=null;if(frame.avoidance)$('physics-status').textContent=`MuJoCo · OSCBF · ${frame.avoidance.solve_ms.toFixed(1)} ms · 近接 ${frame.avoidance.num_constraints} 組`;
+   if(frame.joints){this.motion_state=frame.motion??null;this.actual_joints=frame.joints;for(const [name,value] of Object.entries(frame.joints))current_robot.setJoint(name,value,false);current_robot.updateMatrixWorld(true);this.actual=current_robot.getPose();}
    for(const pose of frame.poses){
     const item=this.environment.items.find(x=>'object_'+x.id===pose.id);
     if(!item){this.stop('物体構成変更のため停止');return;}

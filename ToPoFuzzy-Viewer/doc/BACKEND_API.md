@@ -37,7 +37,7 @@ This document describes the **v2** WebSocket API exposed by `viewer_ws_gateway_n
 
 ### `stream.robot.delete`
 
-ロボットdescription配信元の消失時に、対象`tag`のキャッシュ削除と描画終了を通知。他のロボットは保持。再起動後は新しいdescriptionで再表示。[判定・メッセージ形式](../common/ws_protocol_v2.md#robot-lifecycle)。
+ロボットdescription配信元の消失時に、対象`tag`のキャッシュ削除と描画終了を通知。他のロボットは保持。再起動後は新しいdescriptionで入力一覧へ再登録し、選択済みの場合に再表示。[判定・メッセージ形式](../common/ws_protocol_v2.md#robot-lifecycle)。
 
 ### `stream.pointcloud.meta`
 Published before each binary cloud frame.

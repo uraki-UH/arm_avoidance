@@ -62,6 +62,10 @@ def generate_launch_description():
         'enable_grasp_attention', default_value='auto',
         description='把持候補近傍の重点学習。autoはYAML設定、未指定は無効（CPU専用）'
     )
+    declar_self_mask_topic = DeclareLaunchArgument(
+        'self_mask_topic', default_value='',
+        description='自己点除外用Voxelマスク。空文字はYAML設定（未設定時OFF）'
+    )
     declar_source_point_cloud_topic = DeclareLaunchArgument(
         'source_point_cloud_topic',
         default_value='auto',
@@ -162,6 +166,9 @@ def generate_launch_description():
         # センサ設定と短名変換の統合。同一セレクターへの展開による共通設定との優先順維持。
         parameters = [surface_config_path, gng_parameters]
         launch_parameter_overrides = {}
+        self_mask_topic = LaunchConfiguration('self_mask_topic').perform(context).strip()
+        if self_mask_topic:
+            launch_parameter_overrides['self_filter.mask_topic'] = self_mask_topic
         grasp_attention = LaunchConfiguration('enable_grasp_attention').perform(context)
         if grasp_attention != 'auto':
             enable_grasp_attention = parse_bool(grasp_attention, 'enable_grasp_attention')
@@ -309,6 +316,7 @@ def generate_launch_description():
         declar_input_topic,
         declar_base_frame_id,
         declar_enable_grasp_attention,
+        declar_self_mask_topic,
         declar_source_point_cloud_topic,
         declar_source_camera_info_topic,
         declar_plane_params_file,

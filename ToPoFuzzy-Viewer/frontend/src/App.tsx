@@ -1,3 +1,4 @@
+import { robot_source_id } from './utils/stream_sources';
 import { ViewerEnvironment, type viewer_host, type scene_surface_props } from './embedding';
 import { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import * as THREE from 'three';
@@ -214,7 +215,6 @@ function App({ host }: { host?: viewer_host } = {}) {
         error: wsError,
         connect,
         disconnect,
-        deleteGraphLayer,
         sources,
         getSources,
         subscribeSource,
@@ -334,19 +334,12 @@ function App({ host }: { host?: viewer_host } = {}) {
     };
 
     const removeEntity = (type: EntityType, tag: string) => {
-        if (is_read_only) { updateEntitySettings(type, tag, { visible: false }); return; }
-        const updaters: Record<string, any> = { robot: setRobotSettings, marker: setMarkerSettings, voxel: setVoxelSettings };
-        updaters[type]?.((prev: any) => { const n = { ...prev }; delete n[tag]; return n; });
-
-        // Also unsubscribe from the stream if it's a streamable entity
-        if (type === 'marker' || type === 'voxel') {
-            unsubscribeSource(tag, true);
-        }
+        const source_id = type === 'robot' ? robot_source_id(tag) : tag;
+        void unsubscribeSource(source_id, true).catch(error => console.warn('入力の解除に失敗しました:', error));
     };
 
     const removeLayer = (tag: string) => {
-        if (is_read_only) { handleUpdateLayerSettings(tag, { visible: false }); return; }
-        deleteGraphLayer(tag);
+        void unsubscribeSource(tag, true).catch(error => console.warn('入力の解除に失敗しました:', error));
         removeLayerSettings(tag);
     };
 
@@ -365,7 +358,6 @@ function App({ host }: { host?: viewer_host } = {}) {
         return aggregated;
   }, [getZoneCounts, graphData, layerSettings]);
 
-    const [disabledSourceIds, setDisabledSourceIds] = useState<Set<string>>(new Set());
 
     const [selectedClusterSnapshot, setSelectedClusterSnapshot] = useState<ClusterSnapshot | null>(null);
     const [is_inspecting, set_is_inspecting] = useState(false);
@@ -440,7 +432,6 @@ function App({ host }: { host?: viewer_host } = {}) {
             let changed = false;
 
             Object.values(wsPointClouds).forEach((cloud) => {
-                if (disabledSourceIds.has(cloud.id)) return;
                 if (isEditMode && editLayerId === cloud.id) return;
 
                 const index = next.findIndex((pc) => pc.id === cloud.id);
@@ -478,7 +469,7 @@ function App({ host }: { host?: viewer_host } = {}) {
 
             return changed ? next : prev;
         });
-    }, [wsPointClouds, disabledSourceIds, pointCloudOpacity, isEditMode, editLayerId]);
+    }, [wsPointClouds, pointCloudOpacity, isEditMode, editLayerId]);
 
     useEffect(() => {
         for (const [id, settings] of point_cloud_view_settings_ref.current) {
@@ -509,7 +500,6 @@ function App({ host }: { host?: viewer_host } = {}) {
         if (isEditMode) return;
         point_cloud_view_settings_ref.current.delete(id);
         update_point_cloud_display(id, null);
-        setDisabledSourceIds((prev) => new Set(prev).add(id));
         setPointClouds((prev) => {
             const filtered = prev.filter((pc) => pc.id !== id);
             if (selectedLayerId === id) {
@@ -528,20 +518,6 @@ function App({ host }: { host?: viewer_host } = {}) {
         setPointClouds((prev) => prev.map((pc) => (
             pc.id === id ? { ...pc, visible: !pc.visible } : pc
         )));
-    };
-
-    const handleSourceToggled = (sourceId: string, active: boolean) => {
-        if (isEditMode) return;
-        if (active) {
-            setDisabledSourceIds((prev) => {
-                const next = new Set(prev);
-                next.delete(sourceId);
-                return next;
-            });
-            return;
-        }
-
-        setDisabledSourceIds((prev) => new Set(prev).add(sourceId));
     };
 
     const handleUpdateTransform = (id: string, updates: Partial<PointCloudData>) => {
@@ -570,7 +546,7 @@ function App({ host }: { host?: viewer_host } = {}) {
     const selectedCloud = pointClouds.find((pc) => pc.id === selectedLayerId);
     const renderClouds = isEditMode && editLayerId
         ? pointClouds.filter((pc) => pc.id === editLayerId)
-        : pointClouds.filter((pc) => !disabledSourceIds.has(pc.id));
+        : pointClouds;
 
     const [boundsBuffer, setBoundsBuffer] = useState<ReturnType<typeof calculateBounds>[]>([]);
     const [smoothedBounds, setSmoothedBounds] = useState<ReturnType<typeof calculateBounds> | undefined>(undefined);
@@ -669,7 +645,6 @@ function App({ host }: { host?: viewer_host } = {}) {
                             getSources={getSources}
                             subscribeSource={subscribeSource}
                             unsubscribeSource={unsubscribeSource}
-                            onSourceToggled={handleSourceToggled}
                             onLoadCloud={handleAddPointCloud}
                             listRosbags={listRosbags}
                             playRosbag={playRosbag}
@@ -807,7 +782,7 @@ function App({ host }: { host?: viewer_host } = {}) {
                                     ...defaultSettings,
                                     ...(data === voxelData && is_auxiliary_voxel_layer(tag) ? { visible: false } : {}),
                                 };
-                                if (!s.visible || disabledSourceIds.has(tag)) return null;
+                                if (!s.visible) return null;
                                 const tf = d.frameId && d.frameId !== 'world' ? (transforms[d.frameId] ?? null) : null;
                                 return component(tag, d, s, tf);
                             })
@@ -815,7 +790,7 @@ function App({ host }: { host?: viewer_host } = {}) {
 
                         {Object.entries(graphData).map(([tag, data]) => {
                             const settings = layerSettings[tag];
-                            if (!settings || !settings.visible || disabledSourceIds.has(tag)) return null;
+                            if (!settings || !settings.visible) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
                             return <GraphRenderer key={tag} tag={tag} data={data} settings={settings} tf={tf}
                                 selectedClusterId={selectedClusterSnapshot?.source_id === tag && selectedClusterSnapshot.selection.kind === 'cluster'

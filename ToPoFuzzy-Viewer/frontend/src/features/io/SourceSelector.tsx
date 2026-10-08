@@ -14,7 +14,6 @@ interface SourceSelectorProps {
     stopGng: () => Promise<{ success: boolean }>;
     getGngStatus: () => Promise<GngStatus>;
     listGngConfigs: () => Promise<GngConfigInfo[]>;
-    onSourceToggled?: (sourceId: string, active: boolean) => void;
 }
 
 export function SourceSelector({
@@ -29,8 +28,8 @@ export function SourceSelector({
     stopGng,
     getGngStatus,
     listGngConfigs,
-    onSourceToggled
 }: SourceSelectorProps) {
+    const [pending_sources, set_pending_sources] = useState<Set<string>>(new Set());
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [processingSource, setProcessingSource] = useState<string | null>(null);
@@ -93,6 +92,8 @@ export function SourceSelector({
     }, [isConnected, refreshSources, refreshGngStatus, refreshConfigs, is_read_only]);
 
     const handleToggleSource = async (source: DataSource) => {
+        set_pending_sources(prev => new Set(prev).add(source.id));
+        setError(null);
         try {
             if (source.active) {
                 await unsubscribeSource(source.id, true);
@@ -100,11 +101,11 @@ export function SourceSelector({
                 await subscribeSource(source.id);
             }
 
-            const nextActive = !source.active;
-            onSourceToggled?.(source.id, nextActive);
             await refreshSources();
         } catch (err) {
-            console.error('Failed to toggle source:', err);
+            setError(err instanceof Error ? err.message : '入力の選択変更に失敗しました。');
+        } finally {
+            set_pending_sources(prev => { const next = new Set(prev); next.delete(source.id); return next; });
         }
     };
 
@@ -151,7 +152,7 @@ export function SourceSelector({
             <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                     <h3 className="panel-title">Topics</h3>
-                    <span className="text-[11px] text-[var(--text-muted)]" title="選択中 / 検出トピック数">
+                    <span className="text-[11px] text-[var(--text-muted)]" title="選択中 / 検出入力数">
                         {sources.filter((source) => source.active).length} / {sources.length}
                     </span>
                 </div>
@@ -234,11 +235,12 @@ export function SourceSelector({
                                         type="checkbox"
                                         aria-label={`Topic: ${source.id}`}
                                         checked={source.active}
+                                        disabled={pending_sources.has(source.id) || !isConnected}
                                         onChange={() => handleToggleSource(source)}
                                         className="h-4 w-4 rounded border-gray-500 bg-transparent text-[var(--accent-color)] focus:ring-[var(--accent-color)]"
                                     />
                                     <span className="flex-1 truncate text-xs text-[var(--text-primary)]" title={source.id}>
-                                        {source.id}
+                                        {source.type === 'robot' ? `Robot · ${source.name}` : source.id}
                                     </span>
                                 </label>
 

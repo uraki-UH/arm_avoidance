@@ -28,6 +28,7 @@ import {
     VoxelData,
 } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { merge_robot_state, robot_source_id, stream_source_registry } from '../utils/stream_sources';
 import {
     TemplateMatchConfig,
     TemplateMatchConfigResult,
@@ -705,9 +706,8 @@ interface connection_options {
 }
 export function useWebSocket(url: string, { is_read_only = false, on_transforms, on_clear }: connection_options = {}): UseWebSocketReturn {
     const [sources, setSources] = useState<DataSource[]>([]);
-    const hidden_sources = useRef(new Set<string>());
-    const update_sources = useCallback((items: DataSource[]) => setSources(items.map(item =>
-        hidden_sources.current.has(item.id) ? { ...item, active: false } : item)), []);
+    const source_registry = useRef(new stream_source_registry());
+    const source_url = useRef(url);
     const [pointClouds, setPointClouds] = useState<Record<string, PointCloudData>>({});
     const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
@@ -720,7 +720,6 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
     const wsRef = useRef<WebSocket | null>(null);
     const relativeTransformsRef = useRef<Record<string, TransformData>>({});
 
-    const pendingTopicQueueRef = useRef<string[]>([]);
     const pointCloudFrameIdsRef = useRef<Map<string, string>>(new Map());
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
     const pendingGraphUpdatesRef = useRef<Map<string, QueuedGraphUpdate>>(new Map());
@@ -745,6 +744,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
             pendingPointCloudUpdatesRef.current.clear();
             const decoded: Record<string, PointCloudData> = {};
             for (const update of pointCloudBatch) {
+                if (!source_registry.current.is_enabled(update.layerId)) continue;
                 try {
                     decoded[update.layerId] = decodePointCloudUpdate(update);
                 } catch (parseError) {
@@ -752,7 +752,8 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                 }
             }
             if (Object.keys(decoded).length > 0) {
-                setPointClouds((prev) => ({ ...prev, ...decoded }));
+                setPointClouds(prev => ({ ...prev, ...Object.fromEntries(Object.entries(decoded)
+                    .filter(([id]) => source_registry.current.is_enabled(id))) }));
             }
         }
 
@@ -764,6 +765,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                 let changed = false;
 
                 for (const { tag, graph } of graphBatch) {
+                    if (!source_registry.current.is_enabled(tag)) continue;
                     const existing = next[tag];
                     if (existing && !graphHasChanged(existing, graph)) {
                         continue;
@@ -784,10 +786,13 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
             pending_marker_updates_ref.current.clear();
             setMarkerData(prev => {
                 const next = { ...prev };
-                for (const [tag, data] of batch) next[tag] = {
-                    ...data, visible: prev[tag]?.visible ?? true,
-                    arrow_styles: data.arrow_styles ?? prev[tag]?.arrow_styles ?? {},
-                };
+                for (const [tag, data] of batch) {
+                    if (!source_registry.current.is_enabled(tag)) continue;
+                    next[tag] = {
+                        ...data, visible: prev[tag]?.visible ?? true,
+                        arrow_styles: data.arrow_styles ?? prev[tag]?.arrow_styles ?? {},
+                    };
+                }
                 return next;
             });
             if (enable_marker_ack_ref.current) {
@@ -805,8 +810,8 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
         if (pendingTopologicalMapAppliedRef.current.size > 0) {
             const appliedTopics = Array.from(pendingTopologicalMapAppliedRef.current);
             pendingTopologicalMapAppliedRef.current.clear();
+            const expectedSocket = wsRef.current;
             window.requestAnimationFrame(() => {
-                const expectedSocket = wsRef.current;
                 const now = performance.now();
                 const delayMs = Math.max(
                     0,
@@ -835,6 +840,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                 let changed = false;
 
                 for (const { tag, voxel } of voxelBatch) {
+                    if (!source_registry.current.is_enabled(tag)) continue;
                     if (next === prev) {
                         next = { ...prev };
                     }
@@ -854,16 +860,9 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                 let changed = false;
 
                 for (const { tag, robot } of robotBatch) {
+                    if (!source_registry.current.is_enabled(robot_source_id(tag))) continue;
                     const existing = next[tag];
-                    const mergedRobot: RobotData = existing
-                        ? {
-                            ...existing,
-                            ...robot,
-                            urdf: existing.urdf ?? robot.urdf,
-                            jointNames: robot.jointNames?.length ? robot.jointNames : existing.jointNames,
-                            jointValues: robot.jointValues?.length ? robot.jointValues : existing.jointValues,
-                        }
-                        : robot;
+                    const mergedRobot = merge_robot_state(existing, robot);
 
                     if (existing && !robotHasChanged(existing, mergedRobot)) {
                         continue;
@@ -912,6 +911,55 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
         });
     }, []);
 
+    const clear_source_layer = useCallback((source_id: string) => {
+        const remove = <T,>(prev: Record<string, T>, id: string): Record<string, T> => {
+            if (!(id in prev)) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        };
+        if (source_id.startsWith('robot:')) {
+            const tag = source_id.slice('robot:'.length);
+            pendingRobotPoseUpdatesRef.current.delete(tag);
+            setRobotData(prev => remove(prev, tag));
+            return;
+        }
+        // 描画前の解除でも送信側の待機を解放。再選択時のストリーム停止の防止。
+        const socket = wsRef.current;
+        if (socket?.readyState === WebSocket.OPEN) {
+            if (pendingTopologicalMapAppliedRef.current.has(source_id)) socket.send(JSON.stringify({
+                type: 'stream.topological_map.applied', topic: source_id,
+            }));
+            if (enable_marker_ack_ref.current && pending_marker_updates_ref.current.has(source_id)) socket.send(JSON.stringify({
+                type: 'stream.marker_array.applied', topic: source_id,
+            }));
+        }
+        pendingPointCloudUpdatesRef.current.delete(source_id);
+        pointCloudFrameIdsRef.current.delete(source_id);
+        pending_marker_updates_ref.current.delete(source_id);
+        pendingVoxelUpdatesRef.current.delete(source_id);
+        voxelStreamSnapshotsRef.current.delete(source_id);
+        setPointClouds(prev => remove(prev, source_id));
+        setMarkerData(prev => remove(prev, source_id));
+        setVoxelData(prev => remove(prev, source_id));
+        clearGraphLayer(source_id);
+    }, [clearGraphLayer]);
+
+    const update_sources = useCallback((items: DataSource[]) => {
+        const registry = source_registry.current;
+        const previous_ids = [...registry.topics.keys()];
+        registry.topics = new Map(items.map(item => [item.id, item]));
+        for (const id of previous_ids) {
+            if (registry.topics.has(id)) continue;
+            registry.unavailable_sources.add(id);
+            clear_source_layer(id);
+        }
+        for (const item of items) registry.unavailable_sources.delete(item.id);
+        const next = registry.list();
+        for (const item of next) if (!item.active) clear_source_layer(item.id);
+        setSources(next);
+    }, [clear_source_layer]);
+
     const deleteGraphLayer = useCallback((tag: string) => {
         const socket = wsRef.current;
         if (is_read_only || !socket || socket.readyState !== WebSocket.OPEN) {
@@ -934,7 +982,14 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
         }
 
         try {
-            pendingTopicQueueRef.current = [];
+            if (source_url.current !== url) source_registry.current.choices.clear();
+            source_url.current = url;
+            source_registry.current.clear();
+            setSources([]);
+            setPointClouds({}); setGraphData({}); setMarkerData({}); setRobotData({}); setVoxelData({});
+            setTransforms({}); relativeTransformsRef.current = {};
+            voxelStreamSnapshotsRef.current.clear();
+            on_clear?.();
             pointCloudFrameIdsRef.current.clear();
             flushPendingWithError('WebSocket reconnected');
             pendingGraphUpdatesRef.current.clear();
@@ -988,7 +1043,12 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                     try {
                         const buffer = event.data;
                         if (isTopologicalMapPacket(buffer)) {
-                            const packet = deserializeTopologicalMap(buffer);
+                            const packet = deserializeTopologicalMap(buffer, tag => {
+                                if (source_registry.current.is_enabled(tag)) return true;
+                                socket.send(JSON.stringify({ type: 'stream.topological_map.applied', topic: tag }));
+                                return false;
+                            });
+                            if (!packet) return;
                             pendingGraphUpdatesRef.current.set(packet.tag, {
                                 tag: packet.tag,
                                 graph: mergeGraphFeatures(packet.graph),
@@ -999,11 +1059,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                             return;
                         }
                         const layerId = readPointCloudLayerId(buffer);
-
-                        // Sync the queue just in case other logic depends on it
-                        if (pendingTopicQueueRef.current.length > 0 && pendingTopicQueueRef.current[0] === layerId) {
-                            pendingTopicQueueRef.current.shift();
-                        }
+                        if (!source_registry.current.is_enabled(layerId)) return;
 
                         pendingPointCloudUpdatesRef.current.set(layerId, {
                             layerId,
@@ -1053,8 +1109,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
 
                     const handlers: Record<string, (p: any) => void> = {
                         'stream.pointcloud.meta': (p) => {
-                            if (typeof p.topic !== 'string') return;
-                            pendingTopicQueueRef.current.push(p.topic);
+                            if (typeof p.topic !== 'string' || !source_registry.current.is_enabled(p.topic)) return;
                             if (typeof p.frameId === 'string' && p.frameId.length > 0) {
                                 pointCloudFrameIdsRef.current.set(p.topic, p.frameId);
                             } else {
@@ -1069,6 +1124,10 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                         },
                         'stream.marker_array': (p) => {
                             if (!Array.isArray(p.markers)) return;
+                            if (!source_registry.current.is_enabled(tag)) {
+                                if (enable_marker_ack_ref.current) socket.send(JSON.stringify({ type: 'stream.marker_array.applied', topic: tag }));
+                                return;
+                            }
                             const markers = p.markers as MarkerMessage[];
                             const frameIds = marker_frame_ids(markers);
                             pending_marker_updates_ref.current.set(tag, {
@@ -1081,7 +1140,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                             scheduleStreamFlush();
                         },
                         'stream.marker': (p) => {
-                            if (!p.marker) return;
+                            if (!p.marker || !source_registry.current.is_enabled(tag)) return;
                             const markers = [p.marker as MarkerMessage];
                             const frameIds = marker_frame_ids(markers);
                             setMarkerData(prev => ({
@@ -1096,7 +1155,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                             }));
                         },
                         'stream.graph': (p) => {
-                            if (!p.graph) return;
+                            if (!p.graph || !source_registry.current.is_enabled(tag)) return;
                             const mergedGraph = normalize_environment_cluster_ids(tag, mergeGraphFeatures(p.graph as GraphStreamPayload));
                             pendingGraphUpdatesRef.current.set(tag, {
                                 tag,
@@ -1108,18 +1167,31 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                             if (typeof p.tag === 'string') clearGraphLayer(p.tag);
                         },
                         'stream.robot.description': (p) => {
-                            if (p.robot) setRobotData(prev => ({ ...prev, [tag]: p.robot as RobotData }));
+                            if (!p.robot) return;
+                            const registry = source_registry.current;
+                            const previous = registry.robots.get(tag);
+                            registry.robots.set(tag, p.robot as RobotData);
+                            if (!previous || previous.displayName !== p.robot.displayName) setSources(registry.list());
+                            if (registry.is_enabled(robot_source_id(tag))) setRobotData(prev =>
+                                registry.is_enabled(robot_source_id(tag)) ? { ...prev, [tag]: p.robot as RobotData } : prev);
                         },
                         'stream.robot.pose': (p) => {
                             if (!p.robot) return;
+                            const registry = source_registry.current;
+                            const previous = registry.robots.get(tag);
+                            // description受信前のpose単独登録なし。削除済みロボットの復活防止。
+                            if (!previous) return;
+                            const robot = merge_robot_state(previous, p.robot as RobotData);
+                            registry.robots.set(tag, robot);
+                            if (!registry.is_enabled(robot_source_id(tag))) return;
                             pendingRobotPoseUpdatesRef.current.set(tag, {
                                 tag,
-                                robot: p.robot as RobotData,
+                                robot,
                             });
                             scheduleStreamFlush();
                         },
                         'stream.voxel': (p) => {
-                            if (!Array.isArray(p.data) || !p.layout) return;
+                            if (!Array.isArray(p.data) || !p.layout || !source_registry.current.is_enabled(tag)) return;
                             const hasLabels =
                                 Array.isArray(p.labels) &&
                                 p.labels.length === p.data.length;
@@ -1150,7 +1222,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                             scheduleStreamFlush();
                         },
                         'stream.voxel.delta': (p) => {
-                            if (!Array.isArray(p.added) || !Array.isArray(p.removed)) {
+                            if (!source_registry.current.is_enabled(tag) || !Array.isArray(p.added) || !Array.isArray(p.removed)) {
                                 return;
                             }
                             const snapshot = voxelStreamSnapshotsRef.current.get(tag);
@@ -1202,36 +1274,13 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                         },
                         'stream.robot.delete': (p) => {
                             if (typeof p.tag !== 'string') return;
-                            pendingRobotPoseUpdatesRef.current.delete(p.tag);
-                            setRobotData(prev => {
-                                const next = { ...prev };
-                                delete next[p.tag];
-                                return next;
-                            });
+                            source_registry.current.robots.delete(p.tag);
+                            clear_source_layer(robot_source_id(p.tag));
+                            setSources(source_registry.current.list());
                         },
                         'stream.delete': (p) => {
-                            const targetId = p.topic || p.tag || p.id;
-                            if (!targetId) return;
-                            pendingPointCloudUpdatesRef.current.delete(targetId);
-                            pending_marker_updates_ref.current.delete(targetId);
-                            pendingVoxelUpdatesRef.current.delete(targetId);
-                            voxelStreamSnapshotsRef.current.delete(targetId);
-                            setPointClouds(prev => {
-                                const next = { ...prev };
-                                delete next[targetId];
-                                return next;
-                            });
-                            setVoxelData(prev => {
-                                const next = { ...prev };
-                                delete next[targetId];
-                                return next;
-                            });
-                            setMarkerData(prev => {
-                                const next = { ...prev };
-                                delete next[targetId];
-                                return next;
-                            });
-                            clearGraphLayer(targetId);
+                            const target_id = p.topic || p.tag || p.id;
+                            if (typeof target_id === 'string') clear_source_layer(target_id);
                         },
                         'stream.reset': (p) => handlers['stream.delete'](p),
                         'stream.pointcloud.delete': (p) => handlers['stream.delete'](p),
@@ -1259,11 +1308,11 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                 if (wsRef.current !== socket) return;
                 wsRef.current = null;
                 setIsConnected(false);
+                source_registry.current.clear();
                 setSources([]);
                 setPointClouds({}); setGraphData({}); setMarkerData({}); setRobotData({}); setVoxelData({});
                 setTransforms({}); relativeTransformsRef.current = {};
                 on_clear?.();
-                pendingTopicQueueRef.current = [];
                 pointCloudFrameIdsRef.current.clear();
                 pendingGraphUpdatesRef.current.clear();
                 pending_marker_updates_ref.current.clear();
@@ -1302,7 +1351,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Connection failed');
         }
-    }, [clearGraphLayer, flushPendingWithError, scheduleStreamFlush, url, is_read_only, on_transforms, on_clear, update_sources]);
+    }, [clearGraphLayer, clear_source_layer, flushPendingWithError, scheduleStreamFlush, url, is_read_only, on_transforms, on_clear, update_sources]);
 
     const disconnect = useCallback(() => {
         if (reconnectTimerRef.current !== null) { window.clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
@@ -1378,21 +1427,50 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
 
     const rpcApi = useMemo(() => {
         const api = createViewerRpcApi(sendRpc, update_sources);
-        if (!is_read_only) return api;
-        return { ...api,
-            subscribeSource: async (source_id: string) => {
-                const result = await api.subscribeSource(source_id);
-                hidden_sources.current.delete(source_id);
-                setSources(items => items.map(item => item.id === source_id ? { ...item, active: true } : item));
+        const set_active = async (source_id: string, is_active: boolean, remove_layer = true) => {
+            const registry = source_registry.current;
+            const is_robot = source_id.startsWith('robot:');
+            if (is_robot && is_active && !registry.robots.has(source_id.slice('robot:'.length))) {
+                throw new Error('ロボットのモデルが未受信です。');
+            }
+            // 解除と同時の受信抑止。RPC完了や次フレームまで残存するレイヤーの除去。
+            const expected_socket = wsRef.current;
+            registry.choices.set(source_id, is_active);
+            if (!is_active) clear_source_layer(source_id);
+            setSources(registry.list());
+            try {
+                const result = is_robot || (!is_active && is_read_only)
+                    ? { success: true, sourceId: source_id, active: is_active }
+                    : await (is_active ? api.subscribeSource(source_id) : api.unsubscribeSource(source_id, remove_layer));
+                if (!result.success) throw new Error('入力の選択変更に失敗しました。');
+                if (expected_socket !== wsRef.current) return result;
+                if (is_active && registry.is_enabled(source_id)) {
+                    if (is_robot) {
+                        const tag = source_id.slice('robot:'.length);
+                        const robot = registry.robots.get(tag);
+                        if (robot) setRobotData(prev => registry.is_enabled(source_id) ? { ...prev, [tag]: robot } : prev);
+                    } else {
+                        // ボクセル差分などの再開に必要な完全状態の再要求。
+                        const socket = wsRef.current;
+                        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'request.state' }));
+                    }
+                }
                 return result;
-            },
-            unsubscribeSource: async (source_id: string) => {
-                hidden_sources.current.add(source_id);
-                setSources(items => items.map(item => item.id === source_id ? { ...item, active: false } : item));
-                return { success: true, sourceId: source_id, active: false };
-            },
+            } catch (error) {
+                if (is_active && expected_socket === wsRef.current) {
+                    registry.choices.set(source_id, false);
+                    clear_source_layer(source_id);
+                    setSources(registry.list());
+                }
+                throw error;
+            }
         };
-    }, [sendRpc, update_sources, is_read_only]);
+        return { ...api,
+            getSources: async () => { await api.getSources(); return source_registry.current.list(); },
+            subscribeSource: (source_id: string) => set_active(source_id, true),
+            unsubscribeSource: (source_id: string, remove_layer = true) => set_active(source_id, false, remove_layer),
+        };
+    }, [sendRpc, update_sources, is_read_only, clear_source_layer]);
 
     return {
         sources,

@@ -36,7 +36,7 @@ export class RGBDWorkspace {
  }
  configure(c){this.capture_generation++;this.sensor.configure(c);$('calibration-json').value=JSON.stringify(c,null,2);this.lastTime=0;$('sensor-stats').textContent='校正更新済み。次の取得で反映されます。';}
  resetForRobot(robot){
-  this.capture_generation++;
+  this.capture_generation++;this.pending_preview_frame=null;
   this.exclude=this.exclude.map(o=>o===this.robot.links.camera_link?robot.links.camera_link:o);this.robot=robot;this.live=false;this.lastTime=0;this.sensor.lastFrame=null;this.last_scene_frame=null;this.lastSummary={ready:false,model:robot.modelId,frame:null};
   this.cloud.geometry.dispose();this.cloud.geometry=new THREE.BufferGeometry();this.cloud.visible=false;
   for(const id of ['rgb-preview','depth-preview']){const c=$(id);c.getContext('2d').clearRect(0,0,c.width,c.height);}
@@ -46,6 +46,7 @@ export class RGBDWorkspace {
  setCloud(){const only=$('cloud-only').checked,show=$('cloud-show').checked||only;this.cloud.visible=show;if(show&&this.sensor.lastFrame)this.updateCloud(this.sensor.lastFrame);if(only)this.camera.layers.set(1);else{this.camera.layers.set(0);if(show)this.camera.layers.enable(1);}this.cloudOnly=only;this.onCloudOnly(only);}
  opticalWorld(){const link=this.robot.links.camera_optical_frame;link.updateWorldMatrix(true,false);return link.matrixWorld.clone();}
  tick(now){
+  if(this.pending_preview_frame&&$('rgb-preview').offsetParent!==null)this.paint(this.pending_preview_frame);
   if(this.frustum.visible)this.updateFrustum();
   // 設定周期と取得中ガードによる、追加休止なし・多重取得なしの制御
   if(this.live&&!this.is_capture_pending&&now-this.lastTime>=1000/+$('sensor-fps').value)this.capture();
@@ -68,6 +69,9 @@ export class RGBDWorkspace {
   finally{this.is_capture_pending=false;}
  }
  paint(f){
+  // 非表示画像の描画保留。再表示時は最新の取得結果のみ反映
+  if($('rgb-preview').offsetParent===null){this.pending_preview_frame=f;return;}
+  this.pending_preview_frame=null;
   const rgb=$('rgb-preview'),d=$('depth-preview'),kc=f.calibration.color,k=f.calibration.depth;if(rgb.width!==kc.width)rgb.width=kc.width;if(rgb.height!==kc.height)rgb.height=kc.height;rgb.previousElementSibling.querySelector('span').textContent=`${kc.width} × ${kc.height}`;rgb.getContext('2d').putImageData(new ImageData(f.rgba,kc.width,kc.height),0,0);if(d.width!==k.width)d.width=k.width;if(d.height!==k.height)d.height=k.height;
   const rgba=new Uint8ClampedArray(k.width*k.height*4),lo=f.calibration.min_depth_m,hi=f.calibration.max_depth_m;
   for(let i=0;i<f.depth.length;i++){const z=f.depth[i],a=i*4;if(z){const t=THREE.MathUtils.clamp((z-lo)/(hi-lo),0,1);rgba[a]=255*Math.max(0,1-Math.abs(t*3-2));rgba[a+1]=255*Math.max(0,1-Math.abs(t*3-1));rgba[a+2]=255*Math.max(0,1-Math.abs(t*3));}else{rgba[a]=18;rgba[a+1]=20;rgba[a+2]=29;}rgba[a+3]=255;}d.getContext('2d').putImageData(new ImageData(rgba,k.width,k.height),0,0);

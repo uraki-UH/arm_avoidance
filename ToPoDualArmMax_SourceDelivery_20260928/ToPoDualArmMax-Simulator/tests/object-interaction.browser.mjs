@@ -46,6 +46,22 @@ try{
  for(let i=0;i<150;i++){is_ready=await evaluate('!!window.simulator?.diagnostics.ready');if(is_ready)break;await pause(200);}
  assert.ok(is_ready,'アプリ起動失敗');
 
+ // 姿勢入力の排他と独立したロボット外観の回帰検証
+ {
+ const result=await evaluate(`(()=>{
+ const s=simulator,p=s.ros_points.robot_panel,instance=p.instance_panel,robot=s.robot,$=id=>document.getElementById(id);
+ const check=(v,m)=>{if(!v)throw Error(m);};instance.bind();const pose=robot.getPose(),joint=robot.actuated.find(j=>j.name==='neck_pan_joint');
+ const original=robot.renderMeshes[0].material,roughness=original.roughness,color=original.color.getHex();
+ $('robot-opacity').value='.5';$('robot-opacity').dispatchEvent(new Event('input'));check(original.opacity===.5,'透明度');check(original.roughness===roughness&&original.color.getHex()===color,'材質保持');
+ $('robot-opacity').value='1';$('robot-opacity').dispatchEvent(new Event('input'));check(original.opacity===1,'外観復帰');
+ instance.set_source('ros');$('ros-joints-receive').checked=true;robot.setJoint(joint.name,.2);check(robot.joints[joint.name].q===pose[joint.name],'手動更新の排他');
+ s.physics_panel.start();check(!s.physics_panel.socket,'物理開始の排他');
+ p.joint_stream.latest={[joint.name]:.2};p.joint_stream.tick();check(Math.abs(robot.joints[joint.name].q-.2)<1e-8,'受信姿勢反映');
+ document.querySelector('[data-panel=environment]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));check($('ros-joints-receive').checked,'別タブでも追従維持');
+ instance.set_source('simulator');$('ros-joints-receive').checked=false;robot.setJoint(joint.name,.1);check(Math.abs(robot.joints[joint.name].q-.1)<1e-8,'手動復帰');robot.setPose(pose);return true;
+ })()`);assert.equal(result,true);console.log('PASS: 姿勢入力の排他・受信反映・タブ操作・外観保持と透明度');
+ }
+
  // 影切り替えの画素比較と、ON復帰時の描画一致
  const shadow_result=await evaluate(`(()=>{
   const r=simulator.renderer,button=document.getElementById('enable-shadows'),gl=r.getContext();

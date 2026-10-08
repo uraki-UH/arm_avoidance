@@ -37,6 +37,7 @@ Node.js 22以上、ビルド済みUI、Chromeが必要。`CHROME_BIN`で実行�
 実GPU指定時のソフトウェア描画への代替は失敗扱い。GPU名・ブラウザ版・画面寸法・モデル・ソースのSHA-256を`report.json`へ保存。
 
 既定の試験は通常描画、画角表示、LiDAR、RGB-D、GNG静止表示、GNGの10 Hz更新。
+`graph_stream`は1ノードだけの更新、`graph_stream_all`は全ノードの更新。両方の条件で差分更新の効果と上限を確認可能。
 `--cases idle,lidar,rgbd,graph_static,graph_stream`で選択可能。
 各条件は新しいページから開始。Longモデル、1440×1000のウィンドウ、既定校正、センサの既定品質を使用。
 GNGは`--nodes 10000`が既定で、1万ノード・3万辺の固定入力。
@@ -50,6 +51,26 @@ LiDARは同じ走査開始位置を使用。センサ出力配列のSHA-256も�
 `render_submit`はCPUからの描画送信とそこで生じた待機の時間であり、GPU単体の実行時間ではない。
 RGB-Dの`render_ms`は描画・非同期読出し完了までの経過時間。CPU画像処理は`compute_ms - render_ms`。
 CPUプロファイルは`*.cpuprofile`としてChrome DevToolsへ読込可能。
+
+RGB-Dの非同期読出しは`--readback-mode batch`が既定。画像群を1つの転送バッファへまとめ、完了待ちとCPUコピーを各1回に集約。
+`--readback-mode separate`で従来の画像別読出しと比較可能。
+`--show-preview`でRGB-Dタブを表示して計測。既定は非表示で、プレビュー描画を保留。
+表示条件が異なる結果同士の`--baseline`比較は拒否。
+`methods.webgl.getBufferSubData`にCPUコピーの回数・時間、`methods.webgl.getParameter`にGPU状態照会の回数・時間を記録。
+`--verify-depth`では1280×720までの出力一致、外部回転、同時取得、RGBA float代替、バッファ再利用、失敗後の復旧・破棄時の中断、再表示時のプレビュー一致も検査。
+
+描画品質の比較は`--graph-quality standard` / `--graph-quality compact`。
+軽量表示はノード・辺の件数を維持し、球・円柱の分割数だけを変更。
+標準への復帰・位置・色・選択対象はViewerの`node tests/graph_geometry_browser.test.mjs`で検証。
+差分更新の姿勢・色・並替え・属性交換・辺再接続の検査はSimulatorの`npm run test:graph`。
+
+深度読出し方式の比較は`--depth-readback float` / `--depth-readback packed`。既定の`auto`は単一成分float対応GPUでR32F、非対応GPUでRGBA8を選択。
+`--verify-depth`を加えると、複数解像度・同期／非同期・ステレオ・遮蔽・対象抽出の出力一致と幾何精度も検査。
+低水準APIの`depth_readback: 'float'`はfloat形式を指定。従来の画像別読出しとの比較には、さらに`enable_batched_readback: false`を指定。
+RGBA8格納には[GLSLのfloatBitsToUint](https://registry.khronos.org/OpenGL/specs/es/3.2/GLSL_ES_Specification_3.20.html)を使用。float32のビット表現を保持し、CPUで行反転と復元を実施。
+単一成分float読出しに対応するGPUでは従来方式も1画素4バイトのため、転送量の削減なし。
+`report.json`には方式・描画品質・実際の描画ターゲット形式も保存。異なる方式・品質の性能比較は可能で、センサ出力の一致検査は維持。
+
 
 性能はGPU負荷や温度により変動するため、同条件で3回以上の反復を推奨。
 `--baseline`は計測条件・描画環境とセンサ出力を照合し、各条件の増減率を保存。

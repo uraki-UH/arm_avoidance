@@ -165,6 +165,7 @@ export interface LayerSettings {
     covarianceEllipsoidColor?: string;
     emissiveIntensity?: number;
     nodeScale?: number;
+    enable_simple_graph?: boolean;
     edgeWidth?: number;
     covarianceEllipsoidScale?: number;
     graphTransform?: Transform;
@@ -304,7 +305,7 @@ export interface VoxelSettings {
 export interface DataSource {
     id: string;
     name: string;
-    type: 'pointcloud' | 'topological_map' | 'plane_cluster' | 'nonplane_component' | 'marker' | 'voxel';
+    type: 'pointcloud' | 'topological_map' | 'plane_cluster' | 'nonplane_component' | 'marker' | 'voxel' | 'robot';
     active: boolean;
 }
 

@@ -45,11 +45,52 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml \
 入力と出力の座標系が同じ場合はTF不要。異なる場合は、両座標系を接続するTFが必要。
 TF取得失敗時は、その入力組の学習・出力を抑止。変換前の座標を別フレーム名で配信するフォールバックなし。
 `input.enable_strict_transform: true`では点群取得時刻、既定の`false`では通常は最新のTFを使用。
-CPUの観測支持機能が有効な場合は、`false`でも点群取得時刻のTFを使用。
+CPUの観測支持機能、または自己点除外が有効な場合は、`false`でも点群取得時刻のTFを使用。
 シミュレータの`world → base_footprint`のTF配信が必要。Viewerの表示基準は`world`。
 `base_frame_id:=base_footprint`はロボット基準での処理を意図する場合の指定であり、Viewerの基準変更ではない。
 
 getBase2LidarFrameのTF取得失敗メッセージ`Could not transform ...`はDEBUGログ。通常起動での警告行の割込みなし。ノード直接起動時の`--ros-args --log-level ais_gng_node:=debug`で診断可能。[表示変更・検証](../gng_vlut_system/docs/releases/2026-09-30_gng_tf_log.md)。
+
+## 自己点候補の学習除外
+
+既存の自己ボクセルマスクで元点を判定し、抽出候補から除外。環境点群の粗いグリッドを別途作成せず、残った実測点を既存のGNGボクセル処理へ投入。通常・unknown・重点学習のすべてが除外後の入力を使用。
+
+GNGを停止した状態で、Docker内のワークスペースへ反映します。
+
+```bash
+cd /ros2_ws
+colcon build --packages-select voxel_idx pointcloud_sampling ais_gng --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+```
+
+既存の`ais_gng.launch.py`起動コマンドへ次の引数を追加します。
+
+```bash
+self_mask_topic:=/topo_dual_arm_max_long/self_voxel
+```
+
+マスク配信は既存のViewer／自己認識側が担当。点群に写る同一機体の姿勢・座標系・時刻との整合が必要です。実機点群へGazeboの別姿勢マスクを流用しないでください。
+
+センサ別YAMLの`ais_gng_node.ros__parameters`でも設定可能。設定変更は再起動後に反映。
+
+```yaml
+self_filter.mask_topic: /topo_dual_arm_max_long/self_voxel
+self_filter.max_mask_age_sec: 0.5
+self_filter.enable_labelled_cloud: false
+```
+
+- 有効化: `mask_topic`指定時。未指定の既定はOFF。launch引数はYAMLより優先。
+- 照合: センサ座標の粗い外接箱 → 必要点のみ座標変換 → 自己セル照合。粗い箱には丸め誤差用の余白、最終判定のセル膨張なし。自己領域のビット列は上限2 MiB、広い領域はハッシュ方式。マスク内容が同一なら索引を再利用。
+- ランダム抽出: 少数抽出時は重複なしの候補判定、必要数到達時に終了。大量抽出・大量除外時は連続走査の判定キャッシュへ切替。有効な非自己点が不足する場合は、その全点を返却。
+- 点群走査: XYZ有効性検査と自己判定を共通化。添字領域は入力1点あたり4 byte、判定キャッシュ使用時は追加1 byte。全点×全リンク探索・全点XYZ複製なし。stratified／head／uniformと全点ラベル出力は全点判定、抽出後の点群コピーは従来の投入用バッファを再利用。
+- 保護: マスク未受信・不正・失効、取得時刻のTF欠落、全点除外時は学習保留。期限は受信経過・点群とマスクの時刻差・現在時刻との差に適用。保留時の残存入力による学習、最新TFへの代替なし。
+- ラベル出力: `enable_labelled_cloud: true`かつ購読者がいる場合のみ`scan/self_labelled`へ配信。元点の順序・座標系・時刻・既存フィールドを保持し、UINT8の`self_candidate`を追加。`0`: マスク外、`1`: 自己候補、`2`: 非有限XYZ。同じ入力・seedではラベル出力の有無によらず同じ学習点・順序。OFF／購読なしではラベル配列・全点群複製なし。
+- 対応入力: 単一PointCloud2トピック、先頭XYZ float32・ホストと同じbyte order。head／uniform／random／stratifiedに対応。複数センサは事前に座標・時刻を整合した単一点群へ統合。
+- 制限: 受信した自己セルとの幾何照合であり、意味認識・確定ラベルではありません。追加膨張なし。姿勢や取付校正の誤差による除去漏れ・近接物体の誤除去、過去に学習済みの自己ノードの即時削除は未解決。ロボットの停止指令ではありません。
+
+検証用: `test_self_point_filter`（単体）、`test/check_self_point_filter_ros.py`（専用domain194・`--node-executable`／`--output`指定）、`benchmark_self_point_filter`（合成点群の前処理比較）。CPU版での検証、実機精度・GPU版の実動作は未検証。
+
+計測引数: `benchmark_self_point_filter off|filter|labels SEED SELF_PERCENT MAX_POINTS METRICS_JSON`。入力30.7万点、抽出上限の指定、前処理のみの測定。ROS通信・GNG本体・マスク生成は対象外。
 
 ## 交差点bagの位置・姿勢をYAMLで補正
 

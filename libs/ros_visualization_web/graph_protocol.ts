@@ -32,7 +32,9 @@ export function isTopologicalMapPacket(buffer: ArrayBuffer): boolean {
     return buffer.byteLength >= 4 && new DataView(buffer).getUint32(0, true) === MAGIC;
 }
 
-export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPacket {
+export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPacket;
+export function deserializeTopologicalMap(buffer: ArrayBuffer, accept_tag: (tag: string) => boolean): TopologicalMapPacket | null;
+export function deserializeTopologicalMap(buffer: ArrayBuffer, accept_tag?: (tag: string) => boolean): TopologicalMapPacket | null {
     if (buffer.byteLength < HEADER_SIZE || buffer.byteLength > MAX_PACKET_BYTES) {
         throw new Error('Invalid topological map packet size');
     }
@@ -56,6 +58,8 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPa
     let offset = HEADER_SIZE;
     requireBytes(buffer, offset, tagSize + frameIdSize);
     const tag = decoder.decode(new Uint8Array(buffer, offset, tagSize));
+    // 選択対象外のグラフはノード・辺・クラスタ配列の展開前に除外。
+    if (accept_tag && !accept_tag(tag)) return null;
     offset += tagSize;
     const frameId = decoder.decode(new Uint8Array(buffer, offset, frameIdSize));
     offset += frameIdSize;

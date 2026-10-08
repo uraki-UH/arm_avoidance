@@ -1,5 +1,5 @@
 // 実WS受信後と同じ復号・状態更新・描画経路の負荷。通信・ROSノードの時間は対象外。
-export function install_graph_fixture(num_nodes, stream_hz) {
+export function install_graph_fixture(num_nodes, stream_hz, enable_full_update=false) {
  const tag='/performance/graph', encoder=new TextEncoder(), tag_bytes=encoder.encode(tag), frame_bytes=encoder.encode('world');
  const num_edge_indices=num_nodes*6, offset=36+tag_bytes.length+frame_bytes.length;
  const packet=new ArrayBuffer(offset+num_nodes*96+num_edge_indices*2), view=new DataView(packet);
@@ -24,6 +24,6 @@ export function install_graph_fixture(num_nodes, stream_hz) {
  }
  const original_socket=window.WebSocket;window.WebSocket=fixture_socket;
  window.performance_fixture={tag,packet_bytes:packet.byteLength,get sequence(){return sequence;},start(){
-  if(stream_hz)timer=setInterval(()=>{sequence++;view.setUint32(16,sequence,true);view.setFloat32(offset+32,.65+(sequence%10)*.001,true);for(const socket of sockets)socket.receive(packet);},1000/stream_hz);
+  if(stream_hz)timer=setInterval(()=>{sequence++;view.setUint32(16,sequence,true);for(let idx=0;idx<(enable_full_update?num_nodes:1);idx++)view.setFloat32(offset+idx*96+32,.65+(sequence%10)*.001,true);for(const socket of sockets)socket.receive(packet);},1000/stream_hz);
  },stop(){clearInterval(timer);for(const socket of sockets)socket.close();window.WebSocket=original_socket;}};
 }

@@ -17,7 +17,8 @@
     "dev": "vite build --watch",
     "test:ros": "tsx --tsconfig tests/tsconfig.json --test tests/ros-results.test.ts",
     "test:browser": "node tests/ros-results.browser.mjs",
-    "test:performance": "node tests/performance.browser.mjs"
+    "test:performance": "node tests/performance.browser.mjs",
+    "test:graph": "tsx --tsconfig tests/tsconfig.json --test tests/graph-performance.test.ts"
   },
   "dependencies": {
     "@react-three/drei": "9.122.0",

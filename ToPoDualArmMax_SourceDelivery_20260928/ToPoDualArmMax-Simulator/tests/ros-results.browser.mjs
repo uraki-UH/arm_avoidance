@@ -69,7 +69,10 @@ try{
  await wait_for('!!simulator.ros_results.api');
  await evaluate(`(()=>{const input=document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="ROS結果の接続先"]');input.value='ws://127.0.0.1:${ws_port}/observe';input.dispatchEvent(new FocusEvent('focusout',{bubbles:true,composed:true}));})()`);
  await wait_for(`simulator.ros_results.api.isConnected&&simulator.ros_results.api.sources.some(source=>source.id==='/test/Tmap_robot')`);
- console.log('READY: Viewer sources');
+ await wait_for(`simulator.ros_results.api.sources.some(source=>source.id==='robot:test_robot')`);
+ assert.equal(await evaluate(`simulator.ros_results.api.sources.find(source=>source.id==='robot:test_robot').active`),false);
+ assert.equal(await evaluate(`!!simulator.ros_results.api.robotData.test_robot`),false);
+ console.log('READY: Viewer sources including selectable robot');
  // 実際のTopicsチェックボックスで購読開始。
  await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelectorAll('input[type=checkbox][aria-label^="Topic: "]').forEach(input=>{if(!input.checked)input.click();})`);
  const summary=await wait_for(`(()=>{const a=simulator.ros_results.api;return Object.keys(a.graphData).length>=6&&Object.keys(a.pointClouds).length&&Object.keys(a.markerData).length>=2&&Object.keys(a.voxelData).length&&Object.keys(a.robotData).length?{graphs:Object.keys(a.graphData),points:Object.keys(a.pointClouds),markers:Object.keys(a.markerData),voxels:Object.keys(a.voxelData),robots:Object.keys(a.robotData)}:null})()`);
@@ -82,21 +85,38 @@ try{
  await wait_for(`(()=>{const group=simulator.ros_results.scene.root_scene.getObjectByName('/test/Tmap_robot');const link=simulator.robot.links.base_link;return group?.visible&&group.userData.has_transform&&group.matrix.elements.every((value,idx)=>Math.abs(value-link.matrixWorld.elements[idx])<1e-8);})()`);
  console.log('PASS: namespaced robot map aligned to the selected Simulator model');
  console.log('PASS: graph, point cloud, markers, poses, voxel, robot, TF and sensor-layer isolation');
- const robot_variants=await evaluate(`(()=>{const layer=document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="表示: test_robot"]').closest('.surface-muted');const labels=['Collision','Manip'];for(const label of labels){const button=[...layer.querySelectorAll('button')].find(b=>b.textContent.trim()===label);if(!button)throw Error(label);button.click();}return labels;})()`);
+ const robot_variants=await evaluate(`(()=>{const layer=document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="表示: test_robot"]').closest('[data-layer-id]');const labels=['Collision','Manip'];for(const label of labels){const button=[...layer.querySelectorAll('button')].find(b=>b.textContent.trim()===label);if(!button)throw Error(label);button.click();}return labels;})()`);
  await pause(300);console.log('PASS: robot '+robot_variants.join(', '));
 
  // Connection & StreamsのTopicsだけで表示を切替。Scene Layersは従来の目アイコン。
  assert.equal(await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelectorAll('input[type="checkbox"][aria-label^="表示:"]').length`),0);
- for (const [topic, name] of [['/topological_map','/topological_map'],['/test/points','/test/points'],['/test/markers','/test/markers-markers'],['/test/voxels','/test/voxels']]) {
+ for (const [topic, name, field, tag] of [
+  ['/topological_map','/topological_map','graphData','/topological_map'],
+  ['/test/points','/test/points','pointClouds','/test/points'],
+  ['/test/markers','/test/markers-markers','markerData','/test/markers'],
+  ['/test/voxels','/test/voxels','voxelData','/test/voxels'],
+  ['robot:test_robot','test_robot','robotData','test_robot'],
+ ]) {
   await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Topic: ${topic}"]').click()`);
   await wait_for(`!simulator.ros_results.scene.root_scene.getObjectByName('${name}')`);
+  await wait_for(`!document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="表示: ${tag}"]')`);
+  // 共有購読の継続中にも残骸・再出現なし。一覧更新も同じ選択状態。
+  await pause(350);
+  assert.equal(await evaluate(`!!simulator.ros_results.api.${field}['${tag}']`),false);
+  assert.equal(await evaluate(`!!simulator.ros_results.scene.root_scene.getObjectByName('${name}')`),false);
   await evaluate('simulator.ros_results.api.getSources()');
   assert.equal(await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Topic: ${topic}"]').checked`),false);
   assert.ok(await evaluate(`!!simulator.ros_results.scene.root_scene.getObjectByName('/grasp_pose_cands/Tmap')`));
   await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Topic: ${topic}"]').click()`);
   await wait_for(`!!simulator.ros_results.scene.root_scene.getObjectByName('${name}')`);
+  await wait_for(`!document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Topic: ${topic}"]').disabled`);
+  await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="削除: ${tag}"]').click()`);
+  await wait_for(`!document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="表示: ${tag}"]')`);
+  assert.equal(await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Topic: ${topic}"]').checked`),false);
+  await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelector('[aria-label="Topic: ${topic}"]').click()`);
+  await wait_for(`!!simulator.ros_results.scene.root_scene.getObjectByName('${name}')`);
  }
- console.log('PASS: Connection & Streams topic checkboxes, refresh and per-topic visibility');
+ console.log('PASS: unified robot/topic selection, layer removal, late packets and re-selection');
  const variants=await evaluate(`(()=>{const root=document.querySelector('#ros-results').shadowRoot;const layer=root.querySelector('[aria-label="表示: /topological_map"]').closest('.surface-muted');const labels=['Normals','Clusters','Ellipses'];for(const name of labels){const button=[...layer.querySelectorAll('button')].find(b=>b.textContent.trim()===name);if(!button)throw Error(name);button.click();}return labels;})()`);
  await pause(300);console.log('PASS: Scene Layers display settings: '+variants.join(', '));
  // 読取専用の詳細計算。永続データへの編集操作は別途拒否確認。

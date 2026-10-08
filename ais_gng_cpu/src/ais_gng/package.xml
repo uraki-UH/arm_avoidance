@@ -28,6 +28,7 @@
   <depend>rclcpp_components</depend>
   <depend>message_filters</depend>
   <depend>voxel_msgs</depend>
+  <depend>voxel_idx</depend>
   <depend>eigen</depend>
   <depend>gng_cpu</depend>
   <depend>nlohmann_json</depend>

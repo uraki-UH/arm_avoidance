@@ -42,6 +42,7 @@ export class Robot extends THREE.Group {
     this.actuated = Object.values(this.joints).filter(j => j.type !== 'fixed' && !j.mimic);
   }
   setJoint(name, q, updateMimic = true) {
+    if(this.pose_source==='ros'&&!this.is_receiving_pose)return;
     const j = this.joints[name]; if (!j || j.type === 'fixed' || !Number.isFinite(q)) return;
     j.q = Math.max(j.lower, Math.min(j.upper, q));
     if (j.type === 'prismatic') j.child.position.copy(j.axis).multiplyScalar(j.q);
@@ -50,6 +51,9 @@ export class Robot extends THREE.Group {
   }
   getPose() { return Object.fromEntries(this.actuated.map(j => [j.name, j.q])); }
   setPose(pose) { for (const [name,q] of Object.entries(pose)) this.setJoint(name, q); this.updateMatrixWorld(true); }
+  set_received_pose(pose) {
+    this.is_receiving_pose=true;try{this.setPose(pose);}finally{this.is_receiving_pose=false;}
+  }
   tcp(side) { this.links[`${side}_tcp`].updateWorldMatrix(true, false); return {position: this.links[`${side}_tcp`].getWorldPosition(new THREE.Vector3()), quaternion: this.links[`${side}_tcp`].getWorldQuaternion(new THREE.Quaternion())}; }
   chain(side) { return Array.from({length: 7}, (_,i) => this.joints[`${side}_joint${i+1}`]); }
   async loadVisuals(manifest, materials, progress) {
