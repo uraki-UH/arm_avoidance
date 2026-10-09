@@ -92,6 +92,42 @@ def safe_bool(value, default):
         return False
     return default
 
+def mid360_input(config, robot_name):
+    # MID-360入力選択とURDF取付リンクへの接続
+    if not isinstance(config, dict):
+        raise ValueError('mid360には設定辞書が必要です')
+    if not safe_bool(config.get('enable_input'), False):
+        return '', []
+    topic = config.get('points_topic', '/sensors/mid360/points')
+    from rclpy.validate_full_topic_name import validate_full_topic_name
+    validate_full_topic_name(topic)
+    actions = []
+    if safe_bool(config.get('enable_mount_tf'), True):
+        parent = config.get('parent_frame_id', 'chest_lidar_link')
+        child = config.get('frame_id', 'mid360_link')
+        for frame in (parent, child):
+            if not isinstance(frame, str) or not frame or frame.startswith('/') or any(c.isspace() for c in frame):
+                raise ValueError('MID-360のTF名が不正です')
+        if not parent.startswith(robot_name + '/'):
+            parent = robot_name + '/' + parent
+        if parent == child:
+            raise ValueError('MID-360の親子TFが同一です')
+        pos = config.get('pos', [0.0, 0.0, 0.0])
+        rot = config.get('rot_deg', [0.0, 0.0, 0.0])
+        for vector in (pos, rot):
+            if not isinstance(vector, list) or len(vector) != 3 or any(
+                type(v) not in (int, float) or not math.isfinite(v) for v in vector
+            ):
+                raise ValueError('MID-360の位置・角度には有限値3個が必要です')
+        values = pos + [math.radians(v) for v in rot]
+        arguments = [item for key, value in zip(('x', 'y', 'z', 'roll', 'pitch', 'yaw'), values)
+                     for item in ('--' + key, str(float(value)))]
+        arguments += ['--frame-id', parent, '--child-frame-id', child]
+        actions.append(Node(package='tf2_ros', executable='static_transform_publisher',
+                            name='mid360_mount_tf', arguments=arguments, output='screen'))
+    return topic, actions
+
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     enable_shared_roi_gng = safe_bool(LaunchConfiguration('enable_shared_roi_gng').perform(context), False)
@@ -149,6 +185,7 @@ def launch_setup(context, *args, **kwargs):
     yaml_environment_voxelization = {}
     yaml_voxel_idx = {}
     yaml_dynamixel_mapping_file = ""
+    yaml_mid360 = {}
     yaml_enable_realsense_mount_tf = False
     yaml_realsense_mount_config = "package://gng_vlut_system/config/realsense_mount.yaml"
     yaml_vlut_resolution = 0.0
@@ -195,6 +232,7 @@ def launch_setup(context, *args, **kwargs):
                     root_ros_params.get('enable_environment_voxelization'), False
                 )
                 yaml_environment_voxelization = root_ros_params.get('environment_voxelization', {})
+                yaml_mid360 = root_ros_params.get('mid360', {})
                 yaml_voxel_idx = root_ros_params.get('voxel_idx_shift', {})
                 yaml_enable_dynamixel_current_pose = safe_bool(
                     root_ros_params.get('enable_dynamixel_current_pose'), False
@@ -673,16 +711,21 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
+    mid360_topic, mid360_actions = mid360_input(yaml_mid360, robot_name)
+    actions.extend(mid360_actions)
     enable_environment_voxelization = safe_bool(
         LaunchConfiguration('enable_environment_voxelization').perform(context),
-        yaml_enable_environment_voxelization,
+        yaml_enable_environment_voxelization or bool(mid360_topic),
     )
     if enable_shared_roi_gng and not enable_environment_voxelization:
         raise ValueError('共有GNGにはenable_environment_voxelizationが必要です')
     if enable_environment_voxelization:
         if not enable_self_recognition_viz or not yaml_enable_environment_self_filter:
             raise ValueError('Viewerの環境ROIには自己認識と自己除去の有効化が必要です')
-        environment = yaml_environment_voxelization
+        environment = dict(yaml_environment_voxelization)
+        if mid360_topic:
+            environment['input_topic'] = mid360_topic
+            environment['source_frame_id'] = ''
         base_frame = str(environment.get('base_frame', 'base_link')).lstrip('/')
         target_frame = base_frame if base_frame.startswith(robot_name + '/') else robot_name + '/' + base_frame
         world_index = environment.get('world_index', {})

@@ -110,6 +110,7 @@ bool GNG::licenceAuthentication(){
 
 void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDAR_Config *_config) {
     has_voxelized_input = false;
+    vg.has_registered_input = vg.is_registered_input_valid = false;
     static LiDAR_Config prev_config;
     static bool no_prev_config = true;
     if (!initialized) return;
@@ -207,6 +208,22 @@ void GNG::exec() {
     }
 #endif
 
+    // 外部登録の不正指定時の学習抑止。内部登録への暗黙の切替なし
+    if (vg.has_registered_input && !vg.is_registered_input_valid) {
+        // 完了した入力の借用参照・重点指定の失効。復帰時の旧指定参照なし
+        n1.sampling.reset_input();
+        n1.priority_point_ids.clear();
+        n1.priority_weights.clear();
+        n1.priority_ratio = 0;
+        vg.tracking = nullptr;
+        n1.enable_node_insertion = false;
+        n1.has_observation_origin = false;
+        n1.observation_pixel_source = {};
+        n1.observation_angle_table = nullptr;
+        n1.observation_table_num = 0;
+        n1.finishMapDeltaFrame();
+        return;
+    }
     auto t0 = std::chrono::system_clock::now();
     n1.insertion_stats = {};
     if (!n1.enable_observation_support || !n1.has_observation_origin) {

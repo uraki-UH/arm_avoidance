@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -397,6 +398,62 @@ private:
   std::shared_ptr<point_cell_counts> current_, spare_;
 };
 
+// 有界float32格子の登録条件。減算・逆数乗算・切捨て、両端包含の既存規則
+struct point_registration_spec
+{
+  float size{.1f};
+  std::array<float, 3> min_pos{{-1, -1, -1}}, max_pos{{1, 1, 1}};
+  std::array<std::uint32_t, 3> num_cells{{20, 20, 20}};
+  std::string target_frame;
+  bool operator==(const point_registration_spec &other) const;
+};
+
+// 上位32bitのセル番号と下位32bitの選択入力番号。セル順・入力順の安定配列
+struct point_registration
+{
+  std::vector<std::uint64_t> points;
+};
+
+// 格子条件ごとの元点登録。選択集合が異なる場合も既登録セル番号の再利用
+class point_registration_query
+{
+public:
+  explicit point_registration_query(point_registration_spec spec);
+  const point_registration_spec &spec() const {return spec_;}
+  // 同一snapshot・target_frameの取得時TFは同一値。xyzは選択入力順の借用配列
+  // source_poseは平行移動xyzと回転quaternion xyzw。フレーム間の姿勢変化でも作業領域の再利用
+  std::shared_ptr<const point_registration> read(const std::shared_ptr<const point_frame> &frame,
+    std::uint32_t source_num, const std::vector<std::uint32_t> &source_indices, const float *xyz,
+    const std::array<float, 7> &source_pose = {{0, 0, 0, 0, 0, 0, 1}});
+  std::size_t num_registered_points() const;
+private:
+  // 点単位処理のインライン化。DSO境界・3軸反復の呼出しなし
+  std::uint32_t cell_idx(const float *point) const
+  {
+    if (!std::isfinite(point[0]) || !std::isfinite(point[1]) || !std::isfinite(point[2]) ||
+      point[0] < spec_.min_pos[0] || point[0] > spec_.max_pos[0] ||
+      point[1] < spec_.min_pos[1] || point[1] > spec_.max_pos[1] ||
+      point[2] < spec_.min_pos[2] || point[2] > spec_.max_pos[2]) {return UINT32_MAX;}
+    const auto x = static_cast<std::uint32_t>((point[0] - spec_.min_pos[0]) * inverse_size_);
+    const auto y = static_cast<std::uint32_t>((point[1] - spec_.min_pos[1]) * inverse_size_);
+    const auto z = static_cast<std::uint32_t>((point[2] - spec_.min_pos[2]) * inverse_size_);
+    const auto idx = x + spec_.num_cells[0] * (y + spec_.num_cells[1] * z);
+    return idx < max_cell_num_ ? idx : UINT32_MAX;
+  }
+  point_registration_spec spec_;
+  float inverse_size_;
+  std::uint32_t max_cell_num_;
+  mutable std::mutex mutex_;
+  std::weak_ptr<const point_frame> frame_;
+  std::array<float, 7> source_pose_{{0, 0, 0, 0, 0, 0, 1}};
+  std::vector<std::uint32_t> cell_slots_, selected_indices_;
+  std::vector<std::uint8_t> has_cell_;
+  std::size_t num_registered_points_{0};
+  bool has_result_{false};
+  std::vector<std::uint64_t> sort_buffer_;
+  std::shared_ptr<point_registration> current_, spare_;
+};
+
 // 同一プロセス内の共有窓口。fuzzy評価・ROS通信・点群コピーへの依存なし。
 class point_frame_channel
 {
@@ -406,12 +463,14 @@ public:
   void publish(const void *writer, point_frame frame);
   std::shared_ptr<const point_frame> latest() const;
   std::shared_ptr<point_cell_query> cell_query(const point_cell_spec &spec);
+  std::shared_ptr<point_registration_query> registration_query(const point_registration_spec &spec);
 private:
   mutable std::mutex mutex_;
   const void *writer_{nullptr};
   std::uint64_t revision_{0};
   std::shared_ptr<const point_frame> frame_;
   std::vector<std::weak_ptr<point_cell_query>> cell_queries_;
+  std::vector<std::weak_ptr<point_registration_query>> registration_queries_;
 };
 
 // 共有ライブラリ内で一元管理するchannel。別コンポーネント間でも同じ実体。

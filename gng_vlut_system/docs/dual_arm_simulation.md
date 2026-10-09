@@ -1,5 +1,7 @@
 # 双腕シミュレーションの制御・物理設定
 
+実機MID-360の接続・点群入力: [専用Dockerと取付TFの設定](../../integrations/mid360/README.md)。
+
 ## Gazebo Harmonicの標準effort制御
 
 新しい駆動検証の入口: `launch/dual_arm_gz.launch.py`。ROS 2 Jazzy＋Gazebo Harmonic＋標準`gz_ros2_control/GazeboSimSystem`を使用。自作モータプラグインへの依存なし。

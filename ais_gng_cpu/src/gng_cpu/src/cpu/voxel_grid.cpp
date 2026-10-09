@@ -16,10 +16,32 @@ VoxelGrid::~VoxelGrid() {
 void VoxelGrid::init(GridConfig *_grid_config, OtherConfig *_other_config) { 
     voxel_config = _grid_config;
     enable_voxel_downsampling = _other_config->voxel_grid_unit > 0;
+    has_registered_input = is_registered_input_valid = false;
     voxel_index.resize(_other_config->point_cloud_num);
     sort_buffer.resize(_other_config->point_cloud_num);
     voxel_range.resize(_other_config->point_cloud_num);
     filtered_pcl.resize(_other_config->point_cloud_num);
+}
+
+bool VoxelGrid::set_registered_input(const uint64_t *points, uint32_t num_points,
+    uint32_t inpcl_num, vector<uint8_t> &labels)
+{
+    has_registered_input = true;
+    is_registered_input_valid = false;
+    if (!enable_voxel_downsampling || (!points && num_points) ||
+        num_points > inpcl_num || inpcl_num > labels.size() || num_points > voxel_index.size()) {return false;}
+    std::fill(labels.begin(), labels.begin() + inpcl_num, 0);
+    for (uint32_t idx = 0; idx < num_points; ++idx) {
+        const auto cell_idx = static_cast<uint32_t>(points[idx] >> 32);
+        const auto input_idx = static_cast<uint32_t>(points[idx]);
+        if (cell_idx >= voxel_config->maxXYZ || input_idx >= inpcl_num || labels[input_idx] ||
+            (idx && points[idx - 1] >= points[idx])) {return false;}
+        labels[input_idx] = 1;
+        voxel_index[idx] = Voxel(cell_idx, input_idx);
+    }
+    voxel_index_num = num_points;
+    is_registered_input_valid = true;
+    return true;
 }
 
 void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels){
@@ -33,7 +55,7 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
 template<bool enable_tracking>
 void VoxelGrid::apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels){
     filtered_pcl_num = 0;
-    voxel_index_num = 0;
+    if (!has_registered_input) {voxel_index_num = 0;}
     if(inpcl_num == 0){
         filtered_pcl_num = 0;
         return; // 入力点群がない場合は何もしない
@@ -57,20 +79,25 @@ void VoxelGrid::apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vecto
     uint32_t i, n;
     // リセット
     std::fill(labels.begin(), labels.begin() + inpcl_num, 0);
-    for (i = n = 0; i < inpcl_num; ++i) {
-        index = voxel_config->getIndex(input_pcl[i].p);
-        if(index >= voxel_config->maxXYZ){
-            continue; // 範囲外は無視
+    if (has_registered_input) {
+        // 外部の登録済み配列の利用。座標再量子化・再ソートなし
+        if (!is_registered_input_valid) {voxel_index_num = 0; return;}
+        for (i = 0; i < voxel_index_num; ++i) {labels[voxel_index[i].raw_index] = 0b001;}
+    } else {
+        for (i = n = 0; i < inpcl_num; ++i) {
+            index = voxel_config->getIndex(input_pcl[i].p);
+            if(index >= voxel_config->maxXYZ){
+                continue; // 範囲外の除外
+            }
+            voxel_index[n].voxel_index = index;
+            voxel_index[n++].raw_index = i;
+            labels[i] = 0b001; // 範囲内点群
         }
-        voxel_index[n].voxel_index = index;
-        voxel_index[n++].raw_index = i;
-        labels[i] = 0b001; //範囲内点群
+        voxel_index_num = n;
+        // 全32bitセル番号による安定基数ソート
+        radix_sort_voxels(voxel_index.data(), sort_buffer.data(), voxel_index_num);
     }
-    voxel_index_num = n;
     if (voxel_index_num == 0) {return;}
-
-    // 全32bitセル番号による安定基数ソート。
-    radix_sort_voxels(voxel_index.data(), sort_buffer.data(), voxel_index_num);
 
     // セル範囲と代表元点の確定。合成座標・重心計算なし。
     uint32_t begin_idx = 0;

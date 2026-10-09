@@ -188,6 +188,34 @@ MY_API uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input)
 }
 
 #if allow_external_sampler_build
+MY_API uint8_t gng_get_input_grid(gng_input_grid *grid) {
+    if (!gng.initialized || !grid) {return 0;}
+    const auto &config = *gng.vg.voxel_config;
+    grid->size = config.unit;
+    grid->min_pos[0] = config.x_min; grid->max_pos[0] = config.x_max;
+    grid->min_pos[1] = config.y_min; grid->max_pos[1] = config.y_max;
+    grid->min_pos[2] = config.z_min; grid->max_pos[2] = config.z_max;
+    for (uint32_t axis = 0; axis < 3; ++axis) {grid->num_cells[axis] = config.max[axis];}
+    grid->enable_downsampling = gng.vg.enable_voxel_downsampling;
+    return 1;
+}
+
+MY_API uint8_t gng_set_registered_input(const gng_input_grid *grid, const uint64_t *points,
+    uint32_t num_points, uint32_t input_num) {
+    if (!gng.initialized) {return 0;}
+    gng.vg.has_registered_input = true;
+    gng.vg.is_registered_input_valid = false;
+    gng.has_voxelized_input = false;
+    gng_input_grid current;
+    if (!grid || input_num != static_cast<uint32_t>(gng.input_pcl_num) ||
+        !gng_get_input_grid(&current) || !grid->enable_downsampling || grid->size != current.size) {return 0;}
+    for (uint32_t axis = 0; axis < 3; ++axis) {
+        if (grid->min_pos[axis] != current.min_pos[axis] || grid->max_pos[axis] != current.max_pos[axis] ||
+            grid->num_cells[axis] != current.num_cells[axis]) {return 0;}
+    }
+    return gng.vg.set_registered_input(points, num_points, input_num, gng.map.inpcl_labels);
+}
+
 MY_API uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules) {
     return set_sampling_rules(rules, num_rules);
 }

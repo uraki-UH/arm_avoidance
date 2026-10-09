@@ -610,6 +610,9 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     const auto shared_store = declare_parameter<std::string>("input.shared_point_store", "", self_filter_descriptor);
     if (!shared_store.empty()) {
         if (enable_self_filter_) throw std::invalid_argument("共有ROIと単独自己フィルタの併用不可");
+#if !defined(AIS_GNG_BACKEND_CPU) || !allow_external_sampler_build
+        throw std::invalid_argument("共有入力には外部登録API付きCPU構成が必要");
+#endif
         shared_points_ = voxel_idx::shared_point_frames(shared_store);
     }
     max_self_mask_age_sec_ = declare_parameter<double>("self_filter.max_mask_age_sec", 0.5, self_filter_descriptor);
@@ -1033,6 +1036,42 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
     return result;
 }
 
+#if defined(AIS_GNG_BACKEND_CPU) && allow_external_sampler_build
+bool AiSGNGComponent::prepare_shared_registered_input(const PC2 &source, const LiDAR_Config &config) {
+    gng_input_grid grid;
+    if (!gng_get_input_grid(&grid)) {return false;}
+    // 間引き無効時の全点保持。追加の入力格子なし
+    if (!grid.enable_downsampling) {return true;}
+    voxel_idx::point_registration_spec spec;
+    spec.size = grid.size;
+    std::copy_n(grid.min_pos, 3, spec.min_pos.begin());
+    std::copy_n(grid.max_pos, 3, spec.max_pos.begin());
+    std::copy_n(grid.num_cells, 3, spec.num_cells.begin());
+    spec.target_frame = local_coordinates_ || base_frame_id_.empty() ? source.header.frame_id : base_frame_id_;
+    std::array<float, 7> source_pose{{0, 0, 0, 0, 0, 0, 1}};
+    if (!local_coordinates_) {
+        source_pose = {{config.pos.x, config.pos.y, config.pos.z,
+            config.quat.x, config.quat.y, config.quat.z, config.quat.w}};
+    }
+    uint32_t num_points = 0;
+    const auto *xyz = gng_getAffineTransformedInputPointCloud(&num_points);
+    if (num_points != sampled_point_indices_.size()) {return false;}
+    try {
+        if (!shared_registration_query_ || !(shared_registration_query_->spec() == spec)) {
+            shared_registration_query_ = shared_points_->registration_query(spec);
+        }
+        const auto registered = shared_registration_query_->read(shared_input_frame_,
+            static_cast<uint32_t>(shared_input_frame_->roi_points->point_cells.size()),
+            sampled_point_indices_, xyz, source_pose);
+        return gng_set_registered_input(&grid, registered->points.data(),
+            static_cast<uint32_t>(registered->points.size()), num_points);
+    } catch (const std::exception &error) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "共有入力登録の失敗: %s", error.what());
+        return false;
+    }
+}
+#endif
+
 void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clouds) {
     // 初期化されていない
     if(!initialized_ || clouds.empty()){
@@ -1186,6 +1225,13 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             gng_input_msg->data.data(),
             gng_input_msg->width * gng_input_msg->height,
             &lidar_config);
+#if defined(AIS_GNG_BACKEND_CPU) && allow_external_sampler_build
+        // 共通格子登録結果の投入。失敗フレームの学習・内部再登録なし
+        if (shared_input_frame_ && !prepare_shared_registered_input(*msg, lidar_config)) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "共有入力登録の不成立による学習保留");
+            return;
+        }
+#endif
 #if defined(AIS_GNG_BACKEND_CPU)
         if (enable_observation_support_) {
             gng_observation_input input;

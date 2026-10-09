@@ -344,12 +344,21 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 - 粗索引: `enable_environment_world_index:=true`。同じ索引をworld表示・ROI・共有storeへ渡す方式。幅・frame・表示トピックは機体YAMLの`environment_voxelization.world_index`。別world索引ノードとの同一入力への二重起動禁止。
 - 単一ROI: 粗索引不要なら`enable_environment_world_index:=false`（既定）。直接ROI登録と自己ラベル共有だけ。粗索引の新規構築を追加しても総時間の短縮保証なし。
 - VLUT: 自己領域を除いたROIセル。GNG: 同じ判定で自己点を除いた元点。ROI外の環境点もGNGの抽出対象、ROI外の自己点も除外対象。
+- GNG入力登録: `voxel_idx`の共通キャッシュから`gng_set_registered_input`へ投入。元点→セル対応は1入力フレーム・格子条件ごとに1回、GNG内部の座標再量子化・再ソートなし。格子条件は解像度・原点・範囲・座標系・float32丸め規則、取得時TFはフレームごとの整合確認。ROI格子と異なる条件の強制共用なし。
+- 学習互換: 入力上限・抽出方式・代表元点・重点学習の候補は従来どおり。選択集合が異なる場合も既登録セル番号の再利用、不正な登録結果は当該入力の学習保留。GNGノード近傍探索の索引は別用途のため維持。
 - 自己領域: `self_recognition.self_exclusion_inflation`込み。単独GNGの追加膨張なしの方式とは除去境界が異なる点に注意。
 - 起動: 同一containerのROI処理とCPU GNG。別の`self_voxel_filter_node`は起動なし。既存の`ais_gng.launch.py`との同一入力への二重起動禁止。
 - GNG設定: `shared_gng_config:=at128.yaml`。CPUセンサ設定または絶対パス。出力はロボットnamespace内の`topological_map`等。曲面推定・データセットexporterの同時起動は対象外。
-- 既定: 共有OFF・粗索引OFF。学習器内部の別用途のボクセル索引は従来どおり。速度差は入力点数・自己点率・ROI占有数に依存。
+- 既定: 共有OFF・粗索引OFF。共有OFF時のGNG内部登録は従来どおり。共有は外部サンプラー公開付きCPU構成（`allow_external_sampler=ON`）のみ。単一利用ではキャッシュ管理・受渡しの追加コストあり、同一格子の複数利用で登録結果の再利用。総時間の短縮保証なし。
 
-共有型の変更後は、関連ノードを停止した状態で`voxel_idx`・`pointcloud_sampling`・`ais_gng`・`gng_vlut_system`・`fuzzy_voxel_grid`をReleaseビルドしてから起動してください。旧型のcomponentと新型の共有ライブラリの混在不可。
+共有型・APIの変更後は、関連ノードを停止した状態で以下を実行。旧型のcomponentと新型の共有ライブラリの混在不可。
+
+```bash
+cd /ros2_ws
+colcon build --packages-select voxel_idx pointcloud_sampling gng_cpu ais_gng gng_vlut_system fuzzy_voxel_grid \
+  --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -Dallow_external_sampler=ON
+source install/setup.bash
+```
 
 ## 4. テストとデバッグ
 

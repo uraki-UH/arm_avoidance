@@ -25,6 +25,8 @@ class VoxelGrid {
         ~VoxelGrid();
         GridConfig *voxel_config;
         bool enable_voxel_downsampling = true;
+        bool has_registered_input = false;
+        bool is_registered_input_valid = false;
         vector<Voxel> voxel_index;
         // 入力上限で確保したソート用作業領域のフレーム間再利用。
         vector<Voxel> sort_buffer;
@@ -36,6 +38,8 @@ class VoxelGrid {
 
         void init(GridConfig *_grid_config, OtherConfig *_other_config);
         void applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels);
+        bool set_registered_input(const uint64_t *points, uint32_t num_points,
+            uint32_t inpcl_num, vector<uint8_t> &labels);
         bool has_occupied_cell(uint32_t cell_idx) const;
         template<bool enable_tracking>
         void apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels);

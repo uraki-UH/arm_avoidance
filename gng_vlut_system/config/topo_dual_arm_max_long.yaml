@@ -80,6 +80,18 @@
     gripper_volume_graph:
       enabled: false
 
+    # 実機MID-360の入力選択。trueで環境ボクセル化も有効。ドライバは専用Dockerで起動
+    mid360:
+      enable_input: true
+      points_topic: "/sensors/mid360/points"
+      # 取付TFの配信元はViewer。専用ドライバ側のenable_mount_tfはfalse
+      enable_mount_tf: true
+      parent_frame_id: "chest_lidar_link"
+      frame_id: "mid360_link"
+      # URDFの45度取付に対する計測原点の補正[m]・姿勢補正[deg]
+      pos: [0.0, 0.0, 0.0]
+      rot_deg: [0.0, 0.0, 0.0]
+
     # --- 環境点群からVLUTまでの統合起動設定 ---
     environment_voxelization:
       input_topic: "/camera/camera/depth/color/points"

@@ -2,6 +2,109 @@
 
 namespace voxel_idx
 {
+bool point_registration_spec::operator==(const point_registration_spec &other) const
+{
+  return size == other.size && min_pos == other.min_pos && max_pos == other.max_pos &&
+    num_cells == other.num_cells && target_frame == other.target_frame;
+}
+
+point_registration_query::point_registration_query(point_registration_spec spec)
+: spec_(std::move(spec)), inverse_size_(1.f / spec_.size), max_cell_num_(1)
+{
+  if (!std::isfinite(spec_.size) || spec_.size <= 0 || !std::isfinite(inverse_size_) ||
+    spec_.target_frame.empty()) {throw std::invalid_argument("登録格子条件の不正値");}
+  std::uint64_t num_cells = 1;
+  for (std::size_t axis = 0; axis < 3; ++axis) {
+    const float span = (spec_.max_pos[axis] - spec_.min_pos[axis]) * inverse_size_;
+    if (!std::isfinite(spec_.min_pos[axis]) || !std::isfinite(spec_.max_pos[axis]) ||
+      !std::isfinite(span) || span < 1 || span >= static_cast<float>(INT32_MAX) ||
+      static_cast<std::uint32_t>(span) != spec_.num_cells[axis])
+    {throw std::invalid_argument("登録格子の範囲・寸法不一致");}
+    if (num_cells > (UINT32_MAX - 1ULL) / spec_.num_cells[axis])
+    {throw std::invalid_argument("登録格子のセル数過大");}
+    num_cells *= spec_.num_cells[axis];
+  }
+  max_cell_num_ = static_cast<std::uint32_t>(num_cells);
+}
+
+std::shared_ptr<const point_registration> point_registration_query::read(
+  const std::shared_ptr<const point_frame> &frame, std::uint32_t source_num,
+  const std::vector<std::uint32_t> &source_indices, const float *xyz,
+  const std::array<float, 7> &source_pose)
+{
+  if (!frame || (!xyz && !source_indices.empty()) || source_indices.size() > UINT32_MAX)
+  {throw std::invalid_argument("登録対象snapshot・入力配列の不正値");}
+  for (const auto value : source_pose) {
+    if (!std::isfinite(value)) {throw std::invalid_argument("登録格子の座標変換不正");}
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  const bool is_same_frame = frame_.lock() == frame;
+  if (is_same_frame && source_pose_ != source_pose)
+  {throw std::invalid_argument("同一snapshot・座標系の取得時TF不一致");}
+  if (is_same_frame && cell_slots_.size() != source_num)
+  {throw std::invalid_argument("同一snapshotの元点数不一致");}
+  if (is_same_frame && has_result_ && selected_indices_ == source_indices) {return current_;}
+  has_result_ = false;
+  if (!is_same_frame) {
+    cell_slots_.resize(source_num);
+    has_cell_.assign(source_num, 0);
+    num_registered_points_ = 0;
+    frame_ = frame;
+    source_pose_ = source_pose;
+  }
+  if (!current_ || !current_.unique()) {
+    current_.swap(spare_);
+    if (!current_ || !current_.unique()) {current_ = std::make_shared<point_registration>();}
+  }
+  auto &points = current_->points;
+  points.clear(); points.reserve(source_indices.size());
+  for (std::size_t idx = 0; idx < source_indices.size(); ++idx) {
+    const auto source_idx = source_indices[idx];
+    if (source_idx >= source_num) {throw std::invalid_argument("登録元点番号の範囲外");}
+    if (!has_cell_[source_idx]) {
+      cell_slots_[source_idx] = cell_idx(xyz + 3 * idx);
+      has_cell_[source_idx] = 1;
+      ++num_registered_points_;
+    }
+    if (cell_slots_[source_idx] != UINT32_MAX) {
+      points.push_back((std::uint64_t{cell_slots_[source_idx]} << 32) | idx);
+    }
+  }
+  // セル番号だけの4段安定基数ソート。代表元点の入力順保持、比較ソートなし
+  sort_buffer_.resize(points.size());
+  for (unsigned shift = 32; shift < 64; shift += 8) {
+    std::array<std::size_t, 256> offsets{};
+    for (const auto point : points) {++offsets[(point >> shift) & 255];}
+    std::size_t offset = 0;
+    for (auto &count : offsets) {const auto next = offset + count; count = offset; offset = next;}
+    for (const auto point : points) {sort_buffer_[offsets[(point >> shift) & 255]++] = point;}
+    points.swap(sort_buffer_);
+  }
+  selected_indices_ = source_indices;
+  has_result_ = true;
+  return current_;
+}
+
+std::size_t point_registration_query::num_registered_points() const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  return num_registered_points_;
+}
+
+std::shared_ptr<point_registration_query> point_frame_channel::registration_query(const point_registration_spec &spec)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (auto it = registration_queries_.begin(); it != registration_queries_.end();) {
+    if (const auto query = it->lock()) {
+      if (query->spec() == spec) {return query;}
+      ++it;
+    } else {it = registration_queries_.erase(it);}
+  }
+  auto result = std::make_shared<point_registration_query>(spec);
+  registration_queries_.push_back(result);
+  return result;
+}
+
 bool point_cell_spec::operator==(const point_cell_spec &other) const
 {
   return size == other.size && origin == other.origin && min_corner == other.min_corner &&

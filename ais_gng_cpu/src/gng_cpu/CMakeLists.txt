@@ -127,7 +127,8 @@ target_link_options(${PROJECT_NAME} PRIVATE -static-libstdc++)
 # 配布構成ごとの公開シンボル。製品版には外部登録・任意重点入力の入口なし。
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.v" symbol_map)
 if(NOT allow_external_sampler)
-  foreach(symbol gng_set_sampling_rules gng_set_priority_input gng_set_weighted_priority_input)
+  foreach(symbol gng_set_sampling_rules gng_set_priority_input gng_set_weighted_priority_input
+      gng_get_input_grid gng_set_registered_input)
     string(REPLACE "    ${symbol};\n" "" symbol_map "${symbol_map}")
   endforeach()
 endif()

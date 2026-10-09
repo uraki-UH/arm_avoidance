@@ -53,7 +53,7 @@ getBase2LidarFrameのTF取得失敗メッセージ`Could not transform ...`はDE
 
 ## 自己点候補の学習除外
 
-VLUT用ROIを同時生成する場合は、[ROI登録との共有構成](../gng_vlut_system/README.md#roi登録とais-gngの自己判定共有)を選択可能。直接ROI登録、または一回だけ構築したworld_bucketからのROI登録。`input.shared_point_store`で同一プロセスの元点・セルラベルを参照し、GNG側の点群購読・自己形状照合を省略。単独の`self_filter.mask_topic`との併用不可。以下は単独GNG用の設定。
+VLUT用ROIを同時生成する場合は、[ROI登録との共有構成](../gng_vlut_system/README.md#roi登録とais-gngの自己判定共有)を選択可能。直接ROI登録、または一回だけ構築したworld_bucketからのROI登録。`input.shared_point_store`で同一プロセスの元点・セルラベルを参照し、GNG側の点群購読・自己形状照合を省略。入力格子も共通登録結果の受渡しによる内部再量子化・再ソートの省略、学習範囲・代表元点・外部サンプラーの維持。単独の`self_filter.mask_topic`との併用不可。以下は単独GNG用の設定。
 
 既存の自己ボクセルマスクで元点を判定し、抽出候補から除外。環境点群の粗いグリッドを別途作成せず、残った実測点を既存のGNGボクセル処理へ投入。通常・unknown・重点学習のすべてが除外後の入力を使用。
 
@@ -61,7 +61,7 @@ GNGを停止した状態で、Docker内のワークスペースへ反映しま�
 
 ```bash
 cd /ros2_ws
-colcon build --packages-select voxel_idx pointcloud_sampling ais_gng --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --packages-select voxel_idx pointcloud_sampling gng_cpu ais_gng --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
 ```
 
