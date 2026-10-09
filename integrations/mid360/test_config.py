@@ -43,8 +43,7 @@ class config_test(unittest.TestCase):
             {"lidar_ip": "192.168.1.5"}, {"publish_freq": float("nan")},
             {"publish_freq": 101}, {"enable_mount_tf": "false"},
             {"rot_deg": [0, float("inf"), 0]}, {"pos": [0, 0]},
-            {"points_topic": "relative"}, {"frame_id": "/mid360"},
-            {"imu_topic": self.config["points_topic"]},
+            {"frame_id": "/mid360"},
             {"enable_mount_tf": True, "parent_frame_id": "mid360_link"},
         ):
             with self.subTest(change=change), self.assertRaises(Exception):
@@ -77,7 +76,9 @@ class config_test(unittest.TestCase):
                     actions = module.start(context)
                 driver = node.call_args_list[0].kwargs
                 self.assertEqual(driver["parameters"][0]["xfer_format"], 0)
-                self.assertIn(("/livox/lidar", config["points_topic"]), driver["remappings"])
+                # 公式トピック名の維持。独自リマップなし
+                self.assertNotIn("remappings", driver)
+                self.assertEqual(driver["parameters"][0]["multi_topic"], 0)
                 packet_path = Path(driver["parameters"][0]["user_config_path"])
                 self.assertTrue(packet_path.exists())
                 if enable_tf:

@@ -19,28 +19,8 @@ from ais_gng_msgs.msg import TopologicalMap, TopologicalNodeStates
 from ais_gng_feature_msgs.msg import TopologicalNodeFeatureArray
 
 from dual_arm_avoidance_demo import avoidance_demo
-from gng_avoidance_planner import gng_avoidance_policy, has_stable_return_clearance
-
-
-def graph_topology_hash(ids, edges):
-    """固定グラフのID順序・辺配列に対する64 bit照合値。"""
-    result = 14695981039346656037
-    for value in (len(ids), *ids, len(edges), *edges):
-        result = ((result ^ int(value)) * 1099511628211) & ((1 << 64)-1)
-    return result
-
-
-def voxel_centers(message, root_from_source=None):
-    """受信状態を変更しないボクセル中心座標の復号と固定座標変換。"""
-    ids = np.asarray(message.data, dtype=np.int64)
-    mask = (1 << 21)-1
-    cells = np.column_stack([((ids >> shift) & mask)-message.offset for shift in
-                             (message.x_shift, message.y_shift, message.z_shift)])
-    points = (cells+.5)*message.voxel_size+np.array([message.origin_x, message.origin_y, message.origin_z])
-    if root_from_source is not None:
-        transform = np.asarray(root_from_source)
-        points = points @ transform[:3, :3].T + transform[:3, 3]
-    return points
+from gng_avoidance_planner import (
+    gng_avoidance_policy, has_stable_return_clearance, graph_topology_hash, voxel_centers)
 
 
 def build_path_message(graph, path, labels, stamp):

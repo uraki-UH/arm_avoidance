@@ -32,6 +32,10 @@ def damping_current(velocity, gain, max_current, gravity_current=0.):
 
 class neck_torque(Node):
     ids = (51, 52)
+    node_name = 'dynamixel_neck_torque'
+    label = 'ID51・52'
+    supported_models = (1020,)
+    control_label = '重力補償＋減衰'
 
     def __init__(self):
         super().__init__('dynamixel_neck_torque')
@@ -65,13 +69,17 @@ class neck_torque(Node):
                 raise ValueError('重力補償係数が未設定、または補償振幅がmax_current_maを超えています')
         if not self.driver.startswith('/') or self.driver == '':
             raise ValueError('driver_namespaceには絶対名前空間が必要です')
+        self.setup_io()
+
+    def setup_io(self, allow_output=True):
+        """電流制御の状態監視と配信口。首・両腕で共通の起動終了経路。"""
         self.state = 'waiting'
         self.has_owned_output = False
         self.joints, self.status, self.extra, self.goals = {}, {}, {}, {}
         self.status_sec = self.extra_sec = self.goal_sec = -math.inf
         self.stage_sec = time.monotonic()
-        self.goal_pub = self.create_publisher(DynamixelGoal, self.driver + '/command/goal', 1)
-        self.torque_pub = self.create_publisher(DynamixelStatus, self.driver + '/command/status', 1)
+        self.goal_pub = self.create_publisher(DynamixelGoal, self.driver + '/command/goal', 1) if allow_output else None
+        self.torque_pub = self.create_publisher(DynamixelStatus, self.driver + '/command/status', 1) if allow_output else None
         self.create_subscription(JointState, self.driver + '/fresh_joint_states', self.on_joints, qos_profile_sensor_data)
         self.create_subscription(DynamixelStatus, self.driver + '/state/status', self.on_status, 1)
         self.create_subscription(DynamixelExtra, self.driver + '/state/extra', self.on_extra, 1)
@@ -86,7 +94,7 @@ class neck_torque(Node):
         if not 0 <= (time.time_ns() - stamp) * 1e-9 < .2:
             return
         for name, position, velocity in zip(message.name, message.position, message.velocity):
-            if name not in ('51', '52') or not math.isfinite(position) or not math.isfinite(velocity):
+            if name not in tuple(map(str, self.ids)) or not math.isfinite(position) or not math.isfinite(velocity):
                 continue
             motor_id = int(name)
             if stamp > self.joints.get(motor_id, (-1, 0.))[0]:
@@ -133,8 +141,8 @@ class neck_torque(Node):
             model, auto_torque, reverse = self.extra[motor_id]
             if error or not ping or mode != 'current':
                 raise ValueError(f'ID{motor_id}: mode={mode}, error={error}, ping={ping}（必要: current・エラーなし・通信正常）')
-            if model != 1020 or auto_torque or reverse:
-                raise ValueError(f'ID{motor_id}: XM430-W350・Goal更新時自動ON無効・Reverse無効が必要')
+            if model not in self.supported_models or auto_torque or reverse:
+                raise ValueError(f'ID{motor_id}: 対応機種・Goal更新時自動ON無効・Reverse無効が必要')
         for topic, _ in self.get_topic_names_and_types():
             if (topic.startswith(self.driver + '/command/') or topic.startswith(self.driver + '/commands/')
                     or topic == self.driver + '/shortcut'):
@@ -148,7 +156,7 @@ class neck_torque(Node):
         self.goal_pub.publish(DynamixelGoal(id_list=list(self.ids), current_ma=list(values)))
 
     def send_torque(self, enable_torque):
-        self.torque_pub.publish(DynamixelStatus(id_list=list(self.ids), torque=[enable_torque, enable_torque]))
+        self.torque_pub.publish(DynamixelStatus(id_list=list(self.ids), torque=[enable_torque] * len(self.ids)))
 
     def step(self):
         now = time.monotonic()
@@ -159,15 +167,15 @@ class neck_torque(Node):
         self.check_driver()
         if self.state == 'waiting':
             if any(self.status[motor_id][0] for motor_id in self.ids):
-                raise ValueError('開始前の51・52のトルクOFFが必要。既存ON状態の引継ぎなし')
+                raise ValueError(f'開始前の{self.label}のトルクOFFが必要。既存ON状態の引継ぎなし')
             self.has_owned_output = True
             self.state, self.stage_sec = 'zero', now
-            self.send_current([0., 0.])
+            self.send_current([0.] * len(self.ids))
             return
         if self.state == 'zero':
             if any(self.status[motor_id][0] for motor_id in self.ids):
                 raise ValueError('準備中の予期しないトルクON')
-            self.send_current([0., 0.])
+            self.send_current([0.] * len(self.ids))
             if self.goal_sec > self.stage_sec and all(abs(self.goals[motor_id][0]) < .01 for motor_id in self.ids):
                 self.state, self.stage_sec = 'enable', now
                 self.send_torque(True)
@@ -177,11 +185,11 @@ class neck_torque(Node):
         if self.state == 'enable':
             if any(abs(self.goals[motor_id][0]) >= .01 for motor_id in self.ids):
                 raise ValueError('トルクON準備中のゼロ電流目標の逸脱')
-            self.send_current([0., 0.])
+            self.send_current([0.] * len(self.ids))
             if self.status_sec > self.stage_sec and all(self.status[motor_id][0] for motor_id in self.ids):
                 self.state, self.stage_sec = 'running', now
-                mode = '重力補償＋減衰' if self.enable_gravity_compensation else '減衰のみ（静止時0 mA）'
-                self.get_logger().info(f'ID51・52: {mode} | Ctrl+C: トルクOFF')
+                mode = self.control_label if self.enable_gravity_compensation else '減衰のみ（静止時0 mA）'
+                self.get_logger().info(f'{self.label}: {mode} | Ctrl+C: トルクOFF')
             elif now - self.stage_sec > 3.:
                 raise ValueError('トルクON報告の待機時間超過')
             return
@@ -216,20 +224,20 @@ class neck_torque(Node):
             if time.monotonic() >= next_send:
                 next_send = time.monotonic() + .1
                 try:
-                    self.send_current([0., 0.])
+                    self.send_current([0.] * len(self.ids))
                 finally:
                     self.send_torque(False)
             rclpy.spin_once(self, timeout_sec=.05)
             if (time.monotonic() - start > .5 and self.status_sec > start
                     and self.has_fresh_state()
                     and all(motor_id in self.status and not self.status[motor_id][0] for motor_id in self.ids)):
-                self.get_logger().info('ID51・52: OFF報告あり（キャッシュを含む）')
+                self.get_logger().info(f'{self.label}: OFF報告あり（キャッシュを含む）')
                 return True
-        self.get_logger().error('ID51・52: OFF未確認。首を支持し、独立した停止手段で確認してください')
+        self.get_logger().error(f'{self.label}: OFF未確認。対象を支持し、独立した停止手段で確認してください')
         return False
 
 
-def main():
+def main(node_type=neck_torque):
     is_exiting = False
 
     def request_exit(*_args):
@@ -247,7 +255,7 @@ def main():
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node, result = None, 0
     try:
-        node = neck_torque()
+        node = node_type()
         next_tick = time.monotonic()
         while rclpy.ok() and not is_exiting:
             rclpy.spin_once(node, timeout_sec=.02)
@@ -255,14 +263,14 @@ def main():
                 node.step()
                 next_tick = time.monotonic() + .02
     except Exception as error:
-        rclpy.logging.get_logger('dynamixel_neck_torque').error('首トルク停止: ' + str(error))
+        rclpy.logging.get_logger(node_type.node_name).error(node_type.label + '停止: ' + str(error))
         result = 1
     finally:
         try:
             if node is not None and not node.stop_output():
                 result = 2
         except Exception as error:
-            print('ID51・52: OFF未確認。終了処理の通信異常: ' + str(error), flush=True)
+            print(node_type.label + ': OFF未確認。終了処理の通信異常: ' + str(error), flush=True)
             result = 2
         finally:
             if node is not None:

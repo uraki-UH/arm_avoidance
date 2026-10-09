@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""実機の小動作・Gazebo追従と、両系統への優先停止要求。"""
+"""実機の小動作・Gazebo／リーダー追従と優先停止要求。"""
 import argparse
 import json
 import os
@@ -90,9 +90,11 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--namespace', required=True)
-    parser.add_argument('--sim-namespace', required=True)
+    parser.add_argument('--sim-namespace', default='sim_ToPoDualArm')
+    parser.add_argument('--target-source', choices=['gazebo', 'leader'], default='gazebo')
     parser.add_argument('--tty-path', required=True)
     args = parser.parse_args(remove_ros_args()[1:])
+    is_leader = args.target_source == 'leader'
     stream = os.fdopen(os.open(args.tty_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK), 'r+b', buffering=0)
     def emit(message):
         node.get_logger().info(message)
@@ -101,6 +103,8 @@ def main():
             os.write(stream.fileno(), ('\r\n'+message+'\r\n').encode())
         except OSError:
             pass
+    if is_leader:
+        emit = emit_status
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = rclpy.create_node('dynamixel_sim_keyboard_'+str(os.getpid()))
     hw, sim = '/'+args.namespace.strip('/'), '/'+args.sim_namespace.strip('/')
@@ -112,22 +116,26 @@ def main():
         except ValueError:
             pass
     node.create_subscription(String, hw+'/status', lambda msg: on_status(msg, 'hardware'), 1)
-    node.create_subscription(String, sim+'/control/status', lambda msg: on_status(msg, 'sim'), 1)
-    node.create_subscription(String, sim+'/safety/status', lambda msg: on_status(msg, 'safety'), 1)
-    node.create_subscription(String, sim+'/avoidance/status', lambda msg: on_status(msg, 'demo'), 1)
+    if not is_leader:
+        node.create_subscription(String, sim+'/control/status', lambda msg: on_status(msg, 'sim'), 1)
+        node.create_subscription(String, sim+'/safety/status', lambda msg: on_status(msg, 'safety'), 1)
+        node.create_subscription(String, sim+'/avoidance/status', lambda msg: on_status(msg, 'demo'), 1)
     services = [
         ('enable', SetBool, hw+'/enable'), ('follow', SetBool, hw+'/follow'),
         ('positive', Trigger, hw+'/jog_positive'), ('negative', Trigger, hw+'/jog_negative'),
         ('reset', Trigger, hw+'/reset'), ('sim_reset', Trigger, sim+'/control/reset'),
         ('avoidance', SetBool, sim+'/control/avoidance')]
+    if is_leader:
+        services = services[:5]
     clients = {name: node.create_client(kind, topic) for name, kind, topic in services}
     request_factories = {name: kind.Request for name, kind, _ in services}
     requests = [stop_request(node.create_client(Trigger, topic), Trigger.Request, emit)
-                for topic in (hw+'/stop', sim+'/control/stop')]
+                for topic in ([hw+'/stop'] if is_leader else [hw+'/stop', sim+'/control/stop'])]
     torque_request = stop_request(node.create_client(Trigger, hw+'/torque_off'), Trigger.Request,
                                  lambda message: emit('トルクOFF: '+message))
     all_requests = requests+[torque_request]
-    heartbeats = [node.create_publisher(Empty, topic, 1) for topic in (hw+'/heartbeat', sim+'/control/heartbeat')]
+    heartbeats = [node.create_publisher(Empty, topic, 1) for topic in
+                  ([hw+'/heartbeat'] if is_leader else [hw+'/heartbeat', sim+'/control/heartbeat'])]
     def emit_operation(message):
         emit(message)
         feedback = gazebo_reset_feedback(message)
@@ -140,13 +148,16 @@ def main():
         if action == 'torque_off':
             operation.cancel()
             torque_request.begin()
-            requests[1].begin()
+            if not is_leader:
+                requests[1].begin()
             return False
         if action in ('stop', 'quit'):
             latest.pop('sim_operation', None)
             operation.cancel()
             for request in requests:
                 request.begin()
+            if action == 'quit' and is_leader and latest.get('hardware', {}).get('has_owned_output'):
+                torque_request.begin()
             return action == 'quit'
         if action is None or any(request.is_pending for request in all_requests):
             return False
@@ -161,14 +172,15 @@ def main():
     handlers = {kind: signal.signal(kind, lambda *_: exit_state.update(is_requested=True))
                 for kind in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     decoder = terminal_key_decoder({b'h': 'enable', b'j': 'positive', b'k': 'negative',
-                                    b'f': 'follow', b'r': 'reset', b'b': 'sim_reset', b'a': 'avoidance', b'e': 'torque_off'})
+                                    b'f': 'follow', b'r': 'reset', b'e': 'torque_off',
+                                    **({} if is_leader else {b'b': 'sim_reset', b'a': 'avoidance'})})
     is_exiting = False
     exit_deadline = next_heartbeat = 0.
     previous = None
     previous_sim = None
     emit('H: 実機出力ON／停止（保持目標読返し後の対象IDトルクONを含む）')
-    emit('J/K: 実機の単関節±小角度 / F: 実機のGazebo追従ON/OFF / R: 実機停止解除・出力OFF')
-    emit('gazebo操作 | '+gazebo_key_help)
+    emit('J/K: 単関節±小角度 / F: '+('リーダー' if is_leader else 'Gazebo')+'追従ON/OFF / R: 停止解除・出力OFF')
+    emit('Space: 保持して停止 / Ctrl+C: 停止・所有出力のトルクOFF要求・終了' if is_leader else 'gazebo操作 | '+gazebo_key_help)
     emit('E: 選択IDのトルクOFF＋指令停止ラッチ（出力許可時のみ）。脱力・落下に備えた腕の支持が必要')
     emit('PC/USB故障時の独立非常停止とは別のソフト停止。実測停止表示を確認')
     try:
@@ -187,20 +199,24 @@ def main():
                 rclpy.spin_once(node, timeout_sec=.02)
                 state = latest.get('hardware', {})
                 label = (state.get('mode'), state.get('detail'), state.get('ids'), state.get('is_stopped'),
-                         time.monotonic()-received.get('hardware', -1e9) < .5, state.get('has_torque_off_report'))
+                         time.monotonic()-received.get('hardware', -1e9) < .5, state.get('has_torque_off_report'),
+                         state.get('has_fresh_leader'), state.get('has_fresh_state'))
                 if label != previous:
                     emit(f'実機 ID={label[2]} mode={label[0]} / {label[1]} / 実測停止={label[3] if label[4] else "未確認・状態失効"}')
                     if state.get('is_torque_off_latched'):
                         emit(f'トルクOFF報告={label[5] if label[4] else "未確認・状態失効"}（電源遮断の確認とは別）')
+                    if is_leader:
+                        emit(f'リーダー ID={state.get("leader_ids")} 受信={label[6] if label[4] else "未確認"} / フォロワー受信={label[7] if label[4] else "未確認"}')
                     previous = label
                 sim_label = gazebo_status_label(latest, received, time.monotonic())
                 if latest.get('sim', {}).get('mode') != 'stopped':
                     latest.pop('sim_operation', None)
-                if sim_label != previous_sim:
+                if not is_leader and sim_label != previous_sim:
                     emit_status(sim_label+'\r\n  '+gazebo_key_help)
                     previous_sim = sim_label
                 if is_exiting and (time.monotonic() >= exit_deadline or
-                        (not any(request.is_pending for request in all_requests) and state.get('is_stopped') and label[4])):
+                        (not any(request.is_pending for request in all_requests) and state.get('is_stopped') and label[4]
+                         and (not is_leader or not state.get('has_owned_output') or state.get('has_torque_off_report')))):
                     emit('実測停止確認済み' if state.get('is_stopped') and label[4] else '実測停止未確認。独立停止手段で確認')
                     break
     finally:

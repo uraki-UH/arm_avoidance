@@ -3,6 +3,7 @@ import asyncio
 import json
 import socket
 import unittest
+import time
 from types import SimpleNamespace
 from tornado.httpclient import HTTPRequest, HTTPClientError
 from tornado.websocket import websocket_connect
@@ -68,6 +69,24 @@ class JointStreamTest(unittest.IsolatedAsyncioTestCase):
         response = json.loads(await asyncio.wait_for(client.read_message(), 2))
         self.assertEqual(response['pose'], {'neck_pan_joint': .2})
 
+    async def test_physics_input_rejects_stale_and_replayed_stamps(self):
+        from sensor_msgs.msg import JointState
+        client, response = await self.connect(receive=True, topic='/leader/joint_states', enable_fresh_input=True)
+        self.assertEqual(response['type'], 'ready')
+        def message(stamp, value):
+            sample = JointState(name=['neck_pan_joint'], position=[value])
+            sample.header.stamp.sec, sample.header.stamp.nanosec = divmod(stamp, 1_000_000_000)
+            return sample
+        now = time.time_ns()
+        callback = self.subscriptions[0].callback
+        callback(message(now-1_000_000_000, .8))
+        callback(message(now+1_000_000_000, .7))
+        callback(message(now, .2))
+        callback(message(now, .9))
+        response = json.loads(await asyncio.wait_for(client.read_message(), 2))
+        self.assertEqual(response['pose'], {'neck_pan_joint': .2})
+        self.assertAlmostEqual(response['stamp_sec'], now*1e-9, delta=1e-6)
+
     async def test_invalid_pose_rejected(self):
         client, _ = await self.connect()
         await client.write_message(json.dumps(dict(type='joints', pose={'unknown_joint': .1})))
@@ -79,6 +98,25 @@ class JointStreamTest(unittest.IsolatedAsyncioTestCase):
         _, response = await self.connect(receive=True, topic='/sim/joint_states')
         self.assertEqual(response['type'], 'error')
         self.assertFalse(self.subscriptions)
+
+    async def test_physics_watchdog_without_browser_rendering(self):
+        client = await websocket_connect(HTTPRequest(f'ws://127.0.0.1:{self.port}/physics', headers={'Origin': 'http://localhost:8877'}))
+        self.clients.append(client)
+        robot = dict(model='long', position=[0, 0, 0], quaternion=[0, 0, 0, 1], pose={},
+                     enable_leader_follow=True, max_leader_age_sec=.15)
+        await client.write_message(json.dumps(dict(type='start', bodies=[], robot=robot)))
+        self.assertEqual(json.loads(await asyncio.wait_for(client.read_message(), 10))['type'], 'ready')
+        await client.write_message(json.dumps(dict(type='poses', poses=[], joints={'R_joint1': .1}, leader_stamp_sec=time.time())))
+        deadline = time.monotonic()+2.
+        frame = {}
+        while time.monotonic() < deadline:
+            frame = json.loads(await asyncio.wait_for(client.read_message(), 1))
+            if frame.get('is_leader_stopped'):
+                break
+        self.assertTrue(frame.get('is_leader_stopped'))
+        await client.write_message(json.dumps(dict(type='poses', poses=[], joints={'R_joint1': .5}, leader_stamp_sec=time.time())))
+        frame = json.loads(await asyncio.wait_for(client.read_message(), 1))
+        self.assertTrue(frame['is_leader_stopped'])
 
     async def test_origin_rejected(self):
         with self.assertRaises(HTTPClientError):

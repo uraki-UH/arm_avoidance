@@ -12,7 +12,7 @@ self.onmessage=event=>{
    const message=JSON.parse(event.data);
    if(message.type==='ack'){is_pending=false;return;}
    if(message.type==='ready')is_ready=true;
-   if(message.type==='joints'){latest=message;return;}
+   if(message.type==='joints'){if(data.config.enable_fresh_input)self.postMessage(message);else latest=message;return;}
    self.postMessage(message);
   }catch(error){self.postMessage({type:'error',error:error.message});}
  };

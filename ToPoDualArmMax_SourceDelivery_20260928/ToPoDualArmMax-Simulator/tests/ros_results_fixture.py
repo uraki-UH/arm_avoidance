@@ -1,6 +1,7 @@
 """表示ゲートウェイ・ROS入力の隔離試験。標準入力の終了または期限到達で全プロセスを停止。"""
 import argparse
 import json
+from pathlib import Path
 import signal
 import subprocess
 import tempfile
@@ -14,6 +15,7 @@ def main():
     parser.add_argument('--origin', required=True)
     args = parser.parse_args()
     import rclpy
+    from ament_index_python.packages import get_package_prefix
     from ais_gng_msgs.msg import TopologicalMap, TopologicalNode, TopologicalCluster, PlaneClusterArray, PlaneCluster
     from std_msgs.msg import UInt32MultiArray, String
     from visualization_msgs.msg import Marker, MarkerArray
@@ -129,14 +131,16 @@ def main():
             vertex.pos.z = 5.
         remote_map_pub.publish(remote_map)
     node.create_timer(.05, publish)
-    command = ['/ros2_ws/src/ToPoFuzzy-Viewer/backend/build/topo_fuzzy_viewer/viewer_ws_gateway_node',
+    # 現在のROSオーバーレイで選択されたViewerの実行ファイル
+    viewer_executables = Path(get_package_prefix('topo_fuzzy_viewer')) / 'lib' / 'topo_fuzzy_viewer'
+    command = [str(viewer_executables / 'viewer_ws_gateway_node'),
                '--ros-args', '-p', f'port:={args.port}', '-p', f'allowed_origins:=["{args.origin}"]']
     processes = []
     with tempfile.TemporaryFile() as log:
         try:
             commands = [command,
-                ['/ros2_ws/src/ToPoFuzzy-Viewer/backend/build/topo_fuzzy_viewer/viewer_edit_node'],
-                ['python3', '/ros2_ws/src/ToPoFuzzy-Viewer/backend/src/topo_fuzzy_viewer/scripts/viewer_vehicle_registration_node.py']]
+                [str(viewer_executables / 'viewer_edit_node')],
+                ['python3', str(viewer_executables / 'viewer_vehicle_registration_node.py')]]
             for command in commands:
                 process = subprocess.Popen(command, stdout=log, stderr=log)
                 processes.append(process)

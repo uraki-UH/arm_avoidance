@@ -1,0 +1,40 @@
+/**:
+  ros__parameters:
+    # 腕7軸ずつの追従。右1〜7→31〜37、左11〜17→41〜47
+    # 実機出力は腕のみ。グリッパー38・48と首51・52は校正確認前の対象外
+    joint_names: [R_joint1, R_joint2, R_joint3, R_joint4, R_joint5, R_joint6, R_joint7,
+                  L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7]
+    # 同一USBバスの既定値。別USB時は各handlerの名前空間に対応した設定
+    driver_namespace: /dynamixel
+    leader_driver_namespace: /dynamixel
+    leader_topic: /leader/joint_states
+    # ID8・18の入力専用換算。原点確認前は無効
+    enable_leader_gripper_input: false
+    # モータの開閉端 [deg]。0°開は仮置き、閉じ切り角は暫定180°
+    # 右の閉じ方向は反時計回り、左は時計回り。150°の場合は閉じ端を±150°へ変更
+    leader_right_gripper_open_deg: 0.0
+    leader_right_gripper_closed_deg: 180.0
+    leader_left_gripper_open_deg: 0.0
+    leader_left_gripper_closed_deg: -180.0
+    allow_hardware_output: false
+    allow_leader_follow: true
+    # 追従開始時からの角度差。開始時の姿勢差による急動作の防止
+    enable_relative_follow: true
+    # 所有した出力の終了時トルクOFF要求。支持・独立停止手段の準備が必要
+    enable_torque_off_on_exit: true
+    # 許容電流 [mA]。0は未設定・有効化拒否
+    max_current_ma: 0.0
+    # 有効化時姿勢からの試験範囲 [rad]
+    max_excursion: 0.08726646259971647
+    # 指令速度 [rad/s]・profile加速度 [rad/s²]
+    max_velocity: 0.03490658503988659
+    max_acceleration: 0.5235987755982988
+    # 絶対角追従の開始姿勢差・実機追従偏差 [rad]
+    max_start_dev_th: 0.017453292519943295
+    max_follow_dev_th: 0.05235987755982989
+    max_stop_velocity_th: 0.008726646259971648
+    min_stop_duration_sec: 0.3
+    max_state_age_sec: 0.3
+    max_command_age_sec: 0.3
+    max_status_age_sec: 1.5
+    max_heartbeat_age_sec: 0.4

@@ -333,7 +333,7 @@ VLUT用の占有・危険ボクセルへの変換には除去後のトピック�
 ### ROI登録とAiS-GNGの自己判定共有
 
 実機MID-360のドライバ導入・IP設定・点群受信は[専用Docker環境の手順](../integrations/mid360/README.md)を参照。
-GNGコンテナのビルドとは独立した導入。実機の出力トピックは`/sensors/mid360/points`。
+GNGコンテナのビルドとは独立した導入。実機の出力トピックは公式既定の`/livox/lidar`。
 
 ```bash
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \

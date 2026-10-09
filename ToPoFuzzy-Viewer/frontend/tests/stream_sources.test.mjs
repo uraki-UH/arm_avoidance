@@ -57,6 +57,7 @@ test('入力選択・遅延受信・再接続とロボットのモデル保持',
             ['/marker', 'marker', 'markerData'], ['/voxel', 'voxel', 'voxelData']];
         raw_sources = entries.map(([id, type]) => ({ id, type, name: id, active: true }));
         await act(async () => api.getSources());
+        assert.ok(api.sources.every(source => !source.active));
         const pc = new ArrayBuffer(36);
         new Uint8Array(pc).set([3, ...new TextEncoder().encode('/pc')]);
         const view = new DataView(pc, 4);
@@ -71,6 +72,15 @@ test('入力選択・遅延受信・再接続とロボットのモデル保持',
             socket.receive({ type: 'stream.voxel', tag: '/voxel', data: ['1'], sequence: 1, layout: { voxelSize: .1 } });
         };
         await act(async () => { publish(); socket.receive({ type: 'stream.robot.description', tag: 'test_robot', robot }); });
+        await flush();
+        // 他画面の配信中トピックと未検出トピックの受信でも自動選択なし。
+        entries.forEach(([id, , field]) => assert.equal(api[field][id], undefined, field));
+        await act(async () => socket.receive({ type: 'stream.graph', tag: '/unlisted', graph }));
+        await flush();
+        assert.equal(api.graphData['/unlisted'], undefined);
+        await act(async () => api.getSources());
+        assert.ok(api.sources.every(source => !source.active));
+        await act(async () => { for (const [id] of entries) await api.subscribeSource(id); publish(); });
         await flush();
         entries.forEach(([id, , field]) => assert.ok(api[field][id], field));
         assert.equal(api.robotData.test_robot, undefined);
@@ -130,9 +140,13 @@ test('入力選択・遅延受信・再接続とロボットのモデル保持',
         // 接続先変更は選択状態とモデルキャッシュを初期化。
         url = 'ws://other/observe'; await render();
         await act(async () => { api.connect(); socket.open(); publish(); }); await flush();
-        assert.ok(api.pointClouds['/pc']);
-        // 通常Viewerでも解除と後着データを処理。
+        assert.equal(api.pointClouds['/pc'], undefined);
+        assert.ok(api.sources.every(source => !source.active));
+        // 通常Viewerの共有選択の互換性と、解除後の後着データの除外。
         is_read_only = false; await render();
+        await act(async () => { await api.getSources(); publish(); }); await flush();
+        assert.ok(api.sources.every(source => source.active));
+        assert.ok(api.pointClouds['/pc']);
         await act(async () => api.unsubscribeSource('/pc', true));
         await act(async () => socket.receive(pc)); await flush();
         assert.equal(api.pointClouds['/pc'], undefined);

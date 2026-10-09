@@ -707,6 +707,7 @@ interface connection_options {
 export function useWebSocket(url: string, { is_read_only = false, on_transforms, on_clear }: connection_options = {}): UseWebSocketReturn {
     const [sources, setSources] = useState<DataSource[]>([]);
     const source_registry = useRef(new stream_source_registry());
+    source_registry.current.allow_server_selection = !is_read_only;
     const source_url = useRef(url);
     const [pointClouds, setPointClouds] = useState<Record<string, PointCloudData>>({});
     const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});

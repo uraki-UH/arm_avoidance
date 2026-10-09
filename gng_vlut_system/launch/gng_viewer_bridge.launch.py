@@ -98,7 +98,7 @@ def mid360_input(config, robot_name):
         raise ValueError('mid360には設定辞書が必要です')
     if not safe_bool(config.get('enable_input'), False):
         return '', []
-    topic = config.get('points_topic', '/sensors/mid360/points')
+    topic = config.get('points_topic', '/livox/lidar')
     from rclpy.validate_full_topic_name import validate_full_topic_name
     validate_full_topic_name(topic)
     actions = []

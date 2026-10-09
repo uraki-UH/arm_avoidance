@@ -22,7 +22,7 @@ export class WorkEnvironment {
     this.gizmo.addEventListener('dragging-changed',e=>{orbit.enabled=!e.value;});
     this.gizmo.addEventListener('objectChange',()=>{if(this.editTable){const s=this.state,p=this.root.position,r=this.root.rotation;Object.assign(s,{x:p.x,y:p.y,z:p.z,roll:r.x,pitch:r.y,yaw:r.z});this.syncTable();}else this.syncObject();this.changed();});
     const release=()=>{if(this.gizmo.dragging)this.gizmo.pointerUp({button:0});orbit.enabled=true;};window.addEventListener('pointerup',release);window.addEventListener('blur',release);window.addEventListener('pointercancel',release);
-    this.ui();this.enhanceUI();this.buildTable();this.add('box',[-.10,-.16]);this.add('bottle',[.04,.02]);this.add('mug',[-.07,.21]);this.select(null);
+    this.ui();this.enhanceUI();this.buildTable();this.add('box',[-.10,-.16]).is_default=true;this.add('bottle',[.04,.02]).is_default=true;this.add('mug',[-.07,.21]).is_default=true;this.select(null);this.sync_default_objects?.();
   }
   enhanceUI(){}
   ui(){

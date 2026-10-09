@@ -74,6 +74,7 @@ def policy():
     state.config = dict(min_cloud_clearance_th=.015, min_clearance_th=.035,
                         target_clearance=.1, return_clear_sec=0.)
     state.has_safe_measured_neighbors = lambda: False
+    state.has_safe_target_neighbors = lambda _: True
     state.select_active_arms = lambda: np.array([0])
     state.cloud_clearance = lambda _: (.07, None)
     state.can_bridge = lambda *args: True
@@ -202,11 +203,23 @@ def retreat(monkeypatch):
                 'target_clearance': .1, 'return_clear_sec': .5, 'max_state_age_sec': 1.},
         select_active_arms=lambda: np.array([0]),
         has_safe_measured_neighbors=lambda: observed['label'] == 1,
+        has_safe_target_neighbors=lambda _: observed['label'] == 1,
         cloud_clearance=lambda _: (observed['gap'], None),
         can_bridge=lambda *args: observed['can_bridge'],
         refine_target=lambda step: (np.array([.3+step]), True))
     state.motion_components = motion_components(retreat=lambda request: motion_result(np.array([.8]), True, True))
     return state, observed, clock
+
+
+def test_unsafe_home_never_resumes(retreat):
+    state, _, clock = retreat
+    state.has_safe_target_neighbors = lambda _: False
+    state.config['return_clear_sec'] = 0.
+    for _ in range(3):
+        target, is_valid = state.select_target(None, None, .032)
+        assert is_valid and state.phase == 'waiting_for_clearance'
+        np.testing.assert_allclose(target, state.positions)
+        clock[0] += .1
 
 
 @pytest.mark.parametrize('cause', ['danger', 'collision', 'missing', 'distance', 'path'])

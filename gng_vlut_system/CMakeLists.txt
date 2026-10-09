@@ -213,6 +213,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_dual_arm_udp_output test/test_dual_arm_udp_output.py)
   ament_add_pytest_test(test_dual_arm_control_udp test/test_dual_arm_control_udp.py)
   ament_add_pytest_test(test_dynamixel_neck_torque test/test_dynamixel_neck_torque.py)
+  ament_add_pytest_test(test_dynamixel_hand_guiding test/test_dynamixel_hand_guiding.py)
   ament_add_gtest(test_goal_tasks test/test_goal_tasks.cpp)
   target_include_directories(test_goal_tasks PRIVATE src)
   ament_add_gtest(test_joint_command_mux test/test_joint_command_mux.cpp)
@@ -220,6 +221,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_gazebo_stop_latch test/test_gazebo_stop_latch.cpp)
   target_include_directories(test_gazebo_stop_latch PRIVATE src)
   ament_add_pytest_test(test_joint_command_model test/test_joint_command_model.py)
+  ament_add_pytest_test(test_follower_display_mapping test/test_follower_display_mapping.py)
   ament_add_pytest_test(test_mobile_state_graph test/test_mobile_state_graph.py)
   ament_add_gtest(test_joint_state_utils test/test_joint_state_utils.cpp)
   target_include_directories(test_joint_state_utils PRIVATE src)
@@ -286,6 +288,7 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
   scripts/joint_motion_state.py
   scripts/local_qp.py
   scripts/joint_command_model.py
+  scripts/gravity_compensation.py
   scripts/dual_arm_mode_model.py
   scripts/dual_arm_udp_output.py
   DESTINATION lib/${PROJECT_NAME}
@@ -299,6 +302,7 @@ install(PROGRAMS
   scripts/harmonic_launcher.py
   scripts/joint_motion_observer.py
   scripts/dynamixel_neck_torque.py
+  scripts/dynamixel_hand_guiding.py
   scripts/dynamixel_sim_output.py
   scripts/dynamixel_sim_keyboard.py
   scripts/start_gazebo_physics.py

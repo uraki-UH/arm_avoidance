@@ -1,10 +1,32 @@
 """観測点群・姿勢グラフによるROS非依存の回避計画と復帰方策。"""
 import heapq
 import time
+import copy
 
 import numpy as np
 
 from avoidance_motion import motion_flags, motion_input, motion_result, motion_components, select_motion
+
+
+def graph_topology_hash(ids, edges):
+    """固定グラフのID順序・辺配列に対する64 bit照合値。"""
+    result = 14695981039346656037
+    for value in (len(ids), *ids, len(edges), *edges):
+        result = ((result ^ int(value)) * 1099511628211) & ((1 << 64)-1)
+    return result
+
+
+def voxel_centers(message, root_from_source=None):
+    """受信状態を変更しないボクセル中心座標の復号と座標変換。"""
+    ids = np.asarray(message.data, dtype=np.int64)
+    mask = (1 << 21)-1
+    cells = np.column_stack([((ids >> shift) & mask)-message.offset for shift in
+                             (message.x_shift, message.y_shift, message.z_shift)])
+    points = (cells+.5)*message.voxel_size+np.array([message.origin_x, message.origin_y, message.origin_z])
+    if root_from_source is not None:
+        transform = np.asarray(root_from_source)
+        points = points @ transform[:3, :3].T + transform[:3, 3]
+    return points
 
 
 def has_safe_node_neighbors(labels, adjacency, node_id):
@@ -29,6 +51,19 @@ def has_stable_return_clearance(state, has_clear_return):
 
 
 class gng_path_search:
+    def has_safe_target_neighbors(self, positions):
+        """復帰先の最寄りGNG姿勢と一次隣接の安全確認。"""
+        angles = getattr(self, 'angles', {})
+        if not angles:
+            return False
+        target = positions[self.arm_indices]
+        if getattr(self, 'angle_tree', None) is not None:
+            _, idx = self.angle_tree.query(target)
+            node_id = self.angle_node_ids[int(idx)]
+        else:
+            node_id = min(angles, key=lambda idx: float(np.linalg.norm(angles[idx]-target)))
+        return has_safe_node_neighbors(self.labels, self.adjacency, node_id)
+
     def has_safe_measured_neighbors(self):
         """Python計画の実測最寄り姿勢と一次隣接の安全確認。"""
         self.current_node_id = None
@@ -213,6 +248,8 @@ class gng_avoidance_policy(gng_path_search):
                 snapshot = gng_path_search()
                 for name in ('geometry', 'config', 'cloud_tree', 'cell_radius', 'arm_indices', 'active_angle_indices'):
                     setattr(snapshot, name, getattr(self, name))
+                # 計画中の環境形状差替えを隔離。不変のURDF配列は共有
+                snapshot.geometry = copy.copy(self.geometry)
                 for name in ('angles', 'labels', 'adjacency'):
                     setattr(snapshot, name, dict(getattr(self, name)))
                 snapshot.positions, snapshot.home = self.positions.copy(), self.home.copy()
@@ -308,6 +345,7 @@ class gng_avoidance_policy(gng_path_search):
         can_finish_retreat = (getattr(self, 'motion_phase', '') == 'returning'
                               or self.config['target_clearance']-self.cloud_gap <= max_retreat_clearance_dev_th)
         has_clear_return = (has_safe_neighbors and can_finish_retreat
+                            and self.has_safe_target_neighbors(home_target)
                             and self.can_bridge(self.positions, home_target, self.config['min_clearance_th']))
         can_return = has_stable_return_clearance(self, has_clear_return)
         self.motion_flags = motion_flags(

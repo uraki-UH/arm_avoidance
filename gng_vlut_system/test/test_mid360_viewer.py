@@ -22,7 +22,7 @@ def test_disabled():
 def test_mount_prefix_and_no_double_pitch():
     with patch.object(module, "Node") as node:
         topic, actions = module.mid360_input({"enable_input": True}, "topo_dual_arm_max_long")
-    assert topic == "/sensors/mid360/points"
+    assert topic == "/livox/lidar"
     assert len(actions) == 1
     args = node.call_args.kwargs["arguments"]
     assert args[args.index("--frame-id") + 1] == "topo_dual_arm_max_long/chest_lidar_link"
@@ -32,7 +32,7 @@ def test_mount_prefix_and_no_double_pitch():
 
 def test_external_tf_owner():
     assert module.mid360_input({"enable_input": True, "enable_mount_tf": False}, "robot") == (
-        "/sensors/mid360/points", [])
+        "/livox/lidar", [])
 
 
 def test_long_sensor_axes():

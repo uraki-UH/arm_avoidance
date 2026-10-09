@@ -20,6 +20,21 @@
 
 出典: [Livox公式サンプル配布](https://www.livoxtech.com/mid-360/downloads)、[MID-360仕様](https://www.livoxtech.com/mid-360/specs)、[公式通信仕様の点群・無効点の扱い](https://github.com/Livox-SDK/livox_wiki_en/blob/master/source/tutorials/new_product/mid360/livox_eth_protocol_mid360.md)。
 
+## Hesai JT128の走査
+
+「センサ → LiDAR → センサの種類」でJT128を選択可能。MID-360の走査設定とは独立したプリセット。切替時に旧取得フレームを破棄。
+
+- 走査方向: 公式J01-en-260330 Appendix A.1の128チャンネル設計値（水平角補正・仰角）。設計仰角 −4.43°〜88.99°。個体の角度補正ファイルは未使用。
+- 水平走査: 360°、10 Hz、0.4°刻み・900列。単一リターン115,200スロット／回転、1,152,000スロット／シミュレーション秒。
+- 積分時間: 0.025／0.1／0.5／1秒。連続取得Hzは実時間の上限。回転速度の設定とは独立し、処理が間に合わない場合の取得Hz低下あり。
+- 計測範囲: 最大60 m、最小距離はAppendix A.1の各チャンネル値（0／0.35／0.5 m）。近距離の遮蔽物の奥への透過なし。
+- 外形: 底面直径62.50 mm・高さ73.05 mmの簡易円筒。計測原点の仮配置。既定取付は胸部位置・傾斜0°、親リンク姿勢へ追従。
+- 未再現: 個体校正、チャンネル別の発光時刻、多重反射、IMU、走査中の姿勢変化、赤外反射特性。フレーム開始時の姿勢・環境を固定した幾何走査。
+- 保存: `JT128-capture.zip`、`frame.json.format=topo-lidar/1`、`config.sensor_type=jt128`。センサ座標名は`jt128`。シーンJSONは互換性のため既存`mid360`キー内にセンサ設定を保持。
+- ROS 2: `/sim/lidar/points`へbase_footprint座標の点群を送信。既存ブリッジとの互換性のため入力source名`mid360`・センサTF名`sim_mid360_frame`を継続使用。取付変換は選択中のJT128の姿勢、メタデータの`sensor_type`は`jt128`。
+
+出典: [Hesai JT128公式マニュアル J01](https://www.hesaitech.com/wp-content/uploads/2026/04/JT128_User_Manual_J01-en-260330.pdf)の1.5・Appendix A.1。宣伝ページの画角表示とは独立した、マニュアル設計値に基づく近似。
+
 ## 腰上の近接取付
 
 座標基準: `torso_link`。腰Yawへ追従、首から独立。

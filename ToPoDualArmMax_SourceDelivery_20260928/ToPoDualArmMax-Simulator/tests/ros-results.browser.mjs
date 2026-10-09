@@ -72,6 +72,12 @@ try{
  await wait_for(`simulator.ros_results.api.sources.some(source=>source.id==='robot:test_robot')`);
  assert.equal(await evaluate(`simulator.ros_results.api.sources.find(source=>source.id==='robot:test_robot').active`),false);
  assert.equal(await evaluate(`!!simulator.ros_results.api.robotData.test_robot`),false);
+ // サーバーで配信中でも、この画面の明示選択前は未選択・表示なし。
+ assert.equal(await evaluate('simulator.ros_results.api.sources.every(source=>!source.active)'),true);
+ assert.equal(await evaluate("['graphData','pointClouds','markerData','voxelData','robotData'].every(field=>Object.keys(simulator.ros_results.api[field]).length===0)"),true);
+ await evaluate('simulator.ros_results.api.getSources()');
+ assert.equal(await evaluate('simulator.ros_results.api.sources.every(source=>!source.active)'),true);
+ console.log('PASS: shared active topics remain unselected until explicit selection');
  console.log('READY: Viewer sources including selectable robot');
  // 実際のTopicsチェックボックスで購読開始。
  await evaluate(`document.querySelector('#ros-results').shadowRoot.querySelectorAll('input[type=checkbox][aria-label^="Topic: "]').forEach(input=>{if(!input.checked)input.click();})`);

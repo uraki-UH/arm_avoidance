@@ -5,9 +5,9 @@ export class RobotInstancePanel {
  constructor(panel){
   this.panel=panel;this.robot=null;
   const section=document.createElement('section');
-  section.innerHTML=`<h3>操作対象ロボット</h3><label>姿勢の入力元<select id="robot-pose-source"><option value="simulator">シミュレータ操作</option><option value="ros">ROS追従</option></select></label><label><input id="robot-visible" type="checkbox" checked>ロボットを表示</label><label>不透明度 <input id="robot-opacity" type="range" min="0" max="1" step="0.05" value="1"><output id="robot-opacity-value">100%</output></label><p class="sub-note">ROS追従はROS2連携のJointState設定を使用。ViewerのROSロボット表示とは別個体。実機への指令送信なし。</p>`;
+  section.innerHTML=`<h3>操作対象ロボット</h3><label>姿勢の入力元<select id="robot-pose-source"><option value="simulator">シミュレータ操作</option><option value="ros">ROS実測の直接表示</option><option value="leader">リーダー → 物理フォロワー</option></select></label><label><input id="robot-visible" type="checkbox" checked>ロボットを表示</label><label>不透明度 <input id="robot-opacity" type="range" min="0" max="1" step="0.05" value="1"><output id="robot-opacity-value">100%</output></label><p class="sub-note">物理フォロワーは /leader/joint_states とMuJoCo関節動力学を使用。「物理を開始」で追従開始、腕は最初の受信姿勢からの角度差、グリッパーは換算済み開度をモータ目標へ反映。描画は物理の実姿勢。実機への指令送信なし。</p>`;
   $('robot-panel').prepend(section);
-  $('robot-pose-source').onchange=()=>{const checkbox=$('ros-joints-receive');checkbox.checked=$('robot-pose-source').value==='ros';checkbox.dispatchEvent(new Event('change'));};
+  $('robot-pose-source').onchange=()=>{const source=$('robot-pose-source').value,checkbox=$('ros-joints-receive');checkbox.checked=source!=='simulator';if(source==='leader')$('ros-joints-topic').value='/leader/joint_states';checkbox.dispatchEvent(new Event('change'));};
   $('robot-visible').onchange=() =>this.appearance();$('robot-opacity').oninput=()=>this.appearance();
  }
  bind(){
@@ -23,8 +23,14 @@ export class RobotInstancePanel {
   this.appearance();
  }
  set_source(source){
+  const previous=this.robot?.pose_source;
   this.bind();this.robot.pose_source=source;$('robot-pose-source').value=source;
   if(source==='ros'){window.simulator?.physics_panel?.stop('ROS追従のため物理停止');this.panel.active=null;window.simulator?.apply_ros_pose(this.robot.getPose());}
+  if(source==='leader'||previous==='leader'){
+   window.simulator?.physics_panel?.hold_leader('入力元の切替。物理の再開始が必要');
+   this.panel.active=null;
+   window.simulator?.cancel_robot_motion();
+  }
  }
  appearance(){
   if(!this.robot)return;

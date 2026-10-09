@@ -20,10 +20,10 @@ export class RosJointStream {
  }
  outputs(){return [['ros-joints-send','joints'],['ros-base-send','base'],['ros-tf-send','tf']].filter(([id])=>$(id).checked).map(([,name])=>name);}
  sync_selection(){const num=this.outputs().length;$('ros-state-all').checked=num===3;$('ros-state-all').indeterminate=num>0&&num<3;}
- stop(){this.close();for(const id of ['ros-joints-send','ros-base-send','ros-tf-send'])$(id).checked=false;this.sync_selection();$('ros-joints-receive').checked=false;$('ros-joints-status').textContent='通信OFF';}
+ stop(){if(this.panel.rgbd.robot.pose_source==='leader')window.simulator?.physics_panel?.hold_leader();this.close();for(const id of ['ros-joints-send','ros-base-send','ros-tf-send'])$(id).checked=false;this.sync_selection();$('ros-joints-receive').checked=false;$('ros-joints-status').textContent='通信OFF';}
  connect(){
   this.close();this.sync_selection();
-  this.panel.instance_panel.set_source($('ros-joints-receive').checked?'ros':'simulator');
+  this.panel.instance_panel.set_source($('ros-joints-receive').checked?($('robot-pose-source').value==='leader'?'leader':'ros'):'simulator');
   if(!this.outputs().length&&!$('ros-joints-receive').checked){$('ros-joints-status').textContent='通信OFF';return;}
   const hz=Number($('ros-joints-hz').value);
   if(!Number.isFinite(hz)||hz<1||hz>200){this.stop();$('ros-joints-status').textContent='通信上限は1～200 Hzです';return;}
@@ -39,14 +39,34 @@ export class RosJointStream {
     else if(data.type==='error')fail(data.error);
     else if(data.type==='joints'&&$('ros-joints-receive').checked){
      const robot=this.panel.rgbd.robot;
-     for(const [name,value] of Object.entries(data.pose)){const joint=robot.joints[name];if(!joint||!Number.isFinite(value)||value<joint.lower||value>joint.upper)throw Error('受信関節角がモデルの可動域と一致しません');}
-     this.latest=data.pose;
+     const is_leader=robot.pose_source==='leader';
+     const max_age_sec=window.simulator?.physics_panel?.max_leader_age_ms/1000;
+     if(is_leader&&(!Number.isFinite(data.stamp_sec)||Date.now()/1000-data.stamp_sec<0||Date.now()/1000-data.stamp_sec>=max_age_sec))return;
+     const pose={},invalid_names=[];
+     for(const [name,value] of Object.entries(data.pose)){
+      const joint=robot.joints[name];if(!joint||!Number.isFinite(value))throw Error('受信関節角がモデルと一致しません');
+      const is_gripper=/^(?:L|R)_gripper_(?:joint|mimic)$/.test(name);
+      if(!is_leader&&!is_gripper&&(value<joint.lower||value>joint.upper)){invalid_names.push(name);continue;}
+      pose[name]=!is_leader&&is_gripper?Math.max(joint.lower,Math.min(joint.upper,value)):value;
+     }
+     // 直接表示のグリッパーだけの開閉端飽和。その他の可動域外関節は前回表示の保持
+     if(!is_leader)$('ros-joints-status').textContent=invalid_names.length?`可動域外・表示更新なし: ${invalid_names.join(', ')} / 他の関節は受信継続`:`接続済み · 上限 ${hz} Hz`;
+     this.latest=Object.keys(pose).length?pose:null;
+     this.latest_stamp_sec=data.stamp_sec;
+     if(is_leader){const physics=window.simulator?.physics_panel;if(physics?.set_leader_target(data.pose))physics.leader_stamp_sec=data.stamp_sec;this.latest=null;}
     }
    }catch(error){fail(error.message);}
   };
   socket.onerror=()=>fail('関節WebSocketへ接続できません。ブリッジの更新と起動を確認してください');
-  socket.postMessage({type:'connect',url:url.href,send:this.outputs().length>0,config:{type:'config',model,hz,receive:$('ros-joints-receive').checked,topic:$('ros-joints-topic').value}});
+  socket.postMessage({type:'connect',url:url.href,send:this.outputs().length>0,config:{type:'config',model,hz,receive:$('ros-joints-receive').checked,topic:$('ros-joints-topic').value,enable_fresh_input:this.panel.rgbd.robot.pose_source==='leader',max_state_age_sec:window.simulator?.physics_panel?.max_leader_age_ms/1000}});
   this.tick();
  }
- tick(){if(this.socket&&$('ros-joints-receive').checked)this.socket.postMessage({type:'poll'});if(this.socket&&this.outputs().length){const physics=window.simulator?.physics_panel;if(physics?.socket&&physics.enable_dynamics)physics.sync_robot_pose();const state=robot_snapshot(this.panel.rgbd.robot);if(physics?.socket&&physics.enable_dynamics&&physics.motion_state){for(const field of ['velocity','effort'])state['joint_'+field]=Object.fromEntries(Object.keys(state.robot_pose).map(name=>[name,physics.motion_state[field][name]]));}attach_camera(state,this.panel.rgbd.sensor.opticalToWorld(this.panel.rgbd.opticalWorld()).toArray());this.socket.postMessage({type:'pose',state,outputs:this.outputs()});}if(this.latest&&$('ros-joints-receive').checked){window.simulator.apply_ros_pose(this.latest);this.latest=null;}}
+ tick(){if(this.socket&&$('ros-joints-receive').checked)this.socket.postMessage({type:'poll'});if(this.socket&&this.outputs().length){const physics=window.simulator?.physics_panel;if(physics?.socket&&physics.enable_dynamics)physics.sync_robot_pose();const state=robot_snapshot(this.panel.rgbd.robot);if(physics?.socket&&physics.enable_dynamics&&physics.motion_state){for(const field of ['velocity','effort'])state['joint_'+field]=Object.fromEntries(Object.keys(state.robot_pose).map(name=>[name,physics.motion_state[field][name]]));}attach_camera(state,this.panel.rgbd.sensor.opticalToWorld(this.panel.rgbd.opticalWorld()).toArray());this.socket.postMessage({type:'pose',state,outputs:this.outputs()});}if(this.latest&&$('ros-joints-receive').checked){
+  try{if(this.panel.rgbd.robot.pose_source==='leader'){
+   const age_sec=Date.now()/1000-this.latest_stamp_sec;
+   if(Number.isFinite(age_sec)&&age_sec>=0&&age_sec<window.simulator?.physics_panel?.max_leader_age_ms/1000)window.simulator?.physics_panel?.set_leader_target(this.latest);
+  }else window.simulator.apply_ros_pose(this.latest);}
+  catch(error){this.stop();$('ros-joints-status').textContent=error.message;}
+  this.latest=null;
+ }}
 }

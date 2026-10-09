@@ -141,3 +141,172 @@ ros2 launch gng_vlut_system dynamixel_sim_control.launch.py \
 入力未指定の場合はGazebo内の模擬点群による左腕回避。上記実環境入力では既存RealSense・自己除去・Tmap更新の稼働が必要。Aによる回避開始、Fによる実機転送は別操作。
 
 最新の試験結果と未検証範囲: [リリース記録](releases/2026-10-01_dynamixel_sim_control.md)。
+
+## 両腕の重力補償付き手動操作
+
+対象: フォロワー右腕ID31〜37・左腕ID41〜47。首51・52とグリッパー38・48への指令なし。
+既定モデル: `topo_dual_arm_max_long`。設定: [dynamixel_hand_guiding.yaml](../config/dynamixel_hand_guiding.yaml)。
+
+目的: 元の角度へ戻す位置保持ではなく、自重の支持と小さな速度抵抗による手動操作。
+`init/torque_auto_enable`はhandler起動時のON設定であり、柔らかさ・重力補償の制御モードとは別。
+
+```bash
+ros2 launch gng_vlut_system dynamixel_hand_guiding.launch.py
+```
+
+既定: `allow_hardware_output: false`。実機指令publisherなし、トルク・モード・ゲイン変更なし。
+更新済みhandlerの`/dynamixel/fresh_joint_states`を購読し、`/dynamixel_hand_guiding/status`へ状態と支持トルクを配信。
+トルク換算未設定時の`current_ma`はnull。校正・可動域・速度条件の不一致は`error`へ表示。
+USBの新規接続なし。既存3 Mbps handlerの継続利用、同じUSBへの二重起動禁止。
+
+計算: URDF質量・重心による支持トルク`g(q)`と、モータ速度に対する粘性抵抗。
+モータ電流は`I = (ramp * scale * g(q) - damping_gain * motor_velocity) / torque_nm_per_ma`。
+`scale`は対応表の角度換算符号、位置目標・位置PID・積分項なし。
+首用と共通のゼロ電流読返し→トルクON報告→補償立上げ、終了時OFF要求の経路。
+
+実機有効化に必要な確認・設定:
+
+- 質量・重心・関節符号・原点の実機校正。基台直立、waist固定0、グリッパー角度0、把持物なしの計算条件
+- `torque_nm_per_ma`: モータ出力トルク／電流[N m/mA]の校正済み正数14要素。カタログのストール値からの自動換算なし
+- `max_current_ma`: 機種・支持・荷重に対応した許容電流[mA]14要素
+- 配列順: 右31〜37、左41〜47。`damping_gain`の単位は[N m/(rad/s)]、首用の[mA/(rad/s)]とは別
+- `has_verified_calibration: true`、`allow_hardware_output: true`。未校正・未設定時の実機有効化拒否
+- 対応機種: XM430-W350・XM540-W270。`current`モード、Reverse無効、Goal更新時自動トルクON無効、開始前トルクOFFと静止
+- 同じhandlerへ指令する位置保持・リーダー追従・首制御等との同時使用禁止。モータモード・Current Limit・ゲインの自動書換えなし
+
+モード0の電流指令とモード5の電流上限は別の用途。[ROBOTISのGoal Current仕様](https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#goal-current102)。
+モードを変更する場合は腕を機械的に支持し、トルクOFFでの確認が必要。未確認の値による一括モード変更・一括トルクONなし。
+
+運転条件: 実測位置・速度の失効0.2 sec、状態・電流目標の失効1.5 sec、URDF可動域・手動速度・電流上限の監視。
+支持電流が上限を超える場合、補償不足を隠す飽和継続ではなく異常終了。
+異常・Ctrl+C時は所有した14軸へのゼロ電流とトルクOFF要求。通信復旧だけでの自動再開なし。
+終了・立上げ・通信異常時の落下防止保証なし。腕の機械的支持と独立した停止手段の準備が必要。
+完全な重力補償だけで任意位置の静止を保証する方式ではなく、モデル誤差・摩擦・追加荷重によるドリフトの可能性。
+
+検証範囲: 静的位置エネルギー勾配・MuJoCo支持トルクとの一致、隔離疑似handlerによる電流出力順序・実測失効・対象14軸OFF、実機入力の出力OFFプレビュー。
+実機の柔らかさ・重力支持・電流係数: 未校正・未検証。既存実機のトルク変更なし。
+
+## 実機リーダー・フォロワー制御
+
+Gazeboなしの専用起動。既定モデルは`topo_dual_arm_max_long`、設定は[dynamixel_leader_follower.yaml](../config/dynamixel_leader_follower.yaml)。実機駆動・実物のID／符号／原点の校正は未検証。
+
+| 部位 | リーダーID | フォロワーID | 既定の追従対象 |
+| --- | --- | --- | --- |
+| 右腕7軸 | 1〜7 | 31〜37 | 対象 |
+| 左腕7軸 | 11〜17 | 41〜47 | 対象 |
+| グリッパー | 8・18 | 38・48 | 入力換算は設定で有効化可能、実機出力は対象外 |
+| 首 | 21・22 | 51・52 | 対象外 |
+
+グリッパーの新機構は、右ID8が反時計回り、左ID18が時計回りで閉じる入力換算に対応。モータの開閉端をURDFの開度へ線形換算し、可動域外は開閉端で飽和。LongのURDFは0 radが閉、約0.785398 radが開。旧対応表は保持し、新換算は`enable_leader_gripper_input: true`時の入力だけに適用。フォロワーID38・48の校正は別途必要で、`joint_names`への追加は不可。リーダー・首への指令なし。モータモードの自動変更なし。
+
+新入力は原点未確認のため既定OFF。`dynamixel_leader_follower.yaml`の`leader_right_gripper_open_deg`／`leader_right_gripper_closed_deg`、`leader_left_gripper_open_deg`／`leader_left_gripper_closed_deg`でモータの開閉端を設定。仮置きは0°で開、右+180°／左−180°で閉。実際の閉じ切りが150°なら、閉じ端を右+150°／左−150°へ変更。開いた状態の実測原点を確認したうえで有効化。
+
+有効時の`/leader/joint_states`は腕14軸とグリッパー2軸の16軸。mimicはモデル側で展開。ID8・18を含む全入力の鮮度を満たす場合だけ配信し、グリッパー欠測時の旧開度による鮮度更新なし。実機指令の対象は`joint_names`の腕だけ。
+
+### 起動と設定
+
+初回のビルド:
+
+```bash
+cd /ros2_ws
+colcon build --symlink-install --packages-select gng_vlut_system
+source /ros2_ws/install/setup.bash
+```
+
+USBを専有する`dynamixel_handler`は別起動。既存handlerがある場合は再利用、同じUSBへの二重起動は禁止。Wizardとの同時通信も避けること。既存の起動方法は`ros2 launch dynamixel_handler dynamixel_handler_launch.xml`。ドライバの起動・終了時設定は別管理のため、トルク自動ON無効・終了時の脱力に対する支持条件の確認が必要。
+
+コンテナ内の対話端末から:
+
+```bash
+ros2 launch gng_vlut_system dynamixel_leader_follower.launch.py
+```
+
+既定は`allow_hardware_output: false`。実機指令publisherの生成なし、Hによる有効化も拒否。リーダーが接続済みなら、フォロワー未接続でも`/leader/joint_states`の配信とブラウザ物理フォロワーの使用が可能。
+
+入出力は`fresh_joint_states`。今回の通信で位置・速度を取得できたIDだけを使用、キャッシュ済み`state/present`からの代用なし。必要な入力・状態topicは既存の「実機小動作の準備」と同じ。
+
+YAMLの主な設定:
+
+| 設定 | 用途 |
+| --- | --- |
+| `joint_names` | 実機出力対象関節。初回は1関節での符号・追従・停止確認 |
+| `driver_namespace` | フォロワーhandlerのtopic接頭辞。既定`/dynamixel` |
+| `leader_driver_namespace` | リーダーhandlerのtopic接頭辞。同一USBは`/dynamixel`、別USBは別namespaceのhandlerに対応した値 |
+| `mapping_file` / `leader_mapping_file` | 必要時の校正済み対応表への変更。フォロワーはMax／Long用設定をモデル名で選択、リーダーは旧ID設定。明示指定を優先 |
+| `enable_leader_gripper_input` | 既定false。グリッパー2軸の入力専用換算と配信 |
+| `leader_right_gripper_open_deg` / `leader_right_gripper_closed_deg` | 右モータの開閉端 [deg] |
+| `leader_left_gripper_open_deg` / `leader_left_gripper_closed_deg` | 左モータの開閉端 [deg] |
+| `enable_relative_follow` | 既定true。追従開始時からのリーダー角度差をフォロワーへ反映 |
+| `allow_hardware_output` | 実機出力許可。変更だけではトルクONなし |
+| `max_current_ma` | 許容電流。既定0は未設定・H拒否。機種・支持・荷重に基づく明示設定が必要 |
+| `max_velocity` / `max_acceleration` | 指令速度・profile加速度。既定2°/s・30°/s² |
+| `max_excursion` | 有効化時姿勢からの試験範囲。既定5° |
+| `enable_torque_off_on_exit` | 既定true。自分で有効化した出力の終了時OFF要求。腕の支持が必要 |
+
+実機出力の使用条件: XM430-W350・XM540-W270、`cur_position`モード、速度基準profile、goal更新による自動トルクON無効。許容電流・実測静止・競合publisherの不在・保持目標／profile／電流目標の読返しを確認後にトルクON。Current Limit・ゲイン・Operating Modeの自動書換えなし。[ROBOTISの電流ベース位置制御仕様](https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#operating-mode11)。
+
+### 操作
+
+- H: 現在の実測姿勢の保持準備と対象IDのトルクON。準備完了後は`hold`
+- F: リーダー追従ON/OFF。OFFは現在姿勢の保持
+- Space: 保持して追従停止。入力復旧だけでは再開なし
+- R: 実測静止確認後の停止解除・出力OFF。再開にはH→F
+- E: 選択したフォロワーIDのトルクOFFと指令停止
+- Ctrl+C: 停止と所有出力のトルクOFF要求後、専用ノードの終了。既存handlerの停止なし
+
+相対追従の式: `q_target = q_follower_start + q_leader - q_leader_start`。Fを押した時点の実測を基準に保存し、開始時の姿勢差による急動作を防止。`enable_relative_follow: false`では校正済み絶対角への追従、開始姿勢差1°の確認が必要。
+
+リーダーまたはフォロワーの必要関節の実測失効0.3秒、操作端末heartbeat失効0.4秒、可動域・試験範囲・追従偏差超過で停止ラッチ。電流目標の失効・上限逸脱は既存のトルクOFF処理。Ctrl+C時のOFF要求は対象IDだけで、OFF報告を最大1秒待機。通信・PC故障時の電源遮断保証なし。実物の支持と独立停止手段が必要。
+
+### 実機フォロワーの手動姿勢確認
+
+2026-10-09実機確認: `/dev/ttyUSB0`、Protocol 2.0、3 Mbps、ID31〜38・41〜48・51・52の18台。読取り専用配信と、シミュレータの直接表示による確認。WizardはDisconnect、同じUSBのhandler・readerは二重起動禁止。
+
+```bash
+ros2 launch gng_vlut_system dynamixel_current_pose.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/topo_dual_arm_max_long.yaml \
+  baudrate:=3000000 \
+  output_topic:=/follower/joint_states \
+  enable_viewer:=false enable_viewer_output:=false
+```
+
+既存handlerが`/dynamixel/state/present`を配信中の場合は、上記に`enable_reader:=false`を追加。USBへの新規接続なし、既存実測の変換だけの起動。handlerを併用しない場合だけ読取り専用readerを有効化。
+
+ブラウザを再読み込みし、「ROS2連携 → 姿勢・TFの送受信」の受信トピックを`/follower/joint_states`へ変更。「ロボット → 姿勢の入力元 → ROS実測の直接表示」を選択。物理開始・リーダー追従は不要。実機への位置・トルク指令なし。手動操作前に実機の支持とトルクOFFを確認。終了はCtrl+C。
+
+`output_topic`は実測JointStateの配信先、`enable_viewer_output:=false`は既存Viewer用の追加配信を無効化。初期姿勢publisherとの混在防止。
+
+Max／Longの既定換算: [dynamixel_joint_state_bridge_max_ids_31_52.yaml](../../dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_max_ids_31_52.yaml)。旧設定と手編集済みのID31〜52設定は保持。`mapping_file`の明示指定は自動選択より優先。実機表示launchの既定モデルはLong。Viewer launchでは機体YAMLの`dynamixel_mapping_file`を使用。
+
+肩の下垂姿勢: 右ID32の+90°→`R_joint2`の+90°、左ID42の−90°→`L_joint2`の−90°。肩の旧±90°オフセットによる相殺なし。他の腕軸・首の符号は手編集済み設定を継承。
+
+フォロワーグリッパー: 閉じ原点0°、右ID38の正方向・左ID48の負方向で開き、換算係数は右+1・左−1。mimicは親の反転角。ROSの実測値は丸め込みなし。シミュレータの直接表示はグリッパーとmimicだけをURDF開閉端へ飽和し、45°付近の端点超過でも表示更新を継続。腕の可動域外は警告と前回表示の保持。リーダー制御の可動域検査は維持。
+
+反映: 関節変換launchの再起動とブラウザの再読み込み。稼働中ノードのパラメータはYAML編集だけでは更新されない構成。USBのhandler・readerは既存プロセスを利用し、変換ノードの重複配信を避けた切替。実機駆動の全軸校正は未検証。
+
+### ブラウザの物理フォロワー
+
+実機出力OFFのままで使用可能。ブラウザ側から実機への指令なし。
+
+1. 更新済みROS／物理ブリッジを起動。既存版の更新時はSimulatorフォルダで`bash start_ros.sh --restart`、ブラウザ再読み込み
+2. 「ロボット → 操作対象ロボット → 姿勢の入力元」で「リーダー → 物理フォロワー」を選択。入力は`/leader/joint_states`
+3. 「物理」で「関節動力学（基台固定）」を選択し、「物理を開始」
+
+腕は最初の有効なリーダー実測からの角度差、グリッパーは換算済みの開度をMuJoCoモータ目標へ入力。グリッパーは初回入力から開度に追従。描画は物理の実姿勢で、リーダー角度の直接代入なし。URDFの可動域・指令速度・トルク上限、PD駆動・接触計算は既存の物理経路。実機の電流制限とは別。
+
+入力・実測・目標送信は描画周期から独立。実時刻stampの進行と鮮度を検査。ブラウザと物理側で入力失効1秒を監視し、失効後は保持目標・停止状態を維持。同一stampの再送や通信復旧だけでの再開なし。再開は「停止」→「物理を開始」、新たな実測姿勢を基準に保存。可動域外・接続切断・通信OFFでも追従停止。ページ非表示では物理セッション終了。
+
+詳細: [Simulatorの関節通信](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md#姿勢tfのwebsocket送受信)。
+
+### 検証
+
+実機通信なしの隔離ROSで両腕14軸のID分離、保持目標→トルクONの順序、相対追従、実測失効停止・非自動再開を検証。実USB／実モータでの駆動は未検証。
+
+```bash
+# コンテナ内、実機と異なるROS domain97での疑似モータ試験
+cd /ros2_ws/src/gng_vlut_system
+ROS_DOMAIN_ID=97 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 \
+  python3 -B -m pytest -q -p no:cacheprovider test/test_dynamixel_leader_follower.py
+```
+
+ブラウザ・実MuJoCoの通し試験はSimulatorフォルダで`node tests/leader-follower.browser.mjs`。隔離domain98・専用サーバー・Chromeの使用、終了時に所有プロセスを停止。実物への停止・安全性の保証とは別検証。

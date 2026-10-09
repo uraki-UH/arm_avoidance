@@ -169,6 +169,8 @@ type graph_layer_settings = LayerSettings & Required<Pick<LayerSettings,
 
 export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): graph_layer_settings {
     const is_grasp_candidate_map = tag === '/grasp_pose_cands/Tmap';
+    // 左右腕モデルグラフの初期エッジ非表示。名前空間・L階層への対応
+    const is_arm_map = /(^|\/)Tmap_(?:left|right)_arm(?:_L\d+)?$/.test(tag);
     const isStatic = graph.mode === 'static';
     const isTrajectory = isTrajectoryGraphTag(tag);
     const visualDefaults = isStatic ? STATIC_GNG_DEFAULTS : DYNAMIC_GNG_DEFAULTS;
@@ -177,7 +179,7 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
         visible: true,
         showNodes: true,
         ...(is_grasp_candidate_map ? { enable_bounding_box: true } : {}),
-        showEdges: !isStatic && !is_grasp_candidate_map,
+        showEdges: !isStatic && !is_grasp_candidate_map && !is_arm_map,
         showClusters: false,
         ...normalize_node_label_settings(),
         visibleLabels: {

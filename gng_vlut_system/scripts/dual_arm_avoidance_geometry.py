@@ -187,7 +187,7 @@ def build_collision_pairs(spheres, centers, radii, is_arm, parents, link_groups)
 class robot_geometry:
     """外接球列による保守的なリンク形状。隣接・初期重複球を除いた自己干渉監視。"""
 
-    def __init__(self, urdf_path, planning_groups=None):
+    def __init__(self, urdf_path, planning_groups=None, environment_shapes=None):
         path = Path(urdf_path)
         root = ET.parse(path).getroot()
         self.joints, self.joint_names, self.limits, self.parents = read_joint_geometry(root)
@@ -211,6 +211,10 @@ class robot_geometry:
         centers = self.centers(np.zeros(len(self.joint_names)))
         self.self_pairs, self.inter_arm_pairs = build_collision_pairs(
             self.spheres, centers, self.radii, self.is_arm, self.parents, link_groups)
+        # 既存Gazeboデモの既定形状。別実行系ではロボットルート座標の形状へ差替え
+        self.environment_shapes = environment_shapes if environment_shapes is not None else (
+            ('plane', np.zeros(3), np.eye(3), np.zeros(3)),
+            ('box', np.array([.70, 0, .20]), np.eye(3), np.array([.175, .4, .2])))
 
     def link_transforms(self, positions):
         transforms = np.empty((len(self.operations)+1, 4, 4))
@@ -247,14 +251,21 @@ class robot_geometry:
                           -self.radii[first]-self.radii[second] < min_clearance_th)
 
     def internal_clearances(self, centers):
-        """自己干渉ペア・床・作業台の外接球表面間距離 [m]。"""
+        """自己干渉ペアと実行系から与えられた環境形状の表面間距離 [m]。"""
         first, second = self.self_pairs.T
         self_gaps = np.linalg.norm(centers[first]-centers[second], axis=1)-self.radii[first]-self.radii[second]
-        floor_gaps = centers[self.is_arm, 2]-self.radii[self.is_arm]
-        # Gazebo作業台の外接箱
-        delta = np.maximum(np.abs(centers-np.array([0.70, 0, 0.20]))-np.array([0.175, 0.4, 0.2]), 0)
-        table_gaps = np.linalg.norm(delta[self.is_arm], axis=1)-self.radii[self.is_arm]
-        return np.concatenate((self_gaps, floor_gaps, table_gaps))
+        gaps = [self_gaps]
+        for kind, position, rotation_matrix, half_size in self.environment_shapes:
+            local = (centers[self.is_arm]-position) @ rotation_matrix
+            if kind == 'plane':
+                surface = local[:, 2]
+            elif kind == 'box':
+                delta = np.abs(local)-half_size
+                surface = np.linalg.norm(np.maximum(delta, 0), axis=1)+np.minimum(delta.max(axis=1), 0)
+            else:
+                raise ValueError('未対応の環境衝突形状: '+kind)
+            gaps.append(surface-self.radii[self.is_arm])
+        return np.concatenate(gaps)
 
     def has_internal_clearance(self, centers, min_clearance_th=0.005):
         return not np.any(self.internal_clearances(centers) < min_clearance_th)

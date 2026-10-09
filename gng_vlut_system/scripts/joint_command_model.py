@@ -121,6 +121,31 @@ class joint_command_model:
         return result
 
 
+class gripper_input_mapping:
+    """開閉端のモータ角度からURDF開度への入力専用換算。"""
+    def __init__(self, min_position, max_position, open_deg, closed_deg):
+        if (not all(map(math.isfinite, (min_position, max_position, open_deg, closed_deg))) or
+                min_position >= max_position or open_deg == closed_deg):
+            raise ValueError('グリッパー開閉端・可動範囲が不正です')
+        self.min_position, self.max_position = min_position, max_position
+        self.open_position = math.radians(open_deg)
+        self.scale = (min_position-max_position)/math.radians(closed_deg-open_deg)
+        if not math.isfinite(self.scale):
+            raise ValueError('グリッパー換算係数が非有限です')
+
+    def convert(self, position, velocity):
+        value = self.max_position+(position-self.open_position)*self.scale
+        speed = velocity*self.scale
+        if not all(map(math.isfinite, (position, velocity, value, speed))):
+            raise ValueError('グリッパー実測値または換算後の値が非有限です')
+        # 開閉端の飽和と、端点外への速度の抑制
+        if (value < self.min_position or value > self.max_position or
+                (value == self.min_position and speed < 0) or
+                (value == self.max_position and speed > 0)):
+            speed = 0.0
+        return max(self.min_position, min(self.max_position, value)), speed
+
+
 class dynamixel_mapping:
     def __init__(self, model, config):
         self.model = model

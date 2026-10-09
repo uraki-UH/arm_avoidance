@@ -42,7 +42,7 @@ export class Robot extends THREE.Group {
     this.actuated = Object.values(this.joints).filter(j => j.type !== 'fixed' && !j.mimic);
   }
   setJoint(name, q, updateMimic = true) {
-    if(this.pose_source==='ros'&&!this.is_receiving_pose)return;
+    if(['ros','leader'].includes(this.pose_source)&&!this.is_receiving_pose)return;
     const j = this.joints[name]; if (!j || j.type === 'fixed' || !Number.isFinite(q)) return;
     j.q = Math.max(j.lower, Math.min(j.upper, q));
     if (j.type === 'prismatic') j.child.position.copy(j.axis).multiplyScalar(j.q);

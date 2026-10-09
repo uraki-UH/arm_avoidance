@@ -35,7 +35,6 @@ import {
     nodeHasManipulabilityData,
     useGraphLayerSettings,
 } from './features/visualization/graphLayerSettings';
-import { is_auxiliary_voxel_layer } from './features/visualization/layer_display';
 
 type ClippingRange = Pick<ClippingPlane, 'min' | 'max'>;
 
@@ -306,7 +305,6 @@ function App({ host }: { host?: viewer_host } = {}) {
                     if (!next[tag]) {
                         next[tag] = {
                             ...defaults,
-                            ...(data === voxelData && is_auxiliary_voxel_layer(tag) ? { visible: false } : {}),
                             ...(isLabeledVoxel ? { color: '#ffff00', colorMode: 'uniform' } : {}),
                             ...(isIsolatedVoxel ? { color: '#ff3131', colorMode: 'uniform' } : {}),
                             ...(data === robotData && tag.includes('candidate_goal_preview') ? { opacity: 0.18 } : {}),
@@ -780,7 +778,6 @@ function App({ host }: { host?: viewer_host } = {}) {
                             Object.entries(data).map(([tag, d]: [string, any]) => {
                                 const s = (settings as any)[tag] || {
                                     ...defaultSettings,
-                                    ...(data === voxelData && is_auxiliary_voxel_layer(tag) ? { visible: false } : {}),
                                 };
                                 if (!s.visible) return null;
                                 const tf = d.frameId && d.frameId !== 'world' ? (transforms[d.frameId] ?? null) : null;

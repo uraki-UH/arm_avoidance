@@ -11,7 +11,7 @@ export class RosPointsPanel{
   <label class="ros-connection"><span>接続先</span><input id="ros-endpoint" value="http://127.0.0.1:8879" type="url" aria-label="ROSブリッジ接続先（送受信共通）" spellcheck="false"></label>
   <section id="ros-send-panel"><h3>ブラウザ → ROS：送信</h3>
   <fieldset><legend>点群トピック（複数選択可）</legend>
-  ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（MID-360）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
+  ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（LiDAR）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
   <label><input id="ros-depth" type="checkbox" checked> 深度画像・CameraInfo・画素対応点群も送信</label>
   <div class="row-actions"><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
   <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。取得開始時に対応トピックを自動選択。「連続送信」で送信開始。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>
@@ -67,7 +67,7 @@ export class RosPointsPanel{
    }
    points_to_base(points,robot_state);
    const meta={robot_state,source,frame_id:'base_footprint',count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:is_object?item.id:null,object_to_world:is_object?object_pose:null};
-   if(lidar_frame){meta.captured_at_ms=robot_state.captured_at_ms;meta.lidar={frame_id:'sim_mid360_frame',scan_start_sec:lidar_frame.scanStart,duration_sec:lidar_frame.config.duration,num_slots:lidar_frame.config.beams,scan_pattern:lidar_frame.config.scanPattern};}
+   if(lidar_frame){meta.captured_at_ms=robot_state.captured_at_ms;meta.lidar={sensor_type:lidar_frame.config.sensor_type||'mid360',frame_id:'sim_mid360_frame',scan_start_sec:lidar_frame.scanStart,duration_sec:lidar_frame.config.duration,num_slots:lidar_frame.config.beams,scan_pattern:lidar_frame.config.scanPattern};}
    let color_data;
    if(color_frame){
     meta.color_format='rgb8_valid8';color_data=new Uint8Array(meta.count*4);

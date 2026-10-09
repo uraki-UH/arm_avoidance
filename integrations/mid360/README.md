@@ -178,8 +178,12 @@ docker compose up mid360
 
 | 出力 | 型 | frame |
 | --- | --- | --- |
-| `/sensors/mid360/points` | sensor_msgs/msg/PointCloud2 | mid360_link |
-| `/sensors/mid360/imu` | sensor_msgs/msg/Imu | livox_frame（使用中の公式ドライバ内の固定値） |
+| `/livox/lidar` | sensor_msgs/msg/PointCloud2 | mid360_link |
+| `/livox/imu` | sensor_msgs/msg/Imu | livox_frame（使用中の公式ドライバ内の固定値） |
+
+トピック名: 公式ドライバの単一トピック設定（`multi_topic=0`）をそのまま使用。独自リマップなし。専用ドライバYAMLの`points_topic`・`imu_topic`は廃止。Viewer側の`points_topic`は購読先の指定として維持。
+
+旧構成からの切替え: `docker compose build mid360`後、既存MID-360をCtrl+C等で停止し、`docker compose up mid360`で新イメージへ切替え。Viewer連携のlaunchも新しい機体YAMLで再起動。Viewerの手動選択トピック・GNGの`input_topic`も`/livox/lidar`へ変更。旧トピックへの二重配信なし。
 
 点群: 既定10 Hz、XYZ[m]・intensity等。色なし。IMU周期は点群のpublish_freqとは別。センサは1台を対象。
 
@@ -188,12 +192,25 @@ docker compose up mid360
 ```bash
 docker compose exec gng_cpu bash
 source /ros2_ws/install/setup.bash
-ros2 topic info /sensors/mid360/points -v
-ros2 topic hz /sensors/mid360/points
-ros2 topic echo /sensors/mid360/points --once --field header
+ros2 topic info /livox/lidar -v
+ros2 topic hz /livox/lidar
+ros2 topic echo /livox/lidar --once --field header
 ```
 
 型の検出だけでなく、継続受信・frame・時刻を確認。受信側とドライバの `ROS_DOMAIN_ID` を統一（既定0）。別PCでDDS受信する場合は双方で同一Domain、`ROS_LOCALHOST_ONLY=0`、DDS通信を許可。LiDAR直結側ではUDP 56101/56201/56301/56401/56501の受信とセンサ向け通信を許可。ファイアウォール全体の無効化は不要。
+
+GNG単独起動の例（GNGコンテナ内、下記Viewer連携の取付TFが稼働中の場合）:
+
+```bash
+ros2 launch ais_gng ais_gng.launch.py \
+  backend:=cpu lidar:=mid360.yaml
+```
+
+GNG用設定: [ais_gngのmid360.yaml](../../ais_gng_cpu/src/ais_gng/config/gng_cpu/mid360.yaml)。入力`/livox/lidar`、基準frame`topo_dual_arm_max_long/base_link`。接続用IP・取付設定の本フォルダの`mid360.yaml`とは別ファイル。
+
+学習入力のクリッピング: 基準frameへの変換後、X・Yは−2〜2 m、Zは−0.5〜2 m。調整項目は`input.x_min`・`input.x_max`・`input.y_min`・`input.y_max`・`input.z_min`・`input.z_max`。起動時の格子構築に使用するため、変更後はGNGを停止・再起動。実行中のパラメータ更新は学習範囲へ未反映。元の`/livox/lidar`は全点のまま配信、GNGの座標変換点群も全域を含む場合あり。学習対象の範囲表示は`/filter`（Marker）。
+
+`at128.yaml`の既定変換先は`map`であり、上記MID-360用の範囲設定は未適用。移動ロボットで世界固定のグラフを保持する場合は、自己位置推定を含む`map`等への正しいTF接続が別途必要。
 
 ## 取付TFとボクセル化
 
@@ -210,7 +227,7 @@ GNG/VLUT用のViewer連携は `gng_vlut_system/config/topo_dual_arm_max_long.yam
 ```yaml
 mid360:
   enable_input: true
-  points_topic: "/sensors/mid360/points"
+  points_topic: "/livox/lidar"
   enable_mount_tf: true
   parent_frame_id: "chest_lidar_link"
   frame_id: "mid360_link"

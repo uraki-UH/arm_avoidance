@@ -11,6 +11,34 @@ docker compose --profile manual up  frontend
 
 chrome://restart
 
+## 実機リーダー・フォロワー／ブラウザ物理フォロワー
+
+コンテナ内の対話端末で、更新済み`dynamixel_handler`を別途起動したうえで:
+
+```bash
+ros2 launch gng_vlut_system dynamixel_leader_follower.launch.py
+```
+
+既定は実機出力OFF。設定は[gng_vlut_system/config/dynamixel_leader_follower.yaml](gng_vlut_system/config/dynamixel_leader_follower.yaml)。実機へ出力する場合は、校正・支持・機種とモードの確認後に`allow_hardware_output`と`max_current_ma`を明示設定。Hで保持準備、Fで追従、Spaceで保持停止、Eで選択IDトルクOFF、Ctrl+Cで所有出力のOFF要求と終了。
+
+既定対象: 右腕1〜7→31〜37、左腕11〜17→41〜47。グリッパー・首は校正前の対象外。実機駆動は未検証。[準備・制約・操作](gng_vlut_system/docs/dynamixel_sim_control.md#実機リーダーフォロワー制御)。
+
+ブラウザ側は「ロボット → 姿勢の入力元 → リーダー → 物理フォロワー」を選択し、「物理 → 関節動力学 → 物理を開始」。入力`/leader/joint_states`をモータ目標へ反映し、物理の実姿勢を描画。実機出力OFFでも利用可能。既存ROS／物理ブリッジの更新はSimulatorフォルダで`bash start_ros.sh --restart`とブラウザ再読み込み。実機トルクONは不要。
+
+## 両腕の重力補償付き手動操作
+
+3 Mbps handlerを起動したまま、コンテナ内で:
+
+```bash
+ros2 launch gng_vlut_system dynamixel_hand_guiding.launch.py
+```
+
+既定は出力なしの計算プレビュー。対象: 31〜37・41〜47、首・グリッパー除外。
+設定: [dynamixel_hand_guiding.yaml](gng_vlut_system/config/dynamixel_hand_guiding.yaml)。
+実機有効化には関節別の許容電流・トルク換算、URDF質量・重心・符号・原点の校正が必要。未校正のまま出力許可だけ変更しないこと。
+実機の重力支持は未検証。終了・異常時のOFFによる落下に備えた腕の支持が必要。
+[制御条件・起動終了・制限](gng_vlut_system/docs/dynamixel_sim_control.md#両腕の重力補償付き手動操作)。
+
 ### AMD GPUでWebGLコンテキスト喪失が発生する場合
 
 ホスト側のNVIDIA GPUを使う専用Chromeの起動:ビューアー安定化版

@@ -20,8 +20,12 @@ function body_description(id,group,mode,mass=.2){
 export class PhysicsPanel {
  constructor({environment,robot,scene}){
   this.environment=environment;this.robot=robot;this.scene=scene;this.socket=null;this.latest=null;this.last_ms=0;this.robot_model=null;this.kinematic=[];
+  this.max_leader_age_ms=1000;
   const controls=document.createElement('section');controls.innerHTML=`<h2>MuJoCo</h2><label>回避モジュール<select id="physics-avoidance"><option value="none">なし</option><option value="oscbf">OSCBF（実験・速度フィルタ）</option></select></label><label>ロボット<select id="physics-robot-mode"><option value="dynamic">関節動力学（基台固定）</option><option value="kinematic">姿勢指定（接触のみ）</option></select></label><details><summary>関節固定・自己接触</summary><label><input type="checkbox" id="physics-self-collision">自己接触を計算</label><div id="physics-locks"></div></details><label>選択物体のモード<select id="physics-mode">${Object.entries(physics_modes).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label><label>質量 kg<input id="physics-mass" type="number" min="0.001" max="1000" step="0.1" value="0.2"></label><details id="physics-constraint"><summary>物体の拘束軸・範囲</summary><label>ローカル軸<select id="physics-axis"><option>X</option><option>Y</option><option selected>Z</option></select></label><label>支点 x y z（物体ローカル m）<input id="physics-pivot" value="0 0 0"></label><label>下限・上限（ヒンジ deg / スライド m）<input id="physics-range" value="-90 90"></label><button id="physics-constraint-apply">拘束を適用</button></details><div class="row-actions"><button id="physics-start">物理を開始</button><button id="physics-stop">停止</button><button id="physics-demo">落下する箱を追加</button></div><pre id="physics-status">物理OFF</pre><p class="sub-note">物体は箱近似、ロボットはURDF衝突メッシュの凸包。関節動力学はURDFの慣性・可動範囲・トルク上限を使用。固定した関節は開始時の角度を保持。物理なしの物体もセンサには映ります。編集後は停止して再開始。停止時の配置を保持。</p>`;
   $('physics-panel').append(controls);environment.physics_panel=this;
+  const bulk=document.createElement('section');bulk.innerHTML=`<h3>物体の物理を一括設定</h3><label>一括適用モード<select id="physics-bulk-mode">${Object.entries(physics_modes).map(([key,label])=>`<option value="${key}"${key==='dynamic'?' selected':''}>${label}</option>`).join('')}</select></label><div class="row-actions"><button id="physics-bulk-apply">対象物体に一括適用</button></div><p id="physics-bulk-status" class="sub-note"></p><p class="sub-note">表示中の配置物体・車両が対象。ロボット・机・外部環境は対象外。既存モードを変更し、各物体の質量は保持。適用後は「物理を開始」で反映。</p>`;
+  $('physics-start').parentElement.before(bulk);
+  $('physics-bulk-apply').onclick=()=>this.set_all_object_modes($('physics-bulk-mode').value);
   $('physics-mode').onchange=()=>{const item=environment.selected;if(item)this.set_object_mode([item],$('physics-mode').value);};
   $('physics-mass').onchange=()=>{const item=environment.selected;const mass=Number($('physics-mass').value);if(item&&Number.isFinite(mass)&&mass>=.001&&mass<=1000){this.stop();item.physics={...(item.physics||{}),mode:item.physics?.mode||'none',mass};}};
   $('physics-constraint-apply').onclick=()=>{const item=environment.selected;if(!item)return;const pivot=$('physics-pivot').value.trim().split(/\s+/).map(Number),range=$('physics-range').value.trim().split(/\s+/).map(Number),axis=[0,0,0];axis[$('physics-axis').selectedIndex]=1;if(pivot.length!==3||range.length!==2||![...pivot,...range].every(Number.isFinite)||range[0]>=range[1]||range[0]>0||range[1]<0){$('physics-status').textContent='拘束値が不正です。範囲は0を含む昇順で指定してください';return;}this.stop();item.physics.constraint={axis,pivot,range:range.map(x=>item.physics.mode==='hinge'?x*Math.PI/180:x)};};
@@ -29,7 +33,8 @@ export class PhysicsPanel {
   $('physics-avoidance').onchange=()=>this.stop();
   $('physics-start').onclick=()=>this.start();$('physics-stop').onclick=()=>this.stop();
   $('physics-demo').onclick=()=>{this.stop();const item=environment.add('box',[0,0]);if(item){item.group.position.z=.35;item.physics={mode:'dynamic',mass:.2};environment.syncObject();environment.changed();this.start();}};
-  const previous=environment.onChange;environment.onChange=()=>{previous?.();if(this.socket&&JSON.stringify(environment.getState())!==this.scene_signature)this.stop('配置変更のため停止。再開始で反映します');};
+  const previous=environment.onChange;environment.onChange=()=>{previous?.();this.refresh_bulk_controls();if(this.socket&&JSON.stringify(environment.getState())!==this.scene_signature)this.stop('配置変更のため停止。再開始で反映します');};
+  this.refresh_bulk_controls();
   document.addEventListener('visibilitychange',()=>{if(document.hidden)this.stop();});
  }
  set_robot_mode(robot,mode){
@@ -38,6 +43,25 @@ export class PhysicsPanel {
   this.stop();$('physics-robot-mode').value=mode;
   $('physics-status').textContent=`ロボットに「${robot_physics_modes[mode]}」を設定。${has_running?'物理を停止しました。再開始で反映。':'「物理を開始」で反映。'}`;
   return true;
+ }
+ get_physics_items(){
+  return this.environment.items.filter(item=>{
+   for(let group=item.group;group;group=group.parent)if(!group.visible)return false;
+   let num_meshes=0;
+   item.group.traverse(mesh=>{if(mesh.isMesh&&mesh.geometry?.attributes.position?.count>0)num_meshes++;});
+   return num_meshes>0&&num_meshes<=256;
+  });
+ }
+ refresh_bulk_controls(){
+  const num_items=this.get_physics_items().length;
+  $('physics-bulk-apply').disabled=num_items===0;
+  $('physics-bulk-status').textContent=`対象: ${num_items}個 / 対象外: ${this.environment.items.length-num_items}個`;
+ }
+ set_all_object_modes(mode){
+  const items=this.get_physics_items();
+  this.refresh_bulk_controls();
+  if(!items.length){$('physics-status').textContent='一括適用できる物体がありません';return false;}
+  return this.set_object_mode(items,mode);
  }
  set_object_mode(items,mode){
   if(!Object.hasOwn(physics_modes,mode)||!items.length||items.some(item=>!this.environment.items.includes(item)))return false;
@@ -54,28 +78,37 @@ export class PhysicsPanel {
   return true;
  }
  stop(message='物理OFF'){
+  clearInterval(this.leader_timer);this.leader_timer=null;
+  this.leader_anchor=null;this.is_leader_stopped=true;
   const socket=this.socket;this.socket=null;if(socket)socket.close();this.latest=null;this.scene.userData.physics_time_sec=null;this.motion_state=null;$('physics-status').textContent=message;
   this.environment.object_interaction?.refresh();
  }
  start(){
   this.stop();
   if(this.robot().pose_source==='ros'){$('physics-status').textContent='ROS追従中です。姿勢の入力元をシミュレータ操作へ切り替えてください';return;}
+  if(this.robot().pose_source==='leader'&&$('physics-robot-mode').value!=='dynamic'){$('physics-status').textContent='物理フォロワーには関節動力学が必要です';return;}
   try{
    const environment=this.environment,robot=this.robot();this.robot_model=robot;this.targets=robot.getPose();this.actual={...this.targets};this.base_signature=JSON.stringify([robot.position.toArray(),robot.quaternion.toArray()]);
    environment.setEditing(false);const bodies=[];this.kinematic=[];
    if(environment.table.visible)bodies.push(body_description('table',environment.table,'static'));
-   for(const item of environment.items){const mode=item.physics?.mode||'none';if(mode==='none')continue;const desc=body_description('object_'+item.id,item.group,mode,item.physics?.mass??.2);desc.constraint=item.physics?.constraint;bodies.push(desc);if(mode==='kinematic')this.kinematic.push({id:desc.id,group:item.group});}
+   for(const item of environment.items){const mode=item.physics?.mode||'none';if(mode==='none'||!item.group.visible)continue;const desc=body_description('object_'+item.id,item.group,mode,item.physics?.mass??.2);desc.constraint=item.physics?.constraint;bodies.push(desc);if(mode==='kinematic')this.kinematic.push({id:desc.id,group:item.group});}
    robot.updateWorldMatrix(true,true);let idx=0;
    const enable_dynamics=$('physics-robot-mode').value==='dynamic';this.enable_dynamics=enable_dynamics;this.actual_joints=null;
-   const robot_config=enable_dynamics?{model:robot.modelId,pose:this.targets,position:robot.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:robot.getWorldQuaternion(new THREE.Quaternion()).toArray(),locked_joints:[...$('physics-locks').querySelectorAll('input:checked')].map(input=>input.value),enable_self_collision:$('physics-self-collision').checked}:null;
+   this.leader_anchor=null;this.leader_stamp_sec=null;this.is_leader_stopped=false;this.leader_received_ms=performance.now();
+   const robot_config=enable_dynamics?{model:robot.modelId,pose:this.targets,position:robot.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:robot.getWorldQuaternion(new THREE.Quaternion()).toArray(),locked_joints:[...$('physics-locks').querySelectorAll('input:checked')].map(input=>input.value),enable_self_collision:$('physics-self-collision').checked,enable_leader_follow:robot.pose_source==='leader',max_leader_age_sec:this.max_leader_age_ms/1000}:null;
    if(!enable_dynamics)robot.traverseVisible(mesh=>{if(!mesh.isMesh||!mesh.geometry.attributes.position)return;const id='robot_'+idx++,desc=body_description(id,mesh,'kinematic');bodies.push(desc);this.kinematic.push({id,group:mesh});});
    const endpoint=new URL($('ros-endpoint').value);endpoint.protocol=endpoint.protocol==='https:'?'wss:':'ws:';endpoint.port=String(Number(endpoint.port||8879)+1);endpoint.pathname='/physics';endpoint.search='';endpoint.hash='';
    this.scene_signature=JSON.stringify(environment.getState());
    const socket=this.socket=new WebSocket(endpoint);
    socket.onopen=()=>{if(this.socket===socket)socket.send(JSON.stringify({type:'start',bodies,robot:robot_config,avoidance:{mode:$('physics-avoidance').value}}));};
-   socket.onmessage=event=>{if(this.socket!==socket)return;try{const value=JSON.parse(event.data);if(value.type==='error')throw Error(value.error);if(value.type==='physics')this.latest=value;if(value.type==='ready')$('physics-status').textContent='MuJoCo接続済み';}catch(error){this.stop('物理エラー：'+error.message);}};
+   socket.onmessage=event=>{if(this.socket!==socket)return;try{const value=JSON.parse(event.data);if(value.type==='error')throw Error(value.error);if(value.type==='physics'){
+    // 物理フォロワーの実測と指令処理は描画周期から独立
+    if(robot.pose_source==='leader'&&value.joints){if(!this.actual_joints)this.leader_received_ms=performance.now();this.actual_joints=value.joints;this.actual=Object.fromEntries(robot.actuated.map(joint=>[joint.name,value.joints[joint.name]]));this.motion_state=value.motion??null;if(value.is_leader_stopped&&!this.is_leader_stopped)this.hold_leader('物理側のリーダー入力失効。物理の再開始が必要');}
+    this.latest=value;
+   }if(value.type==='ready')$('physics-status').textContent='MuJoCo接続済み';}catch(error){this.stop('物理エラー：'+error.message);}};
    socket.onerror=()=>{if(this.socket===socket)this.stop('物理ブリッジに接続できません。一括起動とMuJoCoの導入を確認してください');};
    socket.onclose=()=>{if(this.socket===socket)this.stop('物理接続が切れました');};
+   if(robot.pose_source==='leader')this.leader_timer=setInterval(()=>{if(this.actual_joints&&!this.is_leader_stopped&&performance.now()-this.leader_received_ms>this.max_leader_age_ms)this.hold_leader('リーダー入力の失効。物理の再開始が必要');this.send_poses();},33);
    environment.object_interaction?.refresh();
   }catch(error){this.stop('物理エラー：'+error.message);}
  }
@@ -95,9 +128,28 @@ export class PhysicsPanel {
   if(!this.socket||!this.enable_dynamics||this.robot()!==this.robot_model)return;
   const robot=this.robot();
   // 指令値の回収と物理姿勢の維持。受信のない描画フレームでも目標への瞬間移動を防止
-  for(const [name,value] of Object.entries(robot.getPose()))if(value!==this.actual[name])this.targets[name]=value;
-  robot.setPose(this.actual);
-  if(this.actual_joints){for(const [name,value] of Object.entries(this.actual_joints))robot.setJoint(name,value,false);robot.updateMatrixWorld(true);}
+  if(robot.pose_source!=='leader')for(const [name,value] of Object.entries(robot.getPose()))if(value!==this.actual[name])this.targets[name]=value;
+  robot.set_received_pose(this.actual_joints??this.actual);
+ }
+ hold_leader(message='リーダー入力停止。物理の再開始が必要'){
+  if(this.socket&&this.enable_dynamics&&this.actual)this.targets={...this.actual};
+  this.is_leader_stopped=true;this.leader_anchor=null;this.leader_detail=message;
+ }
+ set_leader_target(pose,now_ms=performance.now()){
+  // モータ目標だけの更新。描画姿勢へのリーダー角度の直接代入なし
+  if(!this.socket||!this.enable_dynamics||!this.actual_joints||this.robot()!==this.robot_model||this.is_leader_stopped)return false;
+  const robot=this.robot(),names=Object.keys(pose);
+  if(!names.length||names.some(name=>!robot.actuated.some(j=>j.name===name)||!Number.isFinite(pose[name])))throw Error('リーダーの関節名・角度が不正です');
+  if(!this.leader_anchor){this.leader_anchor={...pose};this.follower_anchor={...this.actual};}
+  if(names.length!==Object.keys(this.leader_anchor).length||names.some(name=>!Object.hasOwn(this.leader_anchor,name)))throw Error('追従中の関節集合の変更');
+  const targets={...this.targets};
+  for(const name of names){const joint=robot.joints[name],value=/^(?:L|R)_gripper_joint$/.test(name)?pose[name]:this.follower_anchor[name]+pose[name]-this.leader_anchor[name];if(!Number.isFinite(value)||value<joint.lower||value>joint.upper)throw Error('追従目標の可動域超過');targets[name]=value;}
+  this.targets=targets;this.leader_received_ms=now_ms;return true;
+ }
+ send_poses(){
+  if(!this.socket||this.socket.readyState!==WebSocket.OPEN||this.socket.bufferedAmount)return;
+  const poses=this.kinematic.map(({id,group})=>({id,position:group.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:group.getWorldQuaternion(new THREE.Quaternion()).toArray()}));
+  this.socket.send(JSON.stringify({type:'poses',poses,joints:this.targets,leader_stamp_sec:this.leader_stamp_sec}));
  }
  tick(now){
   const current_robot=this.robot();
@@ -108,10 +160,12 @@ export class PhysicsPanel {
   if(item&&!$('physics-constraint').contains(document.activeElement)){const c=item.physics?.constraint||{axis:[0,0,1],pivot:[0,0,0],range:item.physics?.mode==='hinge'?[-Math.PI/2,Math.PI/2]:[-.2,.2]};$('physics-axis').selectedIndex=c.axis.findIndex(x=>x!==0);$('physics-pivot').value=c.pivot.join(' ');$('physics-range').value=c.range.map(x=>item.physics?.mode==='hinge'?x*180/Math.PI:x).join(' ');}
   if(!this.socket)return;if(this.robot()!==this.robot_model){this.stop('モデル切替のため停止');return;}
   if(this.base_signature!==JSON.stringify([current_robot.position.toArray(),current_robot.quaternion.toArray()])){this.stop('基台配置の変更により停止。再開始で反映します');return;}
+  if(current_robot.pose_source==='leader'&&this.actual_joints&&!this.is_leader_stopped&&now-this.leader_received_ms>this.max_leader_age_ms)this.hold_leader('リーダー入力の失効。物理の再開始が必要');
   this.sync_robot_pose();
   if(this.latest){
    const frame=this.latest;this.latest=null;if(frame.avoidance)$('physics-status').textContent=`MuJoCo · OSCBF · ${frame.avoidance.solve_ms.toFixed(1)} ms · 近接 ${frame.avoidance.num_constraints} 組`;
-   if(frame.joints){this.motion_state=frame.motion??null;this.actual_joints=frame.joints;for(const [name,value] of Object.entries(frame.joints))current_robot.setJoint(name,value,false);current_robot.updateMatrixWorld(true);this.actual=current_robot.getPose();}
+   if(frame.joints){if(!this.actual_joints)this.leader_received_ms=now;this.motion_state=frame.motion??null;this.actual_joints=frame.joints;current_robot.set_received_pose(frame.joints);this.actual=current_robot.getPose();}
+   if(current_robot.pose_source==='leader'&&frame.is_leader_stopped&&!this.is_leader_stopped)this.hold_leader('物理側のリーダー入力失効。物理の再開始が必要');
    for(const pose of frame.poses){
     const item=this.environment.items.find(x=>'object_'+x.id===pose.id);
     if(!item){this.stop('物体構成変更のため停止');return;}
@@ -128,6 +182,7 @@ export class PhysicsPanel {
    this.scene_signature=JSON.stringify(this.environment.getState());
    this.scene.userData.physics_time_sec=frame.time_sec;$('physics-status').textContent=`MuJoCo実行中 · ${frame.time_sec.toFixed(2)} s · 接触 ${frame.contacts}件`;
   }
-  if(now-this.last_ms>=33&&this.socket.readyState===WebSocket.OPEN&&!this.socket.bufferedAmount){this.last_ms=now;const poses=this.kinematic.map(({id,group})=>({id,position:group.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:group.getWorldQuaternion(new THREE.Quaternion()).toArray()}));this.socket.send(JSON.stringify({type:'poses',poses,joints:this.targets}));}
+  if(current_robot.pose_source==='leader'&&this.is_leader_stopped)$('physics-status').textContent=this.leader_detail??'リーダー入力停止。物理の再開始が必要';
+  if(current_robot.pose_source!=='leader'&&now-this.last_ms>=33){this.last_ms=now;this.send_poses();}
  }
 }

@@ -10,7 +10,8 @@
     robot_name: "topo_dual_arm_max_long"
     urdf_path: "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf"
     resource_root_dir: "/ros2_ws/src/urdf/topo_dual_arm_max_long"
-    mesh_root_dir: "/ros2_ws/src/urdf/topo_dual_arm_max_long/meshes"
+    mesh_root_dir: "/ros2_ws/src/urdf/topo_dual_arm_max_long/meshes"    # 実機フォロワー表示用の肩原点・左右グリッパー換算
+    dynamixel_mapping_file: "package://dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_max_ids_31_52.yaml"
     # Viewer起動直後の初回関節姿勢配信
     enable_joint_state_publisher: true
 
@@ -83,7 +84,7 @@
     # 実機MID-360の入力選択。trueで環境ボクセル化も有効。ドライバは専用Dockerで起動
     mid360:
       enable_input: true
-      points_topic: "/sensors/mid360/points"
+      points_topic: "/livox/lidar"
       # 取付TFの配信元はViewer。専用ドライバ側のenable_mount_tfはfalse
       enable_mount_tf: true
       parent_frame_id: "chest_lidar_link"

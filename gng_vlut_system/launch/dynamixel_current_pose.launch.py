@@ -20,7 +20,11 @@ def launch_setup(context):
     params_file = value('params_file')
     params = yaml.safe_load(Path(params_file).read_text())['/**']['ros__parameters']
     robot_name = params['robot_name']
-    mapping_file = value('mapping_file')
+    bridge_share = Path(get_package_share_directory('dynamixel_joint_state_bridge'))
+    is_max_model = robot_name in ('topo_dual_arm_max', 'topo_dual_arm_max_long')
+    mapping_name = ('dynamixel_joint_state_bridge_max_ids_31_52.yaml' if is_max_model
+                    else 'dynamixel_joint_state_bridge_ids_31_52.yaml')
+    mapping_file = value('mapping_file') or str(bridge_share/'config'/mapping_name)
     mapping = yaml.safe_load(Path(mapping_file).read_text())['/**']['ros__parameters']
     joint_ids = mapping['joint_ids']
     joint_names = mapping['joint_names']
@@ -32,8 +36,8 @@ def launch_setup(context):
         values = mapping[name]
         if len(values) != len(joint_ids) or not all(math.isfinite(v) for v in values):
             raise ValueError('関節換算係数の設定不正: ' + name)
-    state_topic = f'/{robot_name}/joint_states'
-    viewer_topic = f'/{robot_name}/viewer_joint_states'
+    state_topic = value('output_topic') or f'/{robot_name}/joint_states'
+    viewer_topic = f'/{robot_name}/viewer_joint_states' if value('enable_viewer_output').lower() == 'true' else ''
     input_topic = value('input_topic')
     actions = [Node(
         package='dynamixel_joint_state_bridge', executable='dynamixel_joint_state_bridge_node',
@@ -65,12 +69,12 @@ def launch_setup(context):
 
 def generate_launch_description():
     share = Path(get_package_share_directory('gng_vlut_system'))
-    bridge_share = Path(get_package_share_directory('dynamixel_joint_state_bridge'))
     defaults = {
-        'params_file': str(share/'config/ToPoDualArm.yaml'),
-        'mapping_file': str(bridge_share/'config/dynamixel_joint_state_bridge_ids_31_52.yaml'),
+        'params_file': str(share/'config/topo_dual_arm_max_long.yaml'),
+        'mapping_file': '',
         'device_name': '/dev/ttyUSB0', 'baudrate': '1000000', 'reader_publish_hz': '30.0',
         'input_topic': '/dynamixel/state/present', 'enable_reader': 'true', 'enable_viewer': 'true',
+        'output_topic': '', 'enable_viewer_output': 'true',
     }
     return LaunchDescription([
         *[DeclareLaunchArgument(name, default_value=value) for name, value in defaults.items()],

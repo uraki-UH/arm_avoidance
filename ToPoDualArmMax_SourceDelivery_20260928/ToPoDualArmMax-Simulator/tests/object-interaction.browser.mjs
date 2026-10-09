@@ -46,6 +46,77 @@ try{
  for(let i=0;i<150;i++){is_ready=await evaluate('!!window.simulator?.diagnostics.ready');if(is_ready)break;await pause(200);}
  assert.ok(is_ready,'アプリ起動失敗');
 
+ // 一括物理設定の対象限定・既存設定保持・開始時の送信内容の検証
+ assert.equal(await evaluate(`(async()=>{
+  const s=simulator,env=s.workspace,p=s.physics_panel,$=id=>document.getElementById(id),three=await import('three');
+  const check=(value,message)=>{if(!value)throw Error(message);};
+  const saved=env.items.map(item=>({item,physics:item.physics,visible:item.group.visible})),selected=env.selected;
+  const saved_socket=window.WebSocket,robot_mode=$('physics-robot-mode').value;
+  const empty={id:'empty-test',group:new three.Group()},parent=new three.Group();
+  const hidden={id:'hidden-parent-test',group:env.items[0].group.clone()};parent.visible=false;parent.add(hidden.group);
+  const num_items=env.items.length;check(num_items>=2,'試験対象数');
+  let num_closed=0;
+  class TestSocket {static OPEN=1;readyState=1;bufferedAmount=0;messages=[];send(value){this.messages.push(JSON.parse(value));}close(){num_closed++;this.readyState=3;}}
+  try{
+   window.WebSocket=TestSocket;env.items.push(empty,hidden);env.items[1].group.visible=false;
+   env.items[0].physics={mode:'hinge',mass:.7,constraint:{axis:[1,0,0],pivot:[0,0,0],range:[-1,1]}};
+   env.select(null);env.changed();
+   check($('physics-bulk-status').textContent==='対象: '+(num_items-1)+'個 / 対象外: 3個','対象件数');
+   check(!$('physics-bulk-apply').disabled&&$('physics-bulk-mode').value==='dynamic','未選択で一括操作');
+   p.socket=new TestSocket();$('physics-bulk-apply').click();
+   check(num_closed===1&&!p.socket,'実行中の物理停止・自動開始なし');
+   check(p.get_physics_items().every(item=>item.physics.mode==='dynamic'),'表示物体へ一括適用');
+   check(env.items[0].physics.mass===.7&&!env.items[0].physics.constraint,'質量保持・旧拘束解除');
+   check(env.items[1].physics===saved[1].physics&&!empty.physics&&!hidden.physics,'対象外の設定保持');
+   check($('physics-robot-mode').value===robot_mode,'ロボット設定保持');
+   p.start();check(p.socket instanceof TestSocket,'物理開始');p.socket.onopen();
+   const bodies=p.socket.messages[0].bodies;
+   check(bodies.filter(body=>body.id.startsWith('object_')).length===num_items-1,'適用対象だけの送信');
+   check(bodies.filter(body=>body.id.startsWith('object_')).every(body=>body.mode==='dynamic'&&body.geoms.length>0),'動的衝突形状');
+   check(bodies.filter(body=>body.id==='table').every(body=>body.mode==='static'),'机は固定のまま');p.stop();
+   $('physics-bulk-mode').value='static';$('physics-bulk-apply').click();
+   check(p.get_physics_items().every(item=>item.physics.mode==='static'),'固定の一括設定');
+   $('physics-bulk-mode').value='none';$('physics-bulk-apply').click();
+   check(p.get_physics_items().every(item=>item.physics.mode==='none'),'一括解除');
+   for(const item of env.items)item.group.visible=false;env.changed();
+   check($('physics-bulk-apply').disabled&&!p.set_all_object_modes('dynamic'),'対象ゼロ');
+   return true;
+  }finally{
+   p.stop();window.WebSocket=saved_socket;env.items=env.items.filter(item=>item!==empty&&item!==hidden);
+   for(const value of saved){value.item.physics=value.physics;value.item.group.visible=value.visible;}
+   $('physics-bulk-mode').value='dynamic';env.select(selected?.id??null);env.changed();
+  }
+ })()`),true,'物体の一括物理設定');
+ await evaluate(`document.querySelector('[data-panel=physics]').click();document.getElementById('physics-bulk-apply').scrollIntoView({block:'center'})`);
+ const bulk_screenshot=await call('Page.captureScreenshot',{format:'png'});
+ await fs.writeFile('/tmp/topo-physics-bulk.png',Buffer.from(bulk_screenshot.data,'base64'));
+ console.log('PASS: 一括物理設定・対象除外・質量保持・停止・送信内容・一括解除');
+
+ // 直接表示の可動域外関節だけの除外と、正常復帰・不正データ停止の検証
+ assert.equal(await evaluate(`(()=>{
+  const s=simulator,stream=s.ros_points.robot_panel.joint_stream,$=id=>document.getElementById(id);
+  const worker=window.Worker,saved=s.robot.getPose();
+  const check=(value,message)=>{if(!value)throw Error(message);};
+  class TestWorker {postMessage(){} terminate(){}}
+  try{
+   window.Worker=TestWorker;$('robot-pose-source').value='ros';$('ros-joints-receive').checked=true;stream.connect();
+   const send=pose=>stream.socket.onmessage({data:{type:'joints',pose}});
+   const grip=s.robot.getPose().R_gripper_joint;
+   send({R_joint1:.2,R_gripper_joint:-1});stream.tick();
+   check(s.robot.getPose().R_joint1===.2&&s.robot.getPose().R_gripper_joint===grip,'正常軸更新・範囲外軸保持');
+   check(!!stream.socket&&$('ros-joints-status').textContent.includes('R_gripper_joint'),'警告と受信継続');
+   send({R_gripper_joint:-1});check(stream.latest===null,'全関節範囲外の旧フレーム破棄');
+   send({R_joint1:.3,R_gripper_joint:.1});stream.tick();
+   check(s.robot.getPose().R_gripper_joint===.1&&!$('ros-joints-status').textContent.includes('可動域外'),'正常値で更新再開');
+   send({R_joint1:NaN});check(!stream.socket,'非有限値は停止');
+   $('robot-pose-source').value='leader';$('ros-joints-receive').checked=true;stream.connect();
+   stream.socket.onmessage({data:{type:'joints',pose:{unknown_joint:0},stamp_sec:Date.now()/1000}});
+   check(!stream.socket&&s.physics_panel.is_leader_stopped,'リーダーの不正データ停止を維持');
+   return true;
+  }finally{stream.stop();window.Worker=worker;s.ros_points.robot_panel.instance_panel.set_source('simulator');s.robot.set_received_pose(saved);}
+ })()`),true,'直接表示の部分更新とリーダー停止判定');
+ console.log('PASS: 範囲外関節の表示保持・正常軸の継続・警告解除・リーダー停止');
+
  // 姿勢入力の排他と独立したロボット外観の回帰検証
  {
  const result=await evaluate(`(()=>{

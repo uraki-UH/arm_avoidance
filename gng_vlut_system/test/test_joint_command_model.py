@@ -6,7 +6,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
-from joint_command_model import joint_command_model, dynamixel_mapping
+from joint_command_model import joint_command_model, dynamixel_mapping, gripper_input_mapping
 
 
 @pytest.fixture
@@ -81,3 +81,33 @@ def test_feedback_uses_parent_when_mimic_has_tracking_error(model):
 def test_independent_joints_cannot_share_motor(model):
     with pytest.raises(ValueError):
         dynamixel_mapping(model, {'joint_names': ['arm', 'grip'], 'joint_ids': [1, 1]})
+
+
+@pytest.mark.parametrize('closed_deg', [150., 180., -150., -180.])
+def test_gripper_input_endpoints_halfway_and_mimic(model, closed_deg):
+    mapping = gripper_input_mapping(*model.bounds['grip'][:2], 0., closed_deg)
+    assert mapping.convert(0., 0.) == (.8, 0.)
+    assert mapping.convert(math.radians(closed_deg), 0.) == pytest.approx((0., 0.))
+    value, speed = mapping.convert(math.radians(closed_deg/2), math.radians(closed_deg))
+    assert value == pytest.approx(.4) and speed == pytest.approx(-.8)
+    assert model.expand({'grip': value})['mimic'] == pytest.approx(-.4)
+
+
+def test_gripper_input_supports_changed_origin_and_saturates():
+    mapping = gripper_input_mapping(0., .8, 160., 10.)
+    assert mapping.convert(math.radians(160.), 0.) == pytest.approx((.8, 0.))
+    assert mapping.convert(math.radians(10.), 0.) == pytest.approx((0., 0.))
+    assert mapping.convert(math.radians(180.), .1) == (.8, 0.)
+    assert mapping.convert(math.radians(-20.), -.1) == (0., 0.)
+
+
+@pytest.mark.parametrize('open_deg,closed_deg', [(0., 0.), (math.nan, 180.), (0., math.inf)])
+def test_invalid_gripper_calibration_rejected(open_deg, closed_deg):
+    with pytest.raises(ValueError):
+        gripper_input_mapping(0., .8, open_deg, closed_deg)
+
+
+@pytest.mark.parametrize('position,velocity', [(math.nan, 0.), (0., math.inf)])
+def test_invalid_gripper_sample_rejected(position, velocity):
+    with pytest.raises(ValueError):
+        gripper_input_mapping(0., .8, 0., 180.).convert(position, velocity)

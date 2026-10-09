@@ -29,6 +29,9 @@ def start_joint_stream(node, exchange, host, port, origins):
             self.is_writing = False
             self.model = None
             self.last_publish = 0.
+            self.enable_fresh_input = False
+            self.max_state_age_sec = .3
+            self.last_stamp_sec = -math.inf
             self.timer = None
             self.data_lock = threading.Lock()
             context['clients'].add(self)
@@ -46,6 +49,11 @@ def start_joint_stream(node, exchange, host, port, origins):
                     if not isinstance(topic, str) or not topic.startswith('/') or topic == '/sim/joint_states':
                         raise ValueError('入力は絶対トピック名を指定。送信先 /sim/joint_states の自己受信は禁止です')
                     self.model, self.hz = model, hz
+                    self.enable_fresh_input = data.get('enable_fresh_input') is True
+                    max_age = data.get('max_state_age_sec', .3)
+                    if type(max_age) not in (int, float) or not math.isfinite(max_age) or not 0 < max_age <= 5:
+                        raise ValueError('実測鮮度の許容時間は0〜5 sの正数が必要です')
+                    self.max_state_age_sec = max_age
                     if data.get('receive') is True:
                         self.subscription = node.create_subscription(JointState, topic, self.receive, qos_profile_sensor_data)
                     self.timer = tornado.ioloop.PeriodicCallback(self.flush_latest, 1000 / hz)
@@ -89,8 +97,18 @@ def start_joint_stream(node, exchange, host, port, origins):
             pose = {name: value for name, value in zip(message.name, message.position) if name in exchange.joint_names[self.model]}
             if not pose or any(not math.isfinite(v) for v in pose.values()):
                 return
+            stamp_sec = None
+            if self.enable_fresh_input:
+                try:
+                    stamp_sec = message.header.stamp.sec+message.header.stamp.nanosec*1e-9
+                except AttributeError:
+                    return
             with self.data_lock:
-                self.latest = {'type': 'joints', 'pose': pose, 'received': time.monotonic()}
+                # 物理フォロワー用の実時刻と進行確認。再送キャッシュによる鮮度更新なし
+                if self.enable_fresh_input and (not 0 <= time.time()-stamp_sec < self.max_state_age_sec or stamp_sec <= self.last_stamp_sec):
+                    return
+                self.last_stamp_sec = stamp_sec
+                self.latest = {'type': 'joints', 'pose': pose, 'received': time.monotonic(), 'stamp_sec': stamp_sec}
 
         async def flush_latest(self):
             with self.data_lock:

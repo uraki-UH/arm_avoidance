@@ -42,11 +42,6 @@ def read_config(path):
             raise ValueError(f"{key}: 空白・先頭スラッシュなしのTF名を指定してください")
     if config["enable_mount_tf"] and config["frame_id"] == config["parent_frame_id"]:
         raise ValueError("親と子のTF名が同一です")
-    from rclpy.validate_full_topic_name import validate_full_topic_name
-    for key in ("points_topic", "imu_topic"):
-        validate_full_topic_name(config[key])
-    if config["points_topic"] == config["imu_topic"]:
-        raise ValueError("点群とIMUに異なるトピック名を指定してください")
     return config
 
 
@@ -97,8 +92,7 @@ def start(context):
                  "publish_freq": config["publish_freq"], "output_data_type": 0,
                  "frame_id": config["frame_id"], "user_config_path": config_path,
                  "use_sim_time": False,
-             }], remappings=[("/livox/lidar", config["points_topic"]),
-                              ("/livox/imu", config["imu_topic"])]),
+             }]),
     ]
     if config["enable_mount_tf"]:
         roll, pitch, yaw = [math.radians(float(v)) for v in config["rot_deg"]]
