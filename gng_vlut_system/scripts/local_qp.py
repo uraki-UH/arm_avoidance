@@ -1,10 +1,22 @@
 """観測点群・自己形状の距離制約による関節変位QP。実機指令なし。"""
+from dataclasses import dataclass
 import time
 
 import numpy as np
 from scipy import sparse
 
 from motion_smoothing import quintic_peak_velocity_factor
+
+
+@dataclass(frozen=True)
+class local_qp_problem:
+    """関節変位QPの目的関数と線形制約。ソルバ境界の入出力契約。"""
+
+    hessian: np.ndarray
+    linear: np.ndarray
+    matrix: sparse.csc_matrix
+    min_values: np.ndarray
+    max_values: np.ndarray
 
 
 class local_qp:
@@ -74,6 +86,26 @@ class local_qp:
             self.report['status'] = 'hold'
             return positions.copy()
 
+        jacobian = self._clearance_jacobian(positions, active, centers, cloud_tree.data[nearest])
+        if not np.all(np.isfinite(jacobian)):
+            return None
+        problem = self._build_problem(positions, target, active, current_gaps, min_gaps, jacobian)
+        delta = self._solve_problem(problem)
+        if delta is None:
+            return None
+        candidate = positions.copy()
+        candidate[active] += delta
+        if (np.any(candidate[active] < geometry.limits[active, 0]-1e-7)
+                or np.any(candidate[active] > geometry.limits[active, 1]+1e-7)
+                or not can_bridge(positions, candidate, min_cloud_gap)):
+            self.report['status'] = 'path_rejected'
+            return None
+        self.report['status'] = 'solved'
+        return candidate
+
+    def _clearance_jacobian(self, positions, active, centers, nearest_points):
+        """観測点群・自己干渉・床・机の距離ヤコビアン。制約行の順序を維持。"""
+        geometry = self.geometry
         # 球中心の前進差分と距離法線の合成。関節ごとの最近傍再探索なし。
         jacobian_step = 1e-5
         center_jacobian = np.empty((*centers.shape, len(active)))
@@ -86,17 +118,20 @@ class local_qp:
             normal = delta/np.maximum(np.linalg.norm(delta, axis=1, keepdims=True), 1e-12)
             return np.einsum('ni,nij->nj', normal, derivative)
 
-        cloud_jacobian = distance_gradient(centers[geometry.is_arm]-cloud_tree.data[nearest],
+        cloud_jacobian = distance_gradient(centers[geometry.is_arm]-nearest_points,
                                            center_jacobian[geometry.is_arm])
         first, second = geometry.self_pairs.T
         self_jacobian = distance_gradient(centers[first]-centers[second],
                                           center_jacobian[first]-center_jacobian[second])
         table_offset = centers[geometry.is_arm]-np.array([.70, 0., .20])
         table_delta = np.sign(table_offset)*np.maximum(np.abs(table_offset)-np.array([.175, .4, .2]), 0.)
-        jacobian = np.vstack((cloud_jacobian, self_jacobian, center_jacobian[geometry.is_arm, 2, :],
-                             distance_gradient(table_delta, center_jacobian[geometry.is_arm])))
-        if not np.all(np.isfinite(jacobian)):
-            return None
+        return np.vstack((cloud_jacobian, self_jacobian, center_jacobian[geometry.is_arm, 2, :],
+                          distance_gradient(table_delta, center_jacobian[geometry.is_arm])))
+
+    def _build_problem(self, positions, target, active, current_gaps, min_gaps, jacobian):
+        """追従・局所退避の目的関数と、関節範囲・速度・加速度・距離制約の組立て。"""
+        geometry, config = self.geometry, self.config
+        num_cloud = int(np.count_nonzero(geometry.is_arm))
         duration = config['control_period_sec']
         # 静止端点間の5次補間における速度係数1.875・加速度係数10/√3。
         max_delta = np.minimum(self.max_velocity[active]*duration/quintic_peak_velocity_factor,
@@ -108,9 +143,9 @@ class local_qp:
         linear = -nominal
         # GNG候補待ち・疎なグラフでの局所退避。経路候補がある場合は追従を優先。
         if np.max(np.abs(nominal)) < 1e-6:
-            close = current_gaps[:num_cloud] < config['target_clearance']
-            gradient = jacobian[:num_cloud][close]
-            desired_gap = config['target_clearance']-current_gaps[:num_cloud][close]
+            is_close = current_gaps[:num_cloud] < config['target_clearance']
+            gradient = jacobian[:num_cloud][is_close]
+            desired_gap = config['target_clearance']-current_gaps[:num_cloud][is_close]
             hessian += 200.*np.einsum('ni,nj->ij', gradient, gradient)
             linear -= 200.*np.einsum('ni,n->i', gradient, desired_gap)
         # 1区間で安全余裕の半分を消費可能な接近制限。衝突制約の緩和なし。
@@ -120,25 +155,23 @@ class local_qp:
         matrix = sparse.csc_matrix(np.vstack((np.eye(len(active)), jacobian[is_relevant])))
         lower = np.concatenate((lower, -margin[is_relevant]))
         upper = np.concatenate((upper, np.full(np.count_nonzero(is_relevant), np.inf)))
-        self.report['num_constraints'] = len(lower)
+        return local_qp_problem(hessian, linear, matrix, lower, upper)
+
+    def _solve_problem(self, problem):
+        """時間上限つき求解と線形制約の再検査。非線形区間検査前の関節変位。"""
+        self.report['num_constraints'] = len(problem.min_values)
         solver = self.osqp.OSQP()
-        solver.setup(P=sparse.csc_matrix(hessian), q=linear, A=matrix, l=lower, u=upper,
+        solver.setup(P=sparse.csc_matrix(problem.hessian), q=problem.linear,
+                     A=problem.matrix, l=problem.min_values, u=problem.max_values,
                      verbose=False, eps_abs=1e-8, eps_rel=1e-8, max_iter=2000,
                      time_limit=self.max_solve_sec, polishing=False)
         result = solver.solve(raise_error=False)
         self.report.update(status=result.info.status, solve_ms=result.info.run_time*1000)
         if result.info.status_val != 1 or result.x is None or not np.all(np.isfinite(result.x)):
             return None
-        constrained = matrix@result.x
-        if np.any(constrained < lower-1e-7) or np.any(constrained > upper+1e-7):
+        constrained = problem.matrix@result.x
+        if (np.any(constrained < problem.min_values-1e-7)
+                or np.any(constrained > problem.max_values+1e-7)):
             self.report['status'] = 'constraint_violation'
             return None
-        candidate = positions.copy()
-        candidate[active] += result.x
-        if (np.any(candidate[active] < geometry.limits[active, 0]-1e-7)
-                or np.any(candidate[active] > geometry.limits[active, 1]+1e-7)
-                or not can_bridge(positions, candidate, min_cloud_gap)):
-            self.report['status'] = 'path_rejected'
-            return None
-        self.report['status'] = 'solved'
-        return candidate
+        return result.x

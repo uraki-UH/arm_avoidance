@@ -5,6 +5,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT||8877);
+if(!fs.existsSync(path.join(root,'generated/ros-results.js'))){console.error('ROS UI build missing: run npm ci && npm run build');process.exit(1);}
 if(!Number.isInteger(port)||port<1024||port>65535)throw Error('PORT must be 1024..65535');
 const startedAt=Math.round((Date.now()-process.uptime()*1000)/1000);
 const instance=createHash('sha256').update(process.platform==='win32'?root.toLowerCase():root).digest('hex').slice(0,16);
@@ -19,7 +20,7 @@ const server=http.createServer((req,res)=>{
   const origin=req.headers.origin;
   if(req.method!=='POST'||req.headers['x-topo-export']!=='1'||![`http://127.0.0.1:${port}`,`http://localhost:${port}`].includes(origin)){res.writeHead(403);res.end();return;}
   const requested=new URL(req.url,'http://localhost').searchParams.get('name');
-  if(!['ToPoDualArmMax-Long.png','ToPoDualArmMax-Long-pose.json','ToPoDualArmMax.png','ToPoDualArmMax-pose.json','ToPo-workspace.json','D435i-capture.zip','MID360-capture.zip'].includes(requested)){res.writeHead(400);res.end();return;}
+  if(!['ToPoDualArmMax-Long.png','ToPoDualArmMax-Long-pose.json','ToPoDualArmMax.png','ToPoDualArmMax-pose.json','ToPo-workspace.json','D435i-capture.zip','MID360-capture.zip','Camera-capture.zip'].includes(requested)){res.writeHead(400);res.end();return;}
   const chunks=[];let size=0,tooLarge=false;
   req.on('data',chunk=>{size+=chunk.length;if(size>80*1024*1024){tooLarge=true;req.destroy();return;}chunks.push(chunk);});
   req.on('end',async()=>{if(tooLarge)return;const data=Buffer.concat(chunks);

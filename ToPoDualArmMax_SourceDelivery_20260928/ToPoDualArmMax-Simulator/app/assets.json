@@ -1,7 +1,39 @@
 {
   "source_sha256": "5cc85a2672417df7fc64d93575d878973f829091c02c379d791641299ca8123e",
   "library": "three@0.180.0",
+  "model": "long",
+  "urdf_sha256": "5d707a45d3f771e85e5d790749158575b8467aee3a4447e628b326516118dc8f",
   "meshes": {
+    "meshes/chest_lidar_color_0.stl": {
+      "file": "cache/chest_lidar_color_0-a93da22faf.bin",
+      "triangles": 2604,
+      "vertices": 1345,
+      "source_sha256": "a93da22faf86cd7d54e1fadb5ad46c9a0e24084b18b80544aac4d9c738ca041b"
+    },
+    "meshes/chest_lidar_color_1.stl": {
+      "file": "cache/chest_lidar_color_1-11b2380e79.bin",
+      "triangles": 367577,
+      "vertices": 294901,
+      "source_sha256": "11b2380e790200f47bfd635d0f4fdacf00954a52a2984a23f8944ad91d870358"
+    },
+    "meshes/chest_lidar_color_2.stl": {
+      "file": "cache/chest_lidar_color_2-1f65df58ed.bin",
+      "triangles": 23876,
+      "vertices": 17084,
+      "source_sha256": "1f65df58ed0d0db06ea2280bb6ce1f71f07bac67272dc38fd0d35e513e1fc7db"
+    },
+    "meshes/chest_lidar_color_3.stl": {
+      "file": "cache/chest_lidar_color_3-e6c6253ff0.bin",
+      "triangles": 43336,
+      "vertices": 30795,
+      "source_sha256": "e6c6253ff07bc3fb4f0b00f5e2f480f89e35049bdcb63eb33b0b2637bb9ac598"
+    },
+    "meshes/chest_lidar_mount_45.stl": {
+      "file": "cache/chest_lidar_mount_45-1377eeb32f.bin",
+      "triangles": 7224,
+      "vertices": 9720,
+      "source_sha256": "1377eeb32fbd8f8bb1e83afae91ab28ae4b70d8b10bf8b4bdaabfbac92085b0b"
+    },
     "meshes/visual/urdf/L_finger_left.stl": {
       "file": "cache/L_finger_left.bin",
       "triangles": 121234,

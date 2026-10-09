@@ -11,7 +11,6 @@
 #include <iterator>
 #include <mutex>
 #include <memory>
-#include <random>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -22,7 +21,6 @@
 #include <Eigen/Dense>
 
 #include <rclcpp/rclcpp.hpp>
-#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <geometry_msgs/msg/pose.hpp>
@@ -32,19 +30,16 @@
 #include <std_msgs/msg/string.hpp>
 #include <nlohmann/json.hpp>
 
-#include <gng_control_msgs/msg/joint_control_claim.hpp>
 #include <gng_control_msgs/msg/grasp_candidate_metric.hpp>
 #include <gng_control_msgs/msg/grasp_candidate_metric_array.hpp>
 // Candidate goal ids from the target-pose selector.
 #include <std_msgs/msg/int32_multi_array.hpp>
 
 #include "common/resource_utils.hpp"
-#include "common/trajectory.hpp"
 #include "planner/RRT/ik_rrt_planner.hpp"
 #include "planner/RRT/rrt_params.hpp"
 #include "planner/RRT/state_validity_checker.hpp"
 #include "planning/graph_planner_factory.hpp"
-#include "core/tasks/goal_task.hpp"
 #include "planning/robot_stream_payload.hpp"
 #include "planning/topological_map_avoidance_helpers.hpp"
 #include "planning/joint_linf_cost.hpp"
@@ -58,7 +53,6 @@
 
 namespace {
 
-using robot_sim::common::TrajectoryState;
 
 static std::vector<std::string> collectTerminalLeafLinks(
     const ::simulation::RobotModel &model) {
@@ -165,15 +159,13 @@ static std::vector<double> eigenToStdVector(const Eigen::VectorXf &q) {
 
 namespace robot_sim::planning {
 
-class TopologicalMapPlanningNode : public rclcpp::Node {
+class TopologicalMapPathPlannerNode : public rclcpp::Node {
 public:
   using GNGType = ::GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>;
   using CostType = ::planning::JointLInfCost<Eigen::VectorXf, Eigen::Vector3f>;
 
-  TopologicalMapPlanningNode(const rclcpp::NodeOptions &options, bool enable_execution)
-      : Node(enable_execution ? "topological_map_avoidance_node" :
-                               "topological_map_path_planner_node", options),
-        enable_execution_(enable_execution) {
+  explicit TopologicalMapPathPlannerNode(const rclcpp::NodeOptions &options)
+      : Node("topological_map_path_planner_node", options) {
     declare_parameter("urdf_path", "");
     declare_parameter("gng_model_path", "");
     declare_parameter("gng.data_directory", "");
@@ -182,11 +174,6 @@ public:
     declare_parameter("gng.profile_names", "");
     declare_parameter("joint_topic", "/ToPoDualArm/joint_states");
     declare_parameter("topological_map_topic", "/ToPoDualArm/Tmap_static");
-    declare_parameter("target_topic", "target_joint_states");
-    declare_parameter("control_claim_topic", "");
-    declare_parameter("control_claim_priority", 10);
-    declare_parameter("control_claim_mode", static_cast<int>(gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE));
-    declare_parameter("control_claim_enabled", enable_execution_);
     declare_parameter("trajectory_topic", "/ToPoDualArm/plan_Tmap");
     declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/cand_Tmap");
     declare_parameter("candidate_metrics_topic", "/ToPoDualArm/grasp_candidate_metrics");
@@ -197,28 +184,13 @@ public:
     rcl_interfaces::msg::ParameterDescriptor component_descriptor;
     component_descriptor.read_only = true;
     declare_parameter("graph_planner", "gng_dijkstra", component_descriptor);
-    declare_parameter("goal_task_components",
-                      std::vector<std::string>{"requested_goal", "safe_retreat"}, component_descriptor);
     declare_parameter("avoid_collisions", true);
     // 隣接危険ノード数の経路コスト加算。衝突・危険ノードへの進入判定とは独立
-    declare_parameter("enable_safety_penalty", enable_execution_);
+    declare_parameter("enable_safety_penalty", false);
     declare_parameter("avoid_danger", true);
     declare_parameter("allow_danger_goal", true);
     declare_parameter("strict_goal_collision_check", false);
-    declare_parameter("replan_on_path_collision", enable_execution_);
     declare_parameter("allow_zero_initial_joint_state", true);
-    declare_parameter("publish_target_joint_states", enable_execution_);
-    declare_parameter("allow_safe_goal_fallback", enable_execution_);
-    // 自律退避時の関節距離順候補数。0は従来の全候補
-    declare_parameter("max_retreat_candidates", 0);
-    declare_parameter("trial_mode", false);
-    declare_parameter("trial_goal_interval_sec", 4.0);
-    declare_parameter("trial_safe_only", true);
-    declare_parameter("trial_return_home", false);
-    declare_parameter("trial_auto_advance_goal", false);
-    declare_parameter("trial_goal_candidate_count", 10);
-    declare_parameter("trial_seed", 0);
-    declare_parameter("waypoint_tolerance", 0.05);
     declare_parameter("robot_base_frame", "");
     declare_parameter("frame_id", "");
     declare_parameter("publish_candidate_robot_preview", true);
@@ -369,33 +341,12 @@ public:
     planner_options.enable_danger_check = avoid_danger_;
     planner_options.enable_safety_penalty = get_parameter("enable_safety_penalty").as_bool();
     planner_options.enable_strict_goal_check = get_parameter("strict_goal_collision_check").as_bool();
-    planner_options.enable_static_graph = !enable_execution_;
+    planner_options.enable_static_graph = true;
     planner_ = make_graph_planner<Eigen::VectorXf, Eigen::Vector3f, GNGType>(
         get_parameter("graph_planner").as_string(), *gng_, planner_options,
         std::make_shared<CostType>(1000.0f));
-    goal_tasks_ = tasks::make_goal_task_pipeline(
-        get_parameter("goal_task_components").as_string_array());
-    replan_on_path_collision_ = get_parameter("replan_on_path_collision").as_bool();
     allow_zero_initial_joint_state_ =
         get_parameter("allow_zero_initial_joint_state").as_bool();
-    allow_safe_goal_fallback_ = get_parameter("allow_safe_goal_fallback").as_bool();
-
-    trial_mode_ = enable_execution_ && get_parameter("trial_mode").as_bool();
-    trial_goal_interval_sec_ = std::max(0.1, get_parameter("trial_goal_interval_sec").as_double());
-    trial_safe_only_ = get_parameter("trial_safe_only").as_bool();
-    trial_return_home_ = get_parameter("trial_return_home").as_bool();
-    trial_auto_advance_goal_ = get_parameter("trial_auto_advance_goal").as_bool();
-    const int trial_goal_candidate_count =
-        get_parameter("trial_goal_candidate_count").as_int();
-    trial_goal_candidate_count_ =
-        (trial_goal_candidate_count < 1) ? 1 : trial_goal_candidate_count;
-    waypoint_tolerance_ = std::max(1e-6, get_parameter("waypoint_tolerance").as_double());
-    const int trial_seed = get_parameter("trial_seed").as_int();
-    if (trial_seed == 0) {
-      rng_.seed(std::random_device{}());
-    } else {
-      rng_.seed(static_cast<std::mt19937::result_type>(trial_seed));
-    }
 
     const std::string joint_topic = get_parameter("joint_topic").as_string();
     const std::string topological_map_topic =
@@ -430,24 +381,6 @@ public:
       const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
       current_ee_pose_topic_ = "/" + ns + "/current_ee_pose";
     }
-    target_topic_ = get_parameter("target_topic").as_string();
-    if (target_topic_.empty()) {
-      const std::string ns_raw = std::string(get_namespace());
-      const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
-      target_topic_ = "/" + ns + "/target_joint_states";
-    }
-    control_claim_topic_ = get_parameter("control_claim_topic").as_string();
-    if (control_claim_topic_.empty()) {
-      const std::string ns_raw = std::string(get_namespace());
-      const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
-      control_claim_topic_ = "/" + ns + "/control_claims";
-    }
-    control_claim_priority_ = get_parameter("control_claim_priority").as_int();
-    control_claim_mode_ = get_parameter("control_claim_mode").as_int();
-    control_claim_enabled_ = enable_execution_ && get_parameter("control_claim_enabled").as_bool();
-    const bool publish_target_joint_states =
-        get_parameter("publish_target_joint_states").as_bool();
-
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         joint_topic, rclcpp::QoS(10).reliable(),
         [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
@@ -482,16 +415,7 @@ public:
               latest_goal_candidate_ids_.push_back(static_cast<int>(id));
             }
             // 到達領域の変化による旧経路・旧評価の失効と、新しい候補への再計画
-            if (!enable_execution_) {
-              has_pending_plan_ = true;
-            } else if (!trial_mode_) {
-              requestReplanLocked();
-              const Eigen::VectorXf current_q = have_joint_state_
-                  ? currentJointVectorLocked()
-                  : Eigen::VectorXf::Zero(chain_->getTotalDOF());
-              publishTrajectoryPathLocked(current_q, {});
-              publishGraspCandidateMetricsLocked(-1, {}, {});
-            }
+            has_pending_plan_ = true;
             RCLCPP_DEBUG(
                 get_logger(),
                 "Received goal candidate ids: count=%zu first=%d topic=%s",
@@ -541,86 +465,23 @@ public:
       }
     }
 
-    if (enable_execution_ && publish_target_joint_states) {
-      target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
-          target_topic_, rclcpp::QoS(10).reliable());
-    }
-
-    if (control_claim_enabled_) {
-      control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
-          control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
-    }
-
-    if (enable_execution_) {
-      param_cb_handle_ = add_on_set_parameters_callback(
-          [this](const std::vector<rclcpp::Parameter> & params) {
-            rcl_interfaces::msg::SetParametersResult result;
-            result.successful = true;
-            result.reason = "ok";
-            std::lock_guard<std::mutex> lock(mutex_);
-            for (const auto & param : params) {
-              const auto & name = param.get_name();
-              if (name == "control_claim_priority") {
-                control_claim_priority_ = param.as_int();
-              } else if (name == "control_claim_mode") {
-                control_claim_mode_ = param.as_int();
-              } else if (name == "control_claim_enabled") {
-                control_claim_enabled_ = param.as_bool();
-                if (control_claim_enabled_ && !control_claim_pub_) {
-                  control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
-                      control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
-                }
-              }
-            }
-            return result;
-          });
-    }
-
     request_update_srv_ = create_service<std_srvs::srv::Trigger>(
         "request_trajectory_update",
         [this](const std_srvs::srv::Trigger::Request::SharedPtr,
                std_srvs::srv::Trigger::Response::SharedPtr response) {
           std::lock_guard<std::mutex> lock(mutex_);
-          trajectory_.update_requested = true;
           has_pending_plan_ = true;
           response->success = true;
           response->message = "trajectory update requested";
         });
 
-    if (enable_execution_) {
-      trial_goal_advance_srv_ = create_service<std_srvs::srv::Trigger>(
-          "request_trial_goal_advance",
-          [this](const std_srvs::srv::Trigger::Request::SharedPtr,
-                 std_srvs::srv::Trigger::Response::SharedPtr response) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            advanceTrialGoalLocked();
-            response->success = true;
-            response->message = "trial goal advanced";
-          });
-    }
-
     const double publish_hz = std::max(1.0, get_parameter("publish_hz").as_double());
     timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz)),
-        [this]() {
-          if (enable_execution_) {
-            publishTargetLocked();
-          } else {
-            publish_candidate_paths();
-          }
-        });
-
-    RCLCPP_DEBUG(get_logger(),
-                "Planning ready. enable_execution=%d joint_topic=%s map_topic=%s goal_ids_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s candidate_metrics_topic=%s dof=%d trial_mode=%d",
-                enable_execution_ ? 1 : 0, joint_topic.c_str(), topological_map_topic.c_str(),
-                goal_candidate_ids_topic_.c_str(), trajectory_topic_.c_str(),
-                candidate_trajectory_topic_.c_str(),
-                candidate_metrics_topic_.c_str(),
-                dof, trial_mode_ ? 1 : 0);
+        [this]() { publish_candidate_paths(); });
   }
 
 private:
-  const bool enable_execution_;
   bool has_pending_plan_ = true;
   Eigen::VectorXf last_plan_q_;
 
@@ -654,7 +515,7 @@ private:
     RCLCPP_INFO(get_logger(), "dof=%d Plan: %.2f ms Count: goal=%zu reach=%zu",
                 chain_->getTotalDOF(), plan_ms,
                 goal_candidates.size(), candidate_path_by_goal.size());
-    trajectory_.goal_id = goal_id;
+    selected_goal_id_ = goal_id;
     // 経路ID不変でも、更新された安全ラベル・座標系の再配信
     have_last_candidate_publish_ = false;
     if (candidate_paths.empty()) {
@@ -696,30 +557,6 @@ private:
       }
     }
     return q;
-  }
-
-  int findNearestActiveNodeLocked(const Eigen::VectorXf &q) const {
-    if (!gng_) {
-      return -1;
-    }
-    float min_dist = std::numeric_limits<float>::max();
-    int nearest_id = -1;
-    for (const auto &node : gng_->getNodes()) {
-      if (node.id == -1 || !node.status.active) {
-        continue;
-      }
-      const int dim = std::min(static_cast<int>(node.weight_angle.size()),
-                               static_cast<int>(q.size()));
-      if (dim <= 0) {
-        continue;
-      }
-      const float d = (node.weight_angle.head(dim) - q.head(dim)).norm();
-      if (d < min_dist) {
-        min_dist = d;
-        nearest_id = node.id;
-      }
-    }
-    return nearest_id;
   }
 
   void updateNodeStatusFromMapLocked(const ais_gng_msgs::msg::TopologicalMap &msg) {
@@ -779,250 +616,13 @@ private:
     }
   }
 
-  void publishTargetLocked() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (publish_candidate_robot_preview_) {
-      if (latest_goal_candidate_ids_.empty()) {
-        clearCandidateRobotPreviewLocked();
-      } else {
-        candidate_preview_empty_sent_ = false;
-      }
-    }
-    if (!gng_ || (!have_joint_state_ && !trial_mode_ && !allow_zero_initial_joint_state_)) {
-      RCLCPP_INFO_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "Waiting: gng=%d joint=%d map=%d (joint_topic=%s map_topic=%s trial_mode=%d)",
-          gng_ ? 1 : 0, have_joint_state_ ? 1 : 0, have_map_ ? 1 : 0,
-          get_parameter("joint_topic").as_string().c_str(),
-          get_parameter("topological_map_topic").as_string().c_str(),
-          trial_mode_ ? 1 : 0);
-      return;
-    }
-
-    if (!have_map_ && !trial_mode_) {
-      RCLCPP_INFO_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "Waiting for topological map: map_topic=%s trial_mode=%d",
-          get_parameter("topological_map_topic").as_string().c_str(),
-          trial_mode_ ? 1 : 0);
-      return;
-    }
-
-    Eigen::VectorXf current_q;
-    if (!have_joint_state_) {
-      current_q = Eigen::VectorXf::Zero(chain_->getTotalDOF());
-      RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "No joint_state received yet; using zero current_q fallback until %s receives the first message.",
-          get_parameter("joint_topic").as_string().c_str());
-    } else {
-      current_q = currentJointVectorLocked();
-    }
-
-    const int start_id = findNearestActiveNodeLocked(current_q);
-    if (start_id < 0) {
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
-                           "No active nearest GNG node found for current joint state.");
-      return;
-    }
-
-    const auto &start_node = gng_->nodeAt(start_id);
-    Eigen::VectorXf target_q = current_q;
-
-    if (trajectory_.valid) {
-      const bool local_neighborhood_blocked =
-          replan_on_path_collision_ && !is_retreat_trajectory_ && nodeHasUnsafeNeighborLocked(start_id);
-      // 退避中の始点付近の危険は再計画理由から除外。退避先の隣接悪化は再選定
-      const bool is_retreat_goal_blocked = is_retreat_trajectory_ &&
-          !topological_map_avoidance::has_safe_retreat_neighbors(*gng_, trajectory_.goal_id);
-      if (trajectory_.waypoint_index >= trajectory_.node_path.size()) {
-        clearActiveTrajectoryLocked();
-      } else {
-        const bool trajectory_blocked =
-            replan_on_path_collision_ &&
-            trajectoryHasUnsafeNodeLocked(trajectory_.waypoint_index);
-        if (trajectory_blocked || local_neighborhood_blocked || is_retreat_goal_blocked) {
-          if (trial_mode_) {
-            requestReplanCurrentTrialGoalLocked();
-          } else {
-            requestReplanSameGoalLocked();
-          }
-          target_q = current_q;
-        } else {
-          const int waypoint_node_id =
-              trajectory_.node_path[trajectory_.waypoint_index];
-          if (isWaypointReachedLocked(current_q, waypoint_node_id)) {
-            ++trajectory_.waypoint_index;
-            if (trajectory_.waypoint_index >= trajectory_.node_path.size()) {
-              RCLCPP_INFO(
-                  get_logger(),
-                  "Trajectory completed: goal=%d path_len=%zu",
-                  trajectory_.goal_id, trajectory_.node_path.size());
-              if (trial_mode_) {
-                handleTrialGoalCompletionLocked(current_q);
-              } else {
-                clearActiveTrajectoryLocked();
-                trajectory_.update_requested = true;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (trajectory_.bridge_valid) {
-      if (trajectory_.bridge_index >= trajectory_.bridge_path.size()) {
-        trajectory_.bridge_valid = false;
-        trajectory_.bridge_path.clear();
-        trajectory_.bridge_index = 0;
-      } else {
-        target_q = trajectory_.bridge_path[trajectory_.bridge_index];
-        if (postureReachedLocked(current_q, target_q)) {
-          ++trajectory_.bridge_index;
-          if (trajectory_.bridge_index >= trajectory_.bridge_path.size()) {
-            trajectory_.bridge_valid = false;
-            trajectory_.bridge_path.clear();
-            trajectory_.bridge_index = 0;
-          }
-        }
-      }
-    }
-
-    if (trial_mode_ && trial_waiting_for_key_) {
-      if (trial_hold_target_valid_) {
-        target_q = trial_hold_target_q_;
-      }
-    } else if (trajectory_.update_requested && !trajectory_.valid) {
-      if (trial_mode_) {
-        if (!trial_goal_coord_valid_ && !selectTrialGoalCoordLocked(start_id)) {
-          RCLCPP_WARN_THROTTLE(
-              get_logger(), *get_clock(), 5000,
-              "Trial mode: failed to select a goal coordinate.");
-        }
-
-        if (trial_goal_coord_valid_) {
-          trajectory_.goal_candidates = collectNearestGoalCandidatesLocked(
-              trial_goal_coord_, trial_goal_candidate_count_);
-          if (trajectory_.goal_candidates.empty()) {
-            const int fallback_goal_id = topological_map_avoidance::pickRandomGoal(
-                gng_, cached_safe_goal_ids_, trial_safe_only_, start_id, rng_);
-            if (fallback_goal_id >= 0) {
-              trajectory_.goal_candidates.push_back(fallback_goal_id);
-            }
-          }
-
-          if (!latchTrajectoryFromCandidatesLocked(
-                  current_q, start_id, trajectory_.goal_candidates, true,
-                  "Trial", "Trial mode")) {
-            trajectory_.goal_id = -1;
-            trajectory_.goal_candidates.clear();
-            RCLCPP_WARN_THROTTLE(
-                get_logger(), *get_clock(), 5000,
-                "Trial mode: planner returned empty path start=%d. Holding the same goal and retrying.",
-                start_id);
-          }
-        } else {
-          RCLCPP_WARN_THROTTLE(
-              get_logger(), *get_clock(), 5000,
-              "Trial mode: no selectable goal found (collision_free_only=%d collision_free_count=%zu).",
-              trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
-        }
-      } else {
-        const auto goal_candidates = selectedGoalCandidatesLocked(start_id);
-        auto retreat_candidates = cached_safe_goal_ids_;
-        // 距離順の候補数制限より先に、自身と一次隣接の安全で絞込み
-        retreat_candidates.erase(std::remove_if(retreat_candidates.begin(), retreat_candidates.end(),
-            [this](int id) { return !topological_map_avoidance::has_safe_retreat_neighbors(*gng_, id); }),
-            retreat_candidates.end());
-        const auto max_retreat_candidates = get_parameter("max_retreat_candidates").as_int();
-        if (max_retreat_candidates > 0 && goal_candidates.empty()) {
-          const auto num_candidates = std::min(retreat_candidates.size(),
-              static_cast<std::size_t>(max_retreat_candidates));
-          std::partial_sort(retreat_candidates.begin(), retreat_candidates.begin()+num_candidates,
-              retreat_candidates.end(), [this, &current_q](int first, int second) {
-                return (gng_->nodeAt(first).weight_angle-current_q).squaredNorm() <
-                       (gng_->nodeAt(second).weight_angle-current_q).squaredNorm();
-              });
-          retreat_candidates.resize(num_candidates);
-        }
-        const auto request = goal_tasks_.select({
-            goal_candidates, retreat_candidates,
-            start_node.status.is_colliding || (avoid_danger_ && start_node.status.is_danger) ||
-                nodeHasUnsafeNeighborLocked(start_id),
-            allow_safe_goal_fallback_});
-        if (request && !latchTrajectoryFromCandidatesLocked(
-                current_q, start_id, request->goal_ids, false,
-                request->label.c_str(), request->label.c_str(), request->is_retreat)) {
-          RCLCPP_WARN_THROTTLE(
-              get_logger(), *get_clock(), 5000,
-              "%s: planner returned empty path start=%d goal_candidates=%zu",
-              request->label.c_str(), start_id, request->goal_ids.size());
-        }
-      }
-    }
-
-    if (trajectory_.valid) {
-      advanceLatchedTrajectoryLocked(current_q, start_id, target_q);
-    } else if (!trial_mode_ &&
-               !(start_node.status.is_colliding ||
-                 (avoid_danger_ && start_node.status.is_danger))) {
-      publishTrajectoryPathLocked(current_q, {});
-    }
-
-    sensor_msgs::msg::JointState out;
-    out.header.stamp = now();
-    out.name = controlled_joint_names_;
-    out.position.resize(controlled_joint_names_.size(), 0.0);
-    out.velocity.resize(controlled_joint_names_.size(), 0.0);
-    out.effort.resize(controlled_joint_names_.size(), 0.0);
-    const int target_dim = static_cast<int>(target_q.size());
-    const int joint_dim = static_cast<int>(controlled_joint_names_.size());
-    const int copy_dim = std::min(target_dim, joint_dim);
-    if (target_dim != joint_dim) {
-      RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "target_joint_states dimension mismatch: target_dim=%d joint_dim=%d. Clipping to %d.",
-          target_dim, joint_dim, copy_dim);
-    }
-    for (int i = 0; i < copy_dim; ++i) {
-      out.position[static_cast<std::size_t>(i)] =
-          static_cast<double>(target_q[i]);
-    }
-    out.velocity.resize(controlled_joint_names_.size(), 0.0);
-    out.effort.resize(controlled_joint_names_.size(), 0.0);
-    if (target_pub_) {
-      target_pub_->publish(out);
-    }
-    publishCurrentEefPoseLocked(current_q);
-
-    if (control_claim_pub_) {
-      gng_control_msgs::msg::JointControlClaim claim;
-      claim.command_topic = target_topic_;
-      claim.joint_names = controlled_joint_names_;
-      claim.priority = control_claim_priority_;
-      claim.mode = static_cast<uint8_t>(control_claim_mode_);
-      claim.enabled = control_claim_enabled_;
-      control_claim_pub_->publish(claim);
-    }
-
-    last_target_q_ = target_q;
-  }
-
   std::shared_ptr<::kinematics::KinematicChain> chain_;
   std::vector<std::string> chain_joint_names_;
   std::vector<std::string> controlled_joint_names_;
   std::shared_ptr<GNGType> gng_;
   std::unique_ptr<graph_planner<GNGType>> planner_;
-  tasks::goal_task_pipeline goal_tasks_{std::vector<std::unique_ptr<tasks::goal_task>>{}};
-  bool is_retreat_trajectory_ = false;
 
-  std::string target_topic_;
-  std::string control_claim_topic_;
-  int control_claim_priority_ = 10;
-  int control_claim_mode_ = gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE;
-  bool control_claim_enabled_ = true;
   bool allow_zero_initial_joint_state_ = true;
-  bool allow_safe_goal_fallback_ = true;
   std::string trajectory_topic_;
   std::string candidate_trajectory_topic_;
   std::string candidate_metrics_topic_;
@@ -1033,8 +633,6 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_sub_;
   rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr goal_candidate_ids_sub_;
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr target_pub_;
-  rclcpp::Publisher<gng_control_msgs::msg::JointControlClaim>::SharedPtr control_claim_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr candidate_trajectory_pub_;
   rclcpp::Publisher<gng_control_msgs::msg::GraspCandidateMetricArray>::SharedPtr candidate_metrics_pub_;
@@ -1049,7 +647,6 @@ private:
   ais_gng_msgs::msg::TopologicalMap latest_map_;
   bool have_joint_state_ = false;
   bool have_map_ = false;
-  Eigen::VectorXf last_target_q_;
   Eigen::VectorXf last_candidate_current_q_;
   std::vector<std::vector<int>> last_candidate_paths_;
   bool have_last_candidate_publish_ = false;
@@ -1057,16 +654,8 @@ private:
   std::vector<int> latest_goal_candidate_ids_;
   std::unordered_set<std::string> last_candidate_robot_tags_;
   bool candidate_preview_empty_sent_ = false;
-  bool trial_mode_ = false;
-  double trial_goal_interval_sec_ = 4.0;
-  bool trial_safe_only_ = true;
-  bool trial_return_home_ = false;
-  bool trial_auto_advance_goal_ = false;
-  int trial_goal_candidate_count_ = 10;
   bool avoid_danger_ = true;
   bool allow_danger_goal_ = true;
-  double waypoint_tolerance_ = 0.05;
-  bool replan_on_path_collision_ = true;
   bool publish_candidate_robot_preview_ = true;
   float goal_rot_manip_weight_ = 1.0f;
   float goal_joint_limit_weight_ = 0.5f;
@@ -1074,28 +663,8 @@ private:
   std::string robot_root_link_name_;
   std::string candidate_robot_urdf_content_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr request_update_srv_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trial_goal_advance_srv_;
-  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
-  std::mt19937 rng_;
 
-  TrajectoryState trajectory_;
-
-  enum class TrialPhase { kRandomGoal, kReturnHome };
-  TrialPhase trial_phase_ = TrialPhase::kRandomGoal;
-  Eigen::Vector3f trial_goal_coord_ = Eigen::Vector3f::Zero();
-  bool trial_goal_coord_valid_ = false;
-  Eigen::Vector3f trial_home_coord_ = Eigen::Vector3f::Zero();
-  bool trial_home_coord_valid_ = false;
-  bool trial_waiting_for_key_ = false;
-  bool trial_hold_target_valid_ = false;
-  Eigen::VectorXf trial_hold_target_q_;
-
-  std::vector<int> collectNearestGoalCandidatesLocked(const Eigen::Vector3f &reference_coord,
-                                                      int candidate_count) const {
-    return topological_map_avoidance::collectNearestGoalCandidates(
-        gng_, cached_safe_goal_ids_, trial_safe_only_, allow_danger_goal_,
-        reference_coord, candidate_count);
-  }
+  int selected_goal_id_ = -1;
 
   std::vector<int> selectedGoalCandidatesLocked(int start_id) const {
     if (latest_goal_candidate_ids_.empty()) {
@@ -1135,86 +704,6 @@ private:
         gng_, reference_q, candidate_count);
   }
 
-  bool postureReachedLocked(const Eigen::VectorXf &current_q,
-                            const Eigen::VectorXf &target_q) const {
-    const int dim = std::min(static_cast<int>(current_q.size()),
-                             static_cast<int>(target_q.size()));
-    if (dim <= 0) {
-      return false;
-    }
-    const float d = (current_q.head(dim) - target_q.head(dim)).norm();
-    return d <= static_cast<float>(waypoint_tolerance_);
-  }
-
-  bool buildTrialGoalBridgeLocked(const Eigen::VectorXf &start_q,
-                                  const Eigen::Vector3f &goal_coord,
-                                  std::vector<Eigen::VectorXf> &out_path) const {
-    return topological_map_avoidance::buildTrialGoalBridge(
-        chain_, gng_, avoid_danger_, start_q, goal_coord, out_path);
-  }
-
-  bool goalCoordinateReachedLocked(const Eigen::VectorXf &current_q) const {
-    return topological_map_avoidance::goalCoordinateReached(
-        chain_, trial_goal_coord_valid_, trial_goal_coord_, current_q,
-        waypoint_tolerance_);
-  }
-
-  std::vector<Eigen::VectorXf> buildBridgePathLocked(const Eigen::VectorXf &from_q,
-                                                     const Eigen::VectorXf &to_q,
-                                                     int steps) const {
-    std::vector<Eigen::VectorXf> bridge;
-    const int dim = std::min(static_cast<int>(from_q.size()), static_cast<int>(to_q.size()));
-    if (dim <= 0) {
-      return bridge;
-    }
-
-    const int clamped_steps = std::max(1, steps);
-    bridge.reserve(static_cast<std::size_t>(clamped_steps));
-    for (int i = 1; i <= clamped_steps; ++i) {
-      const float t = static_cast<float>(i) / static_cast<float>(clamped_steps);
-      Eigen::VectorXf q = from_q.head(dim) * (1.0f - t) + to_q.head(dim) * t;
-      bridge.push_back(q);
-    }
-    return bridge;
-  }
-
-  void handleTrialGoalCompletionLocked(const Eigen::VectorXf &current_q) {
-    const bool goal_coord_reached = goalCoordinateReachedLocked(current_q);
-    if (goal_coord_reached && trial_auto_advance_goal_) {
-      trial_waiting_for_key_ = false;
-      trial_hold_target_valid_ = false;
-      clearActiveTrajectoryLocked();
-      trajectory_.goal_id = -1;
-      trajectory_.goal_candidates.clear();
-      trial_goal_coord_valid_ = false;
-      trajectory_.update_requested = true;
-      RCLCPP_INFO(
-          get_logger(),
-          "Trial goal coordinate reached. Auto-advancing to next goal coordinate.");
-    } else if (goal_coord_reached) {
-      trial_waiting_for_key_ = true;
-      trial_hold_target_q_ = gng_->nodeAt(trajectory_.node_path.back()).weight_angle;
-      trial_hold_target_valid_ = true;
-      clearActiveTrajectoryLocked();
-      trajectory_.update_requested = false;
-      trajectory_.goal_id = -1;
-      trajectory_.goal_candidates.clear();
-      RCLCPP_INFO(
-          get_logger(),
-          "Trial goal coordinate reached. Waiting for manual advance.");
-    } else {
-      clearActiveTrajectoryLocked();
-      trajectory_.goal_id = -1;
-      trajectory_.goal_candidates.clear();
-      trial_waiting_for_key_ = false;
-      trial_hold_target_valid_ = false;
-      trajectory_.update_requested = true;
-      RCLCPP_INFO(
-          get_logger(),
-          "Trial path completed before goal coordinate was reached. Replanning the same goal coordinate.");
-    }
-  }
-
   std::pair<int, std::vector<int>> planFromStartCandidatesLocked(
       const Eigen::VectorXf &current_q, const std::vector<int> &start_candidates,
       const std::vector<int> &goal_candidates, int &selected_start_id,
@@ -1225,411 +714,6 @@ private:
         selected_start_id, candidate_path_by_goal, candidate_paths,
         allow_danger_goal_,
         goal_rot_manip_weight_, goal_joint_limit_weight_);
-  }
-
-  bool latchTrajectoryFromCandidatesLocked(
-      const Eigen::VectorXf &current_q, int start_id,
-      const std::vector<int> &goal_candidates, bool build_goal_bridge,
-      const char *latched_label, const char *empty_label, bool is_retreat = false) {
-    if (!gng_ || goal_candidates.empty()) {
-      RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "%s: no goal candidates available.", empty_label);
-      return false;
-    }
-
-    const auto start_candidates = collectNearestStartCandidatesLocked(current_q, 5);
-    std::vector<int> start_candidates_or_fallback = start_candidates;
-    if (start_candidates_or_fallback.empty()) {
-      start_candidates_or_fallback.push_back(start_id);
-    }
-
-    std::unordered_map<int, std::vector<int>> candidate_path_by_goal;
-    std::vector<std::vector<int>> candidate_paths;
-    candidate_paths.reserve(goal_candidates.size());
-
-    int selected_start_id = -1;
-    auto [reached_goal_id, node_path] = planFromStartCandidatesLocked(
-        current_q, start_candidates_or_fallback, goal_candidates,
-        selected_start_id, candidate_path_by_goal, candidate_paths);
-
-    trajectory_.goal_id = reached_goal_id;
-    publishGraspCandidateMetricsLocked(
-        selected_start_id >= 0 ? selected_start_id : start_id,
-        goal_candidates, candidate_path_by_goal);
-    trajectory_.bridge_valid = false;
-    trajectory_.bridge_path.clear();
-    trajectory_.bridge_index = 0;
-    trajectory_.goal_bridge_valid = false;
-    trajectory_.goal_bridge_path.clear();
-    trajectory_.goal_bridge_index = 0;
-
-    if (trajectory_.goal_id < 0) {
-      trajectory_.node_path.clear();
-      trajectory_.update_requested = false;
-      RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "%s: planner returned empty path start=%d goals=%zu",
-          empty_label, start_id, goal_candidates.size());
-      return false;
-    }
-
-    const auto it = candidate_path_by_goal.find(trajectory_.goal_id);
-    if (it != candidate_path_by_goal.end()) {
-      trajectory_.node_path = it->second;
-    } else {
-      trajectory_.node_path = node_path;
-    }
-
-    if (candidate_trajectory_pub_ && !candidate_paths.empty()) {
-      publishCandidateTrajectoryPathsLocked(current_q, candidate_paths);
-    }
-
-    if (build_goal_bridge && trial_goal_coord_valid_ && !trajectory_.node_path.empty()) {
-      const auto &goal_start_node = gng_->nodeAt(trajectory_.node_path.back());
-      trajectory_.goal_bridge_valid = buildTrialGoalBridgeLocked(
-          goal_start_node.weight_angle, trial_goal_coord_,
-          trajectory_.goal_bridge_path);
-      if (trajectory_.goal_bridge_valid) {
-        RCLCPP_INFO(
-            get_logger(),
-            "%s: goal bridge latched goal_node=%d bridge_len=%zu goal_coord=[%.4f %.4f %.4f]",
-            latched_label, trajectory_.node_path.back(), trajectory_.goal_bridge_path.size(),
-            trial_goal_coord_.x(), trial_goal_coord_.y(), trial_goal_coord_.z());
-      } else {
-        RCLCPP_WARN(
-            get_logger(),
-            "%s: goal bridge build failed goal_node=%d goal_coord=[%.4f %.4f %.4f]",
-            latched_label, trajectory_.node_path.back(), trial_goal_coord_.x(),
-            trial_goal_coord_.y(), trial_goal_coord_.z());
-      }
-    }
-
-    if (selected_start_id >= 0 &&
-        selected_start_id < static_cast<int>(gng_->getMaxNodeNum())) {
-      const auto &bridge_start_q = gng_->nodeAt(selected_start_id).weight_angle;
-      trajectory_.bridge_path = buildBridgePathLocked(current_q, bridge_start_q, 4);
-      trajectory_.bridge_valid = !trajectory_.bridge_path.empty();
-    }
-
-    trajectory_.waypoint_index = trajectory_.node_path.size() >= 2 ? 1U : 0U;
-    trajectory_.valid = !trajectory_.node_path.empty();
-    is_retreat_trajectory_ = is_retreat;
-    trajectory_.update_requested = !trajectory_.valid;
-    if (!trajectory_.valid) {
-      return false;
-    }
-
-    return true;
-  }
-
-  void logWaypointEefDebugLocked(
-      const Eigen::VectorXf &current_q, const Eigen::VectorXf &target_q,
-      int target_node_id) {
-    const auto target_node_fk_q = eigenToStdVector(target_q);
-    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
-        target_positions;
-    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>
-        target_orientations;
-    chain_->forwardKinematicsAt(target_node_fk_q, target_positions,
-                                target_orientations);
-
-    const auto current_fk_q = eigenToStdVector(current_q);
-    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
-        current_positions;
-    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>
-        current_orientations;
-    chain_->forwardKinematicsAt(current_fk_q, current_positions,
-                                current_orientations);
-
-    if (target_positions.empty() || target_orientations.empty() ||
-        current_positions.empty() || current_orientations.empty()) {
-      return;
-    }
-
-    const auto &wp = gng_->nodeAt(target_node_id);
-    const Eigen::Vector3d target_waypoint_pos = wp.weight_coord.cast<double>();
-    const Eigen::Quaterniond target_waypoint_ori =
-        wp.status.ee_orientation.cast<double>();
-    const Eigen::Vector3d current_eef_pos = current_positions.back();
-    const Eigen::Quaterniond current_eef_ori = current_orientations.back();
-    const Eigen::Vector3d target_fk_pos = target_positions.back();
-    const Eigen::Quaterniond target_fk_ori = target_orientations.back();
-
-    const double cur_pos_err = (current_eef_pos - target_waypoint_pos).norm();
-    const double tgt_pos_err = (target_fk_pos - target_waypoint_pos).norm();
-    const double cur_ori_err =
-        quaternionAngularErrorDeg(current_eef_ori, target_waypoint_ori);
-    const double tgt_ori_err =
-        quaternionAngularErrorDeg(target_fk_ori, target_waypoint_ori);
-
-    RCLCPP_INFO_THROTTLE(
-        get_logger(), *get_clock(), 2000,
-        "EEF debug: current=[%.4f %.4f %.4f] target_wp=[%.4f %.4f %.4f] target_fk=[%.4f %.4f %.4f] pos_err(cur=%.4f tgtfk=%.4f) ori_err_deg(cur=%.3f tgtfk=%.3f)",
-        current_eef_pos.x(), current_eef_pos.y(), current_eef_pos.z(),
-        target_waypoint_pos.x(), target_waypoint_pos.y(),
-        target_waypoint_pos.z(), target_fk_pos.x(), target_fk_pos.y(),
-        target_fk_pos.z(), cur_pos_err, tgt_pos_err, cur_ori_err,
-        tgt_ori_err);
-  }
-
-  bool advanceLatchedTrajectoryLocked(const Eigen::VectorXf &current_q,
-                                      int start_id,
-                                      Eigen::VectorXf &target_q) {
-    if (!trajectory_.valid) {
-      return false;
-    }
-
-    publishTrajectoryPathLocked(current_q, trajectory_.node_path);
-    if (trajectory_.waypoint_index < trajectory_.node_path.size()) {
-      const int target_node_id = trajectory_.node_path[trajectory_.waypoint_index];
-      if (target_node_id >= 0 &&
-          target_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
-        const auto safety = topological_map_avoidance::inspectWaypointSafetyLookahead(
-            gng_, trajectory_.node_path, trajectory_.waypoint_index, avoid_danger_);
-
-        if (safety.next_next_unsafe) {
-          target_q = current_q;
-          if (trial_mode_) {
-            requestReplanCurrentTrialGoalLocked();
-          } else {
-            requestReplanSameGoalLocked();
-          }
-          RCLCPP_INFO_THROTTLE(
-              get_logger(), *get_clock(), 2000,
-              "Hold current posture and replan: next-next waypoint is unsafe. start=%d goal=%d wp_idx=%zu next_id=%d next_next_id=%d",
-              start_id, trajectory_.goal_id, trajectory_.waypoint_index, safety.next_node_id,
-              safety.next_next_node_id);
-        } else if (safety.next_unsafe) {
-          if (trajectory_.waypoint_index > 0) {
-            const int retreat_node_id = trajectory_.node_path[trajectory_.waypoint_index - 1];
-            if (retreat_node_id >= 0 &&
-                retreat_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
-              target_q = gng_->nodeAt(retreat_node_id).weight_angle;
-              trajectory_.waypoint_index -= 1;
-              if (trial_mode_) {
-                requestReplanCurrentTrialGoalLocked();
-              } else {
-                requestReplanSameGoalLocked();
-              }
-              RCLCPP_INFO_THROTTLE(
-                  get_logger(), *get_clock(), 2000,
-                  "Retreat to previous waypoint and replan: next waypoint is unsafe. start=%d goal=%d retreat_id=%d wp_idx=%zu next_id=%d",
-                  start_id, trajectory_.goal_id, retreat_node_id,
-                  trajectory_.waypoint_index, safety.next_node_id);
-            } else {
-              target_q = current_q;
-              if (trial_mode_) {
-                requestReplanCurrentTrialGoalLocked();
-              } else {
-                requestReplanSameGoalLocked();
-              }
-            }
-          } else {
-            target_q = current_q;
-            if (trial_mode_) {
-              requestReplanCurrentTrialGoalLocked();
-            } else {
-              requestReplanSameGoalLocked();
-            }
-          }
-        } else {
-          target_q = gng_->nodeAt(target_node_id).weight_angle;
-        }
-
-        RCLCPP_INFO_THROTTLE(
-            get_logger(), *get_clock(), 2000,
-            "Waypoint debug: start=%d goal=%d wp_idx=%zu wp_id=%d q_dim=%d target_dim=%d",
-            start_id, trajectory_.goal_id, trajectory_.waypoint_index, target_node_id,
-            static_cast<int>(current_q.size()), static_cast<int>(target_q.size()));
-
-        logWaypointEefDebugLocked(current_q, target_q, target_node_id);
-      }
-      return true;
-    }
-
-    if (trial_mode_ && trajectory_.goal_bridge_valid &&
-        trajectory_.goal_bridge_index < trajectory_.goal_bridge_path.size()) {
-      const Eigen::VectorXf &bridge_target_q =
-          trajectory_.goal_bridge_path[trajectory_.goal_bridge_index];
-      target_q = bridge_target_q;
-
-      RCLCPP_INFO_THROTTLE(
-          get_logger(), *get_clock(), 2000,
-          "Goal bridge debug: start=%d goal=%d bridge_idx=%zu bridge_len=%zu q_dim=%d target_dim=%d",
-          start_id, trajectory_.goal_id, trajectory_.goal_bridge_index,
-          trajectory_.goal_bridge_path.size(), static_cast<int>(current_q.size()),
-          static_cast<int>(target_q.size()));
-
-      if (postureReachedLocked(current_q, bridge_target_q)) {
-        ++trajectory_.goal_bridge_index;
-        if (trajectory_.goal_bridge_index >= trajectory_.goal_bridge_path.size()) {
-          RCLCPP_INFO(
-              get_logger(),
-              "Trial goal bridge completed. Evaluating goal coordinate reach.");
-          trajectory_.goal_bridge_valid = false;
-          trajectory_.goal_bridge_path.clear();
-          trajectory_.goal_bridge_index = 0;
-          handleTrialGoalCompletionLocked(current_q);
-        }
-      }
-      return true;
-    }
-
-    RCLCPP_INFO(
-        get_logger(),
-        "Trajectory completed: goal=%d path_len=%zu", trajectory_.goal_id,
-        trajectory_.node_path.size());
-    if (trial_mode_) {
-      handleTrialGoalCompletionLocked(current_q);
-    } else {
-      clearActiveTrajectoryLocked();
-      trajectory_.update_requested = true;
-    }
-    return true;
-  }
-
-  bool selectTrialGoalCoordLocked(int start_id)
-  {
-    const auto selected_coord = topological_map_avoidance::selectTrialGoalCoord(
-        gng_, trial_return_home_, trial_phase_ == TrialPhase::kReturnHome,
-        trial_safe_only_, start_id, cached_safe_goal_ids_, trial_home_coord_,
-        trial_home_coord_valid_, rng_);
-    if (!selected_coord) {
-      return false;
-    }
-    trial_goal_coord_ = *selected_coord;
-    trial_goal_coord_valid_ = true;
-    return true;
-  }
-
-  bool isWaypointReachedLocked(const Eigen::VectorXf & current_q, int waypoint_node_id) const
-  {
-    if (!gng_ || waypoint_node_id < 0 ||
-        waypoint_node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-      return false;
-    }
-    const auto & waypoint = gng_->nodeAt(waypoint_node_id);
-    if (waypoint.id == -1) {
-      return false;
-    }
-    const int dim = std::min(static_cast<int>(waypoint.weight_angle.size()),
-                             static_cast<int>(current_q.size()));
-    if (dim <= 0) {
-      return false;
-    }
-    const float d = (waypoint.weight_angle.head(dim) - current_q.head(dim)).norm();
-    return d <= static_cast<float>(waypoint_tolerance_);
-  }
-
-  bool trajectoryHasUnsafeNodeLocked(std::size_t from_index) const {
-    if (!gng_) {
-      return false;
-    }
-
-    if (from_index >= trajectory_.node_path.size()) {
-      return false;
-    }
-
-    for (std::size_t i = from_index; i < trajectory_.node_path.size(); ++i) {
-      const int node_id = trajectory_.node_path[i];
-      if (node_id < 0 || node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-        return true;
-      }
-      const auto &node = gng_->nodeAt(node_id);
-      if (node.id == -1 || !node.status.active || !node.status.self_collision_free ||
-          node.status.is_colliding ||
-          (avoid_danger_ && node.status.is_danger)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool nodeHasUnsafeNeighborLocked(int node_id) const {
-    if (!gng_ || node_id < 0 ||
-        node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-      return false;
-    }
-    const auto &node = gng_->nodeAt(node_id);
-    if (node.id == -1 || !node.status.active || !node.status.self_collision_free) {
-      return true;
-    }
-    for (int neighbor_id : gng_->getNeighborsAngle(node_id)) {
-      if (neighbor_id < 0 || neighbor_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-        return true;
-      }
-      const auto &neighbor = gng_->nodeAt(neighbor_id);
-      if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.self_collision_free ||
-          neighbor.status.is_colliding ||
-          (avoid_danger_ && neighbor.status.is_danger)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  void clearActiveTrajectoryLocked(bool keep_goal_id = false)
-  {
-    trajectory_.clear(keep_goal_id);
-    is_retreat_trajectory_ = false;
-  }
-
-  void publishEmptyCandidateTrajectoryLocked()
-  {
-    if (candidate_trajectory_pub_) {
-      publishCandidateTrajectoryPathsLocked({});
-    }
-  }
-
-  void requestReplanLocked()
-  {
-    clearActiveTrajectoryLocked(false);
-    trajectory_.goal_candidates.clear();
-    trajectory_.goal_id = -1;
-    trajectory_.update_requested = true;
-    publishEmptyCandidateTrajectoryLocked();
-  }
-
-  void requestReplanCurrentTrialGoalLocked()
-  {
-    clearActiveTrajectoryLocked(true);
-    trajectory_.update_requested = true;
-    publishEmptyCandidateTrajectoryLocked();
-  }
-
-  void requestReplanSameGoalLocked()
-  {
-    clearActiveTrajectoryLocked(true);
-    trajectory_.update_requested = true;
-    publishEmptyCandidateTrajectoryLocked();
-  }
-
-  void advanceTrialGoalLocked()
-  {
-    trial_waiting_for_key_ = false;
-    trial_hold_target_valid_ = false;
-    clearActiveTrajectoryLocked(false);
-    trajectory_.goal_candidates.clear();
-    trajectory_.goal_id = -1;
-    trial_goal_coord_valid_ = false;
-    trajectory_.update_requested = true;
-
-    if (trial_return_home_) {
-      trial_phase_ = (trial_phase_ == TrialPhase::kRandomGoal)
-                         ? TrialPhase::kReturnHome
-                         : TrialPhase::kRandomGoal;
-      RCLCPP_INFO(
-          get_logger(),
-          "Trial goal coordinate advance requested: next phase=%s",
-          trial_phase_ == TrialPhase::kReturnHome ? "return_home" : "random_goal");
-    } else {
-      RCLCPP_INFO(
-          get_logger(),
-          "Trial goal coordinate advance requested: random goal will be reselected.");
-    }
-
-    publishEmptyCandidateTrajectoryLocked();
   }
 
   void publishGraspCandidateMetricsLocked(
@@ -1650,7 +734,7 @@ private:
       ns_raw.erase(ns_raw.begin());
     }
     const auto out = topological_map_avoidance::buildGraspCandidateMetricArray(
-        now(), frame_id, ns_raw, robot_base_frame_, trajectory_.goal_id,
+        now(), frame_id, ns_raw, robot_base_frame_, selected_goal_id_,
         start_id, goal_candidates, candidate_path_by_goal, gng_, chain_,
         controlled_joint_names_);
     candidate_metrics_pub_->publish(out);
@@ -1809,19 +893,6 @@ private:
   }
 };
 
-class TopologicalMapAvoidanceNode : public TopologicalMapPlanningNode {
-public:
-  explicit TopologicalMapAvoidanceNode(const rclcpp::NodeOptions &options)
-      : TopologicalMapPlanningNode(options, true) {}
-};
-
-class TopologicalMapPathPlannerNode : public TopologicalMapPlanningNode {
-public:
-  explicit TopologicalMapPathPlannerNode(const rclcpp::NodeOptions &options)
-      : TopologicalMapPlanningNode(options, false) {}
-};
-
 } // namespace robot_sim::planning
 
-RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::planning::TopologicalMapAvoidanceNode)
 RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::planning::TopologicalMapPathPlannerNode)

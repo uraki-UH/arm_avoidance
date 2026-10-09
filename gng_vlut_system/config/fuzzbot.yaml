@@ -1,0 +1,45 @@
+/**:
+  ros__parameters:
+    # 差動二輪FuzzBotの原点表示。走行制御・物理シミュレーションなし。
+    robot_name: "fuzzbot"
+    urdf_path: "package://fuzzbot_description/urdf/fuzzbot_pro_normal.urdf.xacro"
+    frame_id: "world"
+    publish_hz: 20.0
+
+    # 初回ゼロ姿勢のみ配信。関節指令の生成・実機への出力なし。
+    enable_joint_state_publisher: true
+    joint_control_backend: "external"
+    enable_dynamixel_current_pose: false
+    enable_realsense_mount_tf: false
+    enable_environment_voxelization: false
+
+    # 学習データ未作成時はロボット本体だけの表示。
+    gng:
+      experiment_id: "fuzzbot"
+      data_directory: "gng_results"
+
+    self_recognition:
+      enable_self_recognition_viz: false
+      enable_environment_self_filter: false
+    gripper_volume_graph:
+      enabled: false
+
+    # 原点からの移動状態グラフ。加減速上限はシミュレーション用の仮設定、実機性能保証なし。
+    # 車輪半径・輪間隔・車輪速度上限はURDFのdiff_drive設定とjoint limitから取得。
+    motion_graph:
+      radius: 2.0 # 原点周囲の生成範囲[m]。全域の被覆保証なし。
+      min_speed: -0.2 # 後退速度[m/s]
+      max_speed: 0.4 # 前進速度[m/s]
+      max_angular_speed: 1.2 # 旋回角速度[rad/s]
+      max_acceleration: 0.4 # 前後加速度[m/s^2]
+      max_angular_acceleration: 1.2 # 旋回角加速度[rad/s^2]
+      initial_speed: 0.0
+      initial_angular_speed: 0.0
+      duration_sec: 0.5 # エッジ1本の移動時間[s]
+      integration_step_sec: 0.05 # 軌跡積分の刻み[s]
+      max_depth: 8 # 初期状態からの探索深さ
+      max_nodes: 3000 # 状態数の予算
+      position_step: 0.1 # 位置代表点の間引き幅[m]
+      yaw_step_deg: 15.0 # 向き代表点の間引き幅[deg]
+      speed_step: 0.1 # 速度代表点の間引き幅[m/s]
+      angular_speed_step: 0.3 # 角速度代表点の間引き幅[rad/s]

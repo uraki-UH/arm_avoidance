@@ -281,6 +281,30 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
   }
 }
 
+GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
+    const GeometricSelfCollisionChecker &source)
+    : checker_(source.checker_), collision_objects_(source.collision_objects_),
+#ifdef USE_FCL
+      strict_mode_(source.strict_mode_), use_fcl_backend_(source.use_fcl_backend_),
+      enable_solid_containment_(source.enable_solid_containment_),
+      has_mesh_geometry_(source.has_mesh_geometry_),
+      solid_geometries_(source.solid_geometries_), object_fcl_ids_(source.object_fcl_ids_),
+      fcl_ignore_pairs_(source.fcl_ignore_pairs_),
+#endif
+      object_map_(source.object_map_), chain_(source.chain_),
+      fixed_link_info_(source.fixed_link_info_),
+      fixed_link_connectivity_(source.fixed_link_connectivity_),
+      collision_exclusion_pairs_(source.collision_exclusion_pairs_) {
+#ifdef USE_FCL
+  fcl_detector_.copy_robot_geometry(source.fcl_detector_);
+#endif
+}
+
+std::unique_ptr<GeometricSelfCollisionChecker>
+GeometricSelfCollisionChecker::clone_for_queries() const {
+  return std::unique_ptr<GeometricSelfCollisionChecker>(new GeometricSelfCollisionChecker(*this));
+}
+
 void GeometricSelfCollisionChecker::updateBodyPoses(
     const std::vector<Eigen::Vector3d,
                       Eigen::aligned_allocator<Eigen::Vector3d>> &positions,

@@ -1,0 +1,38 @@
+FROM ros:jazzy-ros-base AS dependencies
+
+# 現行Gazeboと標準の関節軌道制御。Classic関連パッケージの依存なし
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-ros-gz ros-jazzy-gz-ros2-control ros-jazzy-ros2-controllers \
+    ros-jazzy-robot-state-publisher python3-numpy python3-scipy python3-pytest \
+    assimp-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Classic依存を含まない実行プロファイルによる正規amentインストール。
+FROM dependencies AS package_build
+COPY gng_vlut_system/CMakeLists.txt gng_vlut_system/package.xml /build_ws/src/gng_vlut_system/
+COPY gng_vlut_system/launch/dual_arm_tasks.launch.py \
+     gng_vlut_system/launch/dual_arm_gz.launch.py \
+     gng_vlut_system/launch/dual_arm_effort_config.py \
+     gng_vlut_system/launch/simulation_scenario.py /build_ws/src/gng_vlut_system/launch/
+COPY gng_vlut_system/scripts/task_program.py gng_vlut_system/scripts/task_executor.py \
+     gng_vlut_system/scripts/harmonic_launcher.py gng_vlut_system/scripts/task_components.py \
+     gng_vlut_system/scripts/robot_graph_route.py /build_ws/src/gng_vlut_system/scripts/
+COPY gng_vlut_system/config/dual_arm_effort.yaml /build_ws/src/gng_vlut_system/config/
+COPY gng_vlut_system/config/simulation /build_ws/src/gng_vlut_system/config/simulation/
+COPY urdf/topo_dual_arm_max /build_ws/src/urdf/topo_dual_arm_max/
+COPY urdf/topo_dual_arm_max_long /build_ws/src/urdf/topo_dual_arm_max_long/
+WORKDIR /build_ws
+RUN . /opt/ros/jazzy/setup.sh && colcon build --base-paths src/gng_vlut_system \
+    --install-base /opt/gng_harmonic --cmake-args -Denable_harmonic_runtime_only=ON -DBUILD_TESTING=OFF
+
+# ソースworkspaceのマウント不要な実行イメージ。
+FROM dependencies
+# X11/OpenGL接続確認とMesa描画。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mesa-utils mesa-vulkan-drivers \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=package_build /opt/gng_harmonic /opt/gng_harmonic
+COPY --chmod=755 docker/harmonic_entrypoint.sh /harmonic_entrypoint.sh
+ENTRYPOINT ["/harmonic_entrypoint.sh"]
+CMD ["bash"]
+WORKDIR /workspace

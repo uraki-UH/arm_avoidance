@@ -14,6 +14,22 @@ test('全候補の同一リンクへの色反映と、子リンク・共有マ�
         await build({ entryPoints: ['src/features/visualization/robot_link_appearance.ts'], outfile: output_file,
             bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent' });
         const { apply_robot_appearance } = await import(pathToFileURL(output_file).href);
+        // 双腕の標準質感と、表示設定による上書き・復帰
+        const robot = new THREE.Group(); robot.name = 'topo_dual_arm_max';
+        const silver = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshPhongMaterial({name: 'silver'}));
+        robot.add(silver);
+        apply_robot_appearance(robot, {}, true, '#ffffff', 1, 0);
+        assert.ok(silver.material.isMeshPhysicalMaterial);
+        assert.equal(silver.material.color.getHexString(), 'a2abad');
+        assert.equal(silver.material.metalness, .92);
+        assert.equal(silver.material.roughness, .3);
+        apply_robot_appearance(robot, {}, false, '#ff0000', .4, 0);
+        assert.equal(silver.material.opacity, .4);
+        assert.equal(silver.material.color.getHexString(), 'ff0000');
+        apply_robot_appearance(robot, {}, true, '#ffffff', 1, 0);
+        assert.equal(silver.material.color.getHexString(), 'a2abad');
+        silver.geometry.dispose(); silver.material.dispose();
+
         const shared = new THREE.MeshPhongMaterial({ color: '#abcdef' });
         const geometry = new THREE.BoxGeometry();
         const instances = Array.from({ length: 3 }, () => {

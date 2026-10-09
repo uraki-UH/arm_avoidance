@@ -4,7 +4,7 @@ import { PointCloudData, HeatmapSettings } from '../../types';
 import { heatmapVertexShader, heatmapFragmentShader } from '../../utils/heatmapShaders';
 import { useFrame, useThree } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
-import { useDemandUpdate } from './SharedRenderers';
+import { DisplayFrame, useDemandUpdate } from './SharedRenderers';
 
 interface PointCloudRendererProps {
     data: PointCloudData;
@@ -55,25 +55,12 @@ export function PointCloudRenderer({
     onTransformChange,
 }: PointCloudRendererProps) {
     const pointsRef = useRef<THREE.Points>(null);
-    const frameGroupRef = useRef<THREE.Group>(null);
     const groupRef = useRef<THREE.Group>(null);
     const transformControlsRef = useRef<any>(null);
-    const { camera, gl, invalidate } = useThree();
+    const { camera, gl } = useThree();
 
     // 表示設定変更時のオンデマンド再描画。
     useDemandUpdate([data, tf, heatmapSettings, opacity, selected, transformMode]);
-
-    useEffect(() => {
-        if (!frameGroupRef.current) return;
-        if (tf) {
-            frameGroupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
-            frameGroupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-        } else {
-            frameGroupRef.current.position.set(0, 0, 0);
-            frameGroupRef.current.quaternion.set(0, 0, 0, 1);
-        }
-        invalidate();
-    }, [tf, invalidate]);
 
     // Geometry is created once and its GPU buffers are reused across streaming
     // updates (updated in place / grown as needed) instead of being disposed
@@ -228,11 +215,11 @@ export function PointCloudRenderer({
 
     return (
         <>
-            <group ref={frameGroupRef}>
+            <DisplayFrame name={data.id} frame_id={data.frameId} tf={tf}>
                 <group ref={groupRef}>
                     <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} />
                 </group>
-            </group>
+            </DisplayFrame>
 
             {selected && groupRef.current && (
                 <TransformControls

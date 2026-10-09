@@ -167,7 +167,10 @@ public:
           "topofuzzy_bridge: failed to load safety context");
     }
 
-    calculateManipulabilityEllipsoidsDynamically();
+    // 関節選択済みモデルでは学習時の可操作度を保持
+    if (declare_parameter<bool>("enable_dynamic_manipulability", true)) {
+      calculateManipulabilityEllipsoidsDynamically();
+    }
 
     const int coord_layer_count = context_->gng->getCoordLayerCount();
     RCLCPP_INFO(get_logger(),
@@ -923,6 +926,8 @@ private:
     if (!context_ || !context_->gng || !topological_map_pub_) {
       return;
     }
+    // グラフ本体と関節特徴の原子的な発行世代の照合時刻。
+    const auto batch_stamp = now();
     const bool has_graph_consumer = force_publish ||
         hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(topological_map_pub_);
     const bool has_state_consumer = node_state_pub_ && (force_publish ||
@@ -930,7 +935,8 @@ private:
     const bool has_stamped_state_consumer = stamped_node_state_pub_ && (force_publish ||
         hasSubscribers<ais_gng_msgs::msg::TopologicalNodeStates>(stamped_node_state_pub_));
     if (has_graph_consumer || has_state_consumer || has_stamped_state_consumer) {
-      const auto graph = buildGraphMessage();
+      auto graph = buildGraphMessage();
+      graph.header.stamp = batch_stamp;
       if (has_graph_consumer) {
         topological_map_pub_->publish(graph);
       }
@@ -966,8 +972,10 @@ private:
     if (force_publish ||
         hasSubscribers<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(
             node_feature_pub_)) {
-      node_feature_pub_->publish(robot_sim::bridge::topofuzzy::buildNodeFeatureArray(
-          *this, context_->gng, frame_id_));
+      auto features = robot_sim::bridge::topofuzzy::buildNodeFeatureArray(
+          *this, context_->gng, frame_id_);
+      features.header.stamp = batch_stamp;
+      node_feature_pub_->publish(features);
     }
     for (size_t i = 0; i < layer_pubs_.size(); ++i) {
       if (force_publish ||

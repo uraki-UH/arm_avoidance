@@ -42,6 +42,7 @@ export class Robot extends THREE.Group {
     this.actuated = Object.values(this.joints).filter(j => j.type !== 'fixed' && !j.mimic);
   }
   setJoint(name, q, updateMimic = true) {
+    if(this.pose_source==='ros'&&!this.is_receiving_pose)return;
     const j = this.joints[name]; if (!j || j.type === 'fixed' || !Number.isFinite(q)) return;
     j.q = Math.max(j.lower, Math.min(j.upper, q));
     if (j.type === 'prismatic') j.child.position.copy(j.axis).multiplyScalar(j.q);
@@ -50,6 +51,9 @@ export class Robot extends THREE.Group {
   }
   getPose() { return Object.fromEntries(this.actuated.map(j => [j.name, j.q])); }
   setPose(pose) { for (const [name,q] of Object.entries(pose)) this.setJoint(name, q); this.updateMatrixWorld(true); }
+  set_received_pose(pose) {
+    this.is_receiving_pose=true;try{this.setPose(pose);}finally{this.is_receiving_pose=false;}
+  }
   tcp(side) { this.links[`${side}_tcp`].updateWorldMatrix(true, false); return {position: this.links[`${side}_tcp`].getWorldPosition(new THREE.Vector3()), quaternion: this.links[`${side}_tcp`].getWorldQuaternion(new THREE.Quaternion())}; }
   chain(side) { return Array.from({length: 7}, (_,i) => this.joints[`${side}_joint${i+1}`]); }
   async loadVisuals(manifest, materials, progress) {
@@ -80,7 +84,14 @@ export class Robot extends THREE.Group {
       // Reference-image finish: green gripper shells are named *_green in the supplied CAD,
       // but their URDF visual materials are black. This affects appearance only.
       if (filename.includes('gripper_base_green')) materialName = 'green';
-      const mesh = new THREE.Mesh(cache.get(filename), materials[materialName] || materials.black);
+      // 既存の外観パレットを優先、新規材質はURDFのlinear RGBAを使用
+      let material = materials[materialName];
+      if (!material) {
+        const rgba = vector(element.querySelector('material color')?.getAttribute('rgba'), [0.14,0.15,0.145,1]);
+        material = new THREE.MeshStandardMaterial({color: new THREE.Color().setRGB(...rgba.slice(0,3)),
+          opacity: rgba[3], transparent: rgba[3] < 1, metalness: .35, roughness: .4});
+      }
+      const mesh = new THREE.Mesh(cache.get(filename), material);
       mesh.name = filename; origin(element.querySelector('origin'), mesh);
       mesh.scale.fromArray(vector(meshElement.getAttribute('scale'), [1,1,1]));
       mesh.castShadow = true; mesh.receiveShadow = true; link.add(mesh); this.renderMeshes.push(mesh);

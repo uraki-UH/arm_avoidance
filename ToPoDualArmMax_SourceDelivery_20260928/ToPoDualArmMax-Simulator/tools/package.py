@@ -1,10 +1,10 @@
-"""Create a source delivery ZIP and SHA-256 manifest, excluding local run data."""
+"""実行データを除いたソース配布ZIPとSHA-256マニフェストの生成。"""
 from pathlib import Path
 import argparse,hashlib,json,zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 EXCLUDED={'runtime','exports','node_modules','__pycache__','.git','live'}
-TOP={'app','tools','tests','docs','licenses','integrations','package.json','README.md','LICENSE.md','THIRD_PARTY_NOTICES.md','.gitignore','START.cmd','Start-Simulator.ps1','Stop-Simulator.ps1','start.sh'}
+TOP={'src','package-lock.json','tsconfig.json','vite.config.ts','app','tools','tests','docs','licenses','integrations','package.json','README.md','LICENSE.md','THIRD_PARTY_NOTICES.md','.gitignore','START.cmd','Start-Simulator.ps1','Stop-Simulator.ps1','start.sh'}
 def files():
     for p in sorted(ROOT.rglob('*')):
         rel=p.relative_to(ROOT)

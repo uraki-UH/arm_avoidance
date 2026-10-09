@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <sstream>
 #include <map>
+#include <cstdint>
+#include <regex>
 #include <stdexcept>
 #include <tf2_eigen/tf2_eigen.hpp>
 
@@ -26,6 +28,31 @@ using json = nlohmann::json;
 namespace robot_sim::bridge {
 
 namespace {
+
+// 起動時の参照メッシュ更新検知。姿勢配信ループでのファイル走査なし。
+std::string mesh_revision(const std::string &urdf_text, const std::string &source_path) {
+    const std::regex mesh_pattern(R"(<mesh\s[^>]*filename\s*=\s*["']([^"']+)["'][^>]*>)");
+    std::uint64_t revision = 14695981039346656037ULL;
+    for (auto iter = std::sregex_iterator(urdf_text.begin(), urdf_text.end(), mesh_pattern);
+         iter != std::sregex_iterator(); ++iter) {
+        const auto uri = (*iter)[1].str();
+        auto path = std::filesystem::path(robot_sim::common::stripUriScheme(
+            robot_sim::common::resolvePackageUris(uri)));
+        if (path.is_relative()) path = std::filesystem::path(source_path).parent_path() / path;
+        std::error_code error;
+        const auto modified = std::filesystem::last_write_time(path, error);
+        if (error) continue;
+        const auto size = std::filesystem::file_size(path, error);
+        if (error) continue;
+        const auto identity = uri + ":" + std::to_string(size) + ":" +
+            std::to_string(modified.time_since_epoch().count());
+        for (const unsigned char value : identity) {
+            revision ^= value;
+            revision *= 1099511628211ULL;
+        }
+    }
+    return "\n<!-- viewer_mesh_revision: " + std::to_string(revision) + " -->\n";
+}
 
 std::string detectLocalMeshPackageName(const std::string &source_path) {
     std::filesystem::path current(source_path);
@@ -136,7 +163,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     pose_pub_ = create_publisher<std_msgs::msg::String>(stream_topic_ + "/pose", rclcpp::QoS(1).best_effort());
 
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-        joint_state_topic_, 10, std::bind(&RobotViewerBridgeNode::jointStateCallback, this, std::placeholders::_1));
+        joint_state_topic_, rclcpp::SensorDataQoS(), std::bind(&RobotViewerBridgeNode::jointStateCallback, this, std::placeholders::_1));
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -175,7 +202,9 @@ bool RobotViewerBridgeNode::loadRobotDescription(std::string& out_text, const st
         if (!ifs) return false;
         out_text = std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     }
+    const auto revision = mesh_revision(out_text, source_path);
     out_text = rewriteRelativeMeshUris(out_text, detectLocalMeshPackageName(source_path));
+    if (!out_text.empty()) out_text += revision;
     return !out_text.empty();
 }
 

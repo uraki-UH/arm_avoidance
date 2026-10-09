@@ -21,48 +21,62 @@ namespace common {
 class VoxelizerEngine {
 public:
     /**
-     * @brief Boxをボクセル化 (AABB + 包含判定)
+     * @brief 初期構築用の直方体とセルの交差判定による保守的ボクセル化
      */
     static void voxelizeBox(const Eigen::Vector3d& size, const Eigen::Isometry3d& tf,
                            const ::GNG::Analysis::IndexVoxelGrid& grid,
                            std::unordered_set<long>& vids) {
-        double v_size = grid.getVoxelSize();
-        Eigen::Vector3d half = size * 0.5;
+        const double voxel_size = grid.getVoxelSize();
+        const double voxel_half_size = voxel_size * 0.5;
+        const double tolerance = ::robot_sim::common::Constants::GEOM_EPSILON;
+        const Eigen::Vector3d box_half_size = size * 0.5;
+        const Eigen::Matrix3d rotation = tf.rotation();
+        const Eigen::Vector3d center = tf.translation();
+        const Eigen::Vector3d extent = rotation.cwiseAbs() * box_half_size;
+        // 面上の接触セルも含めた候補範囲。負座標も共通のfloor規約。
+        const Eigen::Vector3i min_idx =
+            (((center - extent).array() - tolerance) / voxel_size).floor().cast<int>();
+        const Eigen::Vector3i max_idx =
+            (((center + extent).array() + tolerance) / voxel_size).floor().cast<int>();
 
-        Eigen::Vector3d corners[8];
-        for (int i = 0; i < 8; ++i) {
-            corners[i] = tf * Eigen::Vector3d((i & 1) ? half.x() : -half.x(),
-                                              (i & 2) ? half.y() : -half.y(),
-                                              (i & 4) ? half.z() : -half.z());
+        // 直方体3軸、セル3軸、辺同士の外積9軸の射影範囲を初期構築時に準備。
+        std::array<Eigen::Vector3d, 15> axes;
+        std::array<double, 15> radii;
+        std::size_t num_axes = 0;
+        const auto add_axis = [&](Eigen::Vector3d axis) {
+            const double axis_norm = axis.norm();
+            if (axis_norm <= tolerance) return;
+            axis /= axis_norm;
+            axes[num_axes] = axis;
+            radii[num_axes] = box_half_size.dot((rotation.transpose() * axis).cwiseAbs()) +
+                             voxel_half_size * axis.cwiseAbs().sum() + tolerance;
+            ++num_axes;
+        };
+        for (int axis_idx = 0; axis_idx < 3; ++axis_idx) {
+            add_axis(Eigen::Vector3d::Unit(axis_idx));
+            add_axis(rotation.col(axis_idx));
         }
-        Eigen::Vector3d w_min = corners[0], w_max = corners[0];
-        for (int i = 1; i < 8; ++i) {
-            w_min = w_min.cwiseMin(corners[i]);
-            w_max = w_max.cwiseMax(corners[i]);
+        for (int box_axis_idx = 0; box_axis_idx < 3; ++box_axis_idx) {
+            for (int cell_axis_idx = 0; cell_axis_idx < 3; ++cell_axis_idx) {
+                add_axis(rotation.col(box_axis_idx).cross(Eigen::Vector3d::Unit(cell_axis_idx)));
+            }
         }
 
-        Eigen::Vector3i min_idx =
-            ::common::geometry::VoxelUtils::worldToVoxel(w_min.cast<float>(),
-                                                         static_cast<float>(v_size));
-        Eigen::Vector3i max_idx =
-            ::common::geometry::VoxelUtils::worldToVoxel(w_max.cast<float>(),
-                                                         static_cast<float>(v_size));
-
-        Eigen::Isometry3d inv_tf = tf.inverse();
         for (int x = min_idx.x(); x <= max_idx.x(); ++x) {
             for (int y = min_idx.y(); y <= max_idx.y(); ++y) {
                 for (int z = min_idx.z(); z <= max_idx.z(); ++z) {
-                    Eigen::Vector3i idx(x, y, z);
-                    Eigen::Vector3d wp =
-                        ::common::geometry::VoxelUtils::voxelToWorld(idx, static_cast<float>(v_size))
-                            .template cast<double>();
-                    Eigen::Vector3d lp = inv_tf * wp;
-
-                    if (std::abs(lp.x()) <= half.x() + ::robot_sim::common::Constants::GEOM_EPSILON &&
-                        std::abs(lp.y()) <= half.y() + ::robot_sim::common::Constants::GEOM_EPSILON &&
-                        std::abs(lp.z()) <= half.z() + ::robot_sim::common::Constants::GEOM_EPSILON) {
-                        vids.insert(grid.getFlatVoxelId(idx));
+                    const Eigen::Vector3i idx(x, y, z);
+                    const Eigen::Vector3d cell_center =
+                        (idx.cast<double>().array() + 0.5) * voxel_size;
+                    const Eigen::Vector3d delta = cell_center - center;
+                    bool has_overlap = true;
+                    for (std::size_t axis_idx = 0; axis_idx < num_axes; ++axis_idx) {
+                        if (std::abs(axes[axis_idx].dot(delta)) > radii[axis_idx]) {
+                            has_overlap = false;
+                            break;
+                        }
                     }
+                    if (has_overlap) vids.insert(grid.getFlatVoxelId(idx));
                 }
             }
         }

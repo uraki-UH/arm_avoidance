@@ -9,8 +9,6 @@ overrides:
   # Gazebo回避の関節速度上限[rad/s]と再評価周期[s]
   max_joint_velocity: 1.2
   control_period_sec: 0.05
-  # 既存C++回避ノードによる退避目標の生成
-  enable_native_planner: true
   # 物理開始前の初期位置[rad]。未指定関節は0、回避開始時の実測姿勢が復帰先
   initial_joint_positions:
     L_joint1: -0.7853981633974483

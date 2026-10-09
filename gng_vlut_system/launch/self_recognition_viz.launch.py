@@ -128,7 +128,10 @@ def launch_setup(context, *args, **kwargs):
             experiment_id = str(gng_params.get("experiment_id", "")).strip()
             vlut_filename = str(gng_params.get("vlut_filename", "vlut.bin")).strip()
             if data_directory and experiment_id and vlut_filename:
-                vlut_file = os.path.join(data_directory, experiment_id, vlut_filename)
+                # 左右で共通のボクセル幅。独立モデルでは左腕のヘッダを参照
+                profile_dir = ("left_arm" if str(gng_params.get("enable_independent_arms", False)).lower()
+                               in ("true", "1", "yes", "on") else "")
+                vlut_file = os.path.join(data_directory, experiment_id, profile_dir, vlut_filename)
 
     self_recognition_resolution = read_vlut_voxel_size(vlut_file)
     if self_recognition_resolution is None or self_recognition_resolution <= 0.0:

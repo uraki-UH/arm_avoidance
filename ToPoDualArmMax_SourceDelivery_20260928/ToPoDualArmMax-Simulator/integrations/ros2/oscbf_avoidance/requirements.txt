@@ -1,0 +1,10 @@
+numpy==1.26.4
+jax==0.4.30
+jaxlib==0.4.30
+cbfpy==0.0.1
+qpax==0.0.9
+trimesh>=4,<5
+networkx>=3,<4
+lxml>=4
+pillow
+six

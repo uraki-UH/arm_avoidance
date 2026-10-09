@@ -185,6 +185,28 @@ def test_reset_requires_measured_stop_not_only_latch(control):
     control.service_clients['avoidance/stop'].call_async.assert_not_called()
 
 
+@pytest.mark.parametrize('is_confirmed', [False, True])
+@pytest.mark.parametrize('phase', ['stopped', 'reset_wait_stopped'])
+def test_reset_decision_is_independent_of_display_text(control, monkeypatch, is_confirmed, phase):
+    import gazebo_stop_keyboard
+    stopped_safety(control)
+    control.phase = phase
+    control.safety.update(is_stopped=is_confirmed, has_active_commands=False)
+    label = Mock(return_value='表示変更済み' if is_confirmed else '実測停止: 確認済み')
+    monkeypatch.setattr(gazebo_stop_keyboard, 'status_label', label)
+    # 旧コードの表示関数直参照も含む、文言変更による判定逆転の検出
+    monkeypatch.setattr(control_module, 'status_label', label, raising=False)
+    if phase == 'stopped':
+        response = control.on_reset(None, Trigger.Response())
+        assert response.success is is_confirmed
+        client = control.service_clients['avoidance/stop']
+    else:
+        control.advance(100.0)
+        client = control.service_clients['safety/reset']
+    assert client.call_async.call_count == int(is_confirmed)
+    label.assert_not_called()
+
+
 def test_reset_requires_stationary_fresh_joint_state(control):
     stopped_safety(control)
     control.model.is_stationary.return_value = False
@@ -244,6 +266,24 @@ def test_external_stop_overrides_mode_operation(control):
     assert control.phase == 'stopped'
     assert control.model.mode == 'stopped'
     assert control.future is not None
+
+
+def test_obstacle_wait_does_not_request_software_stop(control):
+    control.model.mode = 'avoidance'
+    control.on_demo(String(data='{"state":"running","phase":"obstacle_wait","run_generation":1}'))
+    control.tick()
+    assert control.model.mode == 'avoidance' and control.phase == 'idle'
+    assert not control.is_stop_required
+    control.service_clients['safety/stop'].call_async.assert_not_called()
+
+
+def test_fault_during_obstacle_wait_still_requests_software_stop(control):
+    control.model.mode = 'avoidance'
+    control.on_demo(String(data='{"state":"fault","phase":"obstacle_wait","run_generation":1,"error":"入力失効"}'))
+    control.tick()
+    assert control.model.mode == 'stopped' and control.is_stop_required
+    assert '入力失効' in control.detail
+    control.service_clients['safety/stop'].call_async.assert_called_once()
 
 
 @pytest.mark.parametrize('phase', ['idle', 'switch_stop_demo', 'switch_settle',

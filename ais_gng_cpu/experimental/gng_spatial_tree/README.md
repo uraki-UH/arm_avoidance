@@ -43,7 +43,7 @@ OPENBLAS_NUM_THREADS=1 timeout -s INT -k 5 90 python3 \
   --output /tmp/gng_spatial_result.json
 ```
 
-比較元は`--library`を`libgng_grid.so`へ変更。同じ30フレームを50回入力し、先頭10回を除いた40回を集計。JSONに全フレームの時間・ノード数・エッジ数・グラフハッシュを保存。ROS変換・TF・配信・viewer・外部分類器の実行時間は含まない。入力はbagのセンサー座標をそのまま使用。
+比較元は`--library`を`libgng_grid.so`へ変更。同じ30フレームを50回入力し、先頭10回を除いた40回を集計。JSONに全フレームの時間・ノード数・エッジ数・グラフハッシュを保存。ROS変換・TF・配信・viewer・外部分類器の実行時間は含まない。入力はbagのセンサ座標をそのまま使用。
 
 bsp3d版の比較条件・実測結果は[検証記録](../../../gng_vlut_system/docs/releases/2026-09-23_gng_bsp3d.md)。設定・起動スクリプト・集計結果は`benchmarks/gng_bsp3d_20260923/`、比較ライブラリ・生ログはGit管理外の`artifacts/gng_bsp3d_20260923/`へ保存。
 

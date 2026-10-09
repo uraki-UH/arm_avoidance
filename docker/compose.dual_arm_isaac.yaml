@@ -1,0 +1,47 @@
+# 起動ディレクトリに依存しない共通ROSトピック接続
+services:
+  isaac:
+    image: nvcr.io/nvidia/isaac-sim:6.1.0
+    entrypoint: ["/bin/bash", "/isaac-sim/python.sh"]
+    command:
+      - /workspace/gng_vlut_system/launch/dual_arm_isaac.py
+      - --urdf
+      - /workspace/${ROBOT_URDF:-urdf/topo_dual_arm_max/topo_dual_arm_max.urdf}
+      - --scenario
+      - ${SIM_SCENARIO:-empty}
+      - --namespace
+      - ${ROBOT_NAMESPACE:-sim_topo_dual_arm_max}
+    network_mode: host
+    gpus: all
+    environment:
+      ACCEPT_EULA: ${ACCEPT_EULA:?Isaac Simの利用規約への同意後にYを指定}
+      ROS_DISTRO: jazzy
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-96}
+      ROS_LOCALHOST_ONLY: "1"
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    volumes:
+      - ..:/workspace:ro
+    working_dir: /isaac-sim
+    stop_grace_period: 30s
+
+  ros:
+    image: uraki-gazebo-harmonic:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gazebo_harmonic
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        source /opt/ros/jazzy/setup.bash &&
+        exec ros2 launch /workspace/gng_vlut_system/launch/dual_arm_isaac.launch.py
+        namespace:=${ROBOT_NAMESPACE:-sim_topo_dual_arm_max}
+    network_mode: host
+    ipc: service:isaac
+    depends_on: [isaac]
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-96}
+      ROS_LOCALHOST_ONLY: "1"
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    volumes:
+      - ..:/workspace:ro
+    stop_grace_period: 20s

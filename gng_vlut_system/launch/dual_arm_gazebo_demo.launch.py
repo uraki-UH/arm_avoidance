@@ -58,39 +58,9 @@ def initial_joint_positions(root, configured):
     return positions
 
 
-def launch_setup(context):
-    package_share = Path(get_package_share_directory('gng_vlut_system'))
-    params_path = Path(LaunchConfiguration('params_file').perform(context))
-    demo_path = Path(LaunchConfiguration('demo_config').perform(context))
-    params = yaml.safe_load(params_path.read_text())['/**']['ros__parameters']
-    config = yaml.safe_load(demo_path.read_text())['dual_arm_gazebo_demo']
-    avoidance_path = LaunchConfiguration('avoidance_config').perform(context)
-    avoidance_config = (yaml.safe_load(Path(avoidance_path).read_text())['dual_arm_avoidance_demo']
-                        if avoidance_path else None)
-    enable_external_control = LaunchConfiguration('enable_external_control').perform(context).lower() == 'true'
-    enable_integrated_control = LaunchConfiguration('enable_integrated_control').perform(context).lower() == 'true'
-    if enable_integrated_control and (enable_external_control or avoidance_config is None):
-        raise ValueError('統合操作には回避設定と単一の指令出力経路が必要です')
-    namespace = config.get('namespace') or 'sim_' + params['robot_name']
-    if not namespace.startswith('sim_') or '/' in namespace:
-        raise ValueError('デモの名前空間はsim_で始まる単一名が必要です')
-    urdf_path = Path(params['urdf_path'])
-    if not urdf_path.is_file():
-        raise FileNotFoundError(urdf_path)
-    gui_arg = LaunchConfiguration('gui').perform(context)
-    gui = gui_arg or str(config['enable_gui']).lower()
-    auto_arg = LaunchConfiguration('enable_auto_start').perform(context)
-    enable_auto_start = (auto_arg or str(config['enable_auto_start'])).lower() == 'true'
-    if avoidance_config is not None:
-        enable_auto_start = (auto_arg or str(avoidance_config['enable_auto_start'])).lower() == 'true'
-    run_dir = Path(tempfile.mkdtemp(prefix='dual_arm_gazebo_demo_'))
-    helper = load_module(package_share/'launch/robot_gazebo_spawn.launch.py')
-    root_link = avoidance_config.get('root_link', 'base_footprint') if avoidance_config else 'base_footprint'
-    temporary_urdf = Path(helper.write_gazebo_urdf(str(urdf_path), params['mesh_root_dir'], False, root_link))
-    root = ET.parse(temporary_urdf).getroot()
-    temporary_urdf.unlink()
-    initial_positions = initial_joint_positions(root, config.get('initial_joint_positions', {}))
-    control = ET.SubElement(root, 'ros2_control', name='GazeboSystem', type='system')
+def build_ros2_control(root, config, initial_positions):
+    """入力URDFを変更しない制御要素と独立関節一覧の生成。"""
+    control = ET.Element('ros2_control', name='GazeboSystem', type='system')
     hardware = ET.SubElement(control, 'hardware')
     ET.SubElement(hardware, 'plugin').text = 'gng_vlut_system/bounded_gazebo_system'
     joint_names = []
@@ -113,14 +83,19 @@ def launch_setup(context):
         if mimic is not None:
             ET.SubElement(item, 'param', name='mimic').text = mimic.get('joint')
             ET.SubElement(item, 'param', name='multiplier').text = mimic.get('multiplier', '1')
-    controllers = {
+    return control, joint_names
+
+
+def build_controllers(namespace, joint_names, enable_integrated_control):
+    """指令経路に応じたコントローラ設定の生成。"""
+    return {
         f'/{namespace}/controller_manager': {'ros__parameters': {
             'update_rate': 1000, 'use_sim_time': True,
             'joint_state_broadcaster': {'type': 'joint_state_broadcaster/JointStateBroadcaster'},
             'dual_arm_controller': {'type': 'joint_trajectory_controller/JointTrajectoryController'},
         }},
         f'/{namespace}/dual_arm_controller': {'ros__parameters': {
-            'joints': joint_names, 'command_interfaces': ['position'],
+            'joints': list(joint_names), 'command_interfaces': ['position'],
             'state_interfaces': ['position', 'velocity'],
             'state_publish_rate': 100.0 if enable_integrated_control else 50.0,
             'action_monitor_rate': 20.0,
@@ -128,12 +103,11 @@ def launch_setup(context):
             'constraints': {'goal_time': 2.0, 'stopped_velocity_tolerance': 0.05},
         }},
     }
-    controllers_path = run_dir/'controllers.yaml'
-    controllers_path.write_text(yaml.safe_dump(controllers, sort_keys=False))
-    gazebo_clock_path = run_dir/'gazebo_clock.yaml'
-    # 低速シミュレーション時の重複時刻・UDP目標失効の抑制。壁時計の失効期限は変更なし
-    gazebo_clock_path.write_text(yaml.safe_dump({'gazebo': {'ros__parameters': {'publish_rate': 100.0}}}))
-    gazebo = ET.SubElement(root, 'gazebo')
+
+
+def build_control_plugin(namespace, controllers_path):
+    """名前空間と設定ファイルを結ぶGazebo制御プラグインの生成。"""
+    gazebo = ET.Element('gazebo')
     plugin = ET.SubElement(gazebo, 'plugin', name='gazebo_ros2_control', filename='libgazebo_ros2_control.so')
     ros = ET.SubElement(plugin, 'ros')
     ET.SubElement(ros, 'namespace').text = '/' + namespace
@@ -141,46 +115,112 @@ def launch_setup(context):
     ET.SubElement(plugin, 'robot_param_node').text = '/' + namespace + '/robot_state_publisher'
     ET.SubElement(plugin, 'robot_param').text = 'robot_description'
     ET.SubElement(plugin, 'parameters').text = str(controllers_path)
+    return gazebo
+
+
+def build_forearm(config):
+    """接近デモ用カプセルの衝突形状と描画形状の生成。"""
+    human = ET.Element('model', name='human_forearm')
+    ET.SubElement(human, 'static').text = 'true'
+    sign = 1 if config['sides'][0] == 'left' else -1
+    ET.SubElement(human, 'pose').text = '{} {} {} 0 0 0'.format(
+        config['hand_far_x'], sign*config['hand_y'], config['hand_z'])
+    human_link = ET.SubElement(human, 'link', name='forearm')
+    length, radius = config['arm_length'], config['arm_radius']
+    for name, shape, pose in [('hand', 'sphere', '0 0 0 0 0 0'),
+                              ('elbow', 'sphere', f'{length} 0 0 0 0 0'),
+                              ('arm', 'cylinder', f'{length/2} 0 0 0 1.5707963267948966 0')]:
+        for kind in ('collision', 'visual'):
+            item = ET.SubElement(human_link, kind, name=name)
+            ET.SubElement(item, 'pose').text = pose
+            geometry = ET.SubElement(ET.SubElement(item, 'geometry'), shape)
+            ET.SubElement(geometry, 'radius').text = str(radius)
+            if shape == 'cylinder':
+                ET.SubElement(geometry, 'length').text = str(length)
+            if kind == 'visual':
+                material = ET.SubElement(item, 'material')
+                ET.SubElement(material, 'ambient').text = '1 0.5 0.1 1'
+                ET.SubElement(material, 'diffuse').text = '1 0.5 0.1 1'
+    return human
+
+
+def build_avoidance_world(world_xml, config, namespace, add_lidar=None):
+    """回避用worldの生成。センサ追加処理だけを差し替える構成。"""
+    physics_solver = config.get('physics_solver', 'quick')
+    if physics_solver not in ('quick', 'world'):
+        raise ValueError('physics_solverはquickまたはworldが必要です')
+    root = ET.fromstring(world_xml)
+    world = root.find('world')
+    world.find('physics/ode/solver/type').text = physics_solver
+    state_plugin = ET.SubElement(world, 'plugin', name='avoidance_state', filename='libgazebo_ros_state.so')
+    state_ros = ET.SubElement(state_plugin, 'ros')
+    ET.SubElement(state_ros, 'namespace').text = '/avoidance_demo'
+    ET.SubElement(state_plugin, 'update_rate').text = '30.0'
+    if not config.get('enable_live_obstacles', False):
+        world.append(build_forearm(config))
+    if config.get('enable_gng_vlut', False) and add_lidar is not None:
+        add_lidar(world, namespace, config)
+    return root
+
+
+def launch_setup(context):
+    package_share = Path(get_package_share_directory('gng_vlut_system'))
+    params_path = Path(LaunchConfiguration('params_file').perform(context))
+    demo_path = Path(LaunchConfiguration('demo_config').perform(context))
+    params = yaml.safe_load(params_path.read_text())['/**']['ros__parameters']
+    config = yaml.safe_load(demo_path.read_text())['dual_arm_gazebo_demo']
+    avoidance_path = LaunchConfiguration('avoidance_config').perform(context)
+    avoidance_config = (yaml.safe_load(Path(avoidance_path).read_text())['dual_arm_avoidance_demo']
+                        if avoidance_path else None)
+    enable_external_control = LaunchConfiguration('enable_external_control').perform(context).lower() == 'true'
+    enable_integrated_control = LaunchConfiguration('enable_integrated_control').perform(context).lower() == 'true'
+    if enable_integrated_control and (enable_external_control or avoidance_config is None):
+        raise ValueError('統合操作には回避設定と単一の指令出力経路が必要です')
+    namespace = config.get('namespace') or 'sim_' + params['robot_name']
+    if not namespace.startswith('sim_') or '/' in namespace:
+        raise ValueError('デモの名前空間はsim_で始まる単一名が必要です')
+    point_cloud_source = LaunchConfiguration('point_cloud_source').perform(context)
+    sensor_helper = load_module(package_share/'launch/dual_arm_lidar_setup.py')
+    point_cloud_topic = sensor_helper.point_cloud_topic(point_cloud_source)
+    depth_helper = depth_config = None
+    if point_cloud_source == 'head_depth':
+        depth_helper = load_module(package_share/'launch/dual_arm_depth_camera_setup.py')
+        depth_config = depth_helper.load_config(LaunchConfiguration('depth_camera_config').perform(context))
+    urdf_path = Path(params['urdf_path'])
+    if not urdf_path.is_file():
+        raise FileNotFoundError(urdf_path)
+    gui_arg = LaunchConfiguration('gui').perform(context)
+    gui = gui_arg or str(config['enable_gui']).lower()
+    auto_arg = LaunchConfiguration('enable_auto_start').perform(context)
+    enable_auto_start = (auto_arg or str(config['enable_auto_start'])).lower() == 'true'
+    if avoidance_config is not None:
+        enable_auto_start = (auto_arg or str(avoidance_config['enable_auto_start'])).lower() == 'true'
+    run_dir = Path(tempfile.mkdtemp(prefix='dual_arm_gazebo_demo_'))
+    helper = load_module(package_share/'launch/robot_gazebo_spawn.launch.py')
+    root_link = avoidance_config.get('root_link', 'base_footprint') if avoidance_config else 'base_footprint'
+    temporary_urdf = Path(helper.write_gazebo_urdf(str(urdf_path), params['mesh_root_dir'], False, root_link))
+    root = ET.parse(temporary_urdf).getroot()
+    temporary_urdf.unlink()
+    initial_positions = initial_joint_positions(root, config.get('initial_joint_positions', {}))
+    if depth_helper is not None:
+        depth_helper.add_depth_camera(root, namespace, depth_config)
+    control, joint_names = build_ros2_control(root, config, initial_positions)
+    root.append(control)
+    controllers = build_controllers(namespace, joint_names, enable_integrated_control)
+    controllers_path = run_dir/'controllers.yaml'
+    controllers_path.write_text(yaml.safe_dump(controllers, sort_keys=False))
+    gazebo_clock_path = run_dir/'gazebo_clock.yaml'
+    # 低速シミュレーション時の重複時刻・UDP目標失効の抑制。壁時計の失効期限は変更なし
+    gazebo_clock_path.write_text(yaml.safe_dump({'gazebo': {'ros__parameters': {'publish_rate': 100.0}}}))
+    root.append(build_control_plugin(namespace, controllers_path))
     robot_description = ET.tostring(root, encoding='unicode')
     gazebo_urdf = run_dir/'robot.urdf'
     gazebo_urdf.write_text(robot_description)
     world_path = package_share/'worlds/dual_arm_demo.world'
     if avoidance_config is not None:
-        world_root = ET.parse(world_path).getroot()
-        world = world_root.find('world')
-        physics_solver = avoidance_config.get('physics_solver', 'quick')
-        if physics_solver not in ('quick', 'world'):
-            raise ValueError('physics_solverはquickまたはworldが必要です')
-        world.find('physics/ode/solver/type').text = physics_solver
-        state_plugin = ET.SubElement(world, 'plugin', name='avoidance_state', filename='libgazebo_ros_state.so')
-        state_ros = ET.SubElement(state_plugin, 'ros')
-        ET.SubElement(state_ros, 'namespace').text = '/avoidance_demo'
-        ET.SubElement(state_plugin, 'update_rate').text = '30.0'
-        if not avoidance_config.get('enable_live_obstacles', False):
-            human = ET.SubElement(world, 'model', name='human_forearm')
-            ET.SubElement(human, 'static').text = 'true'
-            sign = 1 if avoidance_config['sides'][0] == 'left' else -1
-            ET.SubElement(human, 'pose').text = '{} {} {} 0 0 0'.format(
-                avoidance_config['hand_far_x'], sign*avoidance_config['hand_y'], avoidance_config['hand_z'])
-            human_link = ET.SubElement(human, 'link', name='forearm')
-            length, radius = avoidance_config['arm_length'], avoidance_config['arm_radius']
-            for name, shape, pose in [('hand', 'sphere', '0 0 0 0 0 0'),
-                                      ('elbow', 'sphere', f'{length} 0 0 0 0 0'),
-                                      ('arm', 'cylinder', f'{length/2} 0 0 0 1.5707963267948966 0')]:
-                for kind in ('collision', 'visual'):
-                    item = ET.SubElement(human_link, kind, name=name)
-                    ET.SubElement(item, 'pose').text = pose
-                    geometry = ET.SubElement(ET.SubElement(item, 'geometry'), shape)
-                    ET.SubElement(geometry, 'radius').text = str(radius)
-                    if shape == 'cylinder':
-                        ET.SubElement(geometry, 'length').text = str(length)
-                    if kind == 'visual':
-                        material = ET.SubElement(item, 'material')
-                        ET.SubElement(material, 'ambient').text = '1 0.5 0.1 1'
-                        ET.SubElement(material, 'diffuse').text = '1 0.5 0.1 1'
-        if avoidance_config.get('enable_gng_vlut', False):
-            sensor_helper = load_module(package_share/'launch/dual_arm_lidar_setup.py')
-            sensor_helper.add_lidar(world, namespace, avoidance_config)
+        world_root = build_avoidance_world(
+            world_path.read_text(), avoidance_config, namespace,
+            sensor_helper.add_lidar if point_cloud_source == 'external_lidar' else None)
         world_path = run_dir/'avoidance.world'
         ET.ElementTree(world_root).write(world_path, encoding='unicode')
 
@@ -203,7 +243,8 @@ def launch_setup(context):
                         'urdf_path': str(urdf_path),
                         'enable_auto_start': False if enable_integrated_control else enable_auto_start,
                         'enable_stamped_commands': enable_integrated_control}],
-                    remappings=([('dual_arm_controller/joint_trajectory', 'control/avoidance_trajectory')]
+                    remappings=[('lidar_points', point_cloud_topic)] +
+                               ([('dual_arm_controller/joint_trajectory', 'control/avoidance_trajectory')]
                                 if enable_integrated_control else []))
 
     physics_start = Node(package='gng_vlut_system', executable='start_gazebo_physics.py',
@@ -275,23 +316,7 @@ def launch_setup(context):
                 'joint_state_topic': f'/{namespace}/joint_states', 'frame_id': root_link,
                 'stream_topic': '/viewer/internal/stream/robot'}]))
     if avoidance_config is not None and avoidance_config.get('enable_gng_vlut', False):
-        actions.extend(sensor_helper.pipeline_nodes(params_path, params, namespace, avoidance_config))
-        if avoidance_config.get('enable_native_planner', False):
-            source = avoidance_config.get('pipeline', {}).get('external_environment', {})
-            actions.append(Node(package='gng_vlut_system', executable='topological_map_avoidance_node',
-                namespace=namespace, output='screen', parameters=[str(params_path), {
-                    'use_sim_time': True, 'joint_topic': '/'+namespace+'/joint_states',
-                    'topological_map_topic': source.get('graph_topic', '/'+namespace+'/Tmap_static'),
-                    'target_topic': '/'+namespace+'/native_avoidance_target',
-                    'trajectory_topic': '/'+namespace+'/plan_Tmap',
-                    'candidate_trajectory_topic': '/'+namespace+'/cand_Tmap',
-                    'candidate_metrics_topic': '/'+namespace+'/candidate_metrics',
-                    'goal_candidate_ids_topic': '/'+namespace+'/avoidance_goal_ids',
-                    'max_retreat_candidates': 32, 'robot_base_frame': namespace+'/'+root_link,
-                    'enable_safety_penalty': False,
-                    'publish_hz': 20.0, 'allow_zero_initial_joint_state': False,
-                    'publish_candidate_robot_preview': False, 'control_claim_enabled': False,
-                    'trial_mode': False, 'avoid_danger': True, 'allow_danger_goal': False}]))
+        actions.extend(sensor_helper.pipeline_nodes(params_path, params, namespace, avoidance_config, point_cloud_source))
     return actions
 
 
@@ -301,6 +326,8 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file', default_value=str(package_share/'config/topo_dual_arm_max.yaml')),
         DeclareLaunchArgument('demo_config', default_value=str(package_share/'config/dual_arm_gazebo_demo.yaml')),
         DeclareLaunchArgument('avoidance_config', default_value=''),
+        DeclareLaunchArgument('point_cloud_source', default_value='external_lidar'),
+        DeclareLaunchArgument('depth_camera_config', default_value=str(package_share/'config/dual_arm_depth_camera.yaml')),
         DeclareLaunchArgument('enable_external_control', default_value='false'),
         DeclareLaunchArgument('enable_integrated_control', default_value='false'),
         DeclareLaunchArgument('leader_joint_state_topic', default_value='/leader/joint_states'),

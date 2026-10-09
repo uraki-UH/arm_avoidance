@@ -13,7 +13,7 @@
 本書は通常CPU版`ais_gng_cpu/src/gng_cpu`の当時計測の整理。GPU版、ロボット姿勢用GNG、L0、
 `experimental/gng_spatial_tree`の性能評価は対象外。その後のコード・YAML変更後の性能を保証する数値ではない。
 
-2026-09-24追記：削減候補の`voxel2node_ids`生成・整列は削除済み。[同値性・効果の確認](../releases/2026-09-24_gng_unused_mapping.md)。以下の数値・候補表は調査当時の記録。
+2026-09-24追記：削減候補の`voxel2node_ids`生成・整列は削除済み。[同値性・効果の確認](../../../benchmarks/gng_unused_mapping_20260924/README.md)。以下の数値・候補表は調査当時の記録。
 
 ## 条件
 

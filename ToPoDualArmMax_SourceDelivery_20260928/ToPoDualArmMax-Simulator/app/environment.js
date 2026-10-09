@@ -13,7 +13,7 @@ function grain(){const c=document.createElement('canvas');c.width=512;c.height=5
 
 export class WorkEnvironment {
   constructor({scene,overlay,camera,renderer,orbit,toast,onEdit,onChange}){
-    Object.assign(this,{scene,overlay,camera,renderer,orbit,toast,onEdit,onChange});this.items=[];this.nextId=1;this.selected=null;this.editing=false;
+    Object.assign(this,{scene,overlay,camera,renderer,orbit,toast,onEdit,onChange});this.items=[];this.nextId=1;this.selected=null;this.selected_ids=new Set();this.selection_boxes=new Map();this.editing=false;
     this.state={type:'wood',x:.50,y:0,z:.12,yaw:0,roll:0,pitch:0,width:.60,depth:.80,height:.26,color:'#ffffff',visible:true};
     this.root=new THREE.Group();this.root.name='Workspace table';scene.add(this.root);this.table=new THREE.Group();this.objectRoot=new THREE.Group();this.root.add(this.table,this.objectRoot);
     this.wood=material('#ffffff',.04,.48);this.wood.map=grain();this.wood.userData.shared=true;
@@ -34,7 +34,7 @@ export class WorkEnvironment {
     <label class="field-label">配置済みの物体<select id="object-list" size="4" aria-label="配置済みの物体"></select></label>
     <div id="object-editor" hidden><div class="row-actions"><button id="object-edit">配置マーカー</button><button id="object-snap">天板へ置く</button></div><div class="field-grid">${[['object-x','天板 X',0],['object-y','天板 Y',0],['object-z','天板上 Z',0],['object-yaw','Yaw °',0],['object-scale','倍率',1]].map(([id,t,v])=>`<label>${t}<input id="${id}" type="number" value="${v}" step="${id==='object-scale'?.1:5}" aria-label="物体 ${t}"></label>`).join('')}<label>色<input id="object-color" type="color" value="#e69331" aria-label="物体の色"></label></div><div class="row-actions"><button id="object-copy">複製</button><button id="object-delete">選択物体を削除</button></div></div>
     <div class="row-actions space-top"><button id="scene-save">↓ シーン保存</button><button id="scene-load">↑ シーン読込</button></div><input id="scene-file" type="file" accept=".json" hidden>
-    <p class="sub-note">物体の位置・寸法を使って深度を描画します。接触・落下の物理計算は行いません。</p>`;
+    <p class="sub-note">物体の位置・寸法を使って深度を描画します。接触・落下はMuJoCoパネルで有効化できます。</p>`;
     $('table-type').onchange=()=>{this.state.type=$('table-type').value;this.buildTable();};
     for(const [key,id] of Object.entries({x:'table-x',y:'table-y',z:'table-z',yaw:'table-yaw',width:'table-width',depth:'table-depth'}))$(id).onchange=()=>{const n=+$(id).value;if(!Number.isFinite(n))return;this.state[key]=key==='yaw'?n*rad:key==='width'||key==='depth'?THREE.MathUtils.clamp(n/1000,.15,2):key==='z'?THREE.MathUtils.clamp(n/1000,-.08,1.5):THREE.MathUtils.clamp(n/1000,-3,3);this.buildTable();};
     $('object-add').onclick=()=>this.add($('object-type').value);$('object-list').onchange=()=>this.select(+$('object-list').value);
@@ -69,15 +69,35 @@ export class WorkEnvironment {
   }
   add(type,xy){if(this.items.length>=30){this.toast('配置は30個までです');return null;}const id=this.nextId++,group=this.createObject(type,palette[type]);group.name=OBJECTS[type]+' '+id;const n=this.items.length;group.position.set(...(xy||[-.12+(n%3)*.12,-.22+Math.floor(n/3)%4*.14]),0);this.objectRoot.add(group);const item={id,type,color:palette[type],group};this.items.push(item);this.updateList();this.select(id);this.changed();return item;}
   updateList(){const list=$('object-list');list.replaceChildren();for(const item of this.items){const o=document.createElement('option');o.value=item.id;o.textContent=item.group.name;list.append(o);}if(this.selected)list.value=this.selected.id;}
-  select(id){this.selected=this.items.find(x=>x.id===id)||null;$('object-editor').hidden=!this.selected;if(this.selected){$('object-list').value=id;this.syncObject();if(this.editing)this.gizmo.attach(this.selected.group);}else{this.setEditing(false);$('object-list').selectedIndex=-1;}this.selection.visible=!!this.selected;this.changed();}
-  setEditing(value){this.editing=!!(value&&this.selected);this.gizmo.enabled=this.editing;this.gizmo.getHelper().visible=this.editing;if(this.editing)this.gizmo.attach(this.selected.group);else this.gizmo.detach();$('object-edit').textContent=this.editing?'配置を完了':'配置マーカー';this.onEdit(this.editing);}
+  select(id,is_toggle=false){
+    if(!is_toggle)this.selected_ids.clear();
+    const item=this.items.find(x=>x.id===id);
+    if(item){if(is_toggle&&this.selected_ids.has(id))this.selected_ids.delete(id);else this.selected_ids.add(id);}
+    this.selected=this.items.find(x=>x.id===[...this.selected_ids].at(-1))||null;
+    const is_multiple=this.selected_ids.size>1;
+    if(is_multiple)this.setEditing(false);
+    $('object-editor').hidden=!this.selected;
+    for(const element of $('object-editor').querySelectorAll('input,select,button'))if(element.id!=='object-delete')element.disabled=is_multiple;
+    $('object-delete').textContent=is_multiple?`選択した${this.selected_ids.size}個を削除`:'選択物体を削除';
+    if(this.selected){$('object-list').value=this.selected.id;this.syncObject();if(this.editing)this.gizmo.attach(this.selected.group);}
+    else{this.setEditing(false);$('object-list').selectedIndex=-1;}
+    this.changed();
+  }
+  refresh_selection(){
+    this.selection.visible=!!this.selected;
+    if(this.selected)this.selection.box.setFromObject(this.selected.group);
+    for(const [id,box] of this.selection_boxes){if(!this.selected_ids.has(id)||id===this.selected?.id){box.removeFromParent();box.geometry.dispose();box.material.dispose();this.selection_boxes.delete(id);}}
+    for(const item of this.items){if(!this.selected_ids.has(item.id)||item===this.selected)continue;let box=this.selection_boxes.get(item.id);if(!box){box=new THREE.Box3Helper(new THREE.Box3(),0x8c1c8c);this.overlay.add(box);this.selection_boxes.set(item.id,box);}box.box.setFromObject(item.group);}
+  }
+  setEditing(value){this.editing=!!(value&&this.selected&&this.selected_ids.size===1);this.gizmo.enabled=this.editing;this.gizmo.getHelper().visible=this.editing;if(this.editing)this.gizmo.attach(this.selected.group);else this.gizmo.detach();$('object-edit').textContent=this.editing?'配置を完了':'配置マーカー';this.onEdit(this.editing);}
   syncObject(){if(!this.selected)return;const g=this.selected.group;for(const k of ['x','y','z'])if(document.activeElement!==$('object-'+k))$('object-'+k).value=(g.position[k]*1000).toFixed(1);if(document.activeElement!==$('object-yaw'))$('object-yaw').value=(g.rotation.z/rad).toFixed(1);if(document.activeElement!==$('object-scale'))$('object-scale').value=g.scale.x.toFixed(2);$('object-color').value=this.selected.color;}
-  changed(){this.root.updateMatrixWorld(true);if(this.selected)this.selection.box.setFromObject(this.selected.group);this.renderer.shadowMap.needsUpdate=true;this.onChange?.();}
-  getState(){return {format:'topo-workspace/1',table:{...this.state},objects:this.items.map(x=>({type:x.type,color:x.color,position:x.group.position.toArray(),yaw:x.group.rotation.z,scale:x.group.scale.x}))};}
+  changed(){this.root.updateMatrixWorld(true);this.refresh_selection();this.renderer.shadowMap.needsUpdate=true;this.onChange?.();}
+  getState(){return {format:'topo-workspace/1',table:{...this.state},objects:this.items.map(x=>({type:x.type,color:x.color,position:x.group.position.toArray(),yaw:x.group.rotation.z,scale:x.group.scale.x,quaternion:x.group.quaternion.toArray(),physics:x.physics||{mode:'none',mass:.2}}))};}
   load(value){
     const t=value?.table,objects=value?.objects;
     if(value?.format!=='topo-workspace/1'||!t||!TABLES[t.type]||!['x','y','z','yaw','width','depth'].every(k=>Number.isFinite(t[k]))||Math.abs(t.x)>3||Math.abs(t.y)>3||t.z<-.08||t.z>1.5||t.width<.15||t.width>2||t.depth<.15||t.depth>2||!Array.isArray(objects)||objects.length>30)throw Error('シーンの形式・テーブル寸法が不正です');
-    for(const o of objects)if(!OBJECTS[o.type]||!/^#[0-9a-f]{6}$/i.test(o.color)||!Array.isArray(o.position)||o.position.length!==3||!o.position.every(x=>Number.isFinite(x)&&Math.abs(x)<=2)||o.position[2]<0||!Number.isFinite(o.yaw)||!Number.isFinite(o.scale)||o.scale<.2||o.scale>4)throw Error('物体の形式・寸法が不正です');
-    this.select(null);this.items.forEach(x=>disposeGroup(x.group));this.objectRoot.clear();this.items=[];this.state={...t};this.buildTable();for(const o of objects){const x=this.add(o.type,o.position.slice(0,2));x.group.position.fromArray(o.position);x.group.rotation.z=o.yaw;x.group.scale.setScalar(o.scale);x.color=o.color;x.group.userData.primary.color.set(o.color);}this.updateList();this.select(null);this.changed();
+    for(const o of objects)if(!OBJECTS[o.type]||!/^#[0-9a-f]{6}$/i.test(o.color)||!Array.isArray(o.position)||o.position.length!==3||!o.position.every(x=>Number.isFinite(x)&&Math.abs(x)<=2)||!Number.isFinite(o.yaw)||!Number.isFinite(o.scale)||o.scale<.2||o.scale>4)throw Error('物体の形式・寸法が不正です');
+    for(const o of objects){if(o.physics&&(!['none','static','dynamic','kinematic'].includes(o.physics.mode)||!Number.isFinite(o.physics.mass)||o.physics.mass<.001||o.physics.mass>1000))throw Error('物理設定が不正です');if(o.quaternion&&(!Array.isArray(o.quaternion)||o.quaternion.length!==4||!o.quaternion.every(Number.isFinite)||Math.abs(o.quaternion.reduce((sum,v)=>sum+v*v,0)-1)>.001))throw Error('物体姿勢が不正です');}
+    this.select(null);this.items.forEach(x=>disposeGroup(x.group));this.objectRoot.clear();this.items=[];this.state={...t};this.buildTable();for(const o of objects){const x=this.add(o.type,o.position.slice(0,2));x.group.position.fromArray(o.position);x.group.rotation.z=o.yaw;if(o.quaternion)x.group.quaternion.fromArray(o.quaternion);x.physics=o.physics?{...o.physics}:{mode:'none',mass:.2};x.group.scale.setScalar(o.scale);x.color=o.color;x.group.userData.primary.color.set(o.color);}this.updateList();this.select(null);this.changed();
   }
 }

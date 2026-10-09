@@ -1,0 +1,6 @@
+description: 左右それぞれの腕前方に固定障害物
+objects_file: ../objects.yaml
+objects:
+  - {name: floor, asset: floor, position: [0.0, 0.0, -0.075]}
+  - {name: left_post, asset: obstacle_post, position: [0.38, 0.32, 0.20]}
+  - {name: right_post, asset: obstacle_post, position: [0.38, -0.32, 0.20]}

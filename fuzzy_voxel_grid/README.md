@@ -89,7 +89,7 @@ ros2 launch fuzzy_voxel_grid shared_world_voxel.launch.py \
   input_topic:=/dataset/points world_frame:=world target_frame:=world
 ```
 
-必要なセンサー→world、world→targetのTFを別途用意。
+必要なセンサ→world、world→targetのTFを別途用意。
 既定出力は`/world_index/buckets`、`/roi_voxels`、`/voxel_markers`。
 `/voxel_centers`は従来通り`publish_voxel_centers: true`の場合だけ配信。
 `world_params_file:=...`で[world設定](config/shared_world.yaml)、

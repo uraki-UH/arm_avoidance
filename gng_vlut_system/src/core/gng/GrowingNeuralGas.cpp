@@ -6,10 +6,14 @@
 #include "collision/voxel_collision_checker.hpp"
 #include "safety_engine/vlut/iself_collision_checker.hpp"
 #include "common/resource_utils.hpp"
+#include "common/parallel_queries.hpp"
+#include <numeric>
+#include <tuple>
 #include <Eigen/Core>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <deque>
 #include <fstream>
 #include <iostream>
@@ -20,6 +24,14 @@
 using namespace GNG;
 
 namespace {
+
+// 符号付きゼロを含む保存角のビット一致。量子化・許容誤差なし。
+template <typename angle_type>
+bool has_same_angles(const angle_type &first, const angle_type &second) {
+  return first.size() == second.size() &&
+      (first.size() == 0 || std::memcmp(first.data(), second.data(),
+                  first.size() * sizeof(typename angle_type::Scalar)) == 0);
+}
 
 static std::string makePairKey(std::string a, std::string b) {
   if (a > b) {
@@ -256,6 +268,11 @@ void GrowingNeuralGas<T_angle, T_coord>::remove_node(int node) {
   if (node < 0 || (size_t)node >= nodes.size() || nodes[node].id == -1)
     return;
 
+  if (static_cast<std::size_t>(node) < filter_poses_.size()) {
+    filter_poses_[node].has_angles = false;
+    filter_poses_[node].is_safe = false;
+    ++filter_poses_[node].generation;
+  }
   if (angle_nearest_index_) angle_nearest_index_->remove_point(node);
   for (auto &index : coord_nearest_indexes_) {
     if (index) index->remove_point(node);
@@ -990,18 +1007,56 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdges(
 }
 
 template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::invalidate_collision_cache() {
+  filter_poses_.clear();
+  filter_safe_edges_.clear();
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::prepare_filter_collision_cache() {
+  filter_poses_.resize(nodes.size());
+  for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
+    auto &record = filter_poses_[idx];
+    if (nodes[idx].id == -1) {
+      record.has_angles = false;
+      record.is_safe = false;
+    } else if (!record.has_angles ||
+               !has_same_angles(record.angles, nodes[idx].weight_angle)) {
+      record.angles = nodes[idx].weight_angle;
+      ++record.generation;
+      record.has_angles = true;
+      record.is_safe = false;
+    }
+  }
+}
+
+template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
   if (!collision_checker_)
     return;
   std::cout << "[StrictFilter] Starting efficient self-collision filtering..."
             << std::endl;
 
-  // 1. Remove colliding nodes first (and all their associated edges)
+  const bool enable_cache = params_.enable_static_collision_cache;
+  if (enable_cache) prepare_filter_collision_cache();
+  else invalidate_collision_cache();
+  std::size_t num_reused_nodes = 0;
+  std::size_t num_reused_edges = 0;
+  std::size_t num_checked_edges = 0;
+
+  // 干渉姿勢と、その全層の接続辺の先行除去。
   int removed_nodes = 0;
   std::unordered_map<std::string, int> collision_pair_counts;
   int detailed_logs = 0;
   for (int i = 0; i < (int)nodes.size(); ++i) {
-    if (nodes[i].id != -1 && internalCheckColliding(nodes[i].weight_angle)) {
+    if (nodes[i].id == -1) continue;
+    if (enable_cache && filter_poses_[i].is_safe) {
+      ++num_reused_nodes;
+      continue;
+    }
+    const bool is_colliding = internalCheckColliding(nodes[i].weight_angle);
+    if (enable_cache) filter_poses_[i].is_safe = !is_colliding;
+    if (is_colliding) {
       const auto colliding_pairs = collectCollisionPairs(collision_checker_);
       for (const auto &pair : colliding_pairs) {
         collision_pair_counts[makePairKey(pair.first, pair.second)]++;
@@ -1017,9 +1072,7 @@ void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
         }
         detailed_logs++;
       }
-      // Node itself is in collision.
-      // Clear all its edges first (removes from edges_angle_per_node and
-      // edges_angle)
+      // 干渉ノードに接続する関節空間辺の先行除去。
       std::vector<int> neighbors(edges_angle_per_node[i].begin(),
                                  edges_angle_per_node[i].end());
       for (int n : neighbors)
@@ -1034,13 +1087,41 @@ void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
   // 全層の辺を関節角で検査。同じ端点ペアの結果を層間で共有。
   int removed_edges = 0;
   std::map<std::pair<int, int>, bool> edge_collisions;
+  // 現在のグラフに残る非干渉辺だけの保持。過去の辺の無制限蓄積なし。
+  std::unordered_map<std::uint64_t, filter_edge_generations> next_safe_edges;
   const auto is_edge_colliding = [&](int first, int second) {
     const auto key = std::minmax(first, second);
     const std::pair<int, int> ids{key.first, key.second};
     const auto found = edge_collisions.find(ids);
     if (found != edge_collisions.end()) return found->second;
-    const bool is_colliding = internalCheckPathColliding(
-        nodes[first].weight_angle, nodes[second].weight_angle);
+    const std::uint64_t edge_key =
+        (static_cast<std::uint64_t>(ids.first) << 32) |
+        static_cast<std::uint32_t>(ids.second);
+    filter_edge_generations generations{};
+    if (enable_cache) {
+      generations = {filter_poses_[ids.first].generation,
+                     filter_poses_[ids.second].generation};
+      const auto cached = filter_safe_edges_.find(edge_key);
+      if (cached != filter_safe_edges_.end() && cached->second == generations) {
+        ++num_reused_edges;
+        next_safe_edges.emplace(edge_key, generations);
+        edge_collisions.emplace(ids, false);
+        return false;
+      }
+    }
+    ++num_checked_edges;
+    const auto &first_angles = nodes[first].weight_angle;
+    const auto &second_angles = nodes[second].weight_angle;
+    const bool is_colliding = enable_cache
+        ? simulation::has_joint_segment_collision(
+              first_angles, second_angles, 0.025, [&](const T_angle &angles) {
+                // 同じ静的条件で先行検査済みの端点。補間角は従来どおりの全件検査。
+                if (has_same_angles(angles, first_angles) ||
+                    has_same_angles(angles, second_angles)) return false;
+                return internalCheckColliding(angles);
+              })
+        : internalCheckPathColliding(first_angles, second_angles);
+    if (enable_cache && !is_colliding) next_safe_edges.emplace(edge_key, generations);
     edge_collisions.emplace(ids, is_colliding);
     return is_colliding;
   };
@@ -1066,13 +1147,138 @@ void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
   std::cout << "[StrictFilter] Result: Removed " << removed_nodes
             << " nodes and " << removed_edges << " edges." << std::endl;
 
-  // Rebuild active_indices_
+  if (enable_cache) {
+    filter_safe_edges_ = std::move(next_safe_edges);
+    std::cout << "[StrictFilter] Cache: reused_nodes=" << num_reused_nodes
+              << " reused_edges=" << num_reused_edges
+              << " checked_edges=" << num_checked_edges << std::endl;
+  }
+
+  // 有効ノード一覧の再構成。
   active_indices_.clear();
   for (int i = 0; i < (int)nodes.size(); ++i) {
     if (nodes[i].id != -1 && nodes[i].status.active) {
       active_indices_.push_back(i);
     }
   }
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::build_sparse_safe_graph(
+    int num_local_neighbors,
+    const std::vector<std::function<bool(const T_angle &)>> &collision_queries) {
+  if (num_local_neighbors < 1 || collision_queries.empty() ||
+      std::any_of(collision_queries.begin(), collision_queries.end(),
+          [](const auto &query) { return !query; }))
+    throw std::invalid_argument("Invalid sparse collision filter configuration");
+  invalidate_collision_cache();
+  const auto started = std::chrono::steady_clock::now();
+  const auto active = active_indices_;
+  std::vector<unsigned char> is_colliding_node(active.size(), 0);
+  std::cout << "[SparseFilter] Checking nodes=" << active.size()
+            << " workers=" << collision_queries.size() << std::endl;
+  robot_sim::common::parallel_queries(active.size(), collision_queries.size(),
+      [&](std::size_t worker_idx, std::size_t idx) {
+        const auto &angles = nodes[active[idx]].weight_angle;
+        if (angles.size() != angle_dimension || !angles.allFinite())
+          throw std::invalid_argument("Invalid graph node angles");
+        is_colliding_node[idx] = collision_queries[worker_idx](angles);
+      });
+  std::size_t num_removed_nodes = 0;
+  for (std::size_t idx = 0; idx < active.size(); ++idx) {
+    if (!is_colliding_node[idx]) continue;
+    const int node_idx = active[idx];
+    const auto neighbors = edges_angle_per_node[node_idx];
+    for (int other : neighbors) remove_edge_angle(node_idx, other);
+    remove_node(node_idx);
+    ++num_removed_nodes;
+  }
+  struct candidate_edge { int first; int second; double squared_dist; bool is_selected = false; };
+  std::vector<candidate_edge> candidates;
+  for (int first : active_indices_) {
+    for (int second : edges_angle_per_node[first]) {
+      if (first < second && nodes[second].id != -1)
+        candidates.push_back({first, second,
+            static_cast<double>((nodes[first].weight_angle - nodes[second].weight_angle).squaredNorm())});
+    }
+  }
+  std::sort(candidates.begin(), candidates.end(), [](const auto &first, const auto &second) {
+    return std::tie(first.squared_dist, first.first, first.second) <
+           std::tie(second.squared_dist, second.first, second.second);
+  });
+  std::vector<int> roots(nodes.size()), num_neighbors(nodes.size(), 0);
+  std::iota(roots.begin(), roots.end(), 0);
+  const auto root_of = [&](int idx) {
+    while (roots[idx] != idx) { roots[idx] = roots[roots[idx]]; idx = roots[idx]; }
+    return idx;
+  };
+  std::vector<std::size_t> selected;
+  for (std::size_t idx = 0; idx < candidates.size(); ++idx) {
+    auto &edge = candidates[idx];
+    const int first_root = root_of(edge.first), second_root = root_of(edge.second);
+    edge.is_selected = first_root != second_root ||
+        num_neighbors[edge.first] < num_local_neighbors || num_neighbors[edge.second] < num_local_neighbors;
+    if (first_root != second_root) roots[first_root] = second_root;
+    // 各ノードの距離順候補数。全域森による追加接続は別枠。
+    ++num_neighbors[edge.first];
+    ++num_neighbors[edge.second];
+    if (edge.is_selected) selected.push_back(idx);
+  }
+  std::cout << "[SparseFilter] candidates=" << candidates.size()
+            << " selected=" << selected.size() << " removed_nodes=" << num_removed_nodes << std::endl;
+  std::vector<unsigned char> is_colliding_edge(selected.size(), 0);
+  robot_sim::common::parallel_queries(selected.size(), collision_queries.size(),
+      [&](std::size_t worker_idx, std::size_t idx) {
+        const auto &edge = candidates[selected[idx]];
+        const auto &first = nodes[edge.first].weight_angle;
+        const auto &second = nodes[edge.second].weight_angle;
+        is_colliding_edge[idx] = simulation::has_joint_segment_collision(first, second, .025,
+            [&](const T_angle &angles) {
+              // 同じ静的条件で検査済みの端点。補間姿勢は従来と同じ刻み。
+              if (has_same_angles(angles, first) || has_same_angles(angles, second)) return false;
+              return collision_queries[worker_idx](angles);
+            });
+      });
+  // 検査済み接続だけによる全層の再構築。途中例外では保存経路へ到達不可。
+  for (int idx : active_indices_) {
+    edges_angle[idx].clear();
+    edges_angle_per_node[idx].clear();
+    edges_coord[idx].clear();
+    edges_coord_per_node[idx].clear();
+    for (int layer = 0; layer < coord_layer_count_; ++layer) {
+      edges_coord_per_layer_[layer][idx].clear();
+      edges_coord_per_layer_nodes_[layer][idx].clear();
+    }
+  }
+  std::iota(roots.begin(), roots.end(), 0);
+  std::size_t num_edges = 0;
+  for (std::size_t idx = 0; idx < selected.size(); ++idx) {
+    if (is_colliding_edge[idx]) continue;
+    const auto &edge = candidates[selected[idx]];
+    add_edge_angle(edge.first, edge.second);
+    for (int layer = 0; layer < coord_layer_count_; ++layer) add_edge_coord(layer, edge.first, edge.second);
+    roots[root_of(edge.first)] = root_of(edge.second);
+    ++num_edges;
+  }
+  std::size_t num_components = 0;
+  for (int idx : active_indices_) if (root_of(idx) == idx) ++num_components;
+  const double elapsed_sec = std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
+  std::size_t min_num_neighbors = active_indices_.empty() ? 0 : nodes.size();
+  std::size_t max_num_neighbors = 0;
+  for (int idx : active_indices_) {
+    min_num_neighbors = std::min(min_num_neighbors, edges_angle_per_node[idx].size());
+    max_num_neighbors = std::max(max_num_neighbors, edges_angle_per_node[idx].size());
+  }
+  const double mean_num_neighbors = active_indices_.empty() ? 0.0 :
+      2.0 * num_edges / active_indices_.size();
+  std::cout << "[SparseFilter] Result: nodes=" << active_indices_.size()
+            << " edges=" << num_edges << " components=" << num_components
+            << " omitted_unchecked_edges=" << candidates.size() - selected.size()
+            << " colliding_edges=" << selected.size() - num_edges
+            << " mean_num_neighbors=" << mean_num_neighbors
+            << " min_num_neighbors=" << min_num_neighbors
+            << " max_num_neighbors=" << max_num_neighbors
+            << " elapsed_sec=" << elapsed_sec << std::endl;
 }
 
 template <typename T_angle, typename T_coord>
@@ -1366,7 +1572,8 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
   if (!ifs)
     return false;
 
-  // 既存ノードと索引の破棄。
+  // 既存ノードと索引・静的判定結果の破棄。
+  invalidate_collision_cache();
   invalidate_nearest_indexes();
   for (int i = 0; i < (int)nodes.size(); ++i) {
     nodes[i] = NeuronNode<T_angle, T_coord>();
@@ -1631,6 +1838,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::setParams(
     const GngParameters &params) {
+  invalidate_collision_cache();
   invalidate_nearest_indexes();
   bool resize_needed = (params.max_node_num != params_.max_node_num);
   params_ = params;

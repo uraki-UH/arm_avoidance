@@ -163,6 +163,20 @@ void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num, const
 void gng_exec();
 
 // external_sampler_begin
+// 登録入力の格子条件。GNG内部と同じfloat32演算・両端包含の範囲
+struct gng_input_grid {
+    float size = 0;
+    float min_pos[3]{}, max_pos[3]{};
+    uint32_t num_cells[3]{};
+    uint8_t enable_downsampling = 0;
+};
+uint8_t gng_get_input_grid(gng_input_grid *grid);
+// 上位32bit:セル番号、下位32bit:gng_setPointCloud後の入力番号。セル順・入力順の昇順
+// 座標との対応は登録側の責務。配列のコピー、入力置換で失効、重み・学習方式の変更なし
+// 不正指定後の学習抑止。復帰は新しい入力または有効な登録結果の設定
+uint8_t gng_set_registered_input(const gng_input_grid *grid, const uint64_t *points,
+    uint32_t num_points, uint32_t input_num);
+
 // 現在入力の占有セルと既存照合結果。コールバック内だけの借用参照。
 struct gng_sampling_cell {
     uint32_t idx = 0;

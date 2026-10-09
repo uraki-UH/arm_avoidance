@@ -61,5 +61,28 @@ class DepthPacketTest(unittest.TestCase):
                 self.assertTrue(all(math.isnan(v) for v in (x, y, z)))
 
 
+class ColorDepthTest(unittest.TestCase):
+    def test_color_packet(self):
+        meta = dict(source='rgbd', frame_id='base_footprint', count=1, color_format='rgb8_valid8')
+        raw = packet(meta, (1, 2, 3)) + bytes([255, 12, 34, 1])
+        self.assertEqual(parse_packet(raw)[1][-4:], bytes([255, 12, 34, 1]))
+        for invalid in (raw[:-1], raw[:-1] + b'\x02'):
+            with self.assertRaises(ValueError):
+                parse_packet(invalid)
+
+    @unittest.skipUnless(has_ros, 'ROSメッセージ環境が必要')
+    def test_organized_rgb(self):
+        calibration = dict(width=2, height=2, fx=1., fy=1., ppx=0., ppy=0.)
+        colors = bytes([255, 12, 34, 1, 155, 165, 175, 0])
+        image, info, cloud = create_depth_messages(calibration, struct.pack('<4f', 0, 2, 3, 0), Time(), colors)
+        self.assertEqual((cloud.point_step, cloud.row_step), (20, 40))
+        self.assertEqual(struct.unpack_from('<IB', cloud.data, 32), (0xff0c22, 1))
+        self.assertEqual(struct.unpack_from('<IB', cloud.data, 52), (0x9ba5af, 0))
+        self.assertTrue(math.isnan(struct.unpack_from('<f', cloud.data, 0)[0]))
+        self.assertEqual(cloud.header, image.header)
+        from rclpy.serialization import serialize_message, deserialize_message
+        self.assertEqual(deserialize_message(serialize_message(cloud), type(cloud)), cloud)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -25,6 +25,7 @@ interface GraphRendererProps {
 
 export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = null,
     onClusterSelect, on_node_select, uniform_node_color, onManipSelect, enableClusterSelection = true, tf = null }: GraphRendererProps) {
+    const enable_simple_graph = settings.enable_simple_graph ?? false;
     const variant = graph.mode === 'static' ? 'static' : 'dynamic';
     const enable_cluster_colors = /(^|\/)(curved_surface_clusters|nonplane_components)$/.test(tag);
     const { visible, showNodes, showEdges, showClusters, showNormals, showVelocity,
@@ -102,8 +103,8 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
 
     useDemandUpdate([graph, settings, tf, selectedClusterId, variant, goalNodeSignature]);
 
-    // --- Geometries & Materials ---
-    const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
+    // 描画用の形状・マテリアル
+    const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, enable_simple_graph ? 6 : 12, enable_simple_graph ? 4 : 8), [enable_simple_graph]);
     const nodeMaterials = useMemo(() => nodePalette.map((color) => configure_node_material(new THREE.MeshStandardMaterial({
         color,
         emissive: new THREE.Color(color),
@@ -129,7 +130,9 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
         toneMapped: false,
     })), [nodeOpacity, emissiveIntensity]);
 
-    const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
+    const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, enable_simple_graph ? 4 : 6), [enable_simple_graph]);
+    useEffect(() => () => nodeSphereGeometry.dispose(), [nodeSphereGeometry]);
+    useEffect(() => () => edgeCylinderGeometry.dispose(), [edgeCylinderGeometry]);
     const ellipsoidGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
     const ellipsoidMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: covarianceEllipsoidColor,
@@ -223,6 +226,7 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
     const nodeRenderSignature = useMemo(() => {
         return [
             graph.nodes.length,
+            enable_simple_graph,
             showNodes ? 1 : 0,
             label_signature,
             nodeScale,
@@ -234,11 +238,12 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
             goalNodeSignature,
             variant,
         ].join(':');
-    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, emissiveIntensity, graph.timestamp, variant, label_signature]);
+    }, [enable_simple_graph, graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, emissiveIntensity, graph.timestamp, variant, label_signature]);
 
     const edgeRenderSignature = useMemo(() => {
         return [
             edgePairCount,
+            enable_simple_graph,
             showEdges ? 1 : 0,
             edgeWidth,
             edgeCapacity,
@@ -247,7 +252,7 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
             emissiveIntensity,
             graph.timestamp,
         ].join(':');
-    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, edgeOpacity, edgeColor, emissiveIntensity, graph.timestamp]);
+    }, [enable_simple_graph, edgePairCount, showEdges, edgeWidth, edgeCapacity, edgeOpacity, edgeColor, emissiveIntensity, graph.timestamp]);
     const nodeRenderReady = nodeReadySignature === nodeRenderSignature;
     const edgeRenderReady = edgeReadySignature === edgeRenderSignature;
     useEffect(() => {
@@ -314,10 +319,10 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
         invalidate();
     }, [showEdges, invalidate]);
 
-    const normal_samples = useMemo<arrow_sample[]>(() => graph.nodes.map(node => ({
+    const normal_samples = useMemo<arrow_sample[]>(() => !showNormals ? [] : graph.nodes.map(node => ({
         position: [node.x, node.y, node.z], direction: [node.nx, node.ny, node.nz],
         length: Math.min(0.175, Math.hypot(node.nx, node.ny, node.nz) * normal_arrow_style.length),
-    })), [graph.nodes]);
+    })), [graph.nodes, showNormals]);
 
     if (!visible) return null;
 
@@ -381,5 +386,5 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
         </>
     );
 
-    return <DisplayFrame name={tag} tf={tf} manual_transform={transform}>{content}</DisplayFrame>;
+    return <DisplayFrame frame_id={graph.frameId} name={tag} tf={tf} manual_transform={transform}>{content}</DisplayFrame>;
 }

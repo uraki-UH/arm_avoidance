@@ -3,11 +3,12 @@ import {CloudColorControls,displayPLY} from './pointcloud-colors.js';
 import * as THREE from 'three';
 import {RGBDSensor,nominalCalibration,validateCalibration,deproject,binaryPLY} from './rgbd-core.js';
 import {zipFiles} from './capture-zip.js';
+import {depth_preview} from './depth-preview.js';
 const $=id=>document.getElementById(id);
 const colorLUT=Float32Array.from({length:256},(_,i)=>{const x=i/255;return x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4);});
 export class RGBDWorkspace {
  constructor({scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly}){
-  Object.assign(this,{scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly});this.sensor=new RGBDSensor(renderer,scene);this.live=false;this.lastTime=0;this.rate=0;this.cloudOnly=false;this.last_capture_end_ms=0;this.last_capture_ms=0;this.is_capture_pending=false;this.capture_generation=0;
+  Object.assign(this,{scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly});this.sensor=new RGBDSensor(renderer,scene);this.sensor.configure(nominalCalibration(848,480,848,480));this.live=false;this.lastTime=0;this.rate=0;this.cloudOnly=false;this.last_capture_end_ms=0;this.last_capture_ms=0;this.is_capture_pending=false;this.capture_generation=0;this.is_refresh_pending=false;this.enable_gpu_depth_preview=true;this.enable_readback_priority=true;this.depth_preview=null;
   this.cloud=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({size:2,sizeAttenuation:false,vertexColors:true,toneMapped:false}));this.cloud.frustumCulled=false;this.cloud.layers.set(1);this.cloud.visible=false;scene.add(this.cloud);
   this.frustum=new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xb553bb,transparent:true,opacity:.55}));overlay.add(this.frustum);this.frustum.visible=false;
   this.ui();this.lastSummary={ready:true,live:false,frame:null};
@@ -15,10 +16,10 @@ export class RGBDWorkspace {
  ui(){
   $('sensor-panel').innerHTML=`<div class="panel-heading"><div><span class="eyebrow">HEAD CAMERA</span><h2>RealSense D435i</h2></div><span class="chip">RGB-D</span></div>
   <div class="row-actions"><button id="sensor-aim">テーブルを見る</button><button id="sensor-live">▶ RGB-D開始</button><button id="sensor-once">1回取得</button></div>
-  <label class="field-label">深度プロファイル<select id="sensor-profile"><option value="848">848 × 480 · 公称HD画角</option><option value="1280">1280 × 720 · 高密度</option><option value="424">424 × 240 · 軽量縮小</option><option value="custom" disabled>カスタム校正</option></select></label>
-  <div class="row-actions"><select id="sensor-mode" aria-label="深度モード"><option value="ideal">幾何真値（float32 m）</option><option value="stereo" selected>ステレオ可視性 + Z16近似</option></select><select id="sensor-fps" aria-label="取得頻度"><option>5</option><option selected>10</option><option>15</option><option>30</option></select><span>Hz（上限）</span></div><p class="sub-note">連続取得は操作性を保つため処理負荷に応じて頻度を制限。1フレームの解像度・点数は維持。</p>
+  <label class="field-label">RGB-D解像度<select id="sensor-profile"><option value="848">848 × 480 · 公称HD画角</option><option value="1280">1280 × 720 · 高密度</option><option value="424">424 × 240 · 軽量縮小</option><option value="custom" disabled>カスタム校正</option></select></label><p class="sub-note">RGBと深度の画素数をまとめて変更し、プレビューを1回更新。別々の解像度は詳細校正で指定。</p>
+  <div class="row-actions"><select id="sensor-mode" aria-label="深度モード"><option value="ideal">幾何真値（float32 m）</option><option value="stereo" selected>ステレオ可視性 + Z16近似</option></select><select id="sensor-fps" aria-label="取得頻度"><option>5</option><option selected>10</option><option>15</option><option>30</option></select><span>Hz（上限）</span></div><p class="sub-note">設定Hzを上限に、前の取得完了後に次のフレームを取得。処理が間に合わない場合は実測Hzが低下。</p>
   <p class="sub-note">首2軸・腰Yawに追従。基線50 mmのステレオ可視性とZ16。各深度画素から1点、間引きなし。最短距離は848×480で195 mm、1280×720で280 mm、424×240で105 mm。実機個体の校正・IR照射・露光・欠損率は未再現。</p>
-  <div class="sensor-images"><figure><figcaption>RGB <span>1280 × 720</span></figcaption><canvas id="rgb-preview" width="1280" height="720" aria-label="D435i RGB画像"></canvas></figure><figure><figcaption>Depth <span>Z [m] · クリックで計測</span></figcaption><canvas id="depth-preview" width="848" height="480" aria-label="D435i 深度画像"></canvas><div class="depth-scale"><span id="depth-near">0.195 m</span><span id="depth-far">3 m</span></div></figure></div>
+  <div class="sensor-images"><figure><figcaption>RGB <span id="rgb-resolution">848 × 480</span></figcaption><canvas id="rgb-preview" width="848" height="480" aria-label="D435i RGB画像"></canvas></figure><figure><figcaption>Depth <span id="depth-resolution">848 × 480 · Z [m]</span></figcaption><canvas id="depth-preview" width="848" height="480" aria-label="D435i 深度画像"></canvas><div class="depth-scale"><span id="depth-near">0.195 m</span><span id="depth-far">3 m</span></div></figure></div>
   <div id="sensor-stats" class="sensor-stats" role="status">取得待ち</div>
   <div class="row-actions"><label><input id="cloud-show" type="checkbox">点群を重ねる</label><label><input id="cloud-only" type="checkbox">点群のみ</label><label><input id="frustum-show" type="checkbox">画角</label></div>
   <div id="rgbd-colors" class="cloud-color-controls"></div><div class="pixel-readout"><div class="row-actions"><label>u <input id="pixel-u" type="number" value="424" min="0" aria-label="深度画素 u"></label><label>v <input id="pixel-v" type="number" value="240" min="0" aria-label="深度画素 v"></label><button id="pixel-read">計測</button></div><output id="pixel-result">深度画像の点をクリックしてください。</output></div>
@@ -27,17 +28,28 @@ export class RGBDWorkspace {
   this.colorControls=new CloudColorControls($('rgbd-colors'),'rgbd','rgb',()=>{if(this.sensor.lastFrame)this.updateCloud(this.sensor.lastFrame);});
   $('calibration-json').value=JSON.stringify(this.sensor.calibration,null,2);
   $('sensor-aim').onclick=()=>this.aim();$('sensor-live').onclick=()=>{this.live=!this.live;$('sensor-live').textContent=this.live?'■ RGB-D停止':'▶ RGB-D開始';if(this.live)this.capture();else{this.lastSummary.live=false;document.documentElement.dataset.rgbdState=JSON.stringify(this.lastSummary);}};$('sensor-once').onclick=()=>this.capture();
-  $('sensor-profile').onchange=()=>{const w=+$('sensor-profile').value,h=w===1280?720:w===848?480:240;this.configure(nominalCalibration(w,h));};
+  $('sensor-profile').onchange=()=>{const width=+$('sensor-profile').value,height=width===1280?720:width===848?480:240;this.configure(nominalCalibration(width,height,width,height));};
   $('calibration-apply').onclick=()=>{try{this.configure(validateCalibration(JSON.parse($('calibration-json').value)));$('sensor-profile').value='custom';this.toast('校正を適用しました');}catch(e){this.toast('校正エラー：'+e.message);}};
-  $('calibration-reset').onclick=()=>{$('sensor-profile').value='848';this.configure(nominalCalibration());};
+  $('calibration-reset').onclick=()=>{$('sensor-profile').value='848';this.configure(nominalCalibration(848,480,848,480));};
   $('cloud-show').onchange=()=>this.setCloud();$('cloud-only').onchange=()=>this.setCloud();$('frustum-show').onchange=()=>this.frustum.visible=$('frustum-show').checked;
   $('pixel-read').onclick=()=>this.readPixel(+$('pixel-u').value,+$('pixel-v').value);$('depth-preview').onclick=e=>{const r=e.currentTarget.getBoundingClientRect(),k=this.sensor.lastFrame?.calibration.depth;if(k)this.readPixel(Math.floor((e.clientX-r.left)*k.width/r.width),Math.floor((e.clientY-r.top)*k.height/r.height));};
   $('sensor-export').onclick=()=>this.exportFrame();$('sensor-verify').onclick=()=>this.verify();
  }
- configure(c){this.capture_generation++;this.sensor.configure(c);$('calibration-json').value=JSON.stringify(c,null,2);this.lastTime=0;$('sensor-stats').textContent='校正更新済み。次の取得で反映されます。';}
+ configure(c){
+  // 校正の検証後に旧フレームを無効化。取得中の変更は最新設定の1回取得へ集約
+  this.sensor.configure(c);this.capture_generation++;this.is_refresh_pending=true;this.lastTime=0;
+  this.pending_preview_frame=null;this.sensor.lastFrame=null;this.last_scene_frame=null;
+  this.lastSummary={ready:false,model:this.robot.modelId,live:this.live,frame:null};
+  this.cloud.geometry.dispose();this.cloud.geometry=new THREE.BufferGeometry();
+  this.update_preview_calibration(this.sensor.calibration);
+  for(const id of ['rgb-preview','depth-preview']){const canvas=$(id);canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);}
+  $('calibration-json').value=JSON.stringify(this.sensor.calibration,null,2);$('sensor-export').disabled=true;
+  $('sensor-stats').textContent='校正更新済み · 新しい解像度でプレビュー取得待ち';$('pixel-result').textContent='校正を変更しました。深度画像の点をクリックして計測してください。';
+  document.documentElement.dataset.rgbdState=JSON.stringify(this.lastSummary);
+ }
  resetForRobot(robot){
-  this.capture_generation++;
-  this.exclude=this.exclude.map(o=>o===this.robot.links.camera_link?robot.links.camera_link:o);this.robot=robot;this.live=false;this.lastTime=0;this.sensor.lastFrame=null;this.lastSummary={ready:false,model:robot.modelId,frame:null};
+  this.capture_generation++;this.pending_preview_frame=null;this.is_refresh_pending=false;
+  this.exclude=this.exclude.map(o=>o===this.robot.links.camera_link?robot.links.camera_link:o);this.robot=robot;this.live=false;this.lastTime=0;this.sensor.lastFrame=null;this.last_scene_frame=null;this.lastSummary={ready:false,model:robot.modelId,frame:null};
   this.cloud.geometry.dispose();this.cloud.geometry=new THREE.BufferGeometry();this.cloud.visible=false;
   for(const id of ['rgb-preview','depth-preview']){const c=$(id);c.getContext('2d').clearRect(0,0,c.width,c.height);}
   $('sensor-export').disabled=true;$('sensor-stats').textContent='モデル変更済み · 取得待ち';$('pixel-result').textContent='新しいモデルで点群を取得してください。';
@@ -46,19 +58,20 @@ export class RGBDWorkspace {
  setCloud(){const only=$('cloud-only').checked,show=$('cloud-show').checked||only;this.cloud.visible=show;if(show&&this.sensor.lastFrame)this.updateCloud(this.sensor.lastFrame);if(only)this.camera.layers.set(1);else{this.camera.layers.set(0);if(show)this.camera.layers.enable(1);}this.cloudOnly=only;this.onCloudOnly(only);}
  opticalWorld(){const link=this.robot.links.camera_optical_frame;link.updateWorldMatrix(true,false);return link.matrixWorld.clone();}
  tick(now){
+  if(this.pending_preview_frame&&$('rgb-preview').offsetParent!==null)this.paint(this.pending_preview_frame);
   if(this.frustum.visible)this.updateFrustum();
-  // 取得負荷と同じ長さの休止による、連続取得中の描画・入力処理時間の確保
-  if(this.live&&now-this.lastTime>=1000/+$('sensor-fps').value&&now-this.last_capture_end_ms>=this.last_capture_ms)this.capture();
+  // プロファイル変更時の1回更新と連続取得。取得中ガードによる多重取得の抑止
+  if(!this.is_capture_pending&&(this.is_refresh_pending||(this.live&&now-this.lastTime>=1000/+$('sensor-fps').value)))this.capture();
  }
  async capture({target_group=null}={}){
   if(this.is_capture_pending)return null;
-  this.is_capture_pending=true;const generation=this.capture_generation;
+  this.is_capture_pending=true;if(!target_group)this.is_refresh_pending=false;const generation=this.capture_generation;
   try{
    const start=performance.now(),elapsed=start-this.lastTime;this.lastTime=start;
    const robot_state=robot_snapshot(this.robot),robot_pose=robot_state.robot_pose,robot_model=this.robot.modelId,workspace_state=this.environment.getState();
    const frame=await this.sensor.capture(this.opticalWorld(),{mode:$('sensor-mode').value,exclude:[...this.exclude,this.cloud],enable_async_read:true,target_group});
    if(generation!==this.capture_generation)return null;
-   this.sensor.lastFrame=frame;frame.robot_state=robot_state;frame.robotPose=robot_pose;frame.robotModel=robot_model;frame.workspace=workspace_state;this.rate=elapsed>0?1000/elapsed:0;
+   this.sensor.lastFrame=frame;frame.robot_state=robot_state;frame.robotPose=robot_pose;frame.robotModel=robot_model;frame.workspace=workspace_state;if(!target_group)this.last_scene_frame=frame;this.rate=elapsed>0?1000/elapsed:0;
    this.paint(frame);if(this.cloud.visible)this.updateCloud(frame);$('sensor-export').disabled=false;
    $('sensor-stats').textContent=`${frame.valid.toLocaleString()} 点 / ${(frame.calibration.depth.width*frame.calibration.depth.height).toLocaleString()}画素（1フレーム） · 着色 ${frame.colored.toLocaleString()}点\nステレオ除外 ${frame.stereoRejected.toLocaleString()}点 · Min-Z ${frame.calibration.min_depth_m} m\nZ ${frame.min.toFixed(3)}–${frame.max.toFixed(3)} m · ${frame.ms.toFixed(1)} ms / 取得${this.live?' · 実測 '+this.rate.toFixed(1)+' Hz':''}`;
    this.lastSummary={ready:true,model:this.robot.modelId,live:this.live,frame:{id:frame.id,timestamp:frame.timestamp,width:frame.calibration.depth.width,height:frame.calibration.depth.height,valid:frame.valid,colored:frame.colored,stereoRejected:frame.stereoRejected,min:frame.min,max:frame.max,ms:frame.ms,renderMs:frame.renderMs,hz:this.rate,mode:frame.mode,depthWorld:frame.depthWorld},workspace:frame.workspace};
@@ -67,11 +80,25 @@ export class RGBDWorkspace {
   }catch(e){if(generation!==this.capture_generation)return null;this.live=false;$('sensor-live').textContent='▶ RGB-D開始';$('sensor-stats').textContent='RGB-D取得エラー：'+e.message;console.error(e);this.toast(e.message);return null;}
   finally{this.is_capture_pending=false;}
  }
+ update_preview_calibration(calibration){
+  const depth=calibration.depth,color=calibration.color;
+  for(const [id,intrinsics] of [['rgb-preview',color],['depth-preview',depth]]){
+   const canvas=$(id);if(canvas.width!==intrinsics.width)canvas.width=intrinsics.width;if(canvas.height!==intrinsics.height)canvas.height=intrinsics.height;
+  }
+  $('rgb-resolution').textContent=`${color.width} × ${color.height}`;$('depth-resolution').textContent=`${depth.width} × ${depth.height} · Z [m]`;
+  $('depth-near').textContent=calibration.min_depth_m+' m';$('depth-far').textContent=calibration.max_depth_m+' m';
+  $('pixel-u').max=depth.width-1;$('pixel-v').max=depth.height-1;
+  if(+$('pixel-u').value>=depth.width)$('pixel-u').value=Math.floor(depth.width/2);if(+$('pixel-v').value>=depth.height)$('pixel-v').value=Math.floor(depth.height/2);
+ }
  paint(f){
-  const rgb=$('rgb-preview'),d=$('depth-preview'),kc=f.calibration.color,k=f.calibration.depth;rgb.width=kc.width;rgb.height=kc.height;rgb.previousElementSibling.querySelector('span').textContent=`${kc.width} × ${kc.height}`;rgb.getContext('2d').putImageData(new ImageData(f.rgba,kc.width,kc.height),0,0);d.width=k.width;d.height=k.height;
+  // 非表示画像の描画保留。再表示時は最新の取得結果のみ反映
+  if($('rgb-preview').offsetParent===null){this.pending_preview_frame=f;return;}
+  this.pending_preview_frame=null;
+  this.update_preview_calibration(f.calibration);
+  const rgb=$('rgb-preview'),d=$('depth-preview'),kc=f.calibration.color,k=f.calibration.depth;rgb.getContext('2d').putImageData(new ImageData(f.rgba,kc.width,kc.height),0,0);
+  if(this.enable_gpu_depth_preview){this.depth_preview??=new depth_preview();if(this.depth_preview.draw(d.getContext('2d'),f))return;}
   const rgba=new Uint8ClampedArray(k.width*k.height*4),lo=f.calibration.min_depth_m,hi=f.calibration.max_depth_m;
   for(let i=0;i<f.depth.length;i++){const z=f.depth[i],a=i*4;if(z){const t=THREE.MathUtils.clamp((z-lo)/(hi-lo),0,1);rgba[a]=255*Math.max(0,1-Math.abs(t*3-2));rgba[a+1]=255*Math.max(0,1-Math.abs(t*3-1));rgba[a+2]=255*Math.max(0,1-Math.abs(t*3));}else{rgba[a]=18;rgba[a+1]=20;rgba[a+2]=29;}rgba[a+3]=255;}d.getContext('2d').putImageData(new ImageData(rgba,k.width,k.height),0,0);
-  $('depth-near').textContent=lo+' m';$('depth-far').textContent=hi+' m';$('pixel-u').max=k.width-1;$('pixel-v').max=k.height-1;if(+$('pixel-u').value>=k.width)$('pixel-u').value=Math.floor(k.width/2);if(+$('pixel-v').value>=k.height)$('pixel-v').value=Math.floor(k.height/2);
  }
  updateCloud(f){
   const {colors}=this.colorControls.compute(f.xyz,f.depthWorld,f.colors);this.cloud.geometry.dispose();this.cloud.geometry=new THREE.BufferGeometry();this.cloud.geometry.setAttribute('position',new THREE.BufferAttribute(f.xyz,3));this.cloud.geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));this.cloud.matrixAutoUpdate=false;this.cloud.matrix.fromArray(f.depthWorld);this.cloud.updateMatrixWorld(true);
@@ -85,7 +112,7 @@ export class RGBDWorkspace {
    const world=$('cloud-frame').value==='world',view=this.colorControls.compute(f.xyz,f.depthWorld,f.colors);const metadata={format:'topo-rgbd/1',robot_model:f.robotModel,display_color:view.summary,frame_id:f.id,timestamp:f.timestamp,mode:f.mode,point_frame:world?'base_footprint':'camera_depth_optical_frame',units:'m',depth_definition:'optical Z, not Euclidean ray length',invalid_depth:0,pixel_convention:'integer coordinates are pixel centres; top-left row first',float32_depth_file:'depth.f32',z16_file:'depth.z16',endianness:'little',depth_scale:f.calibration.depth_scale,calibration:f.calibration,depth_optical_to_world_column_major:f.depthWorld,color_optical_to_world_column_major:f.colorWorld,valid_points:f.valid,colored_points:f.colored,color_invalid_value:'RGB 155,165,175; color_valid=0 in PLY',robot_joints_rad:f.robotPose};
    const decoder=`import json\nimport numpy as np\nfrom pathlib import Path\np=Path(__file__).parent\nm=json.loads((p/'frame.json').read_text(encoding='utf-8'))\nk=m['calibration']['depth']\nz=np.fromfile(p/'depth.f32',dtype='<f4').reshape(k['height'],k['width'])\nv,u=np.indices(z.shape)\nxyz=np.stack(((u-k['ppx'])*z/k['fx'],(v-k['ppy'])*z/k['fy'],z),axis=-1)[z>0]\nT=np.array(m['depth_optical_to_world_column_major']).reshape(4,4,order='F')\nworld=xyz@T[:3,:3].T+T[:3,3]\nprint('valid:',len(xyz),'world bounds:',(world.min(0),world.max(0)) if len(world) else 'empty')\nnp.save(p/'points_optical.npy',xyz)\nnp.save(p/'points_world.npy',world)\n`;
    const bundle=await zipFiles({'frame.json':JSON.stringify(metadata,null,2),'scene.json':JSON.stringify(f.workspace,null,2),'calibration.json':JSON.stringify(f.calibration,null,2),'rgb.png':png,'depth.f32':f.depth,'depth.z16':f.z16,'points.ply':binaryPLY(f,world),'points_display.ply':displayPLY(f.xyz,f.depthWorld,view.rgb,world),'read_capture.py':decoder});await this.download('D435i-capture.zip',bundle,'application/zip');
-  }catch(e){this.toast('保存エラー：'+e.message);}finally{$('sensor-export').disabled=false;}
+  }catch(e){this.toast('保存エラー：'+e.message);}finally{$('sensor-export').disabled=!this.sensor.lastFrame;}
  }
  async verify(){const wasLive=this.live;this.live=false;$('sensor-verify').disabled=true;$('sensor-qa').textContent='検証中…';try{const {runSensorQA}=await import('./rgbd-qa.js');const report=await runSensorQA(this.renderer);this.qa=report;$('sensor-qa').textContent=report.passed?`${report.tests.length}項目 PASS · 最大幾何誤差 ${report.maxErrorMm.toFixed(4)} mm`:'FAIL: '+report.tests.filter(x=>!x.passed).map(x=>x.name+': '+x.error).join(' / ');document.documentElement.dataset.sensorQa=JSON.stringify(report);}catch(e){$('sensor-qa').textContent='検証エラー：'+e.message;console.error(e);}finally{this.live=wasLive;$('sensor-verify').disabled=false;}}
 }

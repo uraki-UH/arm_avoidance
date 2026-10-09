@@ -39,10 +39,12 @@
   <depend>rclcpp_components</depend>
   <depend>tf2</depend>
   <depend>voxel_idx</depend>
+  <depend>pointcloud_sampling</depend>
   <depend>grasping_system</depend>
   <depend>gng_control_msgs</depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ais_gng</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>rviz2</exec_depend>
@@ -66,6 +68,7 @@
   <exec_depend>dynamixel_joint_state_bridge</exec_depend>
   <exec_depend>dynamixel_handler</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>xacro</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
   <test_depend>ament_lint_auto</test_depend>

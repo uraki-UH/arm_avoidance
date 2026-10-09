@@ -19,6 +19,20 @@ import dual_arm_control_keyboard as keyboard
 
 
 class test_keys(unittest.TestCase):
+    def test_exit_request_preempts_available_input(self):
+        with patch.object(keyboard.select, 'select') as select_input:
+            self.assertEqual(keyboard.read_terminal_action(1, Mock(), True, False), 'quit')
+            select_input.assert_not_called()
+
+    def test_exiting_never_reads_or_restarts_quit(self):
+        with patch.object(keyboard.select, 'select') as select_input:
+            self.assertIsNone(keyboard.read_terminal_action(1, Mock(), True, True))
+            select_input.assert_not_called()
+
+    def test_temporarily_unavailable_input_is_not_exit(self):
+        with patch.object(keyboard.select, 'select', side_effect=BlockingIOError):
+            self.assertIsNone(keyboard.read_terminal_action(1, Mock(), False, False))
+
     def test_stop_and_exit_keys(self):
         for key in (b' ',):
             with self.subTest(key=key):
@@ -123,6 +137,21 @@ class test_live_status(unittest.TestCase):
         self.assertIn('切替中', keyboard.control_status_label(self.status, .1))
         for action in ('avoidance', 'leader', 'hardware'):
             self.assertIsNone(keyboard.toggle_value(action, self.status, .1))
+
+    def test_operation_decision_separates_rejection_and_toggle(self):
+        self.assertEqual(keyboard.control_operation('avoidance', self.status, .1, False), (True, '回避ON'))
+        self.status['mode'] = 'avoidance'
+        self.assertEqual(keyboard.control_operation('avoidance', self.status, .1, False), (False, '回避OFF'))
+        value, reason = keyboard.control_operation('avoidance', self.status, .1, True)
+        self.assertIsNone(value)
+        self.assertIn('停止要求を優先', reason)
+        value, reason = keyboard.control_operation('avoidance', self.status, 1., False)
+        self.assertIsNone(value)
+        self.assertIn('未受信・失効', reason)
+
+    def test_stop_reset_label_has_no_following_claim(self):
+        self.status['mode'] = 'stopped'
+        self.assertEqual(keyboard.control_operation('leader', self.status, .1, False), (True, '停止解除→ホールド'))
 
 
 class test_control_request(unittest.TestCase):
@@ -385,6 +414,14 @@ class test_console_main(unittest.TestCase):
         for name in ('avoidance', 'leader', 'hardware'):
             fixture.clients[name].call_async.assert_not_called()
         fixture.clients['stop'].call_async.assert_called_once()
+
+    def test_rejected_operations_keep_polling_and_heartbeat(self):
+        fixture = console_fixture([b'a'] * 20 + [b'\x03'], has_control_status=False)
+        self.assertEqual(fixture.run(), 0)
+        fixture.clients['avoidance'].call_async.assert_not_called()
+        self.assertGreaterEqual(fixture.num_spins, 21)
+        self.assertGreaterEqual(len(fixture.heartbeat_times), 4)
+        self.assert_clean_exit(fixture)
 
     def test_removed_keys_never_send_operations_or_exit(self):
         fixture = console_fixture([b'r', b'R', b'q', b'Q', b's', b'S', b'\x03'])

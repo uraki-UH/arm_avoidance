@@ -1,3 +1,6 @@
+import type { GraphData } from '../../../../libs/ros_visualization_web/graph_types';
+export type { GraphData, GraphNode, GraphCluster, GraphMode } from '../../../../libs/ros_visualization_web/graph_types';
+export { LAYER_COLORS, SEMANTIC_COLORS } from '../../../../libs/ros_visualization_web/graph_types';
 import * as THREE from 'three';
 
 // --- Point Cloud Types ---
@@ -97,71 +100,6 @@ export interface point_cloud_display_settings extends HeatmapSettings {
 
 // --- Graph / GNG Types ---
 
-export interface GraphNode {
-    id?: number;
-    x: number;
-    y: number;
-    z: number;
-    nx: number;
-    ny: number;
-    nz: number;
-    label: number;
-    semanticLabel?: number;
-    semanticReliability?: number;
-    age: number;
-    nonplaneComponentId?: number;
-    is_boundary_candidate?: boolean;
-    boundary_evidence?: number;
-    winnerPointCount?: number;
-    // 集約元の姿勢数。合計0または未指定の場合は従来のラベル表示
-    num_safe_states?: number;
-    num_danger_states?: number;
-    num_collision_states?: number;
-    winnerPointCovariance?: [number, number, number, number, number, number, number, number, number];
-    isGoal?: boolean;
-    manipValid?: boolean;
-    manipValue?: number;
-    manipConditionNumber?: number;
-    manipScale?: [number, number, number];
-    manipOrientation?: [number, number, number, number];
-    rotationalManipValid?: boolean;
-    rotationalManipValue?: number;
-    rotationalManipConditionNumber?: number;
-    rotationalManipScale?: [number, number, number];
-    rotationalManipOrientation?: [number, number, number, number];
-}
-
-export interface GraphCluster {
-    id: number;
-    label: number;
-    semanticLabel?: number;
-    semanticReliability?: number;
-    pos: [number, number, number];
-    scale: [number, number, number];
-    quat: [number, number, number, number];
-    match: number;
-    reliability: number;
-    velocity: [number, number, number];
-    nodeIds: number[];  // Viewer受信時の正規化後の所属ノードID
-    hasVelocityObservation?: boolean;
-    velCovXx?: number;
-    velCovXy?: number;
-    velCovYy?: number;
-}
-
-export type GraphMode = 'static' | 'dynamic';
-
-export interface GraphData {
-    timestamp: number;
-    nodes: GraphNode[];
-    edges: number[]; // Flat array of indices [src, tgt, src, tgt...]
-    clusters: GraphCluster[];
-    clusterLabels?: number[];
-    frameId?: string;
-    tag?: string;
-    mode?: GraphMode;
-}
-
 export interface graph_selection {
     kind: 'node' | 'cluster' | 'component' | 'marker';
     id: number;
@@ -227,6 +165,7 @@ export interface LayerSettings {
     covarianceEllipsoidColor?: string;
     emissiveIntensity?: number;
     nodeScale?: number;
+    enable_simple_graph?: boolean;
     edgeWidth?: number;
     covarianceEllipsoidScale?: number;
     graphTransform?: Transform;
@@ -366,7 +305,7 @@ export interface VoxelSettings {
 export interface DataSource {
     id: string;
     name: string;
-    type: 'pointcloud' | 'topological_map' | 'nonplane_component' | 'marker' | 'voxel';
+    type: 'pointcloud' | 'topological_map' | 'plane_cluster' | 'nonplane_component' | 'marker' | 'voxel' | 'robot';
     active: boolean;
 }
 
@@ -455,14 +394,7 @@ export interface SetParameterResult {
 
 // --- Constants ---
 
-export const LAYER_COLORS = [
-    '#7c8c66', // 0: DEFAULT (muted gray-green)
-    '#1f8f3a', // 1: SAFE_TERRAIN (deep green)
-    '#FF0000', // 2: COLLISION (Red)
-    '#FFFF00', // 3: DANGER (Yellow)
-    '#d946ef', // 4: HUMAN（赤紫）
-    '#8b5cf6'  // 5: CAR（青紫）
-];
+
 
 export const LAYER_LABELS = [
     "DEFAULT", "SAFE_TERRAIN", "WALL", "UNKNOWN_OBJECT", "HUMAN", "CAR"
@@ -472,12 +404,7 @@ export const SEMANTIC_LABELS = [
    "把持部位", "未評価", "到達範囲内", "到達範囲外"
 ];
 
-export const SEMANTIC_COLORS = [
-    '#00d1ff',
-    '#708090',
-    '#00d1ff',
-    '#2a7898',
-];
+
 
 export const STATIC_GNG_DEFAULTS = {
     nodeColor: '#1f8f3a',

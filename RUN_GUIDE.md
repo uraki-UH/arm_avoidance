@@ -29,6 +29,47 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 
 新しい双腕モデルは`params_file`を`topo_dual_arm_max.yaml`または`topo_dual_arm_max_long.yaml`へ変更。ロボット本体は学習前でも表示可能。GNG・VLUTの表示には機種ごとの学習後にlaunchを再起動。[設定・学習手順](gng_vlut_system/docs/releases/2026-09-28_dual_arm_models.md)。
 
+### FuzzBotの表示専用起動
+
+初回のみDocker内でモデル・メッシュのパッケージをビルド。親ディレクトリの`COLCON_IGNORE`は維持、実機ドライバは対象外。
+
+```bash
+cd /ros2_ws
+colcon build --paths /ros2_ws/src/fuzzbot_gng/fuzzbot/fuzzbot_description --packages-select fuzzbot_description --symlink-install
+source /ros2_ws/install/setup.bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/fuzzbot.yaml
+```
+
+既存Viewerへの`fuzzbot`の原点表示。初回の車輪ゼロ姿勢だけ配信、走行指令・実機接続・Gazebo・学習・自己認識ボクセルは未起動。
+設定は[fuzzbot.yaml](gng_vlut_system/config/fuzzbot.yaml)。`joint_control_backend: external`で関節指令経路を省略。明示launch引数が最優先、YAML未設定時は従来の`viewer`。
+学習データ不足の通知は未学習時の正常動作。ロボット表示にGNG・VLUTは不要。停止は起動ターミナルで`Ctrl+C`。
+起動・TF・配信の隔離検証: Docker内で`python3 -B /ros2_ws/src/gng_vlut_system/test/check_fuzzbot_viewer.py`。ROSドメイン228の未使用が前提、所有launchは試験終了時に停止。
+
+### FuzzBotの移動状態グラフ
+
+Docker内で、上記のロボット表示とは別ターミナルから起動。
+
+```bash
+source /ros2_ws/install/setup.bash
+ros2 launch gng_vlut_system mobile_state_graph.launch.py
+```
+
+既定設定は`fuzzbot.yaml`。初回生成後に保存、次回は整合性検査付きで読込。ViewerのTopicsで`/fuzzbot/state_graph/markers`をON。点は状態の位置、短線は向き、青線は遷移軌跡。点の色は並進速度（赤寄りが後退、緑寄りが前進）。同じ位置で向き・速度が異なる状態は表示上重複。
+
+- 状態: `(x, y, yaw, v, omega)`。有向エッジ: 一定の並進加速度・角加速度による遷移。
+- 生データ: `/fuzzbot/state_graph/data`（JSON）。全状態・有向接続・加速度・遷移時間・単位を保持。
+- 保存先: `/ros2_ws/install/gng_vlut_system/share/gng_vlut_system/gng_results/fuzzbot/motion_graph.json`。`output_path:=/任意の場所/motion_graph.json`で変更可能。
+- 生成だけ: 同じlaunchに`build_only:=true`を追加。生成後は自動終了。
+- 設定変更後: `enable_rebuild:=true`で保存グラフを再生成。指定なしの設定不一致はエラー（古いグラフの黙用防止）。
+- 停止: `Ctrl+C`。表示中の反復生成なし。ノード停止後の新規購読への配信なし。
+
+設定は[fuzzbot.yaml](gng_vlut_system/config/fuzzbot.yaml)の`motion_graph`。既定は原点の静止状態から探索、半径2 m以内・最大3,000状態。半径内の全域や全速度の被覆保証なし。車輪半径・輪間隔・車輪速度上限はURDFから取得、加減速上限はシミュレーション用の仮値。
+
+現段階は平坦床・横滑りなしの運動モデルによる事前生成であり、GNG学習・障害物照合・実機走行指令は対象外。実ロボットの到達保証なし。現在位置への再配置や現在速度に応じた検索、エフェクティビティ評価は未接続。任意URDFへの対応ではなく、`libgazebo_ros_diff_drive.so`設定と左右車輪の速度制限を持つ差動二輪モデルが対象。
+
+隔離起動試験: `python3 -B /ros2_ws/src/gng_vlut_system/test/check_mobile_state_graph.py`。未使用のROSドメイン227で生成・後発購読・保存再利用を検証、試験launchは終了時に停止。
+
 ## 双腕Gazeboデモ
 
 ```bash

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { is_graph_visible_by_default } from './layer_display';
 import {
     DYNAMIC_GNG_DEFAULTS,
     GraphData,
@@ -219,11 +220,13 @@ export function resolve_graph_layer_settings(tag: string, graph: GraphData, sett
 
 export function useGraphLayerSettings(graphData: Record<string, GraphData>) {
     const [layerSettings, setLayerSettings] = useState<Record<string, LayerSettings>>({});
+    const visibility_overrides = useRef(new Set<string>());
 
     useEffect(() => {
         setLayerSettings((currentSettings) => {
             const nextSettings = { ...currentSettings };
             let changed = false;
+            const available_tags = new Set(Object.keys(graphData));
 
             Object.entries(graphData).forEach(([tag, graph]) => {
                 // 初回のみの既定値設定。復帰・一時的な属性欠落による選択済み設定の変更なし。
@@ -237,6 +240,12 @@ export function useGraphLayerSettings(graphData: Record<string, GraphData>) {
                     };
                     changed = true;
                 }
+                // 受信順序によらない重複表示の抑止。表示ボタンでの選択を優先
+                const is_visible = is_graph_visible_by_default(tag, available_tags);
+                if (!visibility_overrides.current.has(tag) && nextSettings[tag].visible !== is_visible) {
+                    nextSettings[tag] = { ...nextSettings[tag], visible: is_visible };
+                    changed = true;
+                }
             });
 
             return changed ? nextSettings : currentSettings;
@@ -244,6 +253,7 @@ export function useGraphLayerSettings(graphData: Record<string, GraphData>) {
     }, [graphData]);
 
     const updateLayerSettings = (tag: string, updates: Partial<LayerSettings>) => {
+        if (typeof updates.visible === 'boolean') visibility_overrides.current.add(tag);
         setLayerSettings((currentSettings) => ({
             ...currentSettings,
             [tag]: { ...currentSettings[tag], ...updates },
@@ -251,6 +261,7 @@ export function useGraphLayerSettings(graphData: Record<string, GraphData>) {
     };
 
     const removeLayerSettings = (tag: string) => {
+        visibility_overrides.current.delete(tag);
         setLayerSettings((currentSettings) => {
             const nextSettings = { ...currentSettings };
             delete nextSettings[tag];

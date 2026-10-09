@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { DataSource, GngStatus, GngParams, GngConfigInfo } from '../../hooks/useWebSocket';
 
 interface SourceSelectorProps {
+    connection_control: ReactNode;
+    is_read_only?: boolean;
     isConnected: boolean;
     sources: DataSource[];
     getSources: () => Promise<DataSource[]>;
@@ -11,10 +14,11 @@ interface SourceSelectorProps {
     stopGng: () => Promise<{ success: boolean }>;
     getGngStatus: () => Promise<GngStatus>;
     listGngConfigs: () => Promise<GngConfigInfo[]>;
-    onSourceToggled?: (sourceId: string, active: boolean) => void;
 }
 
 export function SourceSelector({
+    connection_control,
+    is_read_only = false,
     isConnected,
     sources,
     getSources,
@@ -24,8 +28,8 @@ export function SourceSelector({
     stopGng,
     getGngStatus,
     listGngConfigs,
-    onSourceToggled
 }: SourceSelectorProps) {
+    const [pending_sources, set_pending_sources] = useState<Set<string>>(new Set());
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [processingSource, setProcessingSource] = useState<string | null>(null);
@@ -76,6 +80,7 @@ export function SourceSelector({
     useEffect(() => {
         if (isConnected) {
             refreshSources();
+            if (is_read_only) return;
             refreshGngStatus();
             refreshConfigs();
             const interval = setInterval(refreshGngStatus, 5000);
@@ -84,9 +89,11 @@ export function SourceSelector({
 
         setGngStatus({ isRunning: false });
         setConfigs([]);
-    }, [isConnected, refreshSources, refreshGngStatus, refreshConfigs]);
+    }, [isConnected, refreshSources, refreshGngStatus, refreshConfigs, is_read_only]);
 
     const handleToggleSource = async (source: DataSource) => {
+        set_pending_sources(prev => new Set(prev).add(source.id));
+        setError(null);
         try {
             if (source.active) {
                 await unsubscribeSource(source.id, true);
@@ -94,11 +101,11 @@ export function SourceSelector({
                 await subscribeSource(source.id);
             }
 
-            const nextActive = !source.active;
-            onSourceToggled?.(source.id, nextActive);
             await refreshSources();
         } catch (err) {
-            console.error('Failed to toggle source:', err);
+            setError(err instanceof Error ? err.message : '入力の選択変更に失敗しました。');
+        } finally {
+            set_pending_sources(prev => { const next = new Set(prev); next.delete(source.id); return next; });
         }
     };
 
@@ -141,16 +148,27 @@ export function SourceSelector({
     };
 
     return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="panel-title">Topics</h3>
-                <button
-                    onClick={refreshSources}
-                    disabled={isLoading}
-                    className="btn-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] disabled:opacity-50"
-                >
-                    {isLoading ? 'Loading...' : 'Refresh'}
-                </button>
+        <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                    <h3 className="panel-title">Topics</h3>
+                    <span className="text-[11px] text-[var(--text-muted)]" title="選択中 / 検出入力数">
+                        {sources.filter((source) => source.active).length} / {sources.length}
+                    </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                    {connection_control}
+                    <button
+                        onClick={refreshSources}
+                        disabled={isLoading || !isConnected}
+                        aria-label="トピック一覧を更新"
+                        title="トピック一覧を更新"
+                        aria-busy={isLoading}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] hover:bg-white/10 disabled:opacity-50"
+                    >
+                        <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
             </div>
 
             {configs.length > 0 && (
@@ -172,6 +190,7 @@ export function SourceSelector({
                 </div>
             )}
 
+            {!is_read_only && <>
             <div className={`rounded-lg border px-3 py-2 text-xs ${gngStatus.isRunning ? 'border-green-500/40 bg-green-500/10' : 'border-white/20 bg-black/25'}`}>
                 <div className="flex items-center justify-between gap-2">
                     <span className="text-[var(--text-primary)]">
@@ -193,6 +212,7 @@ export function SourceSelector({
                 </div>
             </div>
 
+            </>}
             {error && (
                 <div className="rounded border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
                     {error}
@@ -200,29 +220,31 @@ export function SourceSelector({
             )}
 
             {sources.length === 0 ? (
-                <div className="rounded-lg border border-white/10 bg-black/20 py-3 text-center text-xs italic text-[var(--text-secondary)]">
-                    No compatible topics found.
+                <div className="py-2 text-xs text-[var(--text-secondary)]">
+                    {isConnected ? 'No compatible topics found.' : '接続するとトピックを表示します。'}
                 </div>
             ) : (
-                <div className="max-h-60 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                <div className="max-h-60 overflow-y-auto scrollbar-thin">
                     {sources.map((source) => {
                         const isRunningSource = gngStatus.isRunning && gngStatus.inputTopic === source.id;
                         const isPointCloud = source.type === 'pointcloud';
                         return (
                             <div key={source.id} className="flex items-center gap-2">
-                                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10">
+                                <label className="flex min-h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-white/10">
                                     <input
                                         type="checkbox"
+                                        aria-label={`Topic: ${source.id}`}
                                         checked={source.active}
+                                        disabled={pending_sources.has(source.id) || !isConnected}
                                         onChange={() => handleToggleSource(source)}
                                         className="h-4 w-4 rounded border-gray-500 bg-transparent text-[var(--accent-color)] focus:ring-[var(--accent-color)]"
                                     />
-                                    <span className="flex-1 truncate text-[13px] font-medium text-[var(--text-primary)]" title={source.id}>
-                                        {source.id}
+                                    <span className="flex-1 truncate text-xs text-[var(--text-primary)]" title={source.id}>
+                                        {source.type === 'robot' ? `Robot · ${source.name}` : source.id}
                                     </span>
                                 </label>
 
-                                {isPointCloud && (
+                                {!is_read_only && isPointCloud && (
                                     <button
                                         onClick={(e) => handleStartGng(e, source.id)}
                                         disabled={processingSource === source.id || gngStatus.isRunning}
@@ -240,10 +262,6 @@ export function SourceSelector({
                     })}
                 </div>
             )}
-
-            <div className="text-right text-xs text-[var(--text-secondary)]">
-                {sources.filter((s) => s.active).length} / {sources.length} active
-            </div>
         </div>
     );
 }

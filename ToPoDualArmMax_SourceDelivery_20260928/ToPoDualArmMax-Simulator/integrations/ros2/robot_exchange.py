@@ -16,6 +16,10 @@ def validate_state(state):
     pose = state.get('robot_pose')
     if not isinstance(pose, dict) or len(pose) > 64 or any(not isinstance(k, str) or type(v) not in (int, float) or not math.isfinite(v) for k, v in pose.items()):
         raise ValueError('関節状態が不正です')
+    for field in ('joint_velocity', 'joint_effort'):
+        values = state.get(field)
+        if values is not None and (not isinstance(values, dict) or set(values) != set(pose) or any(type(v) not in (int, float) or not math.isfinite(v) for v in values.values())):
+            raise ValueError('関節速度・駆動力が不正です')
     transforms = state.get('transforms')
     if not isinstance(transforms, list) or not 1 <= len(transforms) <= 256:
         raise ValueError('TFの数が不正です')
@@ -61,7 +65,7 @@ def trajectory_payload(message):
 
 
 class RobotExchange:
-    def __init__(self, node, joints):
+    def __init__(self, node, joints, tf_topic='/tf'):
         from geometry_msgs.msg import PoseStamped
         from tf2_msgs.msg import TFMessage
         from trajectory_msgs.msg import JointTrajectory
@@ -69,6 +73,7 @@ class RobotExchange:
         from rclpy.qos import QoSProfile, DurabilityPolicy
         self.node, self.joints = node, joints
         self.tf = node.create_publisher(TFMessage, '/sim/tf', 10)
+        self.standard_tf = node.create_publisher(TFMessage, tf_topic, 10) if tf_topic != '/sim/tf' else None
         self.base_pose = node.create_publisher(PoseStamped, '/sim/base_pose', 10)
         self.description = node.create_publisher(String, '/sim/robot_description', QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.model = None
@@ -92,14 +97,19 @@ class RobotExchange:
         actual = {t['child']: t['parent'] for t in state['transforms']}
         if 'sim_camera_depth_optical_frame' in actual:
             expected['sim_camera_depth_optical_frame'] = 'base_footprint'
+        if 'sim_mid360_frame' in actual:
+            expected['sim_mid360_frame'] = 'base_footprint'
         if actual != expected or set(state['robot_pose']) != self.joint_names[model]:
             raise ValueError('URDFと状態の構成が一致しません')
 
-    def publish(self, state, stamp=None):
+    def publish(self, state, stamp=None, outputs=None):
         from geometry_msgs.msg import TransformStamped, PoseStamped
         from tf2_msgs.msg import TFMessage
         from sensor_msgs.msg import JointState
         from std_msgs.msg import String
+        outputs = ['base', 'tf', 'joints'] if outputs is None else outputs
+        if not isinstance(outputs, list) or any(value not in ('base', 'tf', 'joints') for value in outputs):
+            raise ValueError('状態送信項目が不正です')
         self.validate(state)
         stamp = stamp or self.node.get_clock().now().to_msg()
         transforms = []
@@ -109,18 +119,26 @@ class RobotExchange:
             msg.transform.translation.x, msg.transform.translation.y, msg.transform.translation.z = map(float, value['translation'])
             msg.transform.rotation.x, msg.transform.rotation.y, msg.transform.rotation.z, msg.transform.rotation.w = map(float, value['rotation'])
             transforms.append(msg)
-            if value['child'] == 'base_footprint':
+            if value['child'] == 'base_footprint' and 'base' in outputs:
                 base = PoseStamped()
                 base.header = msg.header
                 base.pose.position.x, base.pose.position.y, base.pose.position.z = map(float, value['translation'])
                 base.pose.orientation = msg.transform.rotation
                 self.base_pose.publish(base)
-        self.tf.publish(TFMessage(transforms=transforms))
+        if 'tf' in outputs:
+            self.tf.publish(TFMessage(transforms=transforms))
+        if self.standard_tf is not None and 'tf' in outputs:
+            self.standard_tf.publish(TFMessage(transforms=transforms))
         joints = JointState()
         joints.header.stamp, joints.header.frame_id = stamp, 'base_footprint'
         joints.name = list(state['robot_pose'])
         joints.position = list(map(float, state['robot_pose'].values()))
-        self.joints.publish(joints)
+        for field in ('velocity', 'effort'):
+            values = state.get('joint_' + field)
+            if values is not None:
+                setattr(joints, field, [float(values[name]) for name in joints.name])
+        if 'joints' in outputs:
+            self.joints.publish(joints)
         if self.model != state['robot_model']:
             self.model = state['robot_model']
             self.description.publish(String(data=self.descriptions[self.model]))

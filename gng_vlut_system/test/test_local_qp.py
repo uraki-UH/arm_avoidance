@@ -126,6 +126,89 @@ def test_inaccurate_infeasible_or_timeout_has_no_candidate(setup, status):
         assert project(setup, [-.01, 0., 0.]) is None
 
 
+@pytest.mark.parametrize('target,expected_hessian,expected_linear', [
+    ([.02, .01, .8], [1., 1.], [-.02, -.01]),
+    ([0., 0., 0.], [201., 1.], [14., 0.]),
+])
+def test_solver_boundary_preserves_objective_constraints_and_limits(
+        setup, target, expected_hessian, expected_linear):
+    solver, _ = setup
+    delta = np.array([-.007, .002])
+    can_bridge = Mock(return_value=True)
+    with patch.object(solver.osqp, 'OSQP') as factory:
+        factory.return_value.solve.return_value = SimpleNamespace(
+            x=delta, info=SimpleNamespace(status='solved', status_val=1, run_time=.000125))
+        result = project(setup, target, can_bridge=can_bridge)
+        arguments = factory.return_value.setup.call_args.kwargs
+        factory.return_value.solve.assert_called_once_with(raise_error=False)
+    np.testing.assert_allclose(arguments['P'].toarray(), np.diag(expected_hessian))
+    np.testing.assert_allclose(arguments['q'], expected_linear)
+    np.testing.assert_allclose(arguments['A'].toarray(), [[1., 0.], [0., 1.], [-1., 0.]])
+    max_delta = 3.*.2**2/(10/np.sqrt(3))
+    np.testing.assert_allclose(arguments['l'], [-max_delta, -max_delta, -.0075])
+    np.testing.assert_allclose(arguments['u'], [max_delta, max_delta, np.inf])
+    assert {key: arguments[key] for key in (
+        'verbose', 'eps_abs', 'eps_rel', 'max_iter', 'time_limit', 'polishing')} == {
+            'verbose': False, 'eps_abs': 1e-8, 'eps_rel': 1e-8, 'max_iter': 2000,
+            'time_limit': .02, 'polishing': False}
+    np.testing.assert_allclose(result, [-.007, .002, 0.])
+    assert can_bridge.call_count == 1
+    np.testing.assert_array_equal(can_bridge.call_args.args[0], np.zeros(3))
+    np.testing.assert_array_equal(can_bridge.call_args.args[1], result)
+    assert can_bridge.call_args.args[2] == .035
+    assert solver.report['status'] == 'solved'
+    assert solver.report['num_constraints'] == 3
+    assert solver.report['num_calls'] == 1
+    assert solver.report['solve_ms'] == .125
+    assert solver.report['total_ms'] >= 0.
+
+
+@pytest.mark.parametrize('delta,expected_status', [
+    (None, 'solved'),
+    (np.array([np.nan, 0.]), 'solved'),
+    (np.array([np.inf, 0.]), 'solved'),
+    (np.array([-.1, 0.]), 'constraint_violation'),
+    (np.array([0., .1]), 'constraint_violation'),
+    (np.array([.01, 0.]), 'constraint_violation'),
+])
+def test_invalid_solver_result_never_reaches_path_check(setup, delta, expected_status):
+    solver, _ = setup
+    can_bridge = Mock(return_value=True)
+    with patch.object(solver.osqp, 'OSQP') as factory:
+        factory.return_value.solve.return_value = SimpleNamespace(
+            x=delta, info=SimpleNamespace(status='solved', status_val=1, run_time=.001))
+        assert project(setup, [-.01, 0., 0.], can_bridge=can_bridge) is None
+    can_bridge.assert_not_called()
+    assert solver.report['status'] == expected_status
+    assert solver.report['solve_ms'] == 1.
+
+
+@pytest.mark.parametrize('phase', ['setup', 'solve'])
+@pytest.mark.parametrize('kind', ['value', 'osqp'])
+def test_solver_exceptions_preserve_failure_report(setup, phase, kind):
+    solver, _ = setup
+    exception = ValueError('invalid problem') if kind == 'value' else solver.osqp.OSQPException(1)
+    with patch.object(solver.osqp, 'OSQP') as factory:
+        getattr(factory.return_value, phase).side_effect = exception
+        assert project(setup, [-.01, 0., 0.]) is None
+    assert solver.report['status'] == 'solver_error'
+    assert solver.report['num_constraints'] == 3
+    assert solver.report['num_calls'] == 1
+    assert solver.report['total_ms'] >= 0.
+
+
+def test_no_active_joint_keeps_hold_without_solver(setup):
+    solver, _ = setup
+    positions = np.array([0., 0., 2.])
+    with patch.object(solver.osqp, 'OSQP') as factory:
+        result = project(setup, [.3, .2, -.1], positions=positions, active=[])
+        factory.assert_not_called()
+    np.testing.assert_array_equal(result, positions)
+    assert result is not positions
+    assert solver.report['status'] == 'hold'
+    assert solver.report['num_constraints'] == 0
+
+
 @pytest.mark.parametrize('kind', ['no_solution', 'stale', 'overrun'])
 def test_output_failure_never_forwards_nominal_target(setup, kind):
     node = gng_lidar_demo.__new__(gng_lidar_demo)

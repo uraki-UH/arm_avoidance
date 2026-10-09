@@ -228,6 +228,16 @@ export function EntityColorModal({
                             </div>
 
                             <div className="space-y-2 rounded-md border border-white/5 bg-black/15 p-2">
+                                <label className="flex items-center justify-between text-xs">
+                                    Geometry
+                                    <select aria-label="Graph geometry" value={layerSettings.enable_simple_graph ? 'compact' : 'standard'}
+                                        onChange={event => onUpdate({ enable_simple_graph: event.target.value === 'compact' })}
+                                        className="rounded border border-white/10 bg-[var(--bg-primary)] px-2 py-1">
+                                        <option value="standard">Standard</option>
+                                        <option value="compact">Low polygon</option>
+                                    </select>
+                                </label>
+                                <p className="text-[10px] text-[var(--text-secondary)]">Low polygon keeps all nodes and edges with simpler spheres and cylinders.</p>
                                 <ControlSlider
                                     label="Node Size"
                                     value={layerSettings.nodeScale ?? 0.003}

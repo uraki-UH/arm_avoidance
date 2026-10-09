@@ -1,0 +1,64 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@topo/visualization/*": [
+        "../../libs/ros_visualization_web/*"
+      ],
+      "three": [
+        "node_modules/@types/three"
+      ],
+      "@viewer/*": [
+        "../../ToPoFuzzy-Viewer/frontend/src/*"
+      ],
+      "react": [
+        "node_modules/@types/react"
+      ],
+      "react/*": [
+        "node_modules/@types/react/*"
+      ],
+      "react-dom": [
+        "node_modules/@types/react-dom"
+      ],
+      "react-dom/*": [
+        "node_modules/@types/react-dom/*"
+      ],
+      "three/*": [
+        "node_modules/@types/three/*"
+      ],
+      "@react-three/fiber": [
+        "node_modules/@react-three/fiber"
+      ],
+      "@react-three/drei": [
+        "node_modules/@react-three/drei"
+      ],
+      "lucide-react": [
+        "node_modules/lucide-react"
+      ],
+      "urdf-loader": [
+        "node_modules/urdf-loader"
+      ]
+    },
+    "types": [
+      "node",
+      "vite/client"
+    ]
+  },
+  "include": [
+    "src",
+    "tests/*.ts",
+    "vite.config.ts"
+  ]
+}

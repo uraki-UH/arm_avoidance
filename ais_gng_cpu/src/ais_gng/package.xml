@@ -28,6 +28,7 @@
   <depend>rclcpp_components</depend>
   <depend>message_filters</depend>
   <depend>voxel_msgs</depend>
+  <depend>voxel_idx</depend>
   <depend>eigen</depend>
   <depend>gng_cpu</depend>
   <depend>nlohmann_json</depend>
@@ -44,6 +45,7 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>composition_interfaces</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -1,7 +1,6 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useLayoutEffect } from 'react';
 import * as THREE from 'three';
-import { useThree } from '@react-three/fiber';
-import { useDemandUpdate } from './SharedRenderers';
+import { DisplayFrame, useDemandUpdate } from './SharedRenderers';
 import { LAYER_COLORS, VoxelSettings, Transform } from '../../types';
 
 interface VoxelLayout {
@@ -18,7 +17,7 @@ interface VoxelLayout {
 interface VoxelMessage {
     type: 'stream.voxel';
     tag: string;
-    data: string[]; // BigInt IDs as strings
+    data: string[]; // BigInt IDの文字列表現
     labels?: number[];
     layout: VoxelLayout;
     frameId?: string;
@@ -26,8 +25,6 @@ interface VoxelMessage {
 
 export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { message: VoxelMessage, settings: VoxelSettings, tf?: { pos: number[]; quat: number[] } | null, manualTransform?: Transform }) => {
     const meshRef = useRef<THREE.InstancedMesh>(null);
-    const groupRef = useRef<THREE.Group>(null);
-    const { invalidate } = useThree();
     const { data, labels, layout } = message;
     const voxelSize = Math.round(layout.voxelSize * 1000) / 1000;
     const emissiveIntensity = settings?.emissiveIntensity ?? 0.2;
@@ -44,40 +41,6 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
         });
     }, [labels, uniformColor, useLabelColors]);
 
-    // TFおよび手動トランスフォームの適用
-    useEffect(() => {
-        if (!groupRef.current) return;
-        
-        // ベース位置をTFまたは原点にリセット
-        if (tf) {
-            groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
-            groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-        } else {
-            groupRef.current.position.set(0, 0, 0);
-            groupRef.current.quaternion.set(0, 0, 0, 1);
-        }
-
-        // 手動オフセットの適用（既存の共通仕様）
-        if (manualTransform) {
-            if (manualTransform.position) {
-                groupRef.current.position.x += manualTransform.position[0];
-                groupRef.current.position.y += manualTransform.position[1];
-                groupRef.current.position.z += manualTransform.position[2];
-            }
-            if (manualTransform.rotation) {
-                const euler = new THREE.Euler(
-                    manualTransform.rotation[0] * Math.PI / 180,
-                    manualTransform.rotation[1] * Math.PI / 180,
-                    manualTransform.rotation[2] * Math.PI / 180
-                );
-                groupRef.current.quaternion.multiply(new THREE.Quaternion().setFromEuler(euler));
-            }
-        }
-
-        invalidate();
-    }, [tf, manualTransform, invalidate]);
-
-    // ボクセルの復元計算
     const positions = useMemo(() => {
         const xShift = BigInt(layout.xShift);
         const yShift = BigInt(layout.yShift);
@@ -93,7 +56,7 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
             const x = Number((id >> xShift)) - Number(offset);
             const y = Number((id >> yShift) & mask) - Number(offset);
             const z = Number((id >> zShift) & mask) - Number(offset);
-            // Voxel IDs represent grid cells, so render at the cell center.
+            // ボクセルIDが表すセル中心への配置。
             return [
                 originX + (x + 0.5) * voxelSize,
                 originY + (y + 0.5) * voxelSize,
@@ -104,29 +67,32 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
 
     useDemandUpdate([positions, instanceColors, settings?.color, settings?.opacity, settings?.wireframe, emissiveIntensity]);
 
-    useEffect(() => {
+    // 個数の増減だけで描画資源を破棄しないための容量保持。
+    const capacity_ref = useRef(1);
+    const capacity = Math.max(capacity_ref.current, 2 ** Math.ceil(Math.log2(Math.max(1, positions.length))));
+    capacity_ref.current = capacity;
+    const white = useMemo(() => new THREE.Color('white'), []);
+    useLayoutEffect(() => {
         if (!meshRef.current) return;
         const dummy = new THREE.Object3D();
         positions.forEach((pos, i) => {
             dummy.position.set(pos[0], pos[1], pos[2]);
             dummy.updateMatrix();
             meshRef.current?.setMatrixAt(i, dummy.matrix);
-            if (useLabelColors && instanceColors[i]) {
-                meshRef.current?.setColorAt(i, instanceColors[i]);
-            }
+            meshRef.current?.setColorAt(i, useLabelColors ? instanceColors[i] : white);
         });
         meshRef.current.count = positions.length;
         meshRef.current.instanceMatrix.needsUpdate = true;
-        if (useLabelColors && meshRef.current.instanceColor) {
+        if (meshRef.current.instanceColor) {
             meshRef.current.instanceColor.needsUpdate = true;
         }
-    }, [instanceColors, positions, useLabelColors]);
+    }, [instanceColors, positions, useLabelColors, white, capacity]);
 
     const displaySize = voxelSize;
 
     return (
-        <group ref={groupRef}>
-            <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} frustumCulled={false}>
+        <DisplayFrame name={message.tag} frame_id={message.frameId} tf={tf} manual_transform={manualTransform}>
+            <instancedMesh key={capacity} ref={meshRef} args={[undefined, undefined, capacity]} count={0} frustumCulled={false}>
                 <boxGeometry args={[displaySize, displaySize, displaySize]} />
                 <meshStandardMaterial
                     color={useLabelColors ? '#ffffff' : uniformColor}
@@ -140,6 +106,6 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
                     roughness={0.1}
                 />
             </instancedMesh>
-        </group>
+        </DisplayFrame>
     );
 };

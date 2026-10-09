@@ -3,7 +3,7 @@
 This document describes the **v2** WebSocket API exposed by `viewer_ws_gateway_node`.
 
 ## Endpoint
-- URL: `ws://<host>:9001`
+- URL: `ws://127.0.0.1:9001`（localhost待受）。Simulatorの表示専用入口は `/observe`。Origin・要求制限・対応操作は [WS v2仕様](../common/ws_protocol_v2.md#transport)。
 - Transport:
   - Binary: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
   - Text: JSON request/response + async events
@@ -37,7 +37,7 @@ This document describes the **v2** WebSocket API exposed by `viewer_ws_gateway_n
 
 ### `stream.robot.delete`
 
-ロボットdescription配信元の消失時に、対象`tag`のキャッシュ削除と描画終了を通知。他のロボットは保持。再起動後は新しいdescriptionで再表示。[判定・メッセージ形式](../common/ws_protocol_v2.md#robot-lifecycle)。
+ロボットdescription配信元の消失時に、対象`tag`のキャッシュ削除と描画終了を通知。他のロボットは保持。再起動後は新しいdescriptionで入力一覧へ再登録し、選択済みの場合に再表示。[判定・メッセージ形式](../common/ws_protocol_v2.md#robot-lifecycle)。
 
 ### `stream.pointcloud.meta`
 Published before each binary cloud frame.

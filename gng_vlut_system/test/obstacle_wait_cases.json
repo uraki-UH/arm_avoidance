@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "name": "manual_resume",
+      "cwd": "../..",
+      "argv": ["python3", "-B", "gng_vlut_system/test/check_obstacle_auto_resume.py", "--no-auto-resume", "--output", "@case_dir@/gazebo"],
+      "metrics": "gazebo/metrics.json",
+      "env": {"ROS_DOMAIN_ID": "96", "ROS_LOCALHOST_ONLY": "1", "ROS2CLI_NO_DAEMON": "1"}
+    },
+    {
+      "name": "automatic_resume",
+      "cwd": "../..",
+      "argv": ["python3", "-B", "gng_vlut_system/test/check_obstacle_auto_resume.py", "--output", "@case_dir@/gazebo"],
+      "metrics": "gazebo/metrics.json",
+      "env": {"ROS_DOMAIN_ID": "96", "ROS_LOCALHOST_ONLY": "1", "ROS2CLI_NO_DAEMON": "1"}
+    }
+  ]
+}

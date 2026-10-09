@@ -1,6 +1,34 @@
 cmake_minimum_required(VERSION 3.10)
 project(gng_vlut_system)
 
+# Jazzy/HarmonicのPython実行環境。既定OFFによる従来C++ビルドの維持。
+option(enable_harmonic_runtime_only "Harmonic実行部品だけのインストール" OFF)
+if(enable_harmonic_runtime_only)
+  find_package(ament_cmake REQUIRED)
+  install(FILES
+    launch/dual_arm_tasks.launch.py
+    launch/dual_arm_gz.launch.py
+    launch/dual_arm_effort_config.py
+    launch/simulation_scenario.py
+    DESTINATION share/${PROJECT_NAME}/launch)
+  install(FILES config/dual_arm_effort.yaml DESTINATION share/${PROJECT_NAME}/config)
+  install(DIRECTORY config/simulation DESTINATION share/${PROJECT_NAME}/config)
+  install(FILES scripts/task_program.py scripts/task_components.py scripts/robot_graph_route.py DESTINATION lib/${PROJECT_NAME})
+  install(PROGRAMS scripts/task_executor.py scripts/harmonic_launcher.py DESTINATION lib/${PROJECT_NAME})
+  install(DIRECTORY
+    ../urdf/topo_dual_arm_max ../urdf/topo_dual_arm_max_long
+    DESTINATION share/${PROJECT_NAME}/urdf)
+  if(BUILD_TESTING)
+    find_package(ament_cmake_pytest REQUIRED)
+    ament_add_pytest_test(test_task_program test/test_task_program.py)
+    ament_add_pytest_test(test_task_components test/test_task_components.py)
+    ament_add_pytest_test(test_robot_graph_route test/test_robot_graph_route.py)
+    ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
+  endif()
+  ament_package()
+  return()
+endif()
+
 # Set default build type to Release for optimized performance
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -56,6 +84,8 @@ find_package(nlohmann_json REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(voxel_idx REQUIRED)
+find_package(pointcloud_sampling REQUIRED)
+include_directories(${pointcloud_sampling_INCLUDE_DIRS})
 find_package(grasping_system REQUIRED)
 find_package(gng_control_msgs REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters people sample_consensus search segmentation)
@@ -166,7 +196,15 @@ if(BUILD_TESTING)
     ament_target_dependencies(gng_nearest_index_benchmark Eigen3 rclcpp urdfdom)
   endif()
 
+  ament_add_pytest_test(test_object_class_recognition test/test_object_class_recognition.py)
   ament_add_pytest_test(test_dual_arm_collision_geometry test/test_dual_arm_collision_geometry.py)
+  ament_add_pytest_test(test_dual_arm_launch test/test_dual_arm_launch.py)
+  ament_add_pytest_test(test_avoidance_motion test/test_avoidance_motion.py)
+  ament_add_pytest_test(test_task_program test/test_task_program.py)
+  ament_add_pytest_test(test_task_components test/test_task_components.py)
+  ament_add_pytest_test(test_robot_graph_route test/test_robot_graph_route.py)
+  ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
+  ament_add_pytest_test(test_pointcloud_avoidance test/test_pointcloud_avoidance.py)
   ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
   ament_add_pytest_test(test_gazebo_stop_keyboard test/test_gazebo_stop_keyboard.py)
   ament_add_pytest_test(test_dual_arm_mode_model test/test_dual_arm_mode_model.py)
@@ -182,6 +220,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_gazebo_stop_latch test/test_gazebo_stop_latch.cpp)
   target_include_directories(test_gazebo_stop_latch PRIVATE src)
   ament_add_pytest_test(test_joint_command_model test/test_joint_command_model.py)
+  ament_add_pytest_test(test_mobile_state_graph test/test_mobile_state_graph.py)
   ament_add_gtest(test_joint_state_utils test/test_joint_state_utils.cpp)
   target_include_directories(test_joint_state_utils PRIVATE src)
   ament_target_dependencies(test_joint_state_utils Eigen3 sensor_msgs)
@@ -239,6 +278,12 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/urdf")
 endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
+  scripts/object_class_recognition.py
+  scripts/mobile_state_graph.py
+  scripts/task_program.py
+  scripts/task_components.py
+  scripts/robot_graph_route.py
+  scripts/joint_motion_state.py
   scripts/local_qp.py
   scripts/joint_command_model.py
   scripts/dual_arm_mode_model.py
@@ -247,10 +292,18 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 )
 
 install(PROGRAMS
+  scripts/object_class_recognition_node.py
+  scripts/mobile_state_graph_node.py
+  scripts/task_executor.py
+  scripts/robot_graph_bridge.py
+  scripts/harmonic_launcher.py
+  scripts/joint_motion_observer.py
   scripts/dynamixel_neck_torque.py
   scripts/dynamixel_sim_output.py
   scripts/dynamixel_sim_keyboard.py
   scripts/start_gazebo_physics.py
+  scripts/avoidance_motion.py
+  scripts/gng_avoidance_planner.py
   scripts/dual_arm_gng_lidar_demo.py
   scripts/external_pointcloud_bridge.py
   scripts/dual_arm_avoidance_demo.py

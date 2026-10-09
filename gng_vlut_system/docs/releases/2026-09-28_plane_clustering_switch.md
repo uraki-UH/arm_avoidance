@@ -5,7 +5,7 @@
 平面計算の設定を `plane_clustering` に一本化。CPU直結の計算本体と依存処理は維持。
 旧 `plane_cluster.direct_enabled` の宣言・launch変換を撤去し、関連launch・試験を移行。
 
-- センサー別YAMLの指定を共通YAMLより優先。
+- センサ別YAMLの指定を共通YAMLより優先。
 - 共通YAMLの既定値は従来同様 `false`。CPUノード単体の未指定時は従来同様 `true`。
 - CPUノードへの直接指定も `-p plane_clustering:=true` または `false`。
 - 曲面側の `curve_clustering` と `surface_model.enable` の関係は変更なし。
@@ -14,7 +14,7 @@
 
 ## 条件・検証
 
-- 設定解決テスト15件成功。CPU/GPU、ON/OFF、共通値とセンサー値の優先、外部平面入力を確認。
+- 設定解決テスト15件成功。CPU/GPU、ON/OFF、共通値とセンサ値の優先、外部平面入力を確認。
 - 共通設定から旧パラメータが生成されないことを回帰テストで確認。
 - ais_gngのCPU/GPUビルド・install成功。検証・ビルドプロセスは全て終了。
 - 実bag再生・処理時間比較は未実施。計算アルゴリズムの変更なし。

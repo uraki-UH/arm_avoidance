@@ -57,7 +57,7 @@ bash /ros2_ws/src/benchmarks/gng_spatial_nearest_20260923/run_fixed_order_benchm
 
 **制約**
 
-GNGコアの直接API計測であり、ROS変換・TF・配信・viewer・外部分類器の時間は対象外。センサー座標のまま入力し、bag／YAML／学習条件を固定。CPU固定なし、既存処理との競合を含む測定であり、全ROS系のリアルタイム性能は未検証。
+GNGコアの直接API計測であり、ROS変換・TF・配信・viewer・外部分類器の時間は対象外。センサ座標のまま入力し、bag／YAML／学習条件を固定。CPU固定なし、既存処理との競合を含む測定であり、全ROS系のリアルタイム性能は未検証。
 
 木探索の変更による実bagの視覚的品質評価は未実施。YAML値や探索の意味を変えずにグリッド版と同じグラフを生成する最適化ではない。
 

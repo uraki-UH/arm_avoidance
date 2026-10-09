@@ -1,6 +1,7 @@
+import { ViewerEnvironment } from '../../embedding';
 import { useArrowSettings, marker_arrow_batches, marker_color } from './arrows';
 import { DisplayFrame, ArrowBatch, useDemandUpdate, use_click_pick } from './SharedRenderers';
-import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
@@ -32,13 +33,14 @@ function MarkerFrame({
     allow_untransformed: boolean;
     children: ReactNode;
 }) {
+    const { resolve_frame } = useContext(ViewerEnvironment);
     const frameId = marker.frameId || 'world';
     const tf = frameId === 'world' ? null : (transforms[frameId] ?? null);
 
     // 候補PoseはTF不明時に非表示。通常Markerの既存フォールバックは維持
-    if (!allow_untransformed && (!marker.frameId || (frameId !== 'world' && !tf))) return null;
+    if (!resolve_frame && !allow_untransformed && (!marker.frameId || (frameId !== 'world' && !tf))) return null;
 
-    return <DisplayFrame tf={tf} manual_transform={manualTransform}>
+    return <DisplayFrame frame_id={marker.frameId} tf={tf} manual_transform={manualTransform}>
         {/* 矢印の姿勢は入力変換済み。通常Markerの姿勢は共通フレームで適用 */}
         {marker.type === 'arrow' ? children :
             <group position={marker.pos ?? [0, 0, 0]} quaternion={marker.quat ?? [0, 0, 0, 1]}>{children}</group>}
@@ -165,17 +167,27 @@ function ListMarker({ marker, source_id, on_inspect }: {
 function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
     const { color, opacity } = useMemo(() => marker_color(marker.color), [marker.color]);
     const isCube = marker.type === 'cube';
+    const { invalidate } = useThree();
 
     const geometry = useMemo(() => {
         if (marker.type === 'sphere') return new THREE.SphereGeometry(0.5, 16, 12);
         if (marker.type === 'cylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
-        return new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+        const box = new THREE.BoxGeometry(1, 1, 1);
+        const edges = new THREE.EdgesGeometry(box);
+        box.dispose();
+        return edges;
     }, [marker.type]);
 
     const material = useMemo(() => {
-        if (isCube) return new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
-        return new THREE.MeshLambertMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
-    }, [isCube, color, opacity]);
+        if (isCube) return new THREE.LineBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
+        return new THREE.MeshLambertMaterial({ transparent: true, depthTest: false, depthWrite: false });
+    }, [isCube]);
+    // ストリーム更新時のマテリアル・シェーダー再生成の回避。
+    useLayoutEffect(() => {
+        material.color.copy(color);
+        material.opacity = opacity;
+        invalidate();
+    }, [material, color, opacity, invalidate]);
 
     useEffect(() => () => material.dispose(), [material]);
     useEffect(() => () => geometry.dispose(), [geometry]);

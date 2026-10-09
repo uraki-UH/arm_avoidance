@@ -1,3 +1,5 @@
+import { robot_source_id } from './utils/stream_sources';
+import { ViewerEnvironment, type viewer_host, type scene_surface_props } from './embedding';
 import { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
@@ -33,6 +35,7 @@ import {
     nodeHasManipulabilityData,
     useGraphLayerSettings,
 } from './features/visualization/graphLayerSettings';
+import { is_auxiliary_voxel_layer } from './features/visualization/layer_display';
 
 type ClippingRange = Pick<ClippingPlane, 'min' | 'max'>;
 
@@ -111,13 +114,44 @@ function useClippingPlanes() {
 
 function ClippingPlaneSync({ planes }: { planes: THREE.Plane[] }) {
     const { gl, invalidate } = useThree();
-
     useEffect(() => {
         gl.clippingPlanes = planes;
         invalidate();
     }, [gl, invalidate, planes]);
-
     return null;
+}
+
+function ContextRecovery() {
+    const { gl, invalidate } = useThree();
+    useEffect(() => {
+        const canvas = gl.domElement;
+        const on_lost = (event: Event) => { event.preventDefault(); };
+        const on_restored = () => invalidate();
+        canvas.addEventListener('webglcontextlost', on_lost);
+        canvas.addEventListener('webglcontextrestored', on_restored);
+        return () => {
+            canvas.removeEventListener('webglcontextlost', on_lost);
+            canvas.removeEventListener('webglcontextrestored', on_restored);
+        };
+    }, [gl, invalidate]);
+    return null;
+}
+
+const viewer_canvas_options = { localClippingEnabled: false, powerPreference: 'high-performance' as const, antialias: false };
+
+function standalone_scene({ children, clipping_planes }: scene_surface_props) {
+    return <Canvas frameloop="demand" dpr={1}
+        camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
+        gl={viewer_canvas_options}>
+        <ContextRecovery />
+        <ClippingPlaneSync planes={clipping_planes} />
+        <ambientLight intensity={0.3} />
+        <pointLight position={[10, 10, 10]} intensity={0.5} />
+        <pointLight position={[-10, -10, -10]} intensity={0.3} />
+        {children}
+        <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
+        <OrbitControls makeDefault />
+    </Canvas>;
 }
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
@@ -136,7 +170,12 @@ type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: stri
 type point_cloud_view_settings = Pick<PointCloudData,
     'visible' | 'opacity' | 'position' | 'rotation' | 'scale' | 'matrix'>;
 
-function App() {
+function App({ host }: { host?: viewer_host } = {}) {
+    const SceneSurface = host?.scene_surface ?? standalone_scene;
+    const Layout = host?.layout ?? MainLayout;
+    const SidebarShell = host?.sidebar ?? Sidebar;
+    const is_read_only = !!host;
+
     const local_meshes = useLocalMeshes();
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
     // 配信元の停止を跨ぐ表示設定のみの保持。点群バッファの保持なし。
@@ -162,7 +201,8 @@ function App() {
     const [colorContext, setColorContext] = useState<ColorContext | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
-    const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
+    const wsUrl = host?.endpoint ?? `ws://${window.location.hostname}:${viewerPort}`;
+    const api = useWebSocket(wsUrl, { is_read_only, on_transforms: host?.on_transforms, on_clear: host?.on_clear });
     const {
         pointClouds: wsPointClouds,
         markerData,
@@ -175,7 +215,6 @@ function App() {
         error: wsError,
         connect,
         disconnect,
-        deleteGraphLayer,
         sources,
         getSources,
         subscribeSource,
@@ -203,8 +242,13 @@ function App() {
         register_vehicle,
         inspect_graph,
         inspect_graph_bounds,
-    } = useWebSocket(wsUrl);
+    } = api;
+    useEffect(() => { host?.on_state(api); });
+    const environment = useMemo(() => host?.environment ?? {
+        mesh_base_url: wsUrl.replace(/^ws/, 'http').replace(/\/$/, '') + '/meshes/',
+    }, [host, wsUrl]);
 
+    // 初回表示・接続先変更時の自動接続。手動切断後の再描画による再接続なし。
     useEffect(() => {
         connect();
         return () => disconnect();
@@ -215,13 +259,6 @@ function App() {
   const { getZoneCounts } = zoneMonitor;
 
     const threeClippingPlanes = clipping.threePlanes;
-
-    // Stable gl config: clipping planes are synchronized inside the Canvas.
-    const canvasGl = useMemo(() => ({
-        localClippingEnabled: false,
-        powerPreference: 'high-performance' as const,
-        antialias: false,
-    }), []);
 
     const {
         layerSettings,
@@ -269,6 +306,7 @@ function App() {
                     if (!next[tag]) {
                         next[tag] = {
                             ...defaults,
+                            ...(data === voxelData && is_auxiliary_voxel_layer(tag) ? { visible: false } : {}),
                             ...(isLabeledVoxel ? { color: '#ffff00', colorMode: 'uniform' } : {}),
                             ...(isIsolatedVoxel ? { color: '#ff3131', colorMode: 'uniform' } : {}),
                             ...(data === robotData && tag.includes('candidate_goal_preview') ? { opacity: 0.18 } : {}),
@@ -296,17 +334,12 @@ function App() {
     };
 
     const removeEntity = (type: EntityType, tag: string) => {
-        const updaters: Record<string, any> = { robot: setRobotSettings, marker: setMarkerSettings, voxel: setVoxelSettings };
-        updaters[type]?.((prev: any) => { const n = { ...prev }; delete n[tag]; return n; });
-
-        // Also unsubscribe from the stream if it's a streamable entity
-        if (type === 'marker' || type === 'voxel') {
-            unsubscribeSource(tag, true);
-        }
+        const source_id = type === 'robot' ? robot_source_id(tag) : tag;
+        void unsubscribeSource(source_id, true).catch(error => console.warn('入力の解除に失敗しました:', error));
     };
 
     const removeLayer = (tag: string) => {
-        deleteGraphLayer(tag);
+        void unsubscribeSource(tag, true).catch(error => console.warn('入力の解除に失敗しました:', error));
         removeLayerSettings(tag);
     };
 
@@ -325,7 +358,6 @@ function App() {
         return aggregated;
   }, [getZoneCounts, graphData, layerSettings]);
 
-    const [disabledSourceIds, setDisabledSourceIds] = useState<Set<string>>(new Set());
 
     const [selectedClusterSnapshot, setSelectedClusterSnapshot] = useState<ClusterSnapshot | null>(null);
     const [is_inspecting, set_is_inspecting] = useState(false);
@@ -400,7 +432,6 @@ function App() {
             let changed = false;
 
             Object.values(wsPointClouds).forEach((cloud) => {
-                if (disabledSourceIds.has(cloud.id)) return;
                 if (isEditMode && editLayerId === cloud.id) return;
 
                 const index = next.findIndex((pc) => pc.id === cloud.id);
@@ -438,7 +469,7 @@ function App() {
 
             return changed ? next : prev;
         });
-    }, [wsPointClouds, disabledSourceIds, pointCloudOpacity, isEditMode, editLayerId]);
+    }, [wsPointClouds, pointCloudOpacity, isEditMode, editLayerId]);
 
     useEffect(() => {
         for (const [id, settings] of point_cloud_view_settings_ref.current) {
@@ -469,7 +500,6 @@ function App() {
         if (isEditMode) return;
         point_cloud_view_settings_ref.current.delete(id);
         update_point_cloud_display(id, null);
-        setDisabledSourceIds((prev) => new Set(prev).add(id));
         setPointClouds((prev) => {
             const filtered = prev.filter((pc) => pc.id !== id);
             if (selectedLayerId === id) {
@@ -488,20 +518,6 @@ function App() {
         setPointClouds((prev) => prev.map((pc) => (
             pc.id === id ? { ...pc, visible: !pc.visible } : pc
         )));
-    };
-
-    const handleSourceToggled = (sourceId: string, active: boolean) => {
-        if (isEditMode) return;
-        if (active) {
-            setDisabledSourceIds((prev) => {
-                const next = new Set(prev);
-                next.delete(sourceId);
-                return next;
-            });
-            return;
-        }
-
-        setDisabledSourceIds((prev) => new Set(prev).add(sourceId));
     };
 
     const handleUpdateTransform = (id: string, updates: Partial<PointCloudData>) => {
@@ -527,11 +543,10 @@ function App() {
         setSelectedLayerId(id);
     };
 
-    const totalPoints = pointClouds.reduce((sum, pc) => sum + pc.count, 0);
     const selectedCloud = pointClouds.find((pc) => pc.id === selectedLayerId);
     const renderClouds = isEditMode && editLayerId
         ? pointClouds.filter((pc) => pc.id === editLayerId)
-        : pointClouds.filter((pc) => !disabledSourceIds.has(pc.id));
+        : pointClouds;
 
     const [boundsBuffer, setBoundsBuffer] = useState<ReturnType<typeof calculateBounds>[]>([]);
     const [smoothedBounds, setSmoothedBounds] = useState<ReturnType<typeof calculateBounds> | undefined>(undefined);
@@ -614,12 +629,13 @@ function App() {
     };
 
     return (
-        <>
-            <MainLayout
+        <ViewerEnvironment.Provider value={environment}>
+            <Layout
                 isSidebarOpen={isSidebarOpen}
                 sidebar={
-                    <Sidebar isOpen={isSidebarOpen} onToggle={toggleSidebar}>
+                    <SidebarShell isOpen={isSidebarOpen} onToggle={toggleSidebar}>
                         <SidebarContent
+                            is_read_only={is_read_only}
                             local_meshes={local_meshes}
                             isConnected={isConnected}
                             connect={connect}
@@ -629,7 +645,6 @@ function App() {
                             getSources={getSources}
                             subscribeSource={subscribeSource}
                             unsubscribeSource={unsubscribeSource}
-                            onSourceToggled={handleSourceToggled}
                             onLoadCloud={handleAddPointCloud}
                             listRosbags={listRosbags}
                             playRosbag={playRosbag}
@@ -637,7 +652,6 @@ function App() {
                             getRosbagStatus={getRosbagStatus}
                             listPointCloudFiles={listPointCloudFiles}
                             loadPointCloudFile={loadPointCloudFile}
-                            totalPoints={totalPoints}
                             pointClouds={pointClouds}
                             selectedLayerId={selectedLayerId}
                             onSelectLayer={handleSelectLayer}
@@ -704,36 +718,14 @@ function App() {
                                 setColorContext(prev => (prev?.type === type && prev?.id === id ? null : { type, id, title }));
                             }}
                         />
-                    </Sidebar>
+                    </SidebarShell>
                 }
             >
-                <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
+                <div className={host ? "viewer-dialog-layer" : "w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black"}>
                     <WebGLErrorBoundary>
-                    <Canvas
-                        frameloop="demand"
-                        dpr={1}
-                        camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
-                        gl={canvasGl}
-                        onCreated={({ gl, invalidate }) => {
-                            gl.domElement.addEventListener('webglcontextlost', (e) => {
-                                e.preventDefault();
-                                console.warn('[WebGL] context lost; waiting for browser restoration', {
-                                    time: new Date().toISOString(),
-                                    statusMessage: (e as WebGLContextEvent).statusMessage,
-                                });
-                            });
-                            gl.domElement.addEventListener('webglcontextrestored', () => {
-                                console.info('[WebGL] context restored', new Date().toISOString());
-                                invalidate();
-                            });
-                        }}
-                    >
-                        <ClippingPlaneSync planes={threeClippingPlanes} />
-                        <ambientLight intensity={0.3} />
+                    <SceneSurface clipping_planes={threeClippingPlanes}>
                         {local_meshes.items.map(item => <LocalMeshRenderer key={item.id} item={item}
                             focus_req={local_meshes.focus?.id === item.id ? local_meshes.focus.req : undefined} />)}
-                        <pointLight position={[10, 10, 10]} intensity={0.5} />
-                        <pointLight position={[-10, -10, -10]} intensity={0.3} />
 
                         {renderClouds.map((pc) => {
                             const tf = pc.frameId && pc.frameId !== 'world' ? (transforms[pc.frameId] ?? null) : null;
@@ -786,8 +778,11 @@ function App() {
                             }
                         ].map(({ data, settings, component, defaultSettings }) =>
                             Object.entries(data).map(([tag, d]: [string, any]) => {
-                                const s = (settings as any)[tag] || defaultSettings;
-                                if (!s.visible || disabledSourceIds.has(tag)) return null;
+                                const s = (settings as any)[tag] || {
+                                    ...defaultSettings,
+                                    ...(data === voxelData && is_auxiliary_voxel_layer(tag) ? { visible: false } : {}),
+                                };
+                                if (!s.visible) return null;
                                 const tf = d.frameId && d.frameId !== 'world' ? (transforms[d.frameId] ?? null) : null;
                                 return component(tag, d, s, tf);
                             })
@@ -795,7 +790,7 @@ function App() {
 
                         {Object.entries(graphData).map(([tag, data]) => {
                             const settings = layerSettings[tag];
-                            if (!settings || !settings.visible || disabledSourceIds.has(tag)) return null;
+                            if (!settings || !settings.visible) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
                             return <GraphRenderer key={tag} tag={tag} data={data} settings={settings} tf={tf}
                                 selectedClusterId={selectedClusterSnapshot?.source_id === tag && selectedClusterSnapshot.selection.kind === 'cluster'
@@ -809,9 +804,7 @@ function App() {
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
                     <CandidateHoverFrame is_enabled={!isEditMode && !zoneMonitor.isDrawing} get_bounds={get_hover_bounds} on_inspect={handle_inspect}
                         transforms={transforms} layer_settings={layerSettings} />
-                    <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
-                    <OrbitControls makeDefault />
-                </Canvas>
+                </SceneSurface>
                     </WebGLErrorBoundary>
                 {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={close_inspection}
                     on_refresh={refresh_inspection} is_loading={is_inspecting} error={inspection_error} register_vehicle={register_vehicle} />}
@@ -822,7 +815,7 @@ function App() {
                     </div>}
                 {selectedManipSnapshot && <GraphNodeDetailPanel snapshot={selectedManipSnapshot} onClose={() => setSelectedManipSnapshot(null)} />}
             </div>
-        </MainLayout>
+        </Layout>
 
             <GenericTransformModal
                 open={!!transformContext}
@@ -936,7 +929,7 @@ function App() {
                     }
                 }}
             />
-        </>
+        </ViewerEnvironment.Provider>
     );
 }
 

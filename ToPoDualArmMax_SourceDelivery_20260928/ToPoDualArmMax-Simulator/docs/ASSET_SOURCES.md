@@ -4,6 +4,30 @@
 
 ## Livox MID-360
 
+Longの胸部モデル:
+
+- 入力: ユーザー提供`urdf/ToPoDualArm-Max (long)45d.step`。
+- 同梱形状: `app/meshes/chest_lidar_mount_45.stl`、`chest_lidar_color_0.stl`〜`chest_lidar_color_3.stl`。ROS用`urdf/topo_dual_arm_max_long/meshes/`と同一のSTL。
+- 青色カバー: STEP球面の軸合わせ・隣接面の接合後に三角形化。元の半径・中心・上下境界を維持、面の欠損を回避。再生成処理は元ワークスペースの`scripts/rebuild_chest_lidar_cover.py`。
+- 原点・姿勢: 同梱`app/source.urdf`の固定リンク。mm→mのみ、追加の軸回転なし。
+- 材質: STEPの面色4種類をlinear RGBで保持。ブラケットはロボットのgreen材質。実機の反射率・透過率の再現は対象外。
+- 描画原本: workspaceの`urdf/topo_dual_arm_max_long/`。ROS・ブラウザのvisual・色・STLの共通ソース。ブラウザ同梱分は生成物で、直接の形状修正は原本側。
+- 描画キャッシュ: 下記コマンドで原本を同期して再生成。形状ハッシュは`app/assets.json`。同梱データだけの再生成は従来の`python3 tools/rebuild_meshes.py --model long`も使用可能。
+- 権利: 提供データの権利条件を継承。新たな再配布許諾の付与なし。
+
+workspaceルートからの描画アセット同期:
+
+```bash
+python3 -B ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/tools/rebuild_meshes.py \
+  --model long --source-urdf urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf
+```
+
+同期範囲はvisual・材質・参照メッシュ。リンク構成一致が必要。ブラウザ用のcollision・関節・慣性は保持し、物理モデル全体の上書きはなし。STL未変更時は既存キャッシュを再利用。配布後の実行時にworkspaceへのアクセスは不要。
+
+ROS Viewerは`robot_viewer_bridge_node`起動時の参照メッシュ更新時刻・サイズをdescriptionに付加。同一URLでも更新情報の変更時は描画キャッシュを再取得。姿勢更新周期でのファイル走査・稼働中の自動監視はなし。原本変更後はブリッジの再起動が必要。キャッシュ修正前のページは初回のみ再読込み。
+
+標準モデルの従来センサ:
+
 - メーカー配布ページ: https://www.livoxtech.com/mid-360/downloads
 - 公式原本: https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Mid360/mid-360-asm.stp
 - `assets/mid360/mid-360-asm.stp`: 配布STEPをそのまま保存。
@@ -34,6 +58,13 @@
 - ロゴの権利表記: https://github.com/KhronosGroup/glTF-Sample-Assets/blob/main/LICENSES/LicenseRef-LegalMark-Khronos.txt
 - 変更: 軸・中心の変換、ボディ色、配置・サイズ変更機能。原本GLBは変更せず保存。
 - これはコンセプト車の3Dアセットであり、メーカーの設計CADや実寸公差の保証値ではありません。
+
+## Littlest Tokyo（2026-10-07取得）
+
+- 街並みGLB: `app/assets/environments/littlest_tokyo/LittlestTokyo.glb`。
+- 作者・ライセンス: Glen Fox / glenatron、CC BY 4.0。GLB内`asset.extras`とThree.js公式サンプルの作者表記で確認。
+- 出典・ハッシュ・表示時の変換: [同梱クレジット](../app/assets/environments/littlest_tokyo/ATTRIBUTION.md)。
+- 表示・センサ用の固定環境。物理衝突とアニメーションは未対応。
 
 ## ライブラリ
 

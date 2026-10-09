@@ -19,6 +19,8 @@ A high-performance web-based Point Cloud Viewer and Editor built with React, Thr
 
 ## メッシュモデルの直接表示
 
+ロボットURDFのメッシュ更新は`robot_viewer_bridge_node`の再起動で反映。参照STLの更新情報も形状キャッシュの判定対象。Long双腕のROS・ブラウザ共通描画原本と同期手順は[アセット仕様](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/docs/ASSET_SOURCES.md#livox-mid-360)を参照。
+
 メッシュを点群化せずに追加する場合は `Data → Mesh Models`。
 OBJ・PLY・STL・GLB/glTF・FBXに対応。[直接表示の手順・取得済み車両モデルの例](doc/MESH_MODELS.md)。
 
@@ -33,6 +35,20 @@ Color Mode（RGB・単色・Heatmap）、単色の色、Heatmapの配色・範�
 レイヤーの明示削除またはブラウザリロードで解除します。永続保存はありません。
 設定変更は描画のみで、ROS入力・GNG学習・点群データや送信レートには影響しません。
 個別Heatmapの範囲は設定値を使用し、別トピックを含む全体点群の範囲による自動上書きはありません。
+
+## ロボット学習結果のレイヤー表示
+
+同じ名前空間の `Tmap_static` と `Tmap_static_L0` を受信した場合、標準グラフの
+`Tmap_static` は初期非表示です。左右別の `Tmap_static_L0`・`Tmap_static_L1` は表示を維持します。
+L0を受信していない場合は標準グラフを表示します。表示ボタンによる手動選択は後続受信でも保持します。
+
+補助ボクセルは初期非表示です。必要な場合は各レイヤーの表示ボタンで確認できます。
+
+Scene Layersの表示名は `roi_voxels`・`self_voxel`・`self_filter_roi_voxels` など、
+ROSトピック末尾の名前です。日本語の用途名への置き換えはありません。
+
+初期可視性の変更だけで、ROSトピックの配信や自己除去処理は継続します。
+表示変更の反映にはブラウザの再読み込みが必要です。
 
 ## ロボット候補のリンク別表示設定
 
@@ -153,6 +169,8 @@ ros2 run ais_gng ais_gng_node
   - `CAR` = 青紫（`#8b5cf6`）
 - The arm renderer follows `/joint_states` via the gng_safety bridge and updates the pose in real time.
 - In the GNG Topology panel, `Nodes` and `Edges` can be toggled independently, and `Edge Width` adjusts the whole graph thickness.
+- `Graph colors → Geometry → Low polygon`で球・円柱の分割数を減らす軽量表示へ切替可能。全ノード・辺・位置・色・選択対象を維持しますが、拡大時の丸みは粗くなります。既定は`Standard`。SimulatorのROSレイヤーでも同じ設定を使用します。
+- 更新のないノード・辺は姿勢行列と色を再利用し、不要なGPU転送を抑止します。全ノードが動く入力では、この削減効果は小さくなります。
 - 環境GNGの人・車の確定分類は、Streamsで`/topological_map`を選択した後、所属ノードの色へ反映。Humanは赤紫、Carは青紫。レイヤー欄の`Human: N / Car: N`は確定クラスタ数。
 - `Clusters`をONにすると人は円柱、車はボックスで追加表示。既定OFFと既存の表示設定を維持し、トピックの自動選択なし。ノード色は`Clusters`のON/OFFとは独立。
 - 境界・把持など有効な属性色や明示的な単色指定は優先。分類解除後は元のノード色へ復帰。今回の表示更新にはブラウザの再読み込みのみ、ROSノードの再起動は不要。

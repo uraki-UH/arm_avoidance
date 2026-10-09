@@ -3,11 +3,10 @@
 import argparse
 import json
 import os
-import select
 import signal
 import time
 
-from dual_arm_control_keyboard import terminal_key_decoder, control_request
+from dual_arm_control_keyboard import terminal_key_decoder, control_request, read_terminal_action
 from gazebo_stop_keyboard import terminal_input, stop_request, status_label, is_fresh_age
 
 
@@ -37,7 +36,9 @@ def gazebo_status_label(latest, received, now):
         state = {'waiting': '準備中', 'idle': '開始待ち', 'running': '実行中',
                  'completed': '完了', 'stopped': '開始待ち', 'fault': '異常'}.get(state, state or '不明')
         if latest.get('demo', {}).get('state') == 'running' and latest['demo'].get('phase') == 'obstacle_wait':
-            state = '障害物待ち（離れたら自動再開）'
+            state = ('障害物待ち（離れたら自動再開）'
+                     if latest['demo'].get('enable_obstacle_auto_resume') is True
+                     else '障害物待ち（Aで保持へ）')
     label = ' | '.join(part for part in (f'gazebo | mode={mode}', safety, f'回避={state}') if part)
     if mode == 'stop':
         # 停止理由も同じ状態行へ集約。改行を含む詳細ログの端末展開なし
@@ -57,6 +58,27 @@ def gazebo_reset_feedback(message):
     if not message.startswith(prefix):
         return None
     return ' '.join(message[len(prefix):].split())[:180]
+
+
+def operation_parameters(action, latest, received, now_sec):
+    """通信なしの操作判定。戻り値: 要求パラメータ、または拒否理由。"""
+    if action not in ('enable', 'follow', 'positive', 'negative', 'reset', 'sim_reset', 'avoidance'):
+        return None, '未対応の操作'
+    state = latest.get('hardware', {})
+    if action not in ('sim_reset', 'avoidance') and not is_fresh_age(now_sec-received.get('hardware', -1e9)):
+        return None, '実機状態が未受信・失効。停止キーだけ利用可能'
+    if action == 'enable':
+        return {'data': state.get('mode') == 'off'}, ''
+    if action == 'follow':
+        return {'data': state.get('mode') != 'follow'}, ''
+    if action != 'avoidance':
+        return {}, ''
+    if not is_fresh_age(now_sec-received.get('sim', -1e9)):
+        return None, 'Gazebo制御状態が未受信・失効'
+    if (not is_fresh_age(now_sec-received.get('demo', -1e9)) or
+            latest.get('demo', {}).get('state') not in ('idle', 'running', 'completed', 'stopped')):
+        return None, 'Gazebo回避ノードの準備待ち・入力失効。Aを再操作してください'
+    return {'data': latest['sim'].get('mode') != 'avoidance'}, ''
 
 
 def main():
@@ -93,11 +115,13 @@ def main():
     node.create_subscription(String, sim+'/control/status', lambda msg: on_status(msg, 'sim'), 1)
     node.create_subscription(String, sim+'/safety/status', lambda msg: on_status(msg, 'safety'), 1)
     node.create_subscription(String, sim+'/avoidance/status', lambda msg: on_status(msg, 'demo'), 1)
-    clients = {name: node.create_client(kind, topic) for name, kind, topic in [
+    services = [
         ('enable', SetBool, hw+'/enable'), ('follow', SetBool, hw+'/follow'),
         ('positive', Trigger, hw+'/jog_positive'), ('negative', Trigger, hw+'/jog_negative'),
         ('reset', Trigger, hw+'/reset'), ('sim_reset', Trigger, sim+'/control/reset'),
-        ('avoidance', SetBool, sim+'/control/avoidance')]}
+        ('avoidance', SetBool, sim+'/control/avoidance')]
+    clients = {name: node.create_client(kind, topic) for name, kind, topic in services}
+    request_factories = {name: kind.Request for name, kind, _ in services}
     requests = [stop_request(node.create_client(Trigger, topic), Trigger.Request, emit)
                 for topic in (hw+'/stop', sim+'/control/stop')]
     torque_request = stop_request(node.create_client(Trigger, hw+'/torque_off'), Trigger.Request,
@@ -110,6 +134,29 @@ def main():
         if feedback is not None:
             latest['sim_operation'] = feedback
     operation = control_request(emit_operation)
+
+    def handle_action(action):
+        """停止要求を最優先とする送信境界。戻り値: 終了要求の有無。"""
+        if action == 'torque_off':
+            operation.cancel()
+            torque_request.begin()
+            requests[1].begin()
+            return False
+        if action in ('stop', 'quit'):
+            latest.pop('sim_operation', None)
+            operation.cancel()
+            for request in requests:
+                request.begin()
+            return action == 'quit'
+        if action is None or any(request.is_pending for request in all_requests):
+            return False
+        parameters, reason = operation_parameters(action, latest, received, time.monotonic())
+        if parameters is None:
+            emit(reason)
+            return False
+        operation.begin(clients[action], request_factories[action](**parameters), action)
+        return False
+
     exit_state = {'is_requested': False}
     handlers = {kind: signal.signal(kind, lambda *_: exit_state.update(is_requested=True))
                 for kind in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
@@ -127,40 +174,9 @@ def main():
     try:
         with terminal_input(stream) as descriptor:
             while rclpy.ok():
-                action = 'quit' if exit_state['is_requested'] and not is_exiting else None
-                if not is_exiting and select.select([descriptor], [], [], 0)[0]:
-                    action = decoder.read_action(os.read(descriptor, 1))
-                if action == 'torque_off':
-                    operation.cancel()
-                    torque_request.begin()
-                    requests[1].begin()
-                elif action in ('stop', 'quit'):
-                    latest.pop('sim_operation', None)
-                    operation.cancel()
-                    for request in requests:
-                        request.begin()
-                    if action == 'quit':
-                        is_exiting, exit_deadline = True, time.monotonic()+3.
-                elif action and not any(request.is_pending for request in all_requests):
-                    state = latest.get('hardware', {})
-                    if action not in ('sim_reset', 'avoidance') and time.monotonic()-received.get('hardware', -1e9) > .5:
-                        emit('実機状態が未受信・失効。停止キーだけ利用可能')
-                    else:
-                        request = Trigger.Request()
-                        if action == 'enable':
-                            request = SetBool.Request(data=state.get('mode') == 'off')
-                        elif action == 'follow':
-                            request = SetBool.Request(data=state.get('mode') != 'follow')
-                        elif action == 'avoidance':
-                            if time.monotonic()-received.get('sim', -1e9) > .5:
-                                emit('Gazebo制御状態が未受信・失効')
-                                continue
-                            if (time.monotonic()-received.get('demo', -1e9) > .5 or
-                                    latest.get('demo', {}).get('state') not in ('idle', 'running', 'completed', 'stopped')):
-                                emit('Gazebo回避ノードの準備待ち・入力失効。Aを再操作してください')
-                                continue
-                            request = SetBool.Request(data=latest['sim'].get('mode') != 'avoidance')
-                        operation.begin(clients[action], request, action)
+                action = read_terminal_action(descriptor, decoder, exit_state['is_requested'], is_exiting)
+                if handle_action(action):
+                    is_exiting, exit_deadline = True, time.monotonic()+3.
                 for request in all_requests:
                     request.poll()
                 operation.poll()

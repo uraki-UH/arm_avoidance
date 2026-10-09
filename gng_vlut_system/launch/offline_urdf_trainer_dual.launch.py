@@ -25,10 +25,17 @@ def launch_setup(context, *args, **kwargs):
     validation_dump_path = LaunchConfiguration("validation_dump_path").perform(context)
     gng_profile_names = LaunchConfiguration("gng_profile_names").perform(context)
     use_task_density_bias = LaunchConfiguration("use_task_density_bias").perform(context)
+    enable_independent_arms = LaunchConfiguration("enable_independent_arms").perform(context)
     enable_nearest_index = LaunchConfiguration("enable_nearest_index").perform(context)
+    enable_static_collision_cache = LaunchConfiguration("enable_static_collision_cache").perform(context)
     max_node_num = LaunchConfiguration("max_node_num").perform(context)
     max_iterations = LaunchConfiguration("max_iterations").perform(context)
     refine_iterations = LaunchConfiguration("refine_iterations").perform(context)
+    coord_edge_iterations = LaunchConfiguration("coord_edge_iterations").perform(context)
+
+    enable_batched_collision_filter = LaunchConfiguration("enable_batched_collision_filter").perform(context)
+    collision_worker_num = LaunchConfiguration("collision_worker_num").perform(context)
+    num_local_neighbors = LaunchConfiguration("num_local_neighbors").perform(context)
 
     # 上書き用パラメータの準備
     overrides = {}
@@ -69,14 +76,32 @@ def launch_setup(context, *args, **kwargs):
         overrides["gng.profile_names"] = gng_profile_names
     use_task_density_bias_value = (use_task_density_bias.lower() == "true")
     overrides["gng_params.use_task_density_bias"] = use_task_density_bias_value
+    if enable_batched_collision_filter:
+        if enable_batched_collision_filter.lower() not in ("true", "false"):
+            raise ValueError("enable_batched_collision_filter must be true or false")
+        overrides["gng.enable_batched_collision_filter"] = enable_batched_collision_filter.lower() == "true"
+    if collision_worker_num:
+        overrides["gng.collision_worker_num"] = int(collision_worker_num)
+    if num_local_neighbors:
+        overrides["gng.num_local_neighbors"] = int(num_local_neighbors)
+    if enable_independent_arms:
+        if enable_independent_arms.lower() not in ("true", "false"):
+            raise ValueError("enable_independent_arms must be true or false")
+        overrides["gng.enable_independent_arms"] = enable_independent_arms.lower() == "true"
     if enable_nearest_index:
         if enable_nearest_index.lower() not in ("true", "false"):
             raise ValueError("enable_nearest_index must be true or false")
         overrides["gng_params.enable_nearest_index"] = (enable_nearest_index.lower() == "true")
+    if enable_static_collision_cache:
+        if enable_static_collision_cache.lower() not in ("true", "false"):
+            raise ValueError("enable_static_collision_cache must be true or false")
+        overrides["gng_params.enable_static_collision_cache"] = (enable_static_collision_cache.lower() == "true")
     if max_node_num:
         overrides["gng_params.max_node_num"] = int(max_node_num)
     if max_iterations:
         overrides["gng_params.max_iterations"] = int(max_iterations)
+    if coord_edge_iterations:
+        overrides["gng_params.coord_edge_iterations"] = int(coord_edge_iterations)
     if refine_iterations:
         overrides["gng_params.refine_iterations"] = int(refine_iterations)
 
@@ -96,9 +121,14 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
-    dual_cfg = os.path.join(pkg_share, "config", "topoarm_dual.yaml")
+    dual_cfg = os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")
     
     return LaunchDescription([
+        DeclareLaunchArgument("enable_independent_arms", default_value=""),
+        DeclareLaunchArgument("enable_batched_collision_filter", default_value=""),
+        DeclareLaunchArgument("collision_worker_num", default_value=""),
+        DeclareLaunchArgument("num_local_neighbors", default_value=""),
+        DeclareLaunchArgument("coord_edge_iterations", default_value=""),
         DeclareLaunchArgument(
             "params_file",
             default_value=dual_cfg,
@@ -163,6 +193,11 @@ def generate_launch_description():
             "enable_nearest_index",
             default_value="",
             description="厳密近傍索引の切替え。空指定時は設定ファイルの値を使用。",
+        ),
+        DeclareLaunchArgument(
+            "enable_static_collision_cache",
+            default_value="",
+            description="静的な自己干渉検査結果の再利用。空指定時は設定ファイルの値を使用。",
         ),
         DeclareLaunchArgument(
             "max_node_num",

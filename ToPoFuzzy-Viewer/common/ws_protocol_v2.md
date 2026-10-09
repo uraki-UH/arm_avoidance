@@ -5,7 +5,13 @@
 `Mesh Models` のローカルメッシュ表示は本プロトコルの対象外。
 RPC・stream・ROS topicの追加なし。[操作と範囲](../doc/MESH_MODELS.md)。
 
-- Endpoint: `ws://<host>:9001`
+- Endpoint: `ws://127.0.0.1:9001`。待受はlocalhost。
+- Origin許可: `allowed_origins` パラメータ。既定はlocalhost/127.0.0.1のHTTP 5173・8877。Originなしも拒否。
+- `/observe`: Simulator用の表示専用入口。同じWS v2形式で `sources.list`、`sources.setActive` のactive=true、`request.state`、描画ready/applied、および `edit.inspect_graph`・`vehicle.register` を許可。後者2つは受信スナップショットの詳細抽出／幾何モデル照合であり、保存・ROS操作なし。その他は`READ_ONLY`。
+- `/`: 既存Viewerの操作入口。ログイン認証・遠隔公開は未対応。
+- 入力上限: 1メッセージ1 MiB、1秒区間あたり2,000メッセージ・100 RPC要求。超過は切断。
+- `stream.tf.is_static`: 静的TFでtrue。従来クライアントは追加属性を無視可能。
+- `sources.list`の`plane_cluster`: `PlaneClusterArray`。同一frame_number/frame_idの `/topological_map` から所属ノードと実内部エッジを`TMG1`へ変換。所属IDは元ノードID。
 - Binary frames: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
 - Text frames: JSON request/response and asynchronous events
 
@@ -43,7 +49,9 @@ RPC・stream・ROS topicの追加なし。[操作と範囲](../doc/MESH_MODELS.m
 { "type": "stream.robot.delete", "tag": "sim_ToPoDualArm" }
 ```
 
-削除対象: 該当ロボットの描画データと未描画の姿勢更新。表示設定のリセットなし。同じ`tag`の新しいdescriptionによる再表示。ROS発見情報の反映遅延あり。
+削除対象: 該当ロボットの描画データ・モデルキャッシュ・未描画の姿勢更新・入力一覧の項目。表示設定のリセットなし。同じ`tag`の新しいdescriptionで入力を再登録し、選択済みの場合に再表示。description未受信時のpose単独登録なし。ROS発見情報の反映遅延あり。
+
+Viewer内の入力選択: `robot:<tag>` を論理入力IDとしてTopics一覧へ追加し、初期状態は未選択。descriptionと最新poseを保持し、選択したロボットのみScene Layersへ反映。これはフロントエンド内のIDであり、ROSトピック名や `sources.setActive` の引数への追加なし。チェック解除はこの画面の描画を停止し、ゲートウェイの共有購読を維持。
 
 ### Point Cloud Metadata
 ```json

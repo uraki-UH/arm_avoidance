@@ -11,6 +11,34 @@
   "scripts": {
     "start": "node app/server.mjs",
     "verify": "node tools/verify.mjs",
-    "test": "node tests/server.test.mjs"
+    "test": "node tests/server.test.mjs",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc --noEmit",
+    "dev": "vite build --watch",
+    "test:rgbd": "node --test tests/rgbd-points.test.mjs",
+    "test:ros": "tsx --tsconfig tests/tsconfig.json --test tests/ros-results.test.ts",
+    "test:browser": "node tests/ros-results.browser.mjs",
+    "test:performance": "node tests/performance.browser.mjs",
+    "test:graph": "tsx --tsconfig tests/tsconfig.json --test tests/graph-performance.test.ts"
+  },
+  "dependencies": {
+    "@react-three/drei": "9.122.0",
+    "@react-three/fiber": "8.18.0",
+    "lucide-react": "0.562.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "urdf-loader": "0.12.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "22.19.15",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "@types/three": "0.180.0",
+    "tailwindcss": "4.3.3",
+    "three": "0.180.0",
+    "tsx": "4.23.15",
+    "typescript": "5.6.3",
+    "vite": "6.4.3"
   }
 }

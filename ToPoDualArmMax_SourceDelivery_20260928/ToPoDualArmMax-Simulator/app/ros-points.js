@@ -1,69 +1,92 @@
-import {robot_snapshot,attach_camera,points_to_base} from './robot-ros-state.js';
+import {attach_camera,attach_lidar,points_to_base} from './robot-ros-state.js';
 import {RosRobotPanel} from './ros-robot.js';
-import {sample_object_surface} from './object-points.js';
+import {ObjectCapturePanel} from './object-capture.js';
 import {encodeInput,worldPoints} from './vm-ai.js';
 const $=id=>document.getElementById(id);
+const sources=['rgbd','mid360','object_full','object_visible'];
 export class RosPointsPanel{
- constructor({environment,rgbd,toast}){
-  Object.assign(this,{environment,rgbd,toast});this.is_running=false;this.is_busy=false;this.last_send_ms=0;this.last_list_ms=0;this.generation=0;
-  $('ros-panel').innerHTML=`<h2>ROS 2へ点群を送信</h2>
-  <label class="field-label">送信先ブリッジ<input id="ros-endpoint" value="http://127.0.0.1:8879" type="url"></label>
-  <label class="field-label">点群の種類<select id="ros-source"><option value="rgbd">RGB-D：シーン全体</option><option value="object_full">対象物体：完全表面</option><option value="object_visible">対象物体：遮蔽付きRGB-D</option></select></label>
-  <label><input id="ros-depth" type="checkbox" checked> RGB-D全体の深度画像・CameraInfo・画素対応点群も送信</label>
-  <label class="field-label">対象物体<select id="ros-object"></select></label><button id="ros-use-selected">環境で選択中の物体を使用</button>
-  <div class="field-grid"><label>完全表面の点数<input id="ros-count" type="number" min="1" max="200000" value="10000"></label><label>送信上限 Hz<input id="ros-hz" type="number" min="0.1" max="10" step="0.1" value="2"></label></div>
-  <div class="row-actions"><button id="ros-once">1回送信</button><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
-  <p class="sub-note">XYZ・メートル・base_footprint座標。RGB-Dは現在のカメラ校正・姿勢・深度モードを使用。完全表面は裏面を含むメッシュ面のサンプル。遮蔽付きはロボットや他の物体を含むシーン全体との深度照合。追加の画素対応出力はカメラ光学座標系・深度32FC1。FVGやGNGの結果待ちは不要。</p>`;
+ constructor({environment,rgbd,lidar,toast}){
+  Object.assign(this,{environment,rgbd,lidar,toast});this.is_running=false;this.is_busy=false;this.generation=0;this.last_sent_frames={};this.next_source_idx=0;
+  $('ros-panel').innerHTML=`<h2>ROS2連携</h2>
+  <label class="ros-connection"><span>接続先</span><input id="ros-endpoint" value="http://127.0.0.1:8879" type="url" aria-label="ROSブリッジ接続先（送受信共通）" spellcheck="false"></label>
+  <section id="ros-send-panel"><h3>ブラウザ → ROS：送信</h3>
+  <fieldset><legend>点群トピック（複数選択可）</legend>
+  ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（MID-360）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
+  <label><input id="ros-depth" type="checkbox" checked> 深度画像・CameraInfo・画素対応点群も送信</label>
+  <div class="row-actions"><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
+  <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。取得開始時に対応トピックを自動選択。「連続送信」で送信開始。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>
+</section>`;
   if(location.port==='8879')$('ros-endpoint').value=location.origin;
-  $('ros-once').onclick=()=>this.send();$('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();};
-  $('ros-use-selected').onclick=()=>{this.refresh_objects();if(environment.selected)$('ros-object').value=environment.selected.id;};
-  for(const id of ['ros-source','ros-object','ros-endpoint'])$(id).onchange=()=>{this.generation++;};
-  this.refresh_objects();this.robot_panel=new RosRobotPanel({rgbd,toast});
+  this.object_capture=new ObjectCapturePanel({environment,rgbd});
+  $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='新しい取得結果を送信します。取得の開始・停止はセンサ側で操作してください';};
+  for(const id of ['ros-endpoint','ros-depth',...sources.map(source=>'ros-send-'+source)])$(id).onchange=()=>{this.generation++;};
+  $('ros-endpoint').addEventListener('change',()=>{this.last_sent_frames={};});
+  $('ros-depth').addEventListener('change',()=>{delete this.last_sent_frames.rgbd;});
+  // 取得開始時だけ送信候補を選択。送信開始と手動の選択解除は独立
+  const select_source=source=>{const checkbox=$('ros-send-'+source);if(checkbox&&!checkbox.checked){checkbox.checked=true;this.generation++;}};
+  $('sensor-live').addEventListener('click',()=>{if(rgbd.live)select_source('rgbd');});
+  $('sensor-once').addEventListener('click',()=>select_source('rgbd'));
+  $('lidar-enable').addEventListener('change',()=>{if(lidar.config.enabled)select_source('mid360');});
+  $('lidar-once').addEventListener('click',()=>select_source('mid360'));
+  $('object-capture-live').addEventListener('click',()=>{if(this.object_capture.is_running)select_source($('object-capture-source').value);});
+  $('object-capture-once').addEventListener('click',()=>select_source($('object-capture-source').value));
+  $('object-capture-source').addEventListener('change',()=>{if(this.object_capture.is_running)select_source($('object-capture-source').value);});
+  this.robot_panel=new RosRobotPanel({rgbd,toast});
  }
  update_button(){$('ros-start').textContent=this.is_running?'送信を停止':'連続送信';}
- refresh_objects(){
-  const list=$('ros-object'),old=list.value,items=this.environment.items;
-  const signature=items.map(x=>x.id+':'+x.group.name).join('|');if(signature===this.list_signature)return;
-  this.list_signature=signature;list.replaceChildren();for(const item of items){const option=document.createElement('option');option.value=item.id;option.textContent=item.group.name;list.append(option);}
-  if(items.some(x=>String(x.id)===old))list.value=old;else if(old){list.selectedIndex=-1;this.is_running=false;this.generation++;this.update_button();$('ros-status').textContent='対象物体が削除されました。対象を選び直してください';}
+ latest_frame(source){
+  if(source==='mid360')return this.lidar.config.enabled?this.lidar.last:null;
+  if(source==='rgbd')return this.rgbd.last_scene_frame??null;
+  return this.object_capture.latest(source);
  }
  tick(now){
-  this.robot_panel.tick(now);
-  if(now-this.last_list_ms>300){this.last_list_ms=now;this.refresh_objects();}
-  const hz=Number($('ros-hz').value);
-  if(this.is_running&&!this.is_busy&&now-this.last_send_ms>=1000/hz)this.send();
+  this.robot_panel.tick(now);this.object_capture.tick(now);
+  if(!this.is_running||this.is_busy)return;
+  for(let offset=0;offset<sources.length;offset++){
+   const idx=(this.next_source_idx+offset)%sources.length,source=sources[idx],frame=this.latest_frame(source);
+   if($('ros-send-'+source).checked&&frame&&frame!==this.last_sent_frames[source]){this.next_source_idx=(idx+1)%sources.length;this.send(source);return;}
+  }
  }
- async send(){
-  if(this.is_busy)return null;this.is_busy=true;this.last_send_ms=performance.now();const generation=this.generation;
+ async send(source){
+  if(!sources.includes(source)||!$('ros-send-'+source).checked||this.is_busy)return null;
+  this.is_busy=true;const generation=this.generation;
   try{
-   const hz=Number($('ros-hz').value);if(!Number.isFinite(hz)||hz<.1||hz>10)throw Error('送信上限は0.1〜10 Hzを指定してください');
    const endpoint=new URL($('ros-endpoint').value);if(!['http:','https:'].includes(endpoint.protocol))throw Error('送信先はHTTPのURLを指定してください');
-   const source=$('ros-source').value,item=this.environment.items.find(x=>String(x.id)===$('ros-object').value);
-   if(source!=='rgbd'&&!item)throw Error('対象物体を選択してください');
-   let points,robot_pose,robot_model,object_pose,depth_frame,robot_state;
-   const captured_at_ms=Date.now();
-   if(item){item.group.updateWorldMatrix(true,true);object_pose=item.group.matrixWorld.toArray();}
-   if(source==='object_full'){
-    robot_state=robot_snapshot(this.rgbd.robot);robot_pose=robot_state.robot_pose;robot_model=this.rgbd.robot.modelId;
-    points=(await sample_object_surface(item.group,Number($('ros-count').value))).slice();
-    item.group.updateWorldMatrix(true,true);if(object_pose.some((v,i)=>v!==item.group.matrixWorld.elements[i]))throw Error('取得中に対象が移動しました。再送してください');
+   const captured=this.latest_frame(source);
+   if(!captured){$('ros-status').textContent='取得済み点群がありません。センサまたは環境タブで取得してください';return null;}
+   const is_object=source==='object_full'||source==='object_visible',frame=is_object?captured.frame:captured;
+   const item=is_object?captured.item:null,object_pose=is_object?captured.object_pose:null;
+   const robot_state=structuredClone(frame.robot_state),robot_pose=frame.robotPose,robot_model=frame.robotModel,captured_at_ms=robot_state.captured_at_ms;
+   let points,depth_frame,lidar_frame,color_frame;
+   if(source==='object_full')points=frame.points.slice();
+   else if(source==='mid360'){
+    lidar_frame=frame;attach_lidar(robot_state,frame.pose);points=worldPoints(frame.xyz,frame.pose);
    }else{
-    const frame=await this.rgbd.capture({target_group:source==='object_visible'?item.group:null});
-    if(!frame){$('ros-status').textContent='RGB-D取得中またはモデル変更中。次の送信で再試行';return null;}
     if(source==='rgbd'&&$('ros-depth').checked)depth_frame=frame;
-    robot_state=frame.robot_state;attach_camera(robot_state,frame.depthWorld);
-    points=worldPoints(frame.xyz,frame.depthWorld);robot_pose=frame.robotPose;robot_model=frame.robotModel;
+    color_frame=frame;attach_camera(robot_state,frame.depthWorld);points=worldPoints(frame.xyz,frame.depthWorld);
    }
-   if(generation!==this.generation||(source!=='rgbd'&&!this.environment.items.includes(item)))return null;
    points_to_base(points,robot_state);
-   const meta={robot_state,source,frame_id:'base_footprint',count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:source==='rgbd'?null:item.id,object_to_world:source==='rgbd'?null:object_pose};
+   const meta={robot_state,source,frame_id:'base_footprint',count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:is_object?item.id:null,object_to_world:is_object?object_pose:null};
+   if(lidar_frame){meta.captured_at_ms=robot_state.captured_at_ms;meta.lidar={frame_id:'sim_mid360_frame',scan_start_sec:lidar_frame.scanStart,duration_sec:lidar_frame.config.duration,num_slots:lidar_frame.config.beams,scan_pattern:lidar_frame.config.scanPattern};}
+   let color_data;
+   if(color_frame){
+    meta.color_format='rgb8_valid8';color_data=new Uint8Array(meta.count*4);
+    for(let idx=0;idx<meta.count;idx++){color_data.set(color_frame.colors.subarray(idx*3,idx*3+3),idx*4);color_data[idx*4+3]=color_frame.colorValid[idx];}
+   }
+   if(color_frame){
+    const status_response=await fetch(new URL('/api/points/status',endpoint),{signal:AbortSignal.timeout(5000)});
+    const status=await status_response.json();
+    if(!status_response.ok||(status.protocol_version??1)<2)throw Error('ROSブリッジが旧版です。bash start_ros.sh --restartで再起動してください');
+   }
    let body;
    if(depth_frame){
     meta.depth_image={...depth_frame.calibration.depth,optical_to_world:depth_frame.depthWorld};
-    const packed=encodeInput(meta,points);body=new Blob([packed,depth_frame.depth]);
-   }else body=encodeInput(meta,points);
+    const packed=encodeInput(meta,points);body=new Blob([packed,depth_frame.depth,...(color_data?[color_data]:[])]);
+   }else body=color_data?new Blob([encodeInput(meta,points),color_data]):encodeInput(meta,points);
+   if(generation!==this.generation||!$('ros-send-'+source).checked)return null;
    const response=await fetch(new URL('/api/points',endpoint),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-Points':'1'},body,signal:AbortSignal.timeout(10000)});
    if(!response.ok)throw Error(await response.text());const result=await response.json();
+   if(generation===this.generation)this.last_sent_frames[source]=captured;
    if(generation===this.generation)$('ros-status').textContent=`${result.topic}${result.depth_topics?'\n'+result.depth_topics.join('\n'):''}\n${meta.count.toLocaleString()} 点送信済み\nframe: ${meta.frame_id}`;
    return result;
   }catch(error){this.is_running=false;this.update_button();$('ros-status').textContent='送信エラー：'+error.message+'\npointcloud_bridge.py の起動と送信先を確認してください';return null;}

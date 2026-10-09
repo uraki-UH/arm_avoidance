@@ -10,7 +10,8 @@ void require(bool is_valid, const char *message) {if (!is_valid) {throw std::run
 
 int main() {
     // 自己申告フラグではなく、ロード済み共有ライブラリの公開入口の照合。
-    for (const auto *name : {"gng_set_sampling_rules", "gng_set_priority_input", "gng_set_weighted_priority_input"}) {
+    for (const auto *name : {"gng_set_sampling_rules", "gng_set_priority_input", "gng_set_weighted_priority_input",
+        "gng_get_input_grid", "gng_set_registered_input"}) {
         require((dlsym(RTLD_DEFAULT, name) != nullptr) == bool(allow_external_sampler_build), "外部APIの配布構成");
     }
     require(!gng_setParameter("allow_external_sampler", 0, 1), "実行時の権限変更拒否");

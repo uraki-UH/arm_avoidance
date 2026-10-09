@@ -1,0 +1,76 @@
+# テンプレート由来のファジー適合度。確率ではなく、実データ校正前の初期設定。
+version: 1
+max_candidate_age_sec: 5.0
+defaults:
+  # 照合scoreから適合度0〜1への線形変換範囲。
+  min_score: 0.35
+  max_score: 0.85
+  min_visible_ratio: 0.15
+  membership_th: 0.55
+
+classes:
+  vehicle:
+    label: 車
+    min_visible_ratio: 0.10
+  passenger_car:
+    label: 乗用車
+    parents: [vehicle]
+    min_visible_ratio: 0.25
+  kei_car:
+    label: 軽自動車相当
+    parents: [passenger_car]
+    min_visible_ratio: 0.35
+  truck:
+    label: トラック
+    parents: [vehicle]
+    min_visible_ratio: 0.30
+  container:
+    label: 容器
+    min_visible_ratio: 0.10
+  mug:
+    label: マグカップ
+    parents: [container]
+    min_visible_ratio: 0.30
+  basket:
+    label: かご
+    parents: [container]
+  kettle:
+    label: ケトル
+    parents: [container]
+  milk_jug:
+    label: ミルクジャグ
+    parents: [container]
+  watering_can:
+    label: じょうろ
+    parents: [container]
+
+attributes:
+  large:
+    label: 大型
+    min_visible_ratio: 0.40
+  box_shaped:
+    label: 箱型
+    min_visible_ratio: 0.30
+
+# 保存済みtemplate_idと代表クラスの対応。未読込のテンプレートは認識根拠に不使用。
+# 属性値は代表モデルの注釈。実物の寸法測定や法的区分の判定とは独立。
+templates:
+  car_surface:
+    classes: {passenger_car: 1.0}
+  kei_car_surface:
+    classes: {kei_car: 1.0}
+  truck_surface:
+    classes: {truck: 1.0}
+    attributes: {large: 0.85, box_shaped: 0.90}
+  mug:
+    classes: {mug: 1.0}
+  mug_complete:
+    classes: {mug: 1.0}
+  basket:
+    classes: {basket: 1.0}
+  kettle:
+    classes: {kettle: 1.0}
+  milk_jug:
+    classes: {milk_jug: 1.0}
+  watering_can:
+    classes: {watering_can: 1.0}

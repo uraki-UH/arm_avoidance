@@ -11,6 +11,8 @@
     gng_set_priority_input;
     gng_set_weighted_priority_input;
     gng_set_sampling_rules;
+    gng_get_input_grid;
+    gng_set_registered_input;
     gng_get_sampling_stats;
     gng_get_sampling_points;
     gng_setMapDeltaCapture;

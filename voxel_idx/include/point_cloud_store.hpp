@@ -1,6 +1,8 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -54,6 +56,13 @@ struct world_bucket_query_stats
 class world_point_bucket_index
 {
 public:
+  // 座標と元点番号の同居。ROI照会後の点群再読出し不要
+  struct indexed_point
+  {
+    Eigen::Vector3f position;
+    std::uint32_t source_idx;
+  };
+
   explicit world_point_bucket_index(double bucket_size)
   : bucket_size_(bucket_size), inverse_bucket_size_(1.0 / bucket_size)
   {
@@ -77,7 +86,8 @@ public:
     }
   }
 
-  void add_point(const Eigen::Vector3f &point)
+  void add_point(const Eigen::Vector3f &point,
+    std::uint32_t source_idx = std::numeric_limits<std::uint32_t>::max())
   {
     if (!point.allFinite()) {
       ++nonfinite_point_num_;
@@ -87,12 +97,22 @@ public:
     if (bucket.empty()) {
       ++active_bucket_num_;
     }
-    bucket.push_back(point);
+    bucket.push_back({point, source_idx});
     ++point_num_;
   }
 
   template<typename Visitor>
   world_bucket_query_stats query_aabb(
+    const Eigen::Vector3d &min_corner,
+    const Eigen::Vector3d &max_corner,
+    Visitor visitor) const
+  {
+    return query_aabb_with_source(min_corner, max_corner,
+      [&](const Eigen::Vector3f &point, std::uint32_t) {visitor(point);});
+  }
+
+  template<typename Visitor>
+  world_bucket_query_stats query_aabb_with_source(
     const Eigen::Vector3d &min_corner,
     const Eigen::Vector3d &max_corner,
     Visitor visitor) const
@@ -120,11 +140,11 @@ public:
       ++stats.existing_bucket_num;
       stats.candidate_point_num += points.size();
       for (const auto &point : points) {
-        const Eigen::Vector3d value = point.template cast<double>();
+        const Eigen::Vector3d value = point.position.template cast<double>();
         if ((value.array() >= min_corner.array()).all() &&
           (value.array() <= max_corner.array()).all())
         {
-          visitor(point);
+          visitor(point.position, point.source_idx);
           ++stats.accepted_point_num;
         }
       }
@@ -193,8 +213,14 @@ public:
   template<typename Visitor>
   void visit_points(Visitor visitor) const
   {
+    visit_points_with_source([&](const Eigen::Vector3f &point, std::uint32_t) {visitor(point);});
+  }
+
+  template<typename Visitor>
+  void visit_points_with_source(Visitor visitor) const
+  {
     for (const auto &entry : buckets_) {
-      for (const auto &point : entry.second) {visitor(point);}
+      for (const auto &point : entry.second) {visitor(point.position, point.source_idx);}
     }
   }
 
@@ -227,13 +253,34 @@ private:
   double bucket_size_;
   double inverse_bucket_size_;
   std::unordered_map<
-    world_bucket_key, std::vector<Eigen::Vector3f>, world_bucket_key_hash> buckets_;
+    world_bucket_key, std::vector<indexed_point>, world_bucket_key_hash> buckets_;
   std::size_t active_bucket_num_{0};
   std::size_t point_num_{0};
   std::size_t nonfinite_point_num_{0};
 };
 
-// 不変の公開スナップショット。座標の正本はpoint_idx、元属性の所有元はsource_owner。
+// ROI登録と自己判定の共通結果。元点の細セルIDと上位ビットの自己ラベル
+struct roi_point_membership
+{
+  struct cell
+  {
+    std::int64_t id;
+    bool is_self;
+    bool has_roi_point;
+  };
+  static constexpr std::uint64_t self_flag = std::uint64_t{1} << 63;
+  static constexpr std::uint64_t no_cell = std::numeric_limits<std::uint64_t>::max();
+  std::vector<std::uint64_t> point_cells;
+  std::vector<cell> cells;
+
+  bool is_self_point(std::uint32_t source_idx) const
+  {
+    const auto slot = point_cells.at(source_idx);
+    return slot != no_cell && (slot & self_flag) != 0;
+  }
+};
+
+// 不変の公開スナップショット。ROI専用フレームでは任意のworld索引なし
 struct point_frame
 {
   std::shared_ptr<const world_point_bucket_index> point_idx;
@@ -243,6 +290,9 @@ struct point_frame
   std::string frame_id;
   std::int64_t stamp_ns{0};
   std::uint64_t revision{0};
+  std::shared_ptr<const roi_point_membership> roi_points;
+  std::int64_t self_mask_stamp_ns{0};
+  std::chrono::steady_clock::time_point received_at{std::chrono::steady_clock::now()};
 };
 
 // world座標のセル集計条件。fuzzy属性・ROS・利用者固有ラベルへの依存なし。
@@ -348,6 +398,62 @@ private:
   std::shared_ptr<point_cell_counts> current_, spare_;
 };
 
+// 有界float32格子の登録条件。減算・逆数乗算・切捨て、両端包含の既存規則
+struct point_registration_spec
+{
+  float size{.1f};
+  std::array<float, 3> min_pos{{-1, -1, -1}}, max_pos{{1, 1, 1}};
+  std::array<std::uint32_t, 3> num_cells{{20, 20, 20}};
+  std::string target_frame;
+  bool operator==(const point_registration_spec &other) const;
+};
+
+// 上位32bitのセル番号と下位32bitの選択入力番号。セル順・入力順の安定配列
+struct point_registration
+{
+  std::vector<std::uint64_t> points;
+};
+
+// 格子条件ごとの元点登録。選択集合が異なる場合も既登録セル番号の再利用
+class point_registration_query
+{
+public:
+  explicit point_registration_query(point_registration_spec spec);
+  const point_registration_spec &spec() const {return spec_;}
+  // 同一snapshot・target_frameの取得時TFは同一値。xyzは選択入力順の借用配列
+  // source_poseは平行移動xyzと回転quaternion xyzw。フレーム間の姿勢変化でも作業領域の再利用
+  std::shared_ptr<const point_registration> read(const std::shared_ptr<const point_frame> &frame,
+    std::uint32_t source_num, const std::vector<std::uint32_t> &source_indices, const float *xyz,
+    const std::array<float, 7> &source_pose = {{0, 0, 0, 0, 0, 0, 1}});
+  std::size_t num_registered_points() const;
+private:
+  // 点単位処理のインライン化。DSO境界・3軸反復の呼出しなし
+  std::uint32_t cell_idx(const float *point) const
+  {
+    if (!std::isfinite(point[0]) || !std::isfinite(point[1]) || !std::isfinite(point[2]) ||
+      point[0] < spec_.min_pos[0] || point[0] > spec_.max_pos[0] ||
+      point[1] < spec_.min_pos[1] || point[1] > spec_.max_pos[1] ||
+      point[2] < spec_.min_pos[2] || point[2] > spec_.max_pos[2]) {return UINT32_MAX;}
+    const auto x = static_cast<std::uint32_t>((point[0] - spec_.min_pos[0]) * inverse_size_);
+    const auto y = static_cast<std::uint32_t>((point[1] - spec_.min_pos[1]) * inverse_size_);
+    const auto z = static_cast<std::uint32_t>((point[2] - spec_.min_pos[2]) * inverse_size_);
+    const auto idx = x + spec_.num_cells[0] * (y + spec_.num_cells[1] * z);
+    return idx < max_cell_num_ ? idx : UINT32_MAX;
+  }
+  point_registration_spec spec_;
+  float inverse_size_;
+  std::uint32_t max_cell_num_;
+  mutable std::mutex mutex_;
+  std::weak_ptr<const point_frame> frame_;
+  std::array<float, 7> source_pose_{{0, 0, 0, 0, 0, 0, 1}};
+  std::vector<std::uint32_t> cell_slots_, selected_indices_;
+  std::vector<std::uint8_t> has_cell_;
+  std::size_t num_registered_points_{0};
+  bool has_result_{false};
+  std::vector<std::uint64_t> sort_buffer_;
+  std::shared_ptr<point_registration> current_, spare_;
+};
+
 // 同一プロセス内の共有窓口。fuzzy評価・ROS通信・点群コピーへの依存なし。
 class point_frame_channel
 {
@@ -357,12 +463,14 @@ public:
   void publish(const void *writer, point_frame frame);
   std::shared_ptr<const point_frame> latest() const;
   std::shared_ptr<point_cell_query> cell_query(const point_cell_spec &spec);
+  std::shared_ptr<point_registration_query> registration_query(const point_registration_spec &spec);
 private:
   mutable std::mutex mutex_;
   const void *writer_{nullptr};
   std::uint64_t revision_{0};
   std::shared_ptr<const point_frame> frame_;
   std::vector<std::weak_ptr<point_cell_query>> cell_queries_;
+  std::vector<std::weak_ptr<point_registration_query>> registration_queries_;
 };
 
 // 共有ライブラリ内で一元管理するchannel。別コンポーネント間でも同じ実体。

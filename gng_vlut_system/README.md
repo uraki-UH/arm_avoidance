@@ -112,11 +112,120 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
   ```
   Docker内でGUIが不要なら `gui:=false` にできます。
 
+### 双腕学習・Viewerの既定モデル
+
+モデル指定を省略した場合は`topo_dual_arm_max_long`を使用します。
+次の両launchの`params_file`既定値は`config/topo_dual_arm_max_long.yaml`です。
+
+```bash
+# 双腕GNGの学習
+ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py
+
+# 保存済みGNGのViewer配信
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py
+```
+
+学習結果の保存先・Viewerの読込先は、このYAMLの`gng.data_directory`と
+`gng.experiment_id`に従います。左右別モデルの保存先は
+`gng_results/topo_dual_arm_max_long_independent/`です。
+別モデルを使う場合は`params_file:=...`で対象の設定ファイルを指定します。
+
+
+`gng.enable_independent_arms: true`では左右各7関節を別々に学習します。
+上限は片腕10,000ノード、初期240万回・追加10万回の配置更新が片腕ごとの設定です。
+既定の`gng.enable_batched_collision_filter: true`では配置確定後に全ノードを検査し、
+学習で得られた関節空間の候補辺から、各ノードの近傍6候補と最小全域森を選びます。
+選んだ辺だけを最大関節差0.025 radの間隔で検査し、非干渉の接続をTCP層にも共有します。
+TCP位置だけから別の辺を追加する処理はなく、この方式では`coord_edge_iterations`は未使用です。
+`gng.collision_worker_num`は既定16、`gng.num_local_neighbors`は既定6です。
+近傍・全域森の選択外となった候補辺は、衝突検査前に省略します。
+全ての非干渉辺を保存する設定ではなく、検査対象を局所的な接続へ絞る設定です。
+`omitted_unchecked_edges`が未検査の省略数、`colliding_edges`が検査で干渉した辺数です。
+`mean_num_neighbors`は無向辺数の2倍をノード数で割った平均次数です。
+workerは不変な衝突形状を共有し、姿勢・探索キャッシュ・FK出力をそれぞれ保持します。
+干渉除去後に分かれたグラフは無理に接続せず、成分数を`[SparseFilter] Result`へ出力します。
+干渉ノードを除去するため、保存されるノード数は上限を下回る場合があります。
+各ノードが持つ姿勢はその腕の7関節角1組です。左右の全組合せを事前生成する構成ではありません。
+
+保存形式は次のとおりです。
+
+- `independent_arms.json`: 左右モデルの一覧。両方の保存成功後に生成。
+- `left_arm/`・`right_arm/`: 各腕の`gng.bin`、`vlut.bin`、`model.json`。
+- `model.json`: 関節名・順番、URDF、固定関節条件、ノード数、ボクセル幅。
+
+片腕の学習では反対腕の可動部分だけを衝突形状から外し、対象腕・胴体・固定外装を検査します。
+VLUTには対象腕の可動リンクと、その先の固定外装・指を収録します。
+腰・首・グリッパーは0の条件です。左右それぞれ安全なノードでも、組合せが安全とは限りません。
+
+Viewer用launchは`Tmap_left_arm`・`Tmap_right_arm`と、
+`/<robot_name>/check_arm_pair`サービスを起動します。
+`left_arm/topological_node_features`・`right_arm/topological_node_features`の`weight_angle`は各7要素です。
+ノードIDは各腕のグラフ内でのみ有効です。環境ROIを有効にした場合の既定範囲は、
+左右VLUTの占有範囲を合わせたBBoxです。`min_reachability_*`・`max_reachability_*`の明示設定を優先します。
+
+```bash
+ros2 service call /topo_dual_arm_max_long/check_arm_pair \
+  gng_control_msgs/srv/CheckArmPair '{left_node_id: 0, right_node_id: 0}'
+```
+
+IDは配信グラフから選択します。`start_state`なしは終点のみの検査です。
+現在姿勢を`start_state.name`・`start_state.position`に渡すと、左右14関節すべてを必須として、
+開始点・終点・途中の全身自己干渉を最大関節差0.025 radの間隔で検査します。
+連続時間の非干渉保証ではなく、関節角の線形補間に沿った離散検査です。
+指定した固定関節が0以外の場合は拒否します。省略した固定関節は保存時の0が前提です。
+`is_valid && is_collision_free`を採用条件とし、`joint_state`で組合せ後の14関節を取得します。
+環境障害物・実機への送信・既存の制御経路への自動介入はこのサービスの対象外です。
+
+
+従来方式（`enable_batched_collision_filter:=false`）では、追加学習中にも衝突回避を行い、
+TCP辺を別に構築します。この方式の`gng_params.enable_static_collision_cache: true`は、
+同一の関節角を持つ非干渉ノードと、両端の姿勢が変わっていない検査済みの辺を、
+複数回の`strictFilter()`間で再利用する設定です。量子化や許容差による一致判定はなく、
+姿勢変更・未検査の辺には従来と同じ検査を適用します。
+メッシュ・ボクセルの判定精度と、辺の補間間隔（最大関節差0.025 rad）は従来どおりです。
+初回の検査や、追加学習中に変わる姿勢の衝突判定は引き続き必要です。
+比較時は次の引数でフィルタ結果の再利用を無効化できます。
+
+```bash
+ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
+  enable_batched_collision_filter:=false enable_static_collision_cache:=false
+```
+
+この再利用は、ロボット形状・固定姿勢・運動連鎖・除外規則・環境が不変のオフライン学習用です。
+汎用GNGクラスでは既定オフです。APIで有効化した後にこれらの条件を変える場合は、
+`invalidate_collision_cache()`の呼出しが必要です。チェッカー差替え・パラメータ設定・
+モデル読込みでは自動的に破棄され、キャッシュ自体はモデルに保存されません。
+
+現在の`use_voxel_collision: true`は、全身のメッシュ表面とボクセルによる内部干渉検査の選択です。
+ボクセルはメッシュに完全に内包された形状の検出にも使用します。辺の検査にも同じ判定を使用します。
+
+衝突検査では、FCLのメッシュ探索境界をリンクペアごとに再利用します。
+直前の非交差検査で得た範囲から探索を再開し、各範囲を現在の姿勢で再検査します。
+元の三角形・包絡判定・内部判定・関節補間間隔を維持します。
+保持量の上限と定期的な再構築があり、衝突検出時の未完了範囲は再利用しません。
+形状の差替えや探索順の反転では破棄します。対象は幾何不変のFCL OBBRSSメッシュのbool判定です。
+他の形状と接触点取得は通常のFCL経路です。この最適化はフィルタ結果の再利用とは独立して有効です。
+
 ### ToPoFuzzy-Viewerへのブリッジ
 
 学習したGNGマップやアームの姿勢をToPoFuzzy-Viewerに送信します。
 
-ToPoDualArmのロボットとGNGを表示します。左右グリッパーの体積確認用トピック
+既定のロボット名・設定は `topo_dual_arm_max_long` です。次の指定はファイル名だけでも利用でき、
+`params_file` を省略した場合も同じ設定です。
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=topo_dual_arm_max_long.yaml
+```
+
+左右別モデルは`dir`・`id`で出力ディレクトリを指定して表示します。
+`gng_results/topo_dual_arm_max_long_independent/independent_arms.json`から左右のファイルを読み込みます。
+従来の14関節モデルを表示する場合は`enable_independent_arms:=false`と、
+`gng_model_path`・`vlut_path`を指定します。以前の検査済みモデルは
+`artifacts/gng_self_collision_fix_20261001/long/model/`に保持しています。
+名前・モデル・設定の切替には、起動中のブリッジの終了と新しい設定での再起動が必要です。
+
+別モデルのToPoDualArmは次の指定です。左右グリッパーの体積確認用トピック
 （`L_grip_V_Tmap`など、左右の`V`・`minV`・`baseV`・`sweptV`）は
 `ToPoDualArm.yaml`で既定オフです。
 
@@ -208,12 +317,48 @@ ToPoDualArmの自己領域除去が有効な構成では、環境ボクセルの
 | `/ToPoDualArm/roi_voxels` | 自己ロボット領域の除去前（旧`roi_voxel_ids_raw`） |
 | `/ToPoDualArm/self_filter_roi_voxels` | 自己ロボット領域と除去余裕幅を除いた結果（旧`roi_voxel_ids`） |
 
+自己マスクのURDF直方体（Box）は、初期構築時にセルとの交差・境界接触を判定してボクセル化します。
+セル中心が形状の外側にある端部も収録対象です。判定用の軸・射影範囲はBoxごとに初期構築時だけ計算します。
+関節角度変更後は従来どおり、初期セルをリンク姿勢で変換して更新します。
+既存の更新処理には、格子と一致しない並進を伴う90°回転などで境界セルが不足する場合があります。
+初期構築の変更を稼働中の自己マスクへ反映するには、再ビルド後に`self_recognition_viz_node`の再起動が必要です。
+
 VLUT用の占有・危険ボクセルへの変換には除去後のトピックを使用します。
 入力・出力名は`self_recognition.raw_environment_voxel_topic`と
 `self_recognition.filtered_environment_voxel_topic`、後段の購読先は
 `environment_voxelization.voxel_topic`で設定できます。
 名称変更後は両方のlaunchを再起動し、Viewerで手動選択していた旧トピックを
 新しい名前に変更してください。
+
+### ROI登録とAiS-GNGの自己判定共有
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=topo_dual_arm_max_long.yaml enable_environment_voxelization:=true \
+  enable_shared_roi_gng:=true enable_environment_world_index:=true \
+  environment_input_topic:=/sim/lidar/points
+```
+
+- 入力: `environment_input_topic`。未指定時は機体YAMLの点群トピック。取得時刻のセンサ→world・ロボット基準TFが必須。
+- 登録: 全点を一回だけworld_bucketへ登録 → ROIと自己領域の候補を細ボクセルへ一回登録 → 同じ占有配列の自己ラベル参照。bucket内に座標・元点番号を同居、ROIでのXYZ再読出し・別の自己用点群登録・点群再配信なし。
+- 粗索引: `enable_environment_world_index:=true`。同じ索引をworld表示・ROI・共有storeへ渡す方式。幅・frame・表示トピックは機体YAMLの`environment_voxelization.world_index`。別world索引ノードとの同一入力への二重起動禁止。
+- 単一ROI: 粗索引不要なら`enable_environment_world_index:=false`（既定）。直接ROI登録と自己ラベル共有だけ。粗索引の新規構築を追加しても総時間の短縮保証なし。
+- VLUT: 自己領域を除いたROIセル。GNG: 同じ判定で自己点を除いた元点。ROI外の環境点もGNGの抽出対象、ROI外の自己点も除外対象。
+- GNG入力登録: `voxel_idx`の共通キャッシュから`gng_set_registered_input`へ投入。元点→セル対応は1入力フレーム・格子条件ごとに1回、GNG内部の座標再量子化・再ソートなし。格子条件は解像度・原点・範囲・座標系・float32丸め規則、取得時TFはフレームごとの整合確認。ROI格子と異なる条件の強制共用なし。
+- 学習互換: 入力上限・抽出方式・代表元点・重点学習の候補は従来どおり。選択集合が異なる場合も既登録セル番号の再利用、不正な登録結果は当該入力の学習保留。GNGノード近傍探索の索引は別用途のため維持。
+- 自己領域: `self_recognition.self_exclusion_inflation`込み。単独GNGの追加膨張なしの方式とは除去境界が異なる点に注意。
+- 起動: 同一containerのROI処理とCPU GNG。別の`self_voxel_filter_node`は起動なし。既存の`ais_gng.launch.py`との同一入力への二重起動禁止。
+- GNG設定: `shared_gng_config:=at128.yaml`。CPUセンサ設定または絶対パス。出力はロボットnamespace内の`topological_map`等。曲面推定・データセットexporterの同時起動は対象外。
+- 既定: 共有OFF・粗索引OFF。共有OFF時のGNG内部登録は従来どおり。共有は外部サンプラー公開付きCPU構成（`allow_external_sampler=ON`）のみ。単一利用ではキャッシュ管理・受渡しの追加コストあり、同一格子の複数利用で登録結果の再利用。総時間の短縮保証なし。
+
+共有型・APIの変更後は、関連ノードを停止した状態で以下を実行。旧型のcomponentと新型の共有ライブラリの混在不可。
+
+```bash
+cd /ros2_ws
+colcon build --packages-select voxel_idx pointcloud_sampling gng_cpu ais_gng gng_vlut_system fuzzy_voxel_grid \
+  --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -Dallow_external_sampler=ON
+source install/setup.bash
+```
 
 ## 4. テストとデバッグ
 

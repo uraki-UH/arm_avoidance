@@ -1,4 +1,4 @@
-"""Gazeboの実レイ点群と既存の自己除去・VLUT配信の構成。"""
+"""Gazeboの外置きLiDAR／頭部深度点群と自己除去・VLUT配信の構成。"""
 from pathlib import Path
 import xml.etree.ElementTree as et
 
@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 
 
 def pipeline_config(config):
-    """旧デモ互換の既定値と機体別センサー設定。"""
+    """旧デモ互換の既定値と機体別センサ設定。"""
     return config.get('pipeline', {
         'base_frame': 'base_link', 'points_topic': 'lidar_points', 'enable_lidar': True,
         'voxel_size': 0.02, 'publish_hz': 10.0,
@@ -47,6 +47,13 @@ def add_lidar(world, namespace, config=None):
     et.SubElement(plugin, 'frame_name').text = namespace+'/lidar'
 
 
+def point_cloud_topic(source):
+    if source not in ('external_lidar', 'head_depth'):
+        raise ValueError('point_cloud_sourceはexternal_lidarまたはhead_depthが必要です')
+    return 'camera/depth/points' if source == 'head_depth' else 'lidar_points'
+
+
+
 def simulation_self_node(params_path, namespace, pipeline):
     """実点群の除去マスクとは独立した、Gazebo実測姿勢の自己ボクセル。"""
     base_frame = pipeline['base_frame']
@@ -61,10 +68,13 @@ def simulation_self_node(params_path, namespace, pipeline):
                 'self_recognition.mask_topic': '/'+namespace+'/self_voxel'}])
 
 
-def pipeline_nodes(params_path, params, namespace, config):
+def pipeline_nodes(params_path, params, namespace, config, point_cloud_source='external_lidar'):
+    input_topic = point_cloud_topic(point_cloud_source)
     pipeline = pipeline_config(config)
     if 'external_environment' in pipeline:
         return [simulation_self_node(params_path, namespace, pipeline)]
+    if point_cloud_source == 'external_lidar':
+        input_topic = pipeline['points_topic']
     base_frame = pipeline['base_frame']
     base = namespace+'/'+base_frame
     voxel_size, publish_hz = pipeline['voxel_size'], pipeline['publish_hz']
@@ -79,7 +89,7 @@ def pipeline_nodes(params_path, params, namespace, config):
         return Node(package='gng_vlut_system', executable=executable, namespace=node_namespace or namespace,
                     output='screen', parameters=values+[{'use_sim_time': True, **extra}])
     actions = []
-    if pipeline['enable_lidar']:
+    if pipeline['enable_lidar'] and point_cloud_source == 'external_lidar':
         pose_args = [item for key, value in zip(('x', 'y', 'z', 'roll', 'pitch', 'yaw'), pipeline['lidar']['pose'])
                      for item in ('--'+key, str(value))]
         actions.append(Node(package='tf2_ros', executable='static_transform_publisher',
@@ -99,7 +109,8 @@ def pipeline_nodes(params_path, params, namespace, config):
     self_mask_topic = '/'+namespace+('/real/self_voxel' if is_external else '/self_voxel')
     return actions + [
         node('world_index_to_voxel_node', {
-            'input_topic': pipeline['points_topic'],
+            'input_topic': input_topic,
+            'allow_latest_transform': point_cloud_source == 'external_lidar',
             'output_topic': 'roi_voxels',
             'world_frame_id': base, 'target_frame_id': base,
             'enable_world_index': False, 'enable_roi_query': False, 'enable_world_bucket_publish': False,

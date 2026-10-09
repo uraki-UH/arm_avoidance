@@ -52,22 +52,28 @@ class test_software_stop(unittest.TestCase):
     def test_stop_geometry_persists_after_cloud_moves_away(self):
         centers = np.array([[.2, .1, .3]])
         closest = np.array([.21, .11, .31])
-        state = SimpleNamespace(
+        state = avoidance_demo.__new__(avoidance_demo)
+        state.__dict__.update(
             state='running', phase='avoiding', error='', positions=np.array([.2]), home=np.array([.1]),
-            config={'enable_live_obstacles': True, 'min_clearance_th': .035, 'sides': ['left']},
+            config={'enable_live_obstacles': True, 'min_clearance_th': .035, 'sides': ['left'],
+                    'control_period_sec': .15},
             geometry=SimpleNamespace(spheres=[('L_finger_left', None, .02)], radii=[.02],
                                      root_link='base_link', joint_names=['L_joint1'], has_internal_clearance=lambda _, min_clearance_th=.005: True),
             min_observed_clearance=float('inf'), min_home_clearance=float('inf'), max_excursion=0.,
             stop_clearance=None, trails={}, last_visual=None, side_idx=0,
             run_generation=1, run_start_stamp_sec=1., is_stop_latched=False,
+            enable_stamped_commands=False, command=Mock(),
             joint_time=0., obstacle_time=0., is_fresh=lambda: True, update_obstacle=Mock(),
             observe_clearance=Mock(return_value=(.0336, centers, 0, closest)),
             publish_markers=Mock(), status=Mock(), hold=Mock(), get_logger=Mock())
-        state.fail = lambda error: avoidance_demo.fail(state, error)
         avoidance_demo.tick(state)
-        self.assertEqual(state.state, 'fault')
-        self.assertIn('L_finger_left 33.6 mm', state.error)
+        self.assertEqual(state.state, 'running')
+        self.assertEqual(state.phase, 'obstacle_wait')
+        self.assertFalse(state.is_stop_latched)
         first = json.loads(state.status.publish.call_args.args[0].data)
+        self.assertEqual(first['stop_clearance']['event'], 'obstacle_wait')
+        self.assertEqual(first['stop_clearance']['link'], 'L_finger_left')
+        self.assertAlmostEqual(first['stop_clearance']['clearance_m'], .0336)
         self.assertEqual(first['stop_clearance']['obstacle_point'], closest.tolist())
         self.assertEqual(first['stop_clearance']['joint_positions'], {'L_joint1': .2})
         state.observe_clearance.return_value = (.1, centers, 0, np.ones(3))

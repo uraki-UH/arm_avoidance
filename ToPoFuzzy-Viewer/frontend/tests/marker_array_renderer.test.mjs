@@ -8,7 +8,7 @@ import React, { useLayoutEffect } from 'react';
 import { act, createRoot, extend } from '@react-three/fiber';
 import * as THREE from 'three';
 
-test('球リストの初回・個数・色・位置変更で描画前の直径を維持', async () => {
+test('Markerとボクセルの表示更新・候補数制限・描画資源の再利用', async () => {
     // 実際のReact Three Fiber更新順序を使用、GPU描画のみ代替
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     extend(THREE);
@@ -131,6 +131,54 @@ test('球リストの初回・個数・色・位置変更で描画前の直径�
             }
         }
         assert.equal(candidates.markers.length, 3);
+        // 基本形状の連続受信で色・透明度だけを更新、シェーダーと幾何資源を再利用。
+        let primitive_resources;
+        for (const color of [[1, 0, 0, 1], [1, 0, 0, 1], [0, 1, 0, .4]]) {
+            await act(async () => root.render(React.createElement(MarkerArrayRenderer, {
+                tag: '/primitives', data: { markers: ['cube', 'sphere', 'cylinder'].map((type, id) => ({
+                    ...marker, id, type, color: [...color], points: undefined,
+                })) }, transforms: {},
+            })));
+            const objects = [];
+            scene.traverse(object => { if (object.isMesh || object.isLineSegments) objects.push(object); });
+            assert.equal(objects.length, 3);
+            if (primitive_resources) objects.forEach((object, idx) => {
+                assert.equal(object, primitive_resources[idx]);
+                assert.equal(object.material.color.getHexString(), new THREE.Color(...color.slice(0, 3)).getHexString());
+                assert.equal(object.material.opacity, color[3]);
+            });
+            primitive_resources = objects;
+        }
+        // ボクセル差分の増減とラベル色から単色への復帰。既存描画試験の環境を共用。
+        const voxel_file = resolve(temporary_directory, 'voxel.mjs');
+        await build({ entryPoints: ['src/features/visualization/VoxelRenderer.tsx'], outfile: voxel_file,
+            bundle: true, packages: 'external', platform: 'node', format: 'esm', jsx: 'automatic', logLevel: 'silent' });
+        const { VoxelRenderer } = await import(pathToFileURL(voxel_file).href);
+        let previous_voxel;
+        for (const [num, color_mode] of [[3, 'label'], [4, 'label'], [3, 'uniform'], [0, 'uniform'], [3, 'uniform']]) {
+            await act(async () => root.render(React.createElement(VoxelRenderer, {
+                message: { type: 'stream.voxel', tag: '/voxels', frameId: 'world',
+                    data: Array.from({ length: num }, (_, idx) => String(idx * 16)), labels: Array(num).fill(1),
+                    layout: { voxelSize: .02, xShift: 4, yShift: 2, zShift: 0, offset: 0 } },
+                settings: { colorMode: color_mode, color: '#ff0000' },
+            })));
+            let mesh;
+            scene.traverse(object => { if (object.isInstancedMesh) mesh = object; });
+            assert.equal(mesh.count, num);
+            if (previous_voxel) {
+                assert.equal(mesh, previous_voxel);
+                assert.equal(mesh.geometry, previous_voxel.geometry);
+                assert.equal(mesh.material, previous_voxel.material);
+            }
+            const matrix = new THREE.Matrix4(), color = new THREE.Color();
+            for (let idx = 0; idx < num; idx++) {
+                mesh.getMatrixAt(idx, matrix);
+                assert.ok(Math.abs(matrix.elements[12] - (idx + .5) * .02) < 1e-6);
+                if (color_mode === 'uniform') { mesh.getColorAt(idx, color); assert.equal(color.getHexString(), 'ffffff'); }
+            }
+            previous_voxel = mesh;
+        }
+
         await act(async () => { root.unmount(); });
         root = undefined;
         await new Promise((resolve) => setTimeout(resolve, 600));

@@ -20,6 +20,8 @@ struct GngParameters {
   int n_best_candidates = 2;
   // 厳密近傍索引による候補探索。未対応次元は全探索。
   bool enable_nearest_index = true;
+  // 静的な形状・運動連鎖・判定条件を前提とした、フィルタの非干渉結果再利用。
+  bool enable_static_collision_cache = false;
   float ais_threshold = 0.5f;
   int runtime_per_frame = 100;
   float lpf_alpha = 0.01f; // α value for EMA/Cascaded EMA

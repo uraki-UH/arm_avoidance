@@ -5,7 +5,7 @@
 - 稼働設定: `input.local_coordinates: true`、`input.base_frame_id: map`。ローカル座標優先によるTF変換の省略。
 - 稼働出力: `/topological_map`・`/scan/transformed`とも`camera_depth_optical_frame`。`/ToPoDualArm/Tmap_static`は`ToPoDualArm/base_link`。[8秒読取り](../../../artifacts/gng_base_frame_20261001/live.json)。
 - 実機姿勢: 首pan 0.650407 rad・tilt 1.113670 rad、腰0 rad。ベースからカメラへのTF取得成功。表示だけの補正では頭部移動時の蓄積GNGの座標基準は不変。
-- 設定変更後の再発原因: `GNG_VERSION=0`の`GNG::setPointCloud`で、固定座標へ変換済みの入力とは別に、センサー姿勢差分を蓄積ノード全体へ適用。前回の学習後重心の概略検証では、この入力投入時の移動を未検出。
+- 設定変更後の再発原因: `GNG_VERSION=0`の`GNG::setPointCloud`で、固定座標へ変換済みの入力とは別に、センサ姿勢差分を蓄積ノード全体へ適用。前回の学習後重心の概略検証では、この入力投入時の移動を未検出。
 
 変更:
 
@@ -21,7 +21,7 @@
 ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml
 ```
 
-出力座標: RealSense生点群はカメラ基準、`/scan/transformed`と`/topological_map`は`ToPoDualArm/base_link`。カメラTFは実機関節状態由来。Gazebo側の首姿勢による実センサー変換なし。
+出力座標: RealSense生点群はカメラ基準、`/scan/transformed`と`/topological_map`は`ToPoDualArm/base_link`。カメラTFは実機関節状態由来。Gazebo側の首姿勢による実センサ変換なし。
 
 検証コマンド:
 

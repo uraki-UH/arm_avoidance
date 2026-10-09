@@ -602,6 +602,49 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
             "input.sampling_mode must be 'head', 'uniform', 'stratified' or 'random'");
     }
     input_sampling_mode_ = *parsed_sampling_mode;
+    rcl_interfaces::msg::ParameterDescriptor self_filter_descriptor;
+    self_filter_descriptor.read_only = true;
+    self_filter_descriptor.description = "自己点候補除外の起動時設定";
+    const auto self_mask_topic = declare_parameter<std::string>("self_filter.mask_topic", "", self_filter_descriptor);
+    enable_self_filter_ = !self_mask_topic.empty();
+    const auto shared_store = declare_parameter<std::string>("input.shared_point_store", "", self_filter_descriptor);
+    if (!shared_store.empty()) {
+        if (enable_self_filter_) throw std::invalid_argument("共有ROIと単独自己フィルタの併用不可");
+#if !defined(AIS_GNG_BACKEND_CPU) || !allow_external_sampler_build
+        throw std::invalid_argument("共有入力には外部登録API付きCPU構成が必要");
+#endif
+        shared_points_ = voxel_idx::shared_point_frames(shared_store);
+    }
+    max_self_mask_age_sec_ = declare_parameter<double>("self_filter.max_mask_age_sec", 0.5, self_filter_descriptor);
+    const bool enable_self_labels = declare_parameter<bool>("self_filter.enable_labelled_cloud", false, self_filter_descriptor);
+    if (!std::isfinite(max_self_mask_age_sec_) || max_self_mask_age_sec_ <= 0)
+        throw std::invalid_argument("self_filter.max_mask_age_sec must be finite and positive");
+    if (enable_self_filter_) {
+        input_transform_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+        input_transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*input_transform_buffer_);
+        self_mask_sub_ = create_subscription<voxel_msgs::msg::Voxel>(self_mask_topic, rclcpp::QoS(1),
+            [this](voxel_msgs::msg::Voxel::ConstSharedPtr message) {
+                try {
+                    const auto &previous = self_mask_message_;
+                    const bool is_same_mask = self_mask_ && previous &&
+                        previous->header.frame_id == message->header.frame_id &&
+                        previous->voxel_size == message->voxel_size && previous->x_shift == message->x_shift &&
+                        previous->y_shift == message->y_shift && previous->z_shift == message->z_shift &&
+                        previous->offset == message->offset && previous->origin_x == message->origin_x &&
+                        previous->origin_y == message->origin_y && previous->origin_z == message->origin_z &&
+                        previous->data == message->data;
+                    if (!is_same_mask) self_mask_ = std::make_shared<self_point_filter::mask_snapshot>(*message);
+                    self_mask_->header = message->header;
+                    self_mask_->received_at = std::chrono::steady_clock::now();
+                    self_mask_message_ = message;
+                } catch (const std::exception &error) {
+                    self_mask_.reset(); self_mask_message_.reset();
+                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "自己マスク無効: %s", error.what());
+                }
+            });
+    }
+    if ((enable_self_filter_ || shared_points_) && enable_self_labels)
+        self_labelled_pub_ = create_publisher<PC2>("scan/self_labelled", rclcpp::SensorDataQoS());
     this->declare_parameter("input.base_frame_id", "map");                         // 入力点群の基準フレームID (cpu/gpu)
     this->declare_parameter("input.voxel_grid_unit", 0.02);                         // ボクセルグリッドのサイズ(m) (cpu/gpu)
     this->declare_parameter("input.visualize", true);                              // 位置フィルタの可視化 (cpu/gpu)
@@ -668,9 +711,30 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
 
     // 点群入力subscription
     int num_topics = input_topic_names_.size();
+    if (enable_self_filter_ && num_topics != 1)
+        throw std::invalid_argument("自己フィルタの入力は1トピック。複数センサは座標・時刻を整合した点群へ統合してください");
     int queue_size = 10;
     const auto pointcloud_qos = rclcpp::SensorDataQoS();
-    if(num_topics == 0){
+    if (shared_points_) {
+        // 最新の完了フレームだけの取得。raw点群subscription・再送・再分類なし
+        shared_input_timer_ = create_wall_timer(std::chrono::milliseconds(5), [this]() {
+            auto frame = shared_points_->latest();
+            if (!frame || frame->revision == shared_input_revision_) return;
+            shared_input_revision_ = frame->revision;
+            if (!frame->roi_points || !frame->source_owner || frame->source_type != "sensor_msgs/msg/PointCloud2" ||
+                frame->stamp_ns == 0 || frame->self_mask_stamp_ns == 0 ||
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - frame->received_at).count() > max_self_mask_age_sec_ ||
+                std::abs(double(now().nanoseconds() - frame->stamp_ns) * 1e-9) > max_self_mask_age_sec_ ||
+                std::abs(double(now().nanoseconds() - frame->self_mask_stamp_ns) * 1e-9) > max_self_mask_age_sec_) return;
+            const auto cloud = std::static_pointer_cast<const PC2>(frame->source_owner);
+            shared_input_frame_ = std::move(frame);
+            try {process_clouds({cloud});}
+            catch (const std::exception &error) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "共有ROI入力無効: %s", error.what());
+            }
+            shared_input_frame_.reset();
+        });
+    } else if(num_topics == 0){
         RCLCPP_ERROR(this->get_logger(), "input.topic_names is empty.");
     }else if(num_topics == 1){ // 通常のサブスクライバ
         pcl_sub_ = this->create_subscription<PC2>(
@@ -793,6 +857,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         bool success = false;
         std::vector<float> flt_array;
         auto name = p.get_name();
+        if (name.rfind("self_filter.", 0) == 0 || name == "input.shared_point_store") {continue;}
         if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0 ||
             name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0 ||
             name == "enable_tracking_attention" || name.rfind("tracking_attention.", 0) == 0 ||
@@ -971,6 +1036,42 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
     return result;
 }
 
+#if defined(AIS_GNG_BACKEND_CPU) && allow_external_sampler_build
+bool AiSGNGComponent::prepare_shared_registered_input(const PC2 &source, const LiDAR_Config &config) {
+    gng_input_grid grid;
+    if (!gng_get_input_grid(&grid)) {return false;}
+    // 間引き無効時の全点保持。追加の入力格子なし
+    if (!grid.enable_downsampling) {return true;}
+    voxel_idx::point_registration_spec spec;
+    spec.size = grid.size;
+    std::copy_n(grid.min_pos, 3, spec.min_pos.begin());
+    std::copy_n(grid.max_pos, 3, spec.max_pos.begin());
+    std::copy_n(grid.num_cells, 3, spec.num_cells.begin());
+    spec.target_frame = local_coordinates_ || base_frame_id_.empty() ? source.header.frame_id : base_frame_id_;
+    std::array<float, 7> source_pose{{0, 0, 0, 0, 0, 0, 1}};
+    if (!local_coordinates_) {
+        source_pose = {{config.pos.x, config.pos.y, config.pos.z,
+            config.quat.x, config.quat.y, config.quat.z, config.quat.w}};
+    }
+    uint32_t num_points = 0;
+    const auto *xyz = gng_getAffineTransformedInputPointCloud(&num_points);
+    if (num_points != sampled_point_indices_.size()) {return false;}
+    try {
+        if (!shared_registration_query_ || !(shared_registration_query_->spec() == spec)) {
+            shared_registration_query_ = shared_points_->registration_query(spec);
+        }
+        const auto registered = shared_registration_query_->read(shared_input_frame_,
+            static_cast<uint32_t>(shared_input_frame_->roi_points->point_cells.size()),
+            sampled_point_indices_, xyz, source_pose);
+        return gng_set_registered_input(&grid, registered->points.data(),
+            static_cast<uint32_t>(registered->points.size()), num_points);
+    } catch (const std::exception &error) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "共有入力登録の失敗: %s", error.what());
+        return false;
+    }
+}
+#endif
+
 void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clouds) {
     // 初期化されていない
     if(!initialized_ || clouds.empty()){
@@ -985,14 +1086,15 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     last_process_start_ = start;
     has_last_process_start_ = true;
 
+    Eigen::Isometry3d mask_from_cloud = Eigen::Isometry3d::Identity();
+    if (enable_self_filter_ && !prepare_self_filter(*clouds.front(), mask_from_cloud)) return;
+
     // 全入力の座標変換成立後の学習開始。複数入力の途中失敗による部分投入の防止
     std::vector<LiDAR_Config> cloud_transforms;
-    if (enable_strict_transform_) {
-        cloud_transforms.reserve(clouds.size());
-        for (const auto &cloud : clouds) {
-            cloud_transforms.push_back(getBase2LidarFrame(cloud));
-            if (!has_input_transform_) {return;}
-        }
+    cloud_transforms.reserve(clouds.size());
+    for (const auto &cloud : clouds) {
+        cloud_transforms.push_back(getBase2LidarFrame(cloud));
+        if (!has_input_transform_) {return;}
     }
     std::size_t cloud_idx = 0;
 
@@ -1037,12 +1139,33 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
         // ランダム抽出・層化抽出・一様間引き・行余白のある点群の連続配置。
         const bool requires_repacking =
+            enable_self_filter_ || shared_input_frame_ ||
             input_sampling_mode_ == PointSamplingMode::Random ||
             input_sampling_mode_ == PointSamplingMode::Stratified ||
             (input_sampling_mode_ == PointSamplingMode::Uniform && point_count > input_point_cloud_num_) ||
             static_cast<uint64_t>(msg->row_step) != static_cast<uint64_t>(msg->width) * msg->point_step;
         if (requires_repacking) {
-            if (input_sampling_mode_ == PointSamplingMode::Stratified ||
+            if (enable_self_filter_ || shared_input_frame_) {
+                try {
+                    const bool can_publish_labels = self_labelled_pub_ &&
+                        (self_labelled_pub_->get_subscription_count() + self_labelled_pub_->get_intra_process_subscription_count() > 0);
+                    auto *labels = can_publish_labels ? &self_label_buffer_ : nullptr;
+                    ++sampling_frame_;
+                    sampled_point_indices_ = shared_input_frame_
+                        ? self_point_filter::select_shared_points(*msg, input_point_cloud_num_, sampling_frame_,
+                            input_sampling_mode_, *shared_input_frame_->roi_points, labels)
+                        : self_point_filter::select_points(*msg, input_point_cloud_num_, sampling_frame_,
+                            input_sampling_mode_, *self_mask_, mask_from_cloud, labels);
+                    if (can_publish_labels) self_labelled_pub_->publish(
+                        self_point_filter::make_labelled_cloud(*msg, self_label_buffer_));
+                } catch (const std::invalid_argument &error) {
+                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "自己点除外の入力無効: %s", error.what());
+                    return;
+                }
+                sampled_indices_valid_ = false;
+                // 全点除外時の残存入力による学習防止。診断ラベルは上で配信済み
+                if (sampled_point_indices_.empty()) return;
+            } else if (input_sampling_mode_ == PointSamplingMode::Stratified ||
                 input_sampling_mode_ == PointSamplingMode::Random) {
                 try {
                     const auto select_points = input_sampling_mode_ == PointSamplingMode::Random
@@ -1096,13 +1219,19 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             }
         }
 
-        auto lidar_config = enable_strict_transform_
-            ? cloud_transforms[cloud_idx++] : getBase2LidarFrame(gng_input_msg);
+        auto lidar_config = cloud_transforms[cloud_idx++];
         lidar_config.point_step = gng_input_msg->point_step;
         gng_setPointCloud(
             gng_input_msg->data.data(),
             gng_input_msg->width * gng_input_msg->height,
             &lidar_config);
+#if defined(AIS_GNG_BACKEND_CPU) && allow_external_sampler_build
+        // 共通格子登録結果の投入。失敗フレームの学習・内部再登録なし
+        if (shared_input_frame_ && !prepare_shared_registered_input(*msg, lidar_config)) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "共有入力登録の不成立による学習保留");
+            return;
+        }
+#endif
 #if defined(AIS_GNG_BACKEND_CPU)
         if (enable_observation_support_) {
             gng_observation_input input;
@@ -1984,9 +2113,50 @@ void AiSGNGComponent::updateSemanticLabelHistory(ais_gng_msgs::msg::TopologicalM
     }
 }
 
+bool AiSGNGComponent::prepare_self_filter(const PC2 &cloud, Eigen::Isometry3d &mask_from_cloud) {
+    try {
+        if (!self_mask_) throw std::invalid_argument("自己マスク未受信");
+        const auto &mask = *self_mask_;
+        const rclcpp::Time mask_stamp(mask.header.stamp), cloud_stamp(cloud.header.stamp);
+        const double received_age = std::chrono::duration<double>(std::chrono::steady_clock::now() - mask.received_at).count();
+        if (mask_stamp.nanoseconds() <= 0 || cloud_stamp.nanoseconds() <= 0 ||
+            received_age > max_self_mask_age_sec_ ||
+            std::abs((cloud_stamp - mask_stamp).seconds()) > max_self_mask_age_sec_ ||
+            std::abs((now() - mask_stamp).seconds()) > max_self_mask_age_sec_)
+            throw std::invalid_argument("自己マスクの失効・点群時刻との不一致");
+        // 既存GNG投入形式の検査。異なるXYZ配置を誤解釈した学習の防止
+        const uint16_t endian_probe = 1;
+        const bool is_native_big_endian = *reinterpret_cast<const uint8_t *>(&endian_probe) == 0;
+        if (cloud.is_bigendian != is_native_big_endian || cloud.header.frame_id.empty())
+            throw std::invalid_argument("点群のbyte orderまたはframe_idが不正");
+        for (uint32_t axis = 0; axis < 3; ++axis) {
+            const auto field = std::find_if(cloud.fields.begin(), cloud.fields.end(),
+                [&](const auto &value) {return value.name == std::string(1, "xyz"[axis]);});
+            if (field == cloud.fields.end() || field->datatype != sensor_msgs::msg::PointField::FLOAT32 ||
+                field->count != 1 || field->offset != axis * sizeof(float))
+                throw std::invalid_argument("自己除去からGNGへの投入には先頭XYZ float32が必要");
+        }
+        if (mask.header.frame_id != cloud.header.frame_id) {
+            // 取得時刻のTFを1回取得。全点のTF照会・最新TFへの代替・同期待ちなし
+            const auto transform = input_transform_buffer_->lookupTransform(
+                mask.header.frame_id, cloud.header.frame_id, cloud_stamp);
+            const auto &q = transform.transform.rotation;
+            const auto &p = transform.transform.translation;
+            mask_from_cloud.linear() = Eigen::Quaterniond(q.w, q.x, q.y, q.z).toRotationMatrix();
+            mask_from_cloud.translation() = Eigen::Vector3d(p.x, p.y, p.z);
+        }
+        return true;
+    } catch (const std::exception &error) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "自己点除外のため学習待機: %s", error.what());
+        return false;
+    }
+}
+
 LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) {
-    static auto tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-    static auto tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    if (!input_transform_buffer_) {
+        input_transform_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+        input_transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*input_transform_buffer_);
+    }
     static LiDAR_Config lidar_config;
     lidar_config.pos.x = 0;
     lidar_config.pos.y = 0;
@@ -2005,27 +2175,28 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
     }
     try {
         geometry_msgs::msg::TransformStamped tf_msg;
-        if (enable_strict_transform_) {
+        if (enable_strict_transform_ || enable_self_filter_ || shared_points_) {
             if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
                 has_input_transform_ = false;
                 return lidar_config;
             }
-            tf_msg = tf_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id,
-                rclcpp::Time(msg->header.stamp), rclcpp::Duration::from_seconds(0.05));
+            tf_msg = input_transform_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id,
+                rclcpp::Time(msg->header.stamp), rclcpp::Duration::from_seconds(enable_self_filter_ ? 0.0 : 0.05));
         } else
 #if defined(AIS_GNG_BACKEND_CPU)
         if (enable_observation_support_) {
             if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
+                has_input_transform_ = false;
                 has_observation_cloud_transform_ = false;
                 RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
                     "Observation support skipped: missing cloud transform timestamp");
                 return lidar_config;
             }
-            tf_msg = tf_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id, rclcpp::Time(msg->header.stamp));
+            tf_msg = input_transform_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id, rclcpp::Time(msg->header.stamp));
         } else
 #endif
         {
-            tf_msg = tf_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id, tf2::TimePointZero);
+            tf_msg = input_transform_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id, tf2::TimePointZero);
         }
         auto q = tf_msg.transform.rotation;
         auto t = tf_msg.transform.translation;
@@ -2045,7 +2216,7 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
         RCLCPP_DEBUG_THROTTLE(
             this->get_logger(), *this->get_clock(), 5000,
             "Could not transform %s to %s: %s",
-            base_frame_id_.c_str(), msg->header.frame_id.c_str(), ex.what());
+            msg->header.frame_id.c_str(), base_frame_id_.c_str(), ex.what());
     }
     return lidar_config;
 }

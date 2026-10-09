@@ -1,5 +1,4 @@
 """ブラウザの点群をROS 2へ配信する独立HTTPブリッジ。GNG・FVGへの依存なし。"""
-from array import array
 import argparse
 import json
 import math
@@ -9,10 +8,11 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 from robot_exchange import validate_state, RobotExchange
+from native_points import ensure_native, validate_payload
 
 root = Path(__file__).resolve().parents[2] / 'app'
 topics = {'rgbd': '/sim/rgbd/points', 'object_full': '/sim/object/full_points',
-          'object_visible': '/sim/object/visible_points'}
+          'object_visible': '/sim/object/visible_points', 'mid360': '/sim/lidar/points'}
 max_body_bytes = 50000000
 
 
@@ -44,25 +44,30 @@ def parse_packet(raw):
         if depth.get('model') != 'none' or depth.get('coeffs') != [0, 0, 0, 0, 0]:
             raise ValueError('歪み補正済みの深度画像が必要です')
         num_pixels = width * height
-    if len(raw) != offset + count * 12 + num_pixels * 4:
+    has_color = 'color_format' in meta
+    if has_color and (meta['color_format'] != 'rgb8_valid8' or meta['source'] not in ('rgbd', 'object_visible')):
+        raise ValueError('色情報の形式・点群種別が不正です')
+    color_offset = offset + count * 12 + num_pixels * 4
+    if len(raw) != color_offset + (count * 4 if has_color else 0):
         raise ValueError('点群・深度画像のデータ長が不正です')
-    if num_pixels and any(not math.isfinite(v[0]) or v[0] < 0 for v in struct.iter_unpack('<f', raw[offset + count * 12:])):
-        raise ValueError('深度値が不正です')
     data = raw[offset:]
-    if any(not math.isfinite(v[0]) for v in struct.iter_unpack('<f', data[:count * 12])):
-        raise ValueError('座標に非有限値があります')
+    validate_payload(data, count, num_pixels, has_color)
     pose = meta.get('robot_pose', {})
     if not isinstance(pose, dict) or len(pose) > 64 or any(
             not isinstance(k, str) or type(v) not in (int, float) or not math.isfinite(v)
             for k, v in pose.items()):
         raise ValueError('関節角が不正です')
-    if meta['source'] != 'rgbd':
+    if meta['source'] in ('object_full', 'object_visible'):
         matrix = meta.get('object_to_world')
         if type(meta.get('object_id')) is not int or not isinstance(matrix, list) or len(matrix) != 16 or any(
                 type(v) not in (int, float) or not math.isfinite(v) for v in matrix):
             raise ValueError('対象物体の姿勢が不正です')
     if meta.get('robot_state') is not None:
         validate_state(meta['robot_state'])
+    if meta['source'] == 'mid360':
+        state = meta.get('robot_state')
+        if state is None or not any(t['child'] == 'sim_mid360_frame' and t['parent'] == 'base_footprint' for t in state['transforms']):
+            raise ValueError('MID-360の取得時TFが必要です')
     return meta, data
 
 
@@ -106,7 +111,7 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
                 except ValueError as error:
                     return self.respond(400, {'error': str(error)})
             if urlsplit(self.path).path == '/api/points/status':
-                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'topics': topics})
+                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 4, 'topics': topics, 'pointcloud_backend': 'cpp'})
             super().do_GET()
 
         def do_POST(self):
@@ -137,27 +142,32 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
 def main():
     import rclpy
     from rclpy.node import Node
-    from sensor_msgs.msg import PointCloud2, PointField, JointState
+    from sensor_msgs.msg import PointCloud2, JointState
     from std_msgs.msg import String
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--tf-topic', default='/tf', help='標準TFの配信先。/sim/tf指定で専用配信のみ')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8879)
     parser.add_argument('--allow-origin', action='append', default=[])
     args = parser.parse_args()
+    if not 1024 <= args.port <= 65534:
+        parser.error('HTTPポートは1024～65534。次のポートを関節WebSocketに使用します')
+    from joint_stream import start_joint_stream
     allowed = set(args.allow_origin) | {f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost')
                                        for port in (8877, args.port)}
+    ensure_native()
     rclpy.init()
     node = Node('topo_browser_pointcloud_bridge')
     publishers = {key: node.create_publisher(PointCloud2, topic, 2) for key, topic in topics.items()}
     joints = node.create_publisher(JointState, '/sim/joint_states', 2)
     info = node.create_publisher(String, '/sim/points/info', 2)
-    from depth_output import create_depth_messages, depth_topics
+    from depth_output import create_point_messages, depth_topics
     from sensor_msgs.msg import Image, CameraInfo
     depth_publishers = [node.create_publisher(kind, topic, 2) for kind, topic in
                         zip((Image, CameraInfo, PointCloud2), depth_topics)]
     lock = threading.Lock()
-    exchange = RobotExchange(node, joints)
+    exchange = RobotExchange(node, joints, args.tf_topic)
 
     def publish_state(state):
         with lock:
@@ -168,20 +178,8 @@ def main():
         if meta.get('robot_state') is not None:
             exchange.validate(meta['robot_state'])
         stamp = node.get_clock().now().to_msg()
-        msg = PointCloud2()
-        msg.header.stamp = stamp
-        msg.header.frame_id = meta['frame_id']
-        msg.height = 1
-        msg.width = meta['count']
-        msg.fields = [PointField(name=name, offset=i * 4, datatype=PointField.FLOAT32, count=1)
-                      for i, name in enumerate(('x', 'y', 'z'))]
-        msg.is_bigendian = False
-        msg.point_step = 12
-        msg.row_step = meta['count'] * 12
-        msg.is_dense = True
-        msg.data = array('B', data[:msg.row_step])
-        # 深度の逆投影・配列構築中も姿勢送信が可能なロック範囲
-        depth_messages = create_depth_messages(meta['depth_image'], data[msg.row_step:], stamp) if meta.get('depth_image') is not None else []
+        # 画素ごとの検査・逆投影・色付けをC++で実行。通信・姿勢更新用GILの解放。
+        msg, depth_messages = create_point_messages(meta, data, stamp)
         with lock:
             publishers[meta['source']].publish(msg)
             for publisher, message in zip(depth_publishers, depth_messages):
@@ -197,6 +195,7 @@ def main():
             info.publish(String(data=json.dumps(dict(meta, stamp_sec=stamp.sec, stamp_nanosec=stamp.nanosec))))
         return {'topic': topics[meta['source']], 'depth_topics': depth_topics if meta.get('depth_image') else [], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
 
+    stop_joint_stream = start_joint_stream(node, exchange, args.host, args.port + 1, allowed)
     server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed, publish_state, exchange.latest))
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -207,6 +206,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        stop_joint_stream()
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)

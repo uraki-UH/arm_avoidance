@@ -66,4 +66,4 @@ python3 /ros2_ws/src/benchmarks/gng_normal_efficiency_20260924/summarize.py
 
 比較ソース・ライブラリ・生JSON・ログは`artifacts/gng_normal_efficiency_20260924/`、一時ビルドは`/tmp/gng_normal_efficiency_build/`。通常のcolcon探索から除外。
 
-[集計](summary.json)と[リリース記録](../../gng_vlut_system/docs/releases/2026-09-24_gng_normal_efficiency.md)を参照。単一bag・同じ乱数列／時間刻みでの一致検証であり、任意環境・別コンパイラでの速度や完全一致の保証ではない。
+[集計](summary.json)を参照。単一bag・同じ乱数列／時間刻みでの一致検証であり、任意環境・別コンパイラでの速度や完全一致の保証ではない。

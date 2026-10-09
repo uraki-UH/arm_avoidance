@@ -20,6 +20,8 @@
 #include "collision/composite_collision_checker.hpp"
 #include "collision/environment_collision_checker.hpp"
 #include "collision/geometric_self_collision_checker.hpp"
+#include "collision/independent_arm_model.hpp"
+#include <nlohmann/json.hpp>
 #include "collision/voxel_collision_checker.hpp"
 #include "common/resource_utils.hpp"
 #include "common/voxel_utils.hpp"
@@ -234,7 +236,10 @@ static std::vector<std::string> resolveSelectedProfileNames(
 
 static std::vector<std::string> discoverGngProfileNames(rclcpp::Node *node) {
   std::unordered_set<std::string> names;
-  const auto listed = node->list_parameters({"gng"}, 4);
+  auto listed = node->list_parameters({"gng"}, 4);
+  for (const auto &entry : node->get_node_parameters_interface()->get_parameter_overrides()) {
+    listed.names.push_back(entry.first);
+  }
   for (const auto &param_name : listed.names) {
     const std::string prefix = "gng.profiles.";
     if (param_name.rfind(prefix, 0) != 0) {
@@ -1416,6 +1421,12 @@ public:
     gng_path_root_link_ = this->declare_parameter<std::string>("gng.path_root_link", "");
     gng_profile_names_ = this->declare_parameter<std::string>("gng.profile_names", "");
     gng_profile_name_ = this->declare_parameter<std::string>("gng.profile_name", "");
+    enable_independent_arms_ = declare_parameter<bool>("gng.enable_independent_arms", false);
+    enable_batched_collision_filter_ = declare_parameter<bool>("gng.enable_batched_collision_filter", false);
+    collision_worker_num_ = declare_parameter<int>("gng.collision_worker_num", 16);
+    num_local_neighbors_ = declare_parameter<int>("gng.num_local_neighbors", 6);
+    if (collision_worker_num_ < 1 || collision_worker_num_ > 64 || num_local_neighbors_ < 1)
+      throw std::invalid_argument("Invalid batched collision configuration");
     eef_link_names_ = this->declare_parameter<std::string>("robot.eef_link_names", "");
     arm_leaf_link_names_ = this->declare_parameter<std::string>("robot.arm_leaf_link_names", "");
     this->declare_parameter<std::string>("robot.voxel_link_names", "");
@@ -1469,7 +1480,9 @@ public:
 
     selected_gng_profile_names_ = resolveSelectedProfileNames(
         gng_profile_names_, gng_profile_name_, discoverGngProfileNames(this));
-    for (const auto &profile_name : selected_gng_profile_names_) {
+    all_gng_profile_names_ = discoverGngProfileNames(this);
+    appendUnique(all_gng_profile_names_, selected_gng_profile_names_);
+    for (const auto &profile_name : all_gng_profile_names_) {
       const std::string profile_prefix = "gng.profiles." + profile_name;
       declare_parameter<std::string>(profile_prefix + ".root", "");
       declare_parameter<std::string>(profile_prefix + ".eef", "");
@@ -1561,6 +1574,9 @@ public:
         this->declare_parameter<double>("gng_params.beta", 0.0005);
     gng_params_.enable_nearest_index = this->declare_parameter<bool>(
         "gng_params.enable_nearest_index", true);
+    // 学習中に形状・固定姿勢・判定条件が変化しないオフライン処理用。
+    gng_params_.enable_static_collision_cache = this->declare_parameter<bool>(
+        "gng_params.enable_static_collision_cache", true);
     gng_params_.n_best_candidates =
         this->declare_parameter<int>("gng_params.n_best_candidates", 4);
     gng_params_.ais_threshold =
@@ -1652,6 +1668,58 @@ public:
   } // Constructor
 
   void run_training_pipeline() {
+    if (enable_independent_arms_ && active_independent_profile_.empty()) {
+      if (skip_collision_checks_ || !enable_self_collision_) {
+        throw std::invalid_argument("Independent arm training requires collision checks");
+      }
+      // 左右の処理中に編集されたURDFによる、異なる形状条件の混在防止。
+      const auto read_urdf_source = [this]() {
+        std::ifstream stream(robot_sim::common::resolvePath(robot_urdf_path_), std::ios::binary);
+        if (!stream) throw std::runtime_error("Cannot read independent arm URDF");
+        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+      };
+      const auto urdf_source = read_urdf_source();
+      const auto selected_profiles = selected_gng_profile_names_;
+      const auto parent_id = experiment_id_;
+      // 再学習途中の新旧モデル混在を避ける公開manifestの無効化
+      if (!generate_initial_collision_approval_only_) {
+        std::filesystem::remove(std::filesystem::path(data_directory_) / parent_id / "independent_arms.json");
+      }
+      nlohmann::json manifest = {{"version", 1}, {"mode", "independent_arms"},
+                                 {"profiles", nlohmann::json::array()}};
+      try {
+        for (const auto &profile : selected_profiles) {
+          if (profile.empty() || profile == "." || profile == ".." ||
+              profile.find('/') != std::string::npos) {
+            throw std::invalid_argument("Invalid profile directory");
+          }
+          active_independent_profile_ = profile;
+          selected_gng_profile_names_ = {profile};
+          experiment_id_ = parent_id + "/" + profile;
+          run_training_pipeline();
+          if (read_urdf_source() != urdf_source)
+            throw std::runtime_error("URDF changed during independent arm training; manifest withheld");
+          manifest["profiles"].push_back({{"name", profile}, {"metadata", profile + "/model.json"}});
+        }
+      } catch (...) {
+        selected_gng_profile_names_ = selected_profiles;
+        experiment_id_ = parent_id;
+        active_independent_profile_.clear();
+        throw;
+      }
+      selected_gng_profile_names_ = selected_profiles;
+      experiment_id_ = parent_id;
+      active_independent_profile_.clear();
+      if (!generate_initial_collision_approval_only_) {
+        const auto path = std::filesystem::path(data_directory_) / parent_id / "independent_arms.json";
+        std::ofstream stream(path.string() + ".tmp");
+        stream << manifest.dump(2) << '\n';
+        stream.close();
+        if (!stream) throw std::runtime_error("Cannot save independent arm manifest");
+        std::filesystem::rename(path.string() + ".tmp", path);
+      }
+      return;
+    }
     // 1. Robot Setup
     std::unique_ptr<kinematics::KinematicChain> arm;
     simulation::RobotModel *model = nullptr;
@@ -1716,6 +1784,19 @@ public:
       profile_configs.push_back(loadGngProfileConfig(this, profile_name));
     }
 
+    simulation::RobotModel collision_model = base_model_obj;
+    std::set<std::string> independent_voxel_links;
+    if (enable_independent_arms_) {
+      std::vector<std::string> roots;
+      for (const auto &name : all_gng_profile_names_) {
+        roots.push_back(loadGngProfileConfig(this, name).root_link);
+      }
+      collision_model = simulation::make_independent_arm_collision_model(
+          base_model_obj, profile_configs.front().root_link, roots);
+      independent_voxel_links = simulation::collect_moving_arm_links(
+          base_model_obj, profile_configs.front().root_link);
+    }
+
     std::vector<std::string> combined_leaf_link_names;
     std::vector<std::string> combined_voxel_link_names;
     std::vector<std::string> combined_voxel_exclude_links;
@@ -1774,6 +1855,11 @@ public:
     RCLCPP_INFO(this->get_logger(), "[GNG] combined declared dof: %d",
                 declared_dof_sum);
 
+    if (enable_independent_arms_) {
+      // 固定外装・指を含む、対象腕の全可動形状のVLUT占有
+      combined_voxel_link_names.assign(independent_voxel_links.begin(), independent_voxel_links.end());
+      combined_voxel_exclude_links.clear();
+    }
     arm = buildKinematicChainFromLeafNames(*model, combined_leaf_link_names);
     arm->setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
     RCLCPP_INFO(this->get_logger(), "[Robot] Loaded: %s, DOF: %d",
@@ -1823,6 +1909,7 @@ public:
                   gng_dimension_);
     }
 
+    const auto learning_joint_names = gng_selection_spec.selected_joint_names;
     std::shared_ptr<kinematics::KinematicChain> gng_learning_chain =
         std::make_shared<TcpThresholdAcceptedSampleKinematicChain>(
             arm.get(), std::move(gng_selection_spec), tcp_threshold_);
@@ -1873,7 +1960,7 @@ public:
                   "[Collision] Using all-link mesh surfaces and solid voxel containment (resolution: %.6f m)",
                   collision_voxel_size_);
       self_checker = std::make_shared<simulation::GeometricSelfCollisionChecker>(
-          base_model_obj, *arm, true, collision_voxel_size_);
+          collision_model, *arm, true, collision_voxel_size_);
       auto composite_checker =
           std::make_shared<simulation::CompositeCollisionChecker>();
       composite_checker->setSelfCollisionChecker(self_checker);
@@ -1887,7 +1974,7 @@ public:
       final_checker = composite_checker;
     } else {
       self_checker =
-          std::make_shared<simulation::GeometricSelfCollisionChecker>(*model,
+          std::make_shared<simulation::GeometricSelfCollisionChecker>(collision_model,
                                                                       *arm);
       auto composite_checker =
           std::make_shared<simulation::CompositeCollisionChecker>();
@@ -2035,6 +2122,8 @@ public:
                 gng_params_.enable_nearest_index ? "true" : "false");
 
     gng.setSelfCollisionChecker(final_checker.get());
+    RCLCPP_INFO(this->get_logger(), "[CollisionCache] enable_static_collision_cache=%s",
+                gng_params_.enable_static_collision_cache ? "true" : "false");
     // Initialize Status Providers
     if (!skip_collision_checks_ && final_checker) {
       gng.registerStatusProvider(
@@ -2053,8 +2142,8 @@ public:
 
     std::filesystem::path output_dir =
         std::filesystem::path(data_directory_) / experiment_id_;
-    gng.setStatsLogPath(
-        (output_dir / (experiment_id_ + "_distance_stats.dat")).string());
+    const auto stats_file = output_dir / (output_dir.filename().string() + "_distance_stats.dat");
+    gng.setStatsLogPath(stats_file.string());
 
     // Define standard file paths
     std::string gng_file_path = (output_dir / gng_model_filename_).string();
@@ -2064,7 +2153,7 @@ public:
                 "[SavePlan] gng_file_path=%s", gng_file_path.c_str());
     RCLCPP_INFO(this->get_logger(),
                 "[SavePlan] stats_log_path=%s",
-                (output_dir / (experiment_id_ + "_distance_stats.dat")).string().c_str());
+                stats_file.string().c_str());
 
     // 4. Training Steps
     if (vlut_only_) {
@@ -2080,6 +2169,38 @@ public:
           delete model;
         throw std::runtime_error("Failed to load GNG map.");
       }
+    } else if (enable_batched_collision_filter_) {
+      if (skip_collision_checks_ || !enable_self_collision_ || !self_checker)
+        throw std::invalid_argument("Batched graph construction requires collision checks");
+      RCLCPP_INFO(get_logger(), "[Step 1] Node placement before final collision validation...");
+      gng.setCollisionAware(false);
+      gng.gngTrainOnTheFly(gng_params_.max_iterations);
+      gng.gngTrainOnTheFly(gng_params_.refine_iterations);
+      pruneNodesOutsideTcpThreshold(gng, gng_chain_ptr, tcp_threshold_,
+                                    "before batched filter", get_logger());
+      gng.refresh_coord_weights();
+      // FKの入力・出力と衝突姿勢はworkerごとに分離。不変な運動連鎖と形状だけの共有。
+      std::vector<std::function<bool(const Eigen::VectorXf &)>> queries;
+      for (int worker_idx = 0; worker_idx < collision_worker_num_; ++worker_idx) {
+        auto worker_self = std::shared_ptr<simulation::GeometricSelfCollisionChecker>(self_checker->clone_for_queries());
+        auto worker = std::make_shared<simulation::CompositeCollisionChecker>();
+        worker->setSelfCollisionChecker(worker_self);
+        worker->setEnvironmentCollisionChecker(env_checker);
+        worker->setEnableSelfCollision(enable_self_collision_);
+        if (apply_environment_ignore_links_)
+          for (const auto &name : environment_ignore_links_) worker->addEnvironmentIgnoreLink(name);
+        queries.emplace_back([worker, gng_chain_ptr, values = std::vector<double>{},
+            positions = std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>{},
+            orientations = std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>{}]
+            (const Eigen::VectorXf &angles) mutable {
+              gng_chain_ptr->forwardKinematicsAt(angles, values, positions, orientations);
+              worker->updateBodyPoses(positions, orientations);
+              return worker->checkCollision();
+            });
+      }
+      RCLCPP_INFO(get_logger(), "[Step 2] Sparse graph validation; TCP layers reuse validated joint edges...");
+      gng.build_sparse_safe_graph(num_local_neighbors_, queries);
+      gng.triggerBatchUpdates();
     } else {
       RCLCPP_INFO(this->get_logger(), "[Step 1] Initial Exploration...");
       gng.setCollisionAware(false);
@@ -2124,7 +2245,12 @@ public:
       gng.triggerBatchUpdates();
     }
 
-    // 5. High-Fidelity Voxelization (VLUT Generation)
+    if (gng.getActiveIndices().empty()) throw std::runtime_error("No collision-free GNG nodes");
+    if (enable_independent_arms_ && gng.nodeAt(gng.getActiveIndices().front()).weight_angle.size() != static_cast<int>(learning_joint_names.size())) {
+      throw std::runtime_error("Independent GNG joint dimensions do not match");
+    }
+
+    // 元形状によるVLUT占有の構築
 #ifdef USE_FCL
     struct VRel {
       long vid;
@@ -2275,8 +2401,7 @@ public:
       RCLCPP_INFO(this->get_logger(), "[Success] GNG saved to: %s",
                   gng_file_path.c_str());
     } else {
-      RCLCPP_ERROR(this->get_logger(), "[Error] Failed to save GNG to: %s",
-                   gng_file_path.c_str());
+      throw std::runtime_error("Cannot save GNG: " + gng_file_path);
     }
 
     // Save VLUT
@@ -2319,11 +2444,34 @@ public:
       RCLCPP_INFO(this->get_logger(), "[Success] VLUT saved to: %s (Res: %f m)",
                   vlut_file_path.c_str(), res);
     } else {
-      RCLCPP_ERROR(this->get_logger(), "[Error] Failed to save VLUT to: %s",
-                   vlut_file_path.c_str());
+      throw std::runtime_error("Cannot save VLUT: " + vlut_file_path);
     }
 #endif
 
+    if (enable_independent_arms_) {
+      nlohmann::json fixed_joints = nlohmann::json::object();
+      for (const auto &[name, joint] : base_model_obj.getJoints()) {
+        if (joint.type != kinematics::JointType::Fixed &&
+            std::find(learning_joint_names.begin(), learning_joint_names.end(), name) == learning_joint_names.end()) {
+          fixed_joints[name] = 0.0;
+        }
+      }
+      const nlohmann::json metadata = {
+          {"version", 1}, {"mode", "independent_arm"}, {"profile", active_independent_profile_},
+          {"root_link", profile_configs.front().root_link}, {"eef_link", combined_leaf_link_names.front()},
+          {"urdf_path", resolved_path}, {"joint_names", learning_joint_names},
+          {"fixed_joints", fixed_joints}, {"gng_file", gng_model_filename_}, {"vlut_file", vlut_filename_},
+          {"num_nodes", gng.getActiveIndices().size()}, {"voxel_size", vlut_resolution_},
+          {"collision_voxel_size", collision_voxel_size_}, {"enable_pair_collision_check", true},
+          {"enable_batched_collision_filter", enable_batched_collision_filter_},
+          {"num_local_neighbors", num_local_neighbors_}, {"max_joint_step", .025}};
+      const auto path = output_dir_path / "model.json";
+      std::ofstream stream(path.string() + ".tmp");
+      stream << metadata.dump(2) << '\n';
+      stream.close();
+      if (!stream) throw std::runtime_error("Cannot save independent arm metadata");
+      std::filesystem::rename(path.string() + ".tmp", path);
+    }
     delete model;
   }
 
@@ -2353,6 +2501,12 @@ private:
   std::string gng_profile_names_;
   std::string gng_profile_name_;
   std::vector<std::string> selected_gng_profile_names_;
+  std::vector<std::string> all_gng_profile_names_;
+  bool enable_independent_arms_ = false;
+  bool enable_batched_collision_filter_ = false;
+  int collision_worker_num_ = 16;
+  int num_local_neighbors_ = 6;
+  std::string active_independent_profile_;
   double spatial_map_resolution_;
   double vlut_resolution_;
   double sensing_resolution_;

@@ -1,3 +1,5 @@
+import {create_ros_results} from './generated/ros-results.js';
+import {PhysicsPanel} from './physics-ui.js';
 import {RosPointsPanel} from './ros-points.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -12,9 +14,12 @@ import { Robot, solveIK, orientationError } from './robot.js';
 import {SceneEnvironment as WorkEnvironment} from './environment-editor.js';
 import {LidarWorkspace} from './lidar-ui.js';
 import {RGBDWorkspace} from './rgbd-ui.js';
+import {camera_workspace} from './camera-ui.js';
 import {VMAIWorkspace} from './vm-ai.js';
 import {ROBOT_MODELS,initialModel} from './models.js';
+let physics_panel, ros_results;
 let workspace, rgbd, lidar, ai, ros_points, demoMotion=null;
+let color_camera_panel;
 let model=initialModel(),switchingModel=false;
 const modelCache=new Map(),modelStates=new Map();
 
@@ -111,12 +116,20 @@ function syncTargetInputs(){if(!robot)return;const t=targets[activeSide],e=new T
 function syncControls(){if(!robot)return;$('grip').value=robot.joints[`${activeSide}_gripper_joint`].q/robot.joints[`${activeSide}_gripper_joint`].upper*100;$('grip-value').textContent=Math.round(+$('grip').value)+'%';for(const [name,entry] of Object.entries(jointInputs)){const q=robot.joints[name].q;entry.input.value=q*DEG;if(entry.output)entry.output.textContent=(q*DEG).toFixed(1)+'°';if(entry.number&&document.activeElement!==entry.number)entry.number.value=(q*DEG).toFixed(1);}}
 function homePose(){const p=Object.fromEntries(robot.actuated.map(j=>[j.name,0]));p.L_joint2=-Math.PI/2;p.R_joint2=Math.PI/2;return p;}
 function presetPose(name){const p=homePose();if(name==='ready'){Object.assign(p,{L_joint1:-.18,R_joint1:.18,L_joint2:-1.35,R_joint2:1.35,L_joint4:-1.15,R_joint4:1.15,L_joint6:.4,R_joint6:-.4,L_gripper_joint:.32,R_gripper_joint:.32});}if(name==='spread'){Object.assign(p,{L_joint2:-.65,R_joint2:.65,L_joint4:-.65,R_joint4:.65,L_joint6:.35,R_joint6:-.35});}return p;}
-function animatePose(pose,duration=.7){stopPlayback();playing={type:'single',from:robot.getPose(),to:pose,start:performance.now(),duration:poseDuration(robot.getPose(),pose,duration)};activeTarget=false;targetDirty.L=targetDirty.R=false;}
+let motion_req=0,motion_requires_physics=false;
+async function run_motion(begin){
+ if(robot.pose_source==='ros'){toast('ROS追従中です。シミュレータ操作へ切り替えてください');return;}
+ stopPlayback();const req=motion_req;
+ try{const has_physics=physics_panel.socket?await physics_panel.prepare_motion():false;if(req!==motion_req)return;motion_requires_physics=has_physics;begin();}
+ catch(error){if(req===motion_req)toast('動作を開始できません：'+error.message);}
+}
+function motion_time(now){return motion_requires_physics?(scene.userData.physics_time_sec??0)*1000:now;}
+function animatePose(pose,duration=.7){run_motion(()=>{playing={type:'single',from:robot.getPose(),to:pose,start:motion_time(performance.now()),duration:poseDuration(robot.getPose(),pose,duration)};activeTarget=false;targetDirty.L=targetDirty.R=false;});}
 function poseDuration(a,b,requested){return Math.max(requested,...robot.actuated.map(j=>1.5*Math.abs((b[j.name]??a[j.name])-a[j.name])/Math.max(.01,j.velocity)));}
-function stopPlayback(){ros_points?.robot_panel&&(ros_points.robot_panel.active=null);playing=null;demoMotion=null;if($('ai-demo'))$('ai-demo').textContent='▶ ロボットを動かす';$('play').textContent='▶ 再生';}
-function toggleDemoMotion(){if(demoMotion){stopPlayback();syncTargets();return;}stopPlayback();demoMotion={start:performance.now(),from:robot.getPose()};activeTarget=false;targetDirty.L=targetDirty.R=false;}
+function stopPlayback(){motion_req++;motion_requires_physics=false;ros_points?.robot_panel&&(ros_points.robot_panel.active=null);playing=null;demoMotion=null;if($('ai-demo'))$('ai-demo').textContent='▶ ロボットを動かす';$('play').textContent='▶ 再生';}
+function toggleDemoMotion(){if(demoMotion){stopPlayback();syncTargets();return;}run_motion(()=>{demoMotion={start:motion_time(performance.now()),from:robot.getPose()};$('ai-demo').textContent='■ 動きを止める';activeTarget=false;targetDirty.L=targetDirty.R=false;});}
 function updateDemoMotion(now){
- if(!demoMotion)return false;
+ if(!demoMotion)return false;if(motion_requires_physics&&!physics_panel.socket){stopPlayback();return false;}now=motion_time(now);
  const t=(now-demoMotion.start)/1000,blend=Math.min(1,t/2),u=blend*blend*(3-2*blend),p=presetPose('ready');
  Object.assign(p,{waist_joint:.25*Math.sin(t*.45),neck_pan_joint:.3*Math.sin(t*.35),neck_tilt_joint:-.55+.12*Math.sin(t*.6),L_joint4:-1.05+.25*Math.sin(t*.7),R_joint4:1.05+.25*Math.sin(t*.7+1.3),L_joint1:-.2+.16*Math.sin(t*.5),R_joint1:.2+.16*Math.sin(t*.5+1)});
  for(const j of robot.actuated)p[j.name]=demoMotion.from[j.name]+((p[j.name]??0)-demoMotion.from[j.name])*u;
@@ -144,15 +157,15 @@ function buildJointControls(){
 }
 
 function renderKeyframes(){const container=$('keyframes');container.replaceChildren();if(!keyframes.length){const e=document.createElement('span');e.className='empty-timeline';e.textContent='手先を動かしてポーズを記録';container.append(e);}keyframes.forEach((frame,i)=>{const b=document.createElement('button');b.className='frame';b.title=`ポーズ ${i+1} に移動（右クリックで削除）`;b.textContent=String(i+1).padStart(2,'0');const s=document.createElement('small');s.textContent='POSE';b.append(s);b.addEventListener('click',()=>animatePose(frame));b.addEventListener('contextmenu',e=>{e.preventDefault();stopPlayback();keyframes.splice(i,1);renderKeyframes();});container.append(b);});}
-function playSequence(){if(playing?.type==='sequence'){stopPlayback();return;}if(keyframes.length<2){toast('2つ以上のポーズを記録してください。');return;}activeTarget=false;targetDirty.L=targetDirty.R=false;const requested=Math.max(.5,Math.min(15,+$('duration').value||2));playing={type:'sequence',index:0,from:robot.getPose(),to:keyframes[0],start:performance.now(),duration:poseDuration(robot.getPose(),keyframes[0],requested),requested};$('play').textContent='■ 停止';}
-function updatePlayback(now){if(!playing)return false;const p=playing,t=Math.min(1,(now-p.start)/1000/p.duration),u=t*t*(3-2*t);const pose={};for(const j of robot.actuated)pose[j.name]=p.from[j.name]+((p.to[j.name]??p.from[j.name])-p.from[j.name])*u;robot.setPose(pose);syncTargets();if(t===1){if(p.type==='sequence'&&p.index<keyframes.length-1){p.index++;p.from=robot.getPose();p.to=keyframes[p.index];p.start=now;p.duration=poseDuration(p.from,p.to,p.requested);}else{stopPlayback();toast('ポーズに到着しました');}}return true;}
+function playSequence(){if(playing?.type==='sequence'){stopPlayback();return;}if(keyframes.length<2){toast('2つ以上のポーズを記録してください。');return;}run_motion(()=>{if(keyframes.length<2)return;activeTarget=false;targetDirty.L=targetDirty.R=false;const requested=Math.max(.5,Math.min(15,+$('duration').value||2));playing={type:'sequence',index:0,from:robot.getPose(),to:keyframes[0],start:motion_time(performance.now()),duration:poseDuration(robot.getPose(),keyframes[0],requested),requested};$('play').textContent='■ 停止';});}
+function updatePlayback(now){if(!playing)return false;if(motion_requires_physics&&!physics_panel.socket){stopPlayback();return false;}now=motion_time(now);const p=playing,t=Math.min(1,(now-p.start)/1000/p.duration),u=t*t*(3-2*t);const pose={};for(const j of robot.actuated)pose[j.name]=p.from[j.name]+((p.to[j.name]??p.from[j.name])-p.from[j.name])*u;robot.setPose(pose);syncTargets();if(t===1){if(p.type==='sequence'&&p.index<keyframes.length-1){p.index++;p.from=robot.getPose();p.to=keyframes[p.index];p.start=now;p.duration=poseDuration(p.from,p.to,p.requested);}else{stopPlayback();toast('ポーズ指令の再生が完了しました');}}return true;}
 async function download(name,data,type){
  const blob=new Blob([data],{type});
  try{
   const response=await fetch('/api/export?name='+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':type,'X-ToPo-Export':'1'},body:blob});
   if(!response.ok)throw new Error('Static server');
   const result=await response.json();diagnostics.lastExport=result.url;
-  const link=$('export-link');link.href=result.url;link.hidden=false;link.textContent='保存済みファイルを開く：'+(type==='image/png'?'PNG画像':type==='application/zip'?'RGB-D一式ZIP':name==='ToPo-workspace.json'?'シーンJSON':'ポーズJSON');
+  const link=$('export-link');link.href=result.url;link.hidden=false;link.textContent='保存済みファイルを開く：'+(type==='image/png'?'PNG画像':type==='application/zip'?name:name==='ToPo-workspace.json'?'シーンJSON':'ポーズJSON');
   toast('シミュレータ内の exports フォルダーに保存しました');return;
  }catch{
   const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
@@ -177,7 +190,11 @@ function bindUI(){
  $('photo').onclick=()=>setPhoto(!photoMode);$('screenshot').onclick=()=>{const prev=photoMode;setPhoto(true);draw();renderer.domElement.toBlob(b=>{if(b)download(model.exportName+'.png',b,'image/png');setPhoto(prev);},'image/png');};
  $('show-grid').onchange=e=>grid.visible=e.target.checked;$('show-trails').onchange=e=>{for(const t of Object.values(trails)){t.line.visible=e.target.checked;if(!e.target.checked){t.points=[];t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry();}}};
  $('show-markers').onchange=e=>{markersVisible=e.target.checked;updateMarkerVisibility();};
- $('studio').onchange=e=>{const dark=e.target.value==='dark';document.body.classList.toggle('dark-studio',dark);scene.background.set(dark?'#19231e':'#edf0ed');scene.fog.color.copy(scene.background);floor.material.color.set(dark?'#253329':'#e0e3e0');scene.environmentIntensity=dark?.6:.65;renderer.shadowMap.needsUpdate=true;};
+ $('studio').onchange=e=>{const dark=e.target.value==='dark';document.body.classList.toggle('dark-studio',dark);scene.background.set(dark?'#1e1e1e':'#edf0ed');scene.fog.color.copy(scene.background);floor.material.color.set(dark?'#292929':'#e0e3e0');scene.environmentIntensity=dark?.6:.65;renderer.shadowMap.needsUpdate=true;};
+ $('enable-shadows').onclick=()=>{const enable_shadows=!renderer.shadowMap.enabled;renderer.shadowMap.enabled=enable_shadows;renderer.shadowMap.needsUpdate=enable_shadows;
+  // 影の有無に対応するシェーダーの再選択。更新は切り替え時のみ
+  const shadow_materials=new Set();scene.traverse(object=>{if(object.material)for(const material of Array.isArray(object.material)?object.material:[object.material])shadow_materials.add(material);});for(const material of shadow_materials)material.needsUpdate=true;
+  const button=$('enable-shadows');button.classList.toggle('active',enable_shadows);button.setAttribute('aria-pressed',String(enable_shadows));button.textContent=enable_shadows?'影 ON':'影 OFF';};
  $('quality').onchange=e=>{ao.enabled=e.target.value==='high';renderer.setPixelRatio(Math.min(devicePixelRatio,e.target.value==='high'?1.5:1));composer.setPixelRatio(renderer.getPixelRatio());resize();};
  $('exposure').oninput=e=>renderer.toneMappingExposure=+e.target.value;$('help-button').onclick=()=>$('help').showModal();$('close-help').onclick=()=>$('help').close();
  $('add-keyframe').onclick=()=>{if(keyframes.length>=50){toast('記録できるポーズは50個までです。');return;}keyframes.push(robot.getPose());renderKeyframes();toast(`ポーズ ${keyframes.length} を記録しました`);};$('play').onclick=playSequence;$('clear-frames').onclick=()=>{stopPlayback();keyframes.length=0;renderKeyframes();};
@@ -187,7 +204,7 @@ function bindUI(){
 }
 
 function updateIK(dt){
- if(!activeTarget||playing)return false;
+ if(robot.pose_source==='ros'||!activeTarget||playing)return false;
  const side=activeSide,hold=$('hold-orientation').checked,chain=robot.chain(side),before=chain.map(j=>j.q),start=performance.now();
  if(targetDirty[side]||!ikGoals[side]){
   // Solve a stable destination, then interpolate to it; avoid re-solving intermediate
@@ -221,8 +238,16 @@ function updateLabels(){for(const side of ['L','R']){const tcp=robot.tcp(side),p
 }
 function updateUI(){const tcp=robot.tcp(activeSide),error=tcp.position.distanceTo(targets[activeSide].position)*1000,angle=orientationError(targets[activeSide].quaternion,tcp.quaternion).length()*DEG,hold=$('hold-orientation').checked,ok=error<1&&(!hold||angle<1);$('ik-state').textContent=playing?'ポーズを再生中':ok?'目標に到達':activeTarget&&solveFrames<40?'手先が追従中':'目標未到達';$('ik-error').textContent=error.toFixed(1)+' mm'+(hold?' / '+angle.toFixed(1)+'°':'');$('ik-dot').style.background=ok?'var(--green)':'var(--amber)';$('ik-state').style.color=ok?'#007700':'var(--amber)';$('actual-position').textContent='TCP '+tcp.position.toArray().map(v=>(v*1000).toFixed(1).padStart(6)).join(' / ')+' mm';syncControls();if(!gizmo.dragging)syncTargetInputs();if(window.simulator)document.documentElement.dataset.simState=JSON.stringify(window.simulator.getState());}
 // 標準品質では中間バッファと画面全体の後処理を省略
-function draw(){if(ao.enabled)composer.render();else renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(overlay,camera);renderer.autoClear=true;}
-function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;rgbd?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}draw();diagnostics.frames++;frameCount++;if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
+let last_view_draw_ms=-Infinity,last_view_input_ms=-Infinity,is_view_input_active=false;
+orbit.addEventListener('start',()=>{is_view_input_active=true;});
+orbit.addEventListener('end',()=>{is_view_input_active=false;});
+orbit.addEventListener('change',()=>{last_view_input_ms=performance.now();});
+// RGB-D回収待ち中の重複描画を短時間抑制。視点操作・ロボット動作時は通常描画。
+function draw(is_moving=false){
+ const now=performance.now();
+ if(rgbd?.enable_readback_priority&&!is_moving&&!gizmo.dragging&&!is_view_input_active&&now-last_view_input_ms>100&&rgbd.sensor.readback_pool.has_pending&&now-last_view_draw_ms<50)return false;
+ last_view_draw_ms=now;if(ao.enabled)composer.render();else renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(overlay,camera);renderer.autoClear=true;return true;}
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;physics_panel?.tick(now);ros_results?.tick(now);rgbd?.tick(now);color_camera_panel?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);physics_panel?.sync_robot_pose();if(physics_panel?.socket&&physics_panel.enable_dynamics&&!activeTarget&&!gizmo.dragging)syncTargets();updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}if(draw(moving)){diagnostics.frames++;frameCount++;}if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
 
 function updateModelUI(){
  document.querySelector('.product-header strong').textContent=model.title;document.title=model.title+' · Motion Studio';
@@ -233,7 +258,7 @@ function updateModelUI(){
 async function loadRobotModel(def){
  if(modelCache.has(def.id))return modelCache.get(def.id);
  const [xml,manifest]=await Promise.all([fetch(def.urdf).then(r=>{if(!r.ok)throw Error('URDFがありません');return r.text();}),fetch(def.assets).then(r=>{if(!r.ok)throw Error('メッシュ一覧がありません');return r.json();})]);
- const next=new Robot(xml);next.modelId=def.id;
+ const next=new Robot(xml);next.modelId=def.id;next.ros_frame_prefix=def.ros_frame_prefix;
  await next.loadVisuals(manifest,materials,p=>{$('load-progress').style.width=(p*90).toFixed(0)+'%';$('loading-text').textContent=`${def.label} CADメッシュを読み込み中 ${Math.round(p*100)}%`;});
  modelCache.set(def.id,next);return next;
 }
@@ -242,14 +267,14 @@ async function switchModel(id){
  const previous=model,previousRobot=robot,restoreTabFocus=!!document.activeElement?.closest('#model-tabs'),wasLive={lidar:lidar.live,rgbd:rgbd?.live,ai:ai?.running};
  modelStates.set(model.id,{pose:robot.getPose(),keyframes:structuredClone(keyframes)});
  stopPlayback();releaseMarker();ready=false;switchingModel=true;diagnostics.ready=false;
- lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);
+ lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);
  document.querySelector('aside').inert=true;document.querySelector('footer').inert=true;
  $('loading').classList.remove('done');$('loading').setAttribute('aria-hidden','false');$('load-progress').style.width='0%';updateModelUI();
  try{
   const next=await loadRobotModel(ROBOT_MODELS[id]);scene.remove(robot);scene.add(next);robot=next;model=ROBOT_MODELS[id];
   robot.setPose(modelStates.get(id)?.pose||homePose());
   keyframes.splice(0,keyframes.length,...(modelStates.get(id)?.keyframes||[]));renderKeyframes();buildJointControls();
-  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);
+  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);
   for(const t of Object.values(trails)){t.points=[];t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry();}
   syncTargets();syncControls();setSide(activeSide);updateCloudLayers();renderer.shadowMap.needsUpdate=true;
   await renderer.compileAsync(scene,camera);const url=new URL(location.href);url.searchParams.set('model',id);history.replaceState(null,'',url);
@@ -257,12 +282,12 @@ async function switchModel(id){
  }catch(e){
   scene.remove(robot);robot=previousRobot;model=previous;scene.add(robot);robot.setPose(modelStates.get(model.id).pose);
   keyframes.splice(0,keyframes.length,...modelStates.get(model.id).keyframes);renderKeyframes();buildJointControls();
-  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);syncTargets();syncControls();
+  lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);syncTargets();syncControls();
   toast('モデル切替失敗：'+e.message);diagnostics.errors.push(String(e));
  }finally{
   switchingModel=false;ready=true;diagnostics.ready=true;document.querySelector('aside').inert=false;document.querySelector('footer').inert=false;
   lidar.live=wasLive.lidar; if(rgbd)rgbd.live=wasLive.rgbd;if(ai)ai.running=wasLive.ai;
-  $('lidar-live').textContent=lidar.live?'■ 停止':'▶ 連続取得';if(rgbd)$('sensor-live').textContent=rgbd.live?'■ RGB-D停止':'▶ RGB-D開始';if(ai)$('ai-start').textContent=ai.running?'■ 入力を停止':'▶ VM処理を開始';
+  if(rgbd)$('sensor-live').textContent=rgbd.live?'■ RGB-D停止':'▶ RGB-D開始';if(ai)$('ai-start').textContent=ai.running?'■ 入力を停止':'▶ VM処理を開始';
   $('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');updateModelUI();updateUI();lidar.publish();ai?.publish();
   if(restoreTabFocus)document.querySelector(`[data-model=${model.id}]`).focus({preventScroll:true});
  }
@@ -276,8 +301,8 @@ async function init(){
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
   $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');$('load-status').textContent='LOCAL · READY';
   ready=true;diagnostics.ready=true;toast('手先の矢印をドラッグして操作できます');
-  window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,diagnostics,keyframes,
-   apply_ros_pose:pose=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;robot.setPose(pose);syncTargets();renderer.shadowMap.needsUpdate=true;},
+  window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,ros_results,color_camera_panel,get physics_panel(){return physics_panel;},diagnostics,keyframes,
+   apply_ros_pose:pose=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;robot.set_received_pose(pose);syncTargets();renderer.shadowMap.needsUpdate=true;},
    set_robot_placement:values=>{stopPlayback();activeTarget=false;robot.position.fromArray(values);robot.quaternion.setFromEuler(new THREE.Euler(...values.slice(3).map(v=>v*RAD),'ZYX'));robot.updateMatrixWorld(true);syncTargets();renderer.shadowMap.needsUpdate=true;},setSide,setMode,solveIK,homePose,presetPose,animatePose,syncTargets,validatePose,switchModel,
    getState:()=>({ready,model:model.id,modelTitle:model.title,source:model.urdf,switchingModel,activeSide,mode,workspace:workspace?.getState(),rgbd:rgbd?.lastSummary,dragging:gizmo.dragging,playing:!!playing,quality:$('quality').value,holdOrientation:$('hold-orientation').checked,appearance:{greenBaseHex:'#'+materials.green.color.getHexString(),toneMapping:'Neutral, chroma preserved',logo:'branding/FuzzRoBo-logo.png'},joints:robot.getPose(),tcp:Object.fromEntries(['L','R'].map(s=>{const p=robot.tcp(s);return[s,{position:p.position.toArray(),quaternion:p.quaternion.toArray(),target:targets[s].position.toArray(),errorMm:p.position.distanceTo(targets[s].position)*1000,errorDeg:orientationError(targets[s].quaternion,p.quaternion).length()*DEG}]})),diagnostics:{...diagnostics},triangles:robot.triangles}),
    setTarget:(side,xyz,rpy)=>{setSide(side);targets[side].position.fromArray(xyz);if(rpy){targets[side].quaternion.setFromEuler(new THREE.Euler(...rpy,'ZYX'));$('hold-orientation').checked=true;}targetDirty[side]=true;activeTarget=true;solveFrames=0;syncTargetInputs();},
@@ -305,10 +330,20 @@ function initWorkspace(){
  workspace=new WorkEnvironment({scene,overlay,camera,renderer,orbit,toast,onEdit:()=>updateMarkerVisibility()});
  try{rgbd=new RGBDWorkspace({scene,overlay,renderer,camera,robot,environment:workspace,exclude:[grid,...Object.values(trails).map(x=>x.line),robot.links.camera_link],toast,download,aim:aimAtTable,onCloudOnly:()=>updateCloudLayers()});}
  catch(e){$('sensor-panel').textContent='RGB-Dを初期化できません：'+e.message;diagnostics.errors.push(String(e));}
+ try{color_camera_panel=new camera_workspace({scene,renderer,robot,environment:workspace,exclude:[grid,...Object.values(trails).map(x=>x.line),robot.links.camera_link],toast,download,aim:aimAtTable});}
+ catch(e){$('camera-panel').textContent='カメラを初期化できません：'+e.message;diagnostics.errors.push(String(e));}
  lidar=new LidarWorkspace({scene,overlay,robot,renderer,camera,environment:workspace,toast,download,onLayers:()=>updateCloudLayers()});
  ai=new VMAIWorkspace({scene,camera,robot,lidar,rgbd,environment:workspace,toast,motion:{toggle:toggleDemoMotion,active:()=>!!demoMotion}});
- ros_points=new RosPointsPanel({environment:workspace,rgbd,toast});
- document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>x.classList.toggle('active',x===b));for(const name of ['robot','environment','sensor','lidar','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=b.dataset.panel==='environment'&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
+ ros_points=new RosPointsPanel({environment:workspace,rgbd,lidar,toast});
+ ros_results=create_ros_results({scene,camera,renderer,controls:orbit,robot:()=>robot});
+ physics_panel=new PhysicsPanel({environment:workspace,robot:()=>robot,scene});
+ document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});for(const name of ['robot','environment','sensors','physics','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=['environment','physics'].includes(b.dataset.panel)&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
+ // センサUIの再生成なし。子タブ選択・設定値・取得状態の保持。
+ document.querySelectorAll('[data-sensor-panel]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-sensor-panel]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});
+  for(const name of ['sensor','camera','lidar'])$(name+'-panel').hidden=name!==b.dataset.sensorPanel;
+  document.querySelector('aside').scrollTop=0;
+ });
  $('scene-save').onclick=()=>download('ToPo-workspace.json',JSON.stringify(workspace.getState(),null,2),'application/json');
  $('scene-load').onclick=()=>$('scene-file').click();$('scene-file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>1e6)throw Error('ファイルが大きすぎます');await workspace.load(JSON.parse(await f.text()));toast('シーンを読み込みました');}catch(error){toast('シーン読込エラー：'+error.message);}};
 }

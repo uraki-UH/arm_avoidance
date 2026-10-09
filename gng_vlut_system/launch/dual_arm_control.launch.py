@@ -54,6 +54,7 @@ def launch_setup(context):
             'enable_integrated_control': 'true', 'leader_joint_state_topic': leader_topic,
             'gazebo_master_uri': value('gazebo_master_uri'),
             'udp_config': value('udp_config'), 'allow_remote_udp': value('allow_remote_udp'),
+            'point_cloud_source': value('point_cloud_source'), 'depth_camera_config': value('depth_camera_config'),
         }.items())]
     if robot == 'topodualarm':
         actions.insert(0, LogInfo(msg='ToPoDualArm: sim_ToPoDualArmで起動。既定の回避は幾何方式、実機UDP出力は未対応。'))
@@ -75,11 +76,14 @@ def launch_setup(context):
 
 
 def generate_launch_description():
+    share = Path(get_package_share_directory('gng_vlut_system'))
     defaults = {'robot': 'max', 'params_file': '', 'gui': 'true', 'enable_keyboard': 'true',
                 'demo_config': '', 'avoidance_config': '',
                 'leader_topic': '/leader/joint_states', 'leader_mapping_file': '',
                 'leader_input_topic': '/leader/dynamixel/state/present',
                 'udp_config': '', 'allow_remote_udp': 'false',
+                'point_cloud_source': 'external_lidar',
+                'depth_camera_config': str(share / 'config/dual_arm_depth_camera.yaml'),
                 'gazebo_master_uri': 'http://127.0.0.1:11355'}
     return LaunchDescription([
         *[DeclareLaunchArgument(name, default_value=default) for name, default in defaults.items()],

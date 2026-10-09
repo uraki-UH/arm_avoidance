@@ -1,4 +1,5 @@
 import os
+import json
 import math
 import struct
 import yaml
@@ -8,7 +9,8 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogI
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter, ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 
 
 def resolve_package_uri(raw_path: str) -> str:
@@ -45,6 +47,21 @@ def read_vlut_voxel_size(vlut_file: str):
     return voxel_size
 
 
+
+def read_vlut_bounds(vlut_file: str):
+    # VLUT全占有範囲。TCP位置だけで切り落とさない環境ROIの基準
+    with open(vlut_file, "rb") as stream:
+        header = stream.read(36)
+    if len(header) != 36:
+        raise ValueError("VLUTの占有範囲ヘッダが不足しています")
+    file_id, version, _, *bounds = struct.unpack("<II7f", header)
+    if file_id != int.from_bytes(b"VLUT", byteorder="big") or version < 2:
+        raise ValueError("占有範囲を持つVLUTが必要です")
+    if not all(math.isfinite(value) for value in bounds) or any(bounds[idx] > bounds[idx+3] for idx in range(3)):
+        raise ValueError("VLUTの占有範囲が不正です")
+    return bounds[:3], bounds[3:]
+
+
 def safe_float(value, default):
     try:
         if value is None or value == "":
@@ -75,16 +92,61 @@ def safe_bool(value, default):
         return False
     return default
 
+def mid360_input(config, robot_name):
+    # MID-360入力選択とURDF取付リンクへの接続
+    if not isinstance(config, dict):
+        raise ValueError('mid360には設定辞書が必要です')
+    if not safe_bool(config.get('enable_input'), False):
+        return '', []
+    topic = config.get('points_topic', '/sensors/mid360/points')
+    from rclpy.validate_full_topic_name import validate_full_topic_name
+    validate_full_topic_name(topic)
+    actions = []
+    if safe_bool(config.get('enable_mount_tf'), True):
+        parent = config.get('parent_frame_id', 'chest_lidar_link')
+        child = config.get('frame_id', 'mid360_link')
+        for frame in (parent, child):
+            if not isinstance(frame, str) or not frame or frame.startswith('/') or any(c.isspace() for c in frame):
+                raise ValueError('MID-360のTF名が不正です')
+        if not parent.startswith(robot_name + '/'):
+            parent = robot_name + '/' + parent
+        if parent == child:
+            raise ValueError('MID-360の親子TFが同一です')
+        pos = config.get('pos', [0.0, 0.0, 0.0])
+        rot = config.get('rot_deg', [0.0, 0.0, 0.0])
+        for vector in (pos, rot):
+            if not isinstance(vector, list) or len(vector) != 3 or any(
+                type(v) not in (int, float) or not math.isfinite(v) for v in vector
+            ):
+                raise ValueError('MID-360の位置・角度には有限値3個が必要です')
+        values = pos + [math.radians(v) for v in rot]
+        arguments = [item for key, value in zip(('x', 'y', 'z', 'roll', 'pitch', 'yaw'), values)
+                     for item in ('--' + key, str(float(value)))]
+        arguments += ['--frame-id', parent, '--child-frame-id', child]
+        actions.append(Node(package='tf2_ros', executable='static_transform_publisher',
+                            name='mid360_mount_tf', arguments=arguments, output='screen'))
+    return topic, actions
+
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
+    enable_shared_roi_gng = safe_bool(LaunchConfiguration('enable_shared_roi_gng').perform(context), False)
     joint_control_backend = LaunchConfiguration("joint_control_backend").perform(context)
-    if joint_control_backend not in ("viewer", "dynamixel", "external"):
-        raise ValueError("joint_control_backendはviewer・dynamixel・externalのいずれかが必要です")
-    params_file = LaunchConfiguration("params_file").perform(context)
+    yaml_joint_control_backend = "viewer"
+    params_file = resolve_package_uri(LaunchConfiguration("params_file").perform(context))
+    # config内のファイル名指定と、明示的な設定パスの検証
+    if params_file and not os.path.isfile(params_file):
+        if not os.path.dirname(params_file):
+            params_file = os.path.join(pkg_share, "config", params_file)
+        if not os.path.isfile(params_file):
+            raise FileNotFoundError(f"設定ファイルが見つかりません: {params_file}")
     data_dir = LaunchConfiguration("dir").perform(context)
     exp_id = LaunchConfiguration("id").perform(context)
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
+    has_result_override = bool(
+        (data_dir and data_dir != "gng_results") or exp_id or gng_model_path or vlut_path
+    )
     urdf_path = LaunchConfiguration("urdf_path").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
     arm_leaf_link_names = LaunchConfiguration("arm_leaf_link_names").perform(context)
@@ -123,9 +185,12 @@ def launch_setup(context, *args, **kwargs):
     yaml_environment_voxelization = {}
     yaml_voxel_idx = {}
     yaml_dynamixel_mapping_file = ""
+    yaml_mid360 = {}
     yaml_enable_realsense_mount_tf = False
     yaml_realsense_mount_config = "package://gng_vlut_system/config/realsense_mount.yaml"
     yaml_vlut_resolution = 0.0
+    yaml_enable_independent_arms = False
+    yaml_gng_sampling = {}
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
@@ -157,10 +222,17 @@ def launch_setup(context, *args, **kwargs):
                     break
 
             if isinstance(root_ros_params, dict):
+                yaml_joint_control_backend = root_ros_params.get('joint_control_backend', 'viewer')
+                # 学習の出力先とは独立したViewer用の保存済みモデル。明示引数を優先
+                viewer_params = root_ros_params.get('viewer', {})
+                if isinstance(viewer_params, dict) and not has_result_override:
+                    gng_model_path = str(viewer_params.get('gng_model_path') or '')
+                    vlut_path = str(viewer_params.get('vlut_path') or '')
                 yaml_enable_environment_voxelization = safe_bool(
                     root_ros_params.get('enable_environment_voxelization'), False
                 )
                 yaml_environment_voxelization = root_ros_params.get('environment_voxelization', {})
+                yaml_mid360 = root_ros_params.get('mid360', {})
                 yaml_voxel_idx = root_ros_params.get('voxel_idx_shift', {})
                 yaml_enable_dynamixel_current_pose = safe_bool(
                     root_ros_params.get('enable_dynamixel_current_pose'), False
@@ -173,6 +245,8 @@ def launch_setup(context, *args, **kwargs):
                     'realsense_mount_config', yaml_realsense_mount_config
                 )
                 gng_ns = root_ros_params.get('gng', {}) if isinstance(root_ros_params.get('gng', {}), dict) else {}
+                yaml_enable_independent_arms = safe_bool(gng_ns.get('enable_independent_arms'), False)
+                yaml_gng_sampling = root_ros_params.get('gng_params', {})
                 yaml_data_dir = gng_ns.get('data_directory', yaml_data_dir)
                 yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
                 gng_model_filename = gng_ns.get('gng_model_filename', gng_model_filename)
@@ -236,6 +310,15 @@ def launch_setup(context, *args, **kwargs):
         except Exception:
             pass
 
+    # 関節出力先の優先順位: 明示launch引数、機体YAML、従来のviewer。
+    joint_control_backend = joint_control_backend or yaml_joint_control_backend
+    if joint_control_backend not in ("viewer", "dynamixel", "external"):
+        raise ValueError("joint_control_backendはviewer・dynamixel・externalのいずれかが必要です")
+
+    enable_independent_arms = safe_bool(
+        LaunchConfiguration("enable_independent_arms").perform(context), yaml_enable_independent_arms
+    )
+
     # 名前空間の決定（YAML優先、コマンドライン指定があればそちら）
     robot_name_default = LaunchConfiguration("robot_name").perform(context)
     if robot_name_default and robot_name_default != "ToPoDualArm":
@@ -278,10 +361,8 @@ def launch_setup(context, *args, **kwargs):
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
             if os.path.isabs(path):
-                if os.path.exists(path):
-                    return path
-                # 既存の絶対パスを優先しつつ、存在しない場合は basename を相対候補として扱う。
-                path = os.path.basename(path)
+                # 指定モデルの欠落時に、別の保存済みモデルへ切り替わることの防止
+                return path
             if path.startswith("gng_results/") or "/" in path:
                 return os.path.join(pkg_share, path)
         filename = path or default_filename
@@ -323,10 +404,13 @@ def launch_setup(context, *args, **kwargs):
         common_params["resource_root_dir"] = resource_root
     if mesh_root:
         common_params["mesh_root_dir"] = mesh_root
-    # Viewer 用の関節状態は制御系の /joint_states と分離する。
-    # ここが public /joint_states と混ざると、初期姿勢や GUI 由来の部分集合が
-    # そのまま制御系に流れ込んで不安定になる。
-    viewer_joint_state_topic = f"/{robot_name}/viewer_joint_states"
+    # 外部実測入力の直接購読。仮想姿勢との混在防止
+    state_topic = LaunchConfiguration("state_topic").perform(context)
+    if state_topic and joint_control_backend != "external":
+        raise ValueError("state_topicの直接指定にはjoint_control_backend:=externalが必要です")
+    viewer_joint_state_topic = state_topic or f"/{robot_name}/viewer_joint_states"
+    if state_topic:
+        enable_joint_state_publisher = False
     common_params["joint_state_topic"] = viewer_joint_state_topic
 
     # 内部ストリーム用のトピック名
@@ -354,12 +438,54 @@ def launch_setup(context, *args, **kwargs):
     # 学習前のURDF表示と、学習済みGNG・VLUT配信の分離
     gng_file = resolve_result_path(gng_model_path, gng_model_filename)
     missing_result_files = [path for path in (gng_file, vlut_file) if not os.path.isfile(path)]
+    independent_profiles = []
+    independent_bounds = None
+    if enable_independent_arms:
+        if gng_model_path or vlut_path:
+            raise ValueError("独立学習モデルはdir・idで指定してください。単体モデルの指定にはenable_independent_arms:=falseが必要です")
+        models_dir = os.path.join(data_dir if os.path.isabs(data_dir) else os.path.join(pkg_share, data_dir), exp_id)
+        manifest_path = os.path.join(models_dir, "independent_arms.json")
+        missing_result_files = []
+        if not os.path.isfile(manifest_path):
+            missing_result_files.append(manifest_path)
+        else:
+            with open(manifest_path, encoding="utf-8") as stream:
+                manifest = json.load(stream)
+            if manifest.get("version") != 1 or manifest.get("mode") != "independent_arms":
+                raise ValueError("独立学習モデルのmanifest形式が不正です")
+            profiles = manifest.get("profiles", [])
+            if len(profiles) != 2 or {item["name"] for item in profiles} != {"left_arm", "right_arm"}:
+                raise ValueError("left_armとright_armの独立学習モデルが必要です")
+            for profile in profiles:
+                metadata_path = os.path.join(models_dir, profile["metadata"])
+                with open(metadata_path, encoding="utf-8") as stream:
+                    metadata = json.load(stream)
+                if metadata.get("mode") != "independent_arm" or metadata.get("profile") != profile["name"]:
+                    raise ValueError("独立学習モデルのprofileが一致しません")
+                metadata_dir = os.path.dirname(metadata_path)
+                entry = dict(metadata, metadata_path=metadata_path,
+                             gng_path=os.path.join(metadata_dir, metadata["gng_file"]),
+                             vlut_path=os.path.join(metadata_dir, metadata["vlut_file"]))
+                independent_profiles.append(entry)
+                missing_result_files.extend(path for path in (entry["gng_path"], entry["vlut_path"]) if not os.path.isfile(path))
+            sizes = [read_vlut_voxel_size(item["vlut_path"]) for item in independent_profiles]
+            if not missing_result_files:
+                if sizes[0] is None or sizes[0] != sizes[1]:
+                    raise ValueError("左右VLUTのボクセル幅が一致しません")
+                self_recognition_resolution = sizes[0]
+                bounds = [read_vlut_bounds(item["vlut_path"]) for item in independent_profiles]
+                independent_bounds = {
+                    "min": [min(item[0][idx] for item in bounds) for idx in range(3)],
+                    "max": [max(item[1][idx] for item in bounds) for idx in range(3)],
+                }
     has_learning_data = not missing_result_files
 
     actions = [
+        SetParameter(name="use_sim_time", value=LaunchConfiguration("use_sim_time")),
         # 0. ロボット本体の起動（TF / robot_state_publisher / 初回姿勢配信）
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
+            condition=IfCondition(LaunchConfiguration("enable_robot_state_publisher")),
             launch_arguments={
                 "robot_name": robot_name,
                 "enable_joint_state_publisher": "false",
@@ -396,7 +522,7 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package="gng_vlut_system",
             executable="topofuzzy_bridge_node",
-            condition=IfCondition(str(has_learning_data).lower()),
+            condition=IfCondition(str(has_learning_data and not enable_independent_arms).lower()),
             name="topofuzzy_bridge_node",
             namespace=robot_name,
             parameters=[
@@ -439,6 +565,38 @@ def launch_setup(context, *args, **kwargs):
             additional_env={"RCUTILS_CONSOLE_OUTPUT_FORMAT": "[{severity}] [{name}] {message}"},
         )
     ]
+
+    if enable_independent_arms and has_learning_data:
+        for profile in independent_profiles:
+            name = profile["profile"]
+            actions.append(Node(
+                package="gng_vlut_system", executable="topofuzzy_bridge_node",
+                name="topofuzzy_" + name, namespace=robot_name,
+                parameters=[params_file, {
+                    "gng_model_path": profile["gng_path"], "vlut_path": profile["vlut_path"],
+                    "topic_name": "Tmap_" + name,
+                    "node_feature_topic": name + "/topological_node_features",
+                    "node_state_topic": name + "/gng_node_states",
+                    "stamped_node_state_topic": name + "/gng_node_states_stamped",
+                    "frame_id": gng_frame_id or "base_link",
+                    "source_frame_id": gng_source_frame_id or "base_link",
+                    "edge_mode": safe_int(edge_mode, 1), "publish_hz": publish_hz,
+                    "enable_viewer_status": True, "urdf_path": urdf_path,
+                    "occupied_voxels_topic": "occupied_voxels", "danger_voxels_topic": "danger_voxels",
+                    "grasp.state_topic": name + "/grasp_state",
+                    "grasp.applied_state_topic": name + "/grasp_state_applied",
+                    "enable_dynamic_manipulability": False,
+                    "visualization_gng.enabled": False,
+                }]))
+        profiles_by_name = {item["profile"]: item for item in independent_profiles}
+        actions.append(Node(
+            package="gng_vlut_system", executable="independent_arm_pair_node",
+            name="independent_arm_pair_node", namespace=robot_name,
+            parameters=[params_file, {
+                "left_model_path": profiles_by_name["left_arm"]["metadata_path"],
+                "right_model_path": profiles_by_name["right_arm"]["metadata_path"],
+                "urdf_path": urdf_path, "resource_root_dir": resource_root, "mesh_root_dir": mesh_root,
+            }]))
 
     if not has_learning_data:
         actions.insert(0, LogInfo(msg=(
@@ -486,7 +644,7 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
-    if yaml_enable_environment_self_filter:
+    if yaml_enable_environment_self_filter and not enable_shared_roi_gng:
         filter_params = []
         if params_file and os.path.exists(params_file):
             filter_params.append(params_file)
@@ -553,40 +711,104 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
+    mid360_topic, mid360_actions = mid360_input(yaml_mid360, robot_name)
+    actions.extend(mid360_actions)
     enable_environment_voxelization = safe_bool(
         LaunchConfiguration('enable_environment_voxelization').perform(context),
-        yaml_enable_environment_voxelization,
+        yaml_enable_environment_voxelization or bool(mid360_topic),
     )
+    if enable_shared_roi_gng and not enable_environment_voxelization:
+        raise ValueError('共有GNGにはenable_environment_voxelizationが必要です')
     if enable_environment_voxelization:
         if not enable_self_recognition_viz or not yaml_enable_environment_self_filter:
             raise ValueError('Viewerの環境ROIには自己認識と自己除去の有効化が必要です')
-        environment = yaml_environment_voxelization
+        environment = dict(yaml_environment_voxelization)
+        if mid360_topic:
+            environment['input_topic'] = mid360_topic
+            environment['source_frame_id'] = ''
         base_frame = str(environment.get('base_frame', 'base_link')).lstrip('/')
         target_frame = base_frame if base_frame.startswith(robot_name + '/') else robot_name + '/' + base_frame
-        # world座標の仮定なし。ロボット基準へのTF変換後の直接ROI生成
+        world_index = environment.get('world_index', {})
+        # 共有時だけ機体YAMLの粗索引設定。従来の単独Viewerは直接登録
+        enable_world_index = safe_bool(
+            LaunchConfiguration('enable_environment_world_index').perform(context),
+            safe_bool(world_index.get('enable_build', False), False) if enable_shared_roi_gng else False)
+        # 索引必要時だけ一回のworld登録とROI照会。単一ROIでは直接登録
         roi_params = {
             'enable_viewer_status': True,
             'input_topic': environment.get('input_topic', '/camera/camera/depth/color/points'),
             'output_topic': self_recognition_ns.get('raw_environment_voxel_topic', 'roi_voxels'),
             'source_frame_id': environment.get('source_frame_id', ''),
-            'target_frame_id': target_frame, 'world_frame_id': target_frame,
-            'enable_world_index': False, 'enable_roi_query': False,
-            'enable_world_bucket_publish': False, 'allow_unconnected_source_as_world': False,
+            'target_frame_id': target_frame,
+            'world_frame_id': str(world_index.get('frame_id', target_frame)) if enable_world_index else target_frame,
+            'enable_world_index': enable_world_index, 'enable_roi_query': enable_world_index,
+            'enable_world_bucket_publish': enable_world_index and safe_bool(world_index.get('enable_bucket_publish', True), True),
+            'world_bucket_topic': str(world_index.get('bucket_topic', 'world_index_buckets')),
+            'bucket_size': float(world_index.get('bucket_size', 0.2)),
+            'allow_unconnected_source_as_world': False,
             'voxel_size': self_recognition_resolution,
             'enable_reachability_filter': True,
-            'reachability_map_topic': environment.get('reachability_map_topic', 'Tmap_static'),
+            'reachability_map_topic': '' if enable_independent_arms else environment.get('reachability_map_topic', 'Tmap_static'),
         }
         for key, default in (('x_shift', 42), ('y_shift', 21), ('z_shift', 0), ('offset', 1000000)):
             roi_params[key] = int(yaml_voxel_idx.get(key, default))
-        for axis in 'xyz':
+        for idx, axis in enumerate('xyz'):
             for direction, default in (('min', -0.1 if axis == 'x' else -1.0), ('max', 0.5 if axis == 'x' else 1.0)):
                 key = direction + '_reachability_' + axis
-                roi_params[key] = float(environment.get(key, gng_ns.get(direction + '_' + axis, default)))
+                fallback = gng_ns.get(direction + '_' + axis,
+                    yaml_gng_sampling.get(direction + '_' + axis, default))
+                if enable_independent_arms:
+                    fallback = (independent_bounds[direction][idx] if independent_bounds else
+                                yaml_gng_sampling.get(direction + '_' + axis, default))
+                roi_params[key] = float(environment.get(key, fallback))
             key = 'reachability_margin_' + axis
             roi_params[key] = float(environment.get(key, 0.2))
-        actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
-                            name='viewer_environment_voxelization', namespace=robot_name,
-                            parameters=[roi_params], output='screen'))
+        input_topic = LaunchConfiguration('environment_input_topic').perform(context).strip()
+        if input_topic:
+            roi_params['input_topic'] = input_topic
+        if enable_shared_roi_gng:
+            # 既存ROI登録と同一プロセスのCPU入力。点群再配信・別自己除去ノードなし
+            store = robot_name + '/roi_gng'
+            roi_params.update({
+                'shared_point_store': store, 'allow_latest_transform': False,
+                'source_frame_id': '',
+                'self_filter.mask_topic': self_recognition_ns.get('mask_topic', 'self_voxel'),
+                'self_filter.output_topic': self_recognition_ns.get('filtered_environment_voxel_topic', 'self_filter_roi_voxels'),
+                'self_filter.inflation': float(self_recognition_ns.get('self_exclusion_inflation', 0.02)),
+                'self_filter.max_mask_age_sec': float(self_recognition_ns.get('max_self_mask_age_sec', 0.5)),
+            })
+            ais_share = get_package_share_directory('ais_gng')
+            config_path = LaunchConfiguration('shared_gng_config').perform(context)
+            if not os.path.isabs(config_path):
+                config_path = os.path.join(ais_share, 'config', 'gng_cpu', config_path)
+            with open(config_path, encoding='utf-8') as stream:
+                gng_params = yaml.safe_load(stream).get('ais_gng_node', {}).get('ros__parameters', {})
+            with open(os.path.join(ais_share, 'config', 'plane_cluster_incremental.yaml'), encoding='utf-8') as stream:
+                plane_config = yaml.safe_load(stream)
+            plane_params = {'plane_cluster.' + name: value for name, value in
+                            plane_config.get('plane_cluster_incremental_node', {}).get('ros__parameters', {}).items()}
+            plane_params.update(plane_config.get('ais_gng_node', {}).get('ros__parameters', {}))
+            # 共通平面設定→センサ設定→共有入力設定の優先順
+            gng_params = {**plane_params, **gng_params,
+                          'input.shared_point_store': store,
+                          'input.base_frame_id': target_frame, 'input.local_coordinates': False,
+                          'input.enable_strict_transform': True,
+                          'self_filter.mask_topic': '',
+                          'self_filter.max_mask_age_sec': roi_params['self_filter.max_mask_age_sec'],
+                          'surface_model.enable': False}
+            actions.append(ComposableNodeContainer(
+                package='rclcpp_components', executable='component_container',
+                name='roi_gng_container', namespace=robot_name, output='screen',
+                composable_node_descriptions=[
+                    ComposableNode(package='gng_vlut_system', plugin='robot_sim::bridge::WorldIndexToVoxelNode',
+                                   name='viewer_environment_voxelization', namespace=robot_name, parameters=[roi_params]),
+                    ComposableNode(package='ais_gng', plugin='fuzzrobo::AiSGNGComponent',
+                                   name='ais_gng_node', namespace=robot_name, parameters=[gng_params]),
+                ]))
+        else:
+            actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
+                                name='viewer_environment_voxelization', namespace=robot_name,
+                                parameters=[roi_params], output='screen'))
         danger_source = str(environment.get('danger_source', 'environment_inflation'))
         if danger_source not in ('environment_inflation', 'vlut_distance'):
             raise ValueError('danger_sourceにはenvironment_inflationまたはvlut_distanceが必要です')
@@ -631,24 +853,38 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
+        DeclareLaunchArgument("enable_independent_arms", default_value=""),
+        DeclareLaunchArgument("state_topic", default_value="",
+                              description="外部実測JointStateの購読先。未指定時は従来のViewer入力"),
+        DeclareLaunchArgument("enable_robot_state_publisher", default_value="true",
+                              description="ロボットTF配信の起動。外部配信済みの場合はfalse"),
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("dir", default_value="gng_results"),
         DeclareLaunchArgument("id", default_value=""),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")),
         DeclareLaunchArgument(
             "enable_joint_state_publisher",
             default_value="",
             description="初回姿勢配信の上書き。未指定時はparams_fileを使用。",
         ),
-        DeclareLaunchArgument("joint_control_backend", default_value="viewer",
-                              description="関節出力先。viewer・dynamixel・external"),
+        DeclareLaunchArgument("joint_control_backend", default_value="",
+                              description="関節出力先。未指定時は機体YAML、設定なしはviewer"),
         DeclareLaunchArgument("dynamixel_mapping_file", default_value=""),
         DeclareLaunchArgument('enable_dynamixel_current_pose', default_value='',
                               description='Dynamixel実測姿勢の表示。未指定時は機体YAMLを使用'),
         DeclareLaunchArgument('enable_environment_voxelization', default_value='',
                               description='環境点群のROI生成。未指定時は機体YAMLを使用'),
+        DeclareLaunchArgument('enable_environment_world_index', default_value='false',
+                              description='world索引の共有。既定OFF、空指定時は機体YAMLのworld_index.enable_buildを使用'),
+        DeclareLaunchArgument('enable_shared_roi_gng', default_value='false',
+                              description='ROI登録・自己判定の共有と同一プロセスのCPU GNG起動'),
+        DeclareLaunchArgument('shared_gng_config', default_value='at128.yaml',
+                              description='共有CPU GNGのセンサ設定。絶対パスまたはgng_cpu内のファイル名'),
+        DeclareLaunchArgument('environment_input_topic', default_value='',
+                              description='ROI入力点群の上書き。未指定時は機体YAMLを使用'),
         DeclareLaunchArgument("enable_dynamixel_input", default_value=""),
         DeclareLaunchArgument("dynamixel_input_topic", default_value="/dynamixel/state/present"),
         DeclareLaunchArgument('enable_realsense_mount_tf', default_value='',

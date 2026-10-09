@@ -49,6 +49,9 @@ def _resolve_vlut_file(params_file, explicit_vlut_file):
     vlut_filename = str(gng_parameters.get("vlut_filename", "vlut.bin")).strip()
     if not data_directory or not experiment_id or not vlut_filename:
         return ""
+    # 左右で共通のボクセル幅。独立モデルでは左腕のヘッダを参照
+    if str(gng_parameters.get("enable_independent_arms", False)).lower() in ("true", "1", "yes", "on"):
+        return os.path.join(data_directory, experiment_id, "left_arm", vlut_filename)
     return os.path.join(data_directory, experiment_id, vlut_filename)
 
 

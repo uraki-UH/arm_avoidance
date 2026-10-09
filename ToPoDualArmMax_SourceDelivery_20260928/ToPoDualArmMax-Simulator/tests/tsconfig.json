@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@topo/visualization/*": [
+        "../../libs/ros_visualization_web/*"
+      ],
+      "three": [
+        "node_modules/three/build/three.module.js"
+      ]
+    }
+  }
+}

@@ -13,7 +13,7 @@ namespace analysis {
 
 /**
  * @brief NodeSpatialSensorMapper
- * 把持物体や手先ノードを「空間センサー」として扱うための支援クラス。
+ * 把持物体や手先ノードを「空間センサ」として扱うための支援クラス。
  * 特定のノードの手先位置（weight_coord）が障害物に埋まった際、
  * VLUTを介して「他にどのノードが影響を受けるか（使用不能になるか）」をマッピングする。
  * 
@@ -55,7 +55,7 @@ public:
             std::vector<int> affected_ids = spatial_index->getNodesInVoxel(pos);
 
             for (int aid : affected_ids) {
-                // 自分自身はセンサー対象から除外
+                // 自分自身はセンサ対象から除外
                 if (aid == node.id) continue;
                 if (aid < 0 || (size_t)aid >= nodes.size()) continue;
 
@@ -129,7 +129,7 @@ public:
     }
 
     /**
-     * @brief 特定のノードをセンサーとした際に、影響を受ける（連動して衝突とみなすべき）ノード群を取得
+     * @brief 特定のノードをセンサとした際に、影響を受ける（連動して衝突とみなすべき）ノード群を取得
      */
     const std::vector<int>& getAffectedNodes(int sensor_node_id) const {
         if (sensor_node_id >= 0 && (size_t)sensor_node_id < sensor_to_affected_.size()) {

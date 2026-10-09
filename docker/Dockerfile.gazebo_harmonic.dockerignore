@@ -1,0 +1,26 @@
+# Harmonicビルドで使用する資産だけを対象とする転送範囲。
+**
+!docker/
+!docker/Dockerfile.gazebo_harmonic
+!docker/harmonic_entrypoint.sh
+!gng_vlut_system/
+!gng_vlut_system/CMakeLists.txt
+!gng_vlut_system/package.xml
+!gng_vlut_system/launch/
+!gng_vlut_system/launch/dual_arm_tasks.launch.py
+!gng_vlut_system/launch/dual_arm_gz.launch.py
+!gng_vlut_system/launch/dual_arm_effort_config.py
+!gng_vlut_system/launch/simulation_scenario.py
+!gng_vlut_system/scripts/
+!gng_vlut_system/scripts/task_program.py
+!gng_vlut_system/scripts/task_executor.py
+!gng_vlut_system/scripts/harmonic_launcher.py
+!gng_vlut_system/config/
+!gng_vlut_system/config/dual_arm_effort.yaml
+!gng_vlut_system/config/simulation/
+!gng_vlut_system/config/simulation/**
+!urdf/
+!urdf/topo_dual_arm_max/
+!urdf/topo_dual_arm_max/**
+!urdf/topo_dual_arm_max_long/
+!urdf/topo_dual_arm_max_long/**

@@ -44,6 +44,6 @@ ctest --test-dir /tmp/gng_runtime_trials_build/optimized --output-on-failure
 - 連続入力の追加計測では、座標の丸め差と接続構造を分離する`topology_sha256`を保存。対象はノードID・生成フレーム・ラベル・エッジ。
 - 品質評価とbag読込は時間計測外。GNG本体時間、入力転送、出力変換を分離。
 
-[実測・比較条件](../../../benchmarks/gng_runtime_trials_20260924/README.md)に結果を記録。基数ソートの標準採用と本番版への結果保持型の変更は[追加判断](../../../gng_vlut_system/docs/releases/2026-09-24_gng_production_efficiency.md)を参照。
+[実測・比較条件](../../../benchmarks/gng_runtime_trials_20260924/README.md)に結果を記録。基数ソートの標準採用と本番版への結果保持型の変更は[追加判断](../../../benchmarks/gng_production_efficiency_20260924/README.md)を参照。
 
 全点の観測寿命維持・重点学習・クラスタリングを含まない前回の最小構成を維持。本番GNGとの機能差は前回から継続。エッジ表のメモリ構造も変更なし。

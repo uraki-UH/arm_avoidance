@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""共通点群回避の実センサー入力・GNG利用・欠測停止・所有プロセス回収。"""
+"""共通点群回避の実センサ入力・GNG利用・欠測停止・所有プロセス回収。"""
 import argparse
 import json
 from pathlib import Path

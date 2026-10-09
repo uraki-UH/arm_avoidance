@@ -367,6 +367,69 @@ class dynamixel_sim_output(Node):
                 self.sim_safety.get('is_stop_latched') is not False):
             raise ValueError('Gazebo目標・状態の失効または停止')
 
+    def prepare_output(self, now):
+        """有効化準備中の保持目標・profile読返しとトルクONの確認。"""
+        if now-self.prepare_sec > self.config['max_prepare_sec']:
+            raise ValueError('保持目標・torque ONの読返し期限超過')
+        if any(abs(self.target[name]-self.measured[name]) > self.config['max_start_dev_th'] for name in self.names):
+            raise ValueError('有効化準備中の実測姿勢変化')
+        ids, angles = self.mapping.convert(self.target)
+        has_echo = self.goal_sec > self.prepare_sec and self.goal_echo and all(
+            motor_id in self.goal_echo and abs(self.goal_echo[motor_id][0]-angle) < .1 and
+            0 < self.goal_echo[motor_id][1] <= math.degrees(self.config['max_velocity'])/abs(self.mapping.entries[name][1])+.01 and
+            0 < self.goal_echo[motor_id][2] <= math.degrees(self.config['max_acceleration'])/abs(self.mapping.entries[name][1])+.01 and
+            0 < self.goal_echo[motor_id][3] <= self.config['max_current_ma']+.001
+            for motor_id, angle in zip(ids, angles) for name in self.names if self.mapping.entries[name][0] == motor_id)
+        if has_echo and not self.has_sent_torque_on:
+            self.torque_pub.publish(DynamixelStatus(id_list=self.ids, torque=[True]*len(self.ids)))
+            self.has_sent_torque_on = True
+        elif has_echo and self.status_sec > self.prepare_sec and all(self.motor_status[motor_id][0] for motor_id in self.ids):
+            self.mode, self.detail = 'hold', '実機保持。J/K: 小動作 / F: Gazebo追従'
+        self.send_goal(self.target)
+
+    def advance_output(self, now, duration):
+        """電流・目標・実測偏差の確認後の速度制限つき出力。"""
+        if (now-self.goal_sec > self.config['max_status_age_sec'] or not self.goal_echo or
+                any(motor_id not in self.goal_echo or not 0 < self.goal_echo[motor_id][3] <= self.config['max_current_ma']+.001
+                    for motor_id in self.ids)):
+            self.on_torque_off(None, Trigger.Response())
+            self.detail = '電流目標の読返し失効・上限逸脱によるトルクOFF'
+            raise ValueError('電流目標の読返し失効・上限逸脱')
+        if any(not self.motor_status[motor_id][0] for motor_id in self.ids):
+            raise ValueError('実機トルクOFF')
+        if self.mode == 'follow':
+            self.check_sim()
+            self.target = dict(self.sim_target)
+        self.check_target(self.target)
+        if any(abs(self.commanded[name]-self.measured[name]) > self.config['max_follow_dev_th'] for name in self.names):
+            raise ValueError('実機追従偏差の超過')
+        self.commanded = self.model.step(self.commanded, self.target, duration, self.config['max_velocity'])
+        self.send_goal(self.commanded)
+        if self.mode == 'jog' and self.is_stationary() and all(abs(self.target[name]-self.measured[name]) < math.radians(.15) for name in self.names):
+            self.mode, self.detail = 'hold', '小動作完了・実測静止'
+
+    def hold_stopped_output(self):
+        """停止後の新実測による保持目標の確定と再送。旧到達目標への再開なし。"""
+        if not self.target or any(self.stamps.get(name, -1) <= self.stop_feedback_stamps.get(name, -1) for name in self.names):
+            return
+        if self.has_pending_hold:
+            self.target = dict(self.measured)
+            self.has_pending_hold = False
+        self.send_goal(self.target)
+
+    def publish_status(self):
+        """出力状態と独立した実測停止確認の配信。"""
+        is_stopped = self.is_stop_latched and self.is_stationary() and all(
+            self.stamps.get(name, -1) > self.stop_feedback_stamps.get(name, -1) for name in self.names)
+        self.status_pub.publish(String(data=json.dumps({'mode': self.mode, 'detail': self.detail,
+            'allow_hardware_output': self.config['allow_hardware_output'], 'joint_names': self.names, 'ids': self.ids,
+            'is_stop_latched': self.is_stop_latched, 'is_stopped': is_stopped,
+            'is_torque_off_latched': self.is_torque_off_latched,
+            'has_torque_off_report': self.has_torque_off_report(),
+            'is_stationary': self.is_stationary(),
+            'has_fresh_state': self.has_fresh_state(), 'positions': self.measured,
+            'velocities': self.velocity, 'commanded': self.commanded}, ensure_ascii=False)))
+
     def tick(self):
         now = time.monotonic()
         duration = min(now-self.last_tick, 2./self.config['publish_hz'])
@@ -381,64 +444,14 @@ class dynamixel_sim_output(Node):
                 if self.count_publishers(self.config['driver_namespace']+'/command/goal') != 1:
                     raise ValueError('実機指令publisherの競合')
                 if self.mode == 'preparing':
-                    if now-self.prepare_sec > self.config['max_prepare_sec']:
-                        raise ValueError('保持目標・torque ONの読返し期限超過')
-                    if any(abs(self.target[name]-self.measured[name]) > self.config['max_start_dev_th'] for name in self.names):
-                        raise ValueError('有効化準備中の実測姿勢変化')
-                    ids, angles = self.mapping.convert(self.target)
-                    has_echo = self.goal_sec > self.prepare_sec and self.goal_echo and all(
-                        motor_id in self.goal_echo and abs(self.goal_echo[motor_id][0]-angle) < .1 and
-                        0 < self.goal_echo[motor_id][1] <= math.degrees(self.config['max_velocity'])/abs(self.mapping.entries[name][1])+.01 and
-                        0 < self.goal_echo[motor_id][2] <= math.degrees(self.config['max_acceleration'])/abs(self.mapping.entries[name][1])+.01 and
-                        0 < self.goal_echo[motor_id][3] <= self.config['max_current_ma']+.001
-                        for motor_id, angle in zip(ids, angles) for name in self.names if self.mapping.entries[name][0] == motor_id)
-                    if has_echo:
-                        if not self.has_sent_torque_on:
-                            self.torque_pub.publish(DynamixelStatus(id_list=self.ids, torque=[True]*len(self.ids)))
-                            self.has_sent_torque_on = True
-                        elif self.status_sec > self.prepare_sec and all(self.motor_status[motor_id][0] for motor_id in self.ids):
-                            self.mode, self.detail = 'hold', '実機保持。J/K: 小動作 / F: Gazebo追従'
-                    self.send_goal(self.target)
+                    self.prepare_output(now)
                 else:
-                    if (now-self.goal_sec > self.config['max_status_age_sec'] or not self.goal_echo or
-                            any(motor_id not in self.goal_echo or not 0 < self.goal_echo[motor_id][3] <= self.config['max_current_ma']+.001
-                                for motor_id in self.ids)):
-                        self.on_torque_off(None, Trigger.Response())
-                        self.detail = '電流目標の読返し失効・上限逸脱によるトルクOFF'
-                        raise ValueError('電流目標の読返し失効・上限逸脱')
-                    if any(not self.motor_status[motor_id][0] for motor_id in self.ids):
-                        raise ValueError('実機トルクOFF')
-                    if self.mode == 'follow':
-                        self.check_sim()
-                        self.target = dict(self.sim_target)
-                    self.check_target(self.target)
-                    if any(abs(self.commanded[name]-self.measured[name]) > self.config['max_follow_dev_th'] for name in self.names):
-                        raise ValueError('実機追従偏差の超過')
-                    self.commanded = self.model.step(self.commanded, self.target, duration, self.config['max_velocity'])
-                    self.send_goal(self.commanded)
-                    if self.mode == 'jog' and self.is_stationary() and all(abs(self.target[name]-self.measured[name]) < math.radians(.15) for name in self.names):
-                        self.mode, self.detail = 'hold', '小動作完了・実測静止'
+                    self.advance_output(now, duration)
             elif self.mode == 'stopped' and self.has_owned_output and self.has_fresh_state():
-                # 欠測後の最初の新鮮な実測で保持目標を確定。旧到達目標への再開なし
-                if not self.target or any(self.stamps.get(name, -1) <= self.stop_feedback_stamps.get(name, -1) for name in self.names):
-                    pass
-                else:
-                    if self.has_pending_hold:
-                        self.target = dict(self.measured)
-                        self.has_pending_hold = False
-                    self.send_goal(self.target)
+                self.hold_stopped_output()
         except ValueError as error:
             self.stop(str(error))
-        is_stopped = self.is_stop_latched and self.is_stationary() and all(
-            self.stamps.get(name, -1) > self.stop_feedback_stamps.get(name, -1) for name in self.names)
-        self.status_pub.publish(String(data=json.dumps({'mode': self.mode, 'detail': self.detail,
-            'allow_hardware_output': self.config['allow_hardware_output'], 'joint_names': self.names, 'ids': self.ids,
-            'is_stop_latched': self.is_stop_latched, 'is_stopped': is_stopped,
-            'is_torque_off_latched': self.is_torque_off_latched,
-            'has_torque_off_report': self.has_torque_off_report(),
-            'is_stationary': self.is_stationary(),
-            'has_fresh_state': self.has_fresh_state(), 'positions': self.measured,
-            'velocities': self.velocity, 'commanded': self.commanded}, ensure_ascii=False)))
+        self.publish_status()
 
 
 def main():

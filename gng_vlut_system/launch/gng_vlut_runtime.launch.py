@@ -127,7 +127,7 @@ def launch_setup(context, *args, **kwargs):
                 }.items()
             ),
 
-        # 2. センサー位置の静的TF配信 (キャリブレーション用)
+        # 2. センサ位置の静的TF配信 (キャリブレーション用)
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
@@ -207,7 +207,7 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
         
-        # --- センサーキャリブレーション（実測値をここに入力） ---
+        # --- センサキャリブレーション（実測値をここに入力） ---
         DeclareLaunchArgument("sensor_x", default_value="0.5"),
         DeclareLaunchArgument("sensor_y", default_value="0.0"),
         DeclareLaunchArgument("sensor_z", default_value="1.0"),

@@ -1,0 +1,17 @@
+# 独立GNGの左右ノードID
+int32 left_node_id
+int32 right_node_id
+# 任意の開始姿勢。空の場合は終点のみ、指定時は左右全学習関節が必須
+sensor_msgs/JointState start_state
+---
+# 入力・モデル・固定関節条件の整合性
+bool is_valid
+# 全身の自己干渉検査結果
+bool is_collision_free
+# 開始姿勢からの線形補間検査の有無
+bool has_path_check
+# 検査対象の組合せ姿勢。アクチュエータへの送信なし
+sensor_msgs/JointState joint_state
+# 検出位置での干渉リンク対
+string[] collision_pairs
+string message

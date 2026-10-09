@@ -1,0 +1,14 @@
+# 実機接続PCの有線LAN IPv4とセンサIPv4。接続前に実値へ変更
+host_ip: ""
+lidar_ip: ""
+publish_freq: 10.0
+points_topic: /sensors/mid360/points
+imu_topic: /sensors/mid360/imu
+frame_id: mid360_link
+# Viewer側のmid360設定で取付TFを配信。単独利用時のみ有効化
+enable_mount_tf: false
+parent_frame_id: chest_lidar_link
+# URDF取付原点と一致する公称値。計測原点の校正後は差分のみ補正
+# parent_frame_idから測定原点までの位置[m]・姿勢[deg]。45度の追加なし
+pos: [0.0, 0.0, 0.0]
+rot_deg: [0.0, 0.0, 0.0]

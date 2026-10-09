@@ -1,12 +1,120 @@
-"""ROS起動不要のGazebo状態表示・操作案内の検証。"""
+"""ROS起動不要の操作判定・停止優先・周期処理・Gazebo状態表示の検証。"""
 
+from contextlib import nullcontext
+import json
 from pathlib import Path
 import sys
+from types import ModuleType, SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from dynamixel_sim_keyboard import gazebo_status_label, gazebo_key_help, gazebo_reset_feedback
+import dynamixel_sim_keyboard as keyboard
+from dynamixel_sim_keyboard import gazebo_status_label, gazebo_key_help, gazebo_reset_feedback, operation_parameters
+
+
+@pytest.mark.parametrize('action, mode, parameters', [
+    ('enable', 'off', {'data': True}), ('enable', 'hold', {'data': False}),
+    ('follow', 'hold', {'data': True}), ('follow', 'follow', {'data': False}),
+    ('positive', 'hold', {}), ('negative', 'hold', {}), ('reset', 'off', {}),
+])
+def test_hardware_operation_parameters(action, mode, parameters):
+    assert operation_parameters(action, {'hardware': {'mode': mode}}, {'hardware': 10.}, 10.5) == (parameters, '')
+    rejected, reason = operation_parameters(action, {'hardware': {'mode': mode}}, {'hardware': 10.}, 10.500001)
+    assert rejected is None and '未受信・失効' in reason
+
+
+def test_sim_reset_is_independent_of_status_reception():
+    assert operation_parameters('sim_reset', {}, {}, 10.) == ({}, '')
+
+
+@pytest.mark.parametrize('mode, value', [('hold', True), ('avoidance', False)])
+def test_avoidance_parameters_need_sim_and_demo_but_not_hardware(mode, value):
+    latest = {'sim': {'mode': mode}, 'demo': {'state': 'running'}}
+    received = dict.fromkeys(latest, 10.)
+    assert operation_parameters('avoidance', latest, received, 10.5) == ({'data': value}, '')
+    for key in ('sim', 'demo'):
+        stale = dict(received, **{key: 9.})
+        parameters, reason = operation_parameters('avoidance', latest, stale, 10.5)
+        assert parameters is None and '失効' in reason
+
+
+@pytest.mark.parametrize('state', ['waiting', 'fault', None])
+def test_unready_demo_rejects_avoidance(state):
+    latest = {'sim': {'mode': 'hold'}, 'demo': {'state': state}}
+    parameters, reason = operation_parameters('avoidance', latest, dict.fromkeys(latest, 10.), 10.1)
+    assert parameters is None and '準備待ち' in reason
+
+
+@pytest.mark.parametrize('has_sim_status', [False, True])
+def test_rejected_avoidance_keeps_polling_and_heartbeat(monkeypatch, has_sim_status):
+    """操作拒否2回と終了要求1回。実ROS・端末・子プロセスの起動なし。"""
+    clock = {'sec': 10., 'num_spins': 0}
+    messages = []
+    node = Mock()
+    node.get_logger.return_value.info.side_effect = messages.append
+    publishers = [Mock(), Mock()]
+    node.create_publisher.side_effect = publishers
+
+    def receive_initial_status(_kind, topic, callback, _qos):
+        if topic.endswith('/control/status') and has_sim_status:
+            callback(SimpleNamespace(data=json.dumps({'mode': 'hold'})))
+        if topic.endswith('/avoidance/status'):
+            callback(SimpleNamespace(data=json.dumps({'state': 'waiting'})))
+
+    def spin_once(_node, timeout_sec):
+        clock['num_spins'] += 1
+        clock['sec'] += .2
+
+    node.create_subscription.side_effect = receive_initial_status
+    rclpy = ModuleType('rclpy')
+    rclpy.init = Mock()
+    rclpy.create_node = Mock(return_value=node)
+    rclpy.ok = lambda: clock['num_spins'] < 3
+    rclpy.spin_once = spin_once
+    rclpy.shutdown = Mock()
+    modules = {'rclpy': rclpy}
+    for name in ('rclpy.signals', 'rclpy.utilities', 'std_msgs', 'std_msgs.msg', 'std_srvs', 'std_srvs.srv'):
+        modules[name] = ModuleType(name)
+    modules['rclpy.signals'].SignalHandlerOptions = SimpleNamespace(NO='no_signals')
+    modules['rclpy.utilities'].remove_ros_args = lambda: [
+        'dynamixel_sim_keyboard.py', '--namespace', 'hardware', '--sim-namespace', 'sim_robot', '--tty-path', '/test_tty']
+    modules['std_msgs.msg'].Empty = type('Empty', (), {})
+    modules['std_msgs.msg'].String = type('String', (), {})
+    modules['std_srvs.srv'].SetBool = SimpleNamespace(Request=lambda **kwargs: SimpleNamespace(**kwargs))
+    modules['std_srvs.srv'].Trigger = SimpleNamespace(Request=lambda: SimpleNamespace())
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    operation = Mock()
+    stop_requests = [Mock(is_pending=False) for _ in range(3)]
+    stream = Mock()
+    monkeypatch.setattr(keyboard, 'control_request', Mock(return_value=operation))
+    monkeypatch.setattr(keyboard, 'stop_request', Mock(side_effect=stop_requests))
+    monkeypatch.setattr(keyboard, 'terminal_input', lambda _: nullcontext(17))
+    monkeypatch.setattr(keyboard, 'read_terminal_action', Mock(side_effect=['avoidance', 'avoidance', 'quit']))
+    monkeypatch.setattr(keyboard.time, 'monotonic', lambda: clock['sec'])
+    monkeypatch.setattr(keyboard.os, 'open', Mock(return_value=17))
+    monkeypatch.setattr(keyboard.os, 'fdopen', Mock(return_value=stream))
+    monkeypatch.setattr(keyboard.os, 'write', Mock())
+    monkeypatch.setattr(keyboard.signal, 'signal', Mock())
+
+    keyboard.main()
+
+    assert clock['num_spins'] == 3
+    operation.begin.assert_not_called()
+    operation.cancel.assert_called_once()
+    assert operation.poll.call_count == 3
+    for request in stop_requests:
+        assert request.poll.call_count == 3
+    for request in stop_requests[:2]:
+        request.begin.assert_called_once()
+    for publisher in publishers:
+        assert publisher.publish.call_count == 3
+    assert any('未受信・失効' in message if not has_sim_status else '準備待ち' in message for message in messages)
+    node.destroy_node.assert_called_once()
+    rclpy.shutdown.assert_called_once()
+    stream.close.assert_called_once()
 
 
 def test_fault_with_unconfirmed_stop():
@@ -63,11 +171,19 @@ def test_stopped_demo_after_reset_means_start_wait():
 
 def test_obstacle_wait_is_distinct_from_manual_stop():
     latest = {'sim': {'mode': 'avoidance'}, 'safety': {'is_stop_latched': False},
-              'demo': {'state': 'running', 'phase': 'obstacle_wait'}}
+              'demo': {'state': 'running', 'phase': 'obstacle_wait', 'enable_obstacle_auto_resume': True}}
     label = gazebo_status_label(latest, dict.fromkeys(latest, 10.), 10.1)
     assert '回避=障害物待ち（離れたら自動再開）' in label
     assert '停止解除待ち' not in label
     assert '障害物待ち' not in gazebo_status_label(latest, dict.fromkeys(latest, 10.), 11.)
+
+
+def test_obstacle_wait_without_auto_resume_shows_hold_key():
+    latest = {'sim': {'mode': 'avoidance'}, 'safety': {'is_stop_latched': False},
+              'demo': {'state': 'running', 'phase': 'obstacle_wait', 'enable_obstacle_auto_resume': False}}
+    label = gazebo_status_label(latest, dict.fromkeys(latest, 10.), 10.1)
+    assert '回避=障害物待ち（Aで保持へ）' in label
+    assert '自動再開' not in label and '停止解除待ち' not in label
 
 
 def test_waiting_for_reset_is_visible_even_if_demo_is_stopped():

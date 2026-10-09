@@ -1,0 +1,50 @@
+# 環境物体の共通定義。寸法はm、質量はkg、色はRGB
+floor:
+  shape: box
+  size: [3.0, 3.0, 0.05]
+  color: [0.35, 0.38, 0.40]
+  is_static: true
+workbench:
+  shape: box
+  size: [0.60, 0.90, 0.04]
+  color: [0.48, 0.34, 0.20]
+  is_static: true
+pick_cube:
+  shape: box
+  size: [0.04, 0.04, 0.05]
+  color: [0.85, 0.08, 0.06]
+  is_static: false
+  mass: 0.08
+  friction: 1.0
+pick_cylinder:
+  shape: cylinder
+  radius: 0.02
+  length: 0.06
+  color: [0.95, 0.68, 0.05]
+  is_static: false
+  mass: 0.06
+  friction: 1.0
+obstacle_post:
+  shape: cylinder
+  radius: 0.055
+  length: 0.50
+  color: [0.88, 0.38, 0.08]
+  is_static: true
+side_panel:
+  shape: box
+  size: [0.50, 0.04, 0.60]
+  color: [0.18, 0.38, 0.72]
+  is_static: true
+rolling_ramp:
+  shape: box
+  size: [0.50, 0.90, 0.04]
+  color: [0.22, 0.40, 0.55]
+  is_static: true
+  friction: 0.8
+rolling_ball:
+  shape: sphere
+  radius: 0.04
+  color: [0.90, 0.20, 0.08]
+  is_static: false
+  mass: 0.10
+  friction: 0.8
