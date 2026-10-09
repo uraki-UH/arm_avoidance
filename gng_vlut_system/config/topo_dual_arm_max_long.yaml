@@ -88,9 +88,10 @@
       enable_mount_tf: true
       parent_frame_id: "chest_lidar_link"
       frame_id: "mid360_link"
-      # URDFの45度取付に対する計測原点の補正[m]・姿勢補正[deg]
+      # 取付リンクから計測原点への補正[m]。原点差分は未校正
       pos: [0.0, 0.0, 0.0]
-      rot_deg: [0.0, 0.0, 0.0]
+      # 計測軸へのRPY[deg]。計測+X=取付+Y、計測+Y=取付-X。45度はURDF側
+      rot_deg: [0.0, 0.0, 90.0]
 
     # --- 環境点群からVLUTまでの統合起動設定 ---
     environment_voxelization:

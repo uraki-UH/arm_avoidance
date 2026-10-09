@@ -8,7 +8,7 @@ frame_id: mid360_link
 # Viewer側のmid360設定で取付TFを配信。単独利用時のみ有効化
 enable_mount_tf: false
 parent_frame_id: chest_lidar_link
-# URDF取付原点と一致する公称値。計測原点の校正後は差分のみ補正
-# parent_frame_idから測定原点までの位置[m]・姿勢[deg]。45度の追加なし
+# parent_frame_idから計測原点までの位置[m]。原点差分は未校正
 pos: [0.0, 0.0, 0.0]
-rot_deg: [0.0, 0.0, 0.0]
+# longの取付リンクから計測軸へのRPY[deg]。計測+X=取付+Y。45度はURDF側
+rot_deg: [0.0, 0.0, 90.0]

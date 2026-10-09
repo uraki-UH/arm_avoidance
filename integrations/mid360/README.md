@@ -179,7 +179,7 @@ docker compose up mid360
 | 出力 | 型 | frame |
 | --- | --- | --- |
 | `/sensors/mid360/points` | sensor_msgs/msg/PointCloud2 | mid360_link |
-| `/sensors/mid360/imu` | sensor_msgs/msg/Imu | mid360_link |
+| `/sensors/mid360/imu` | sensor_msgs/msg/Imu | livox_frame（使用中の公式ドライバ内の固定値） |
 
 点群: 既定10 Hz、XYZ[m]・intensity等。色なし。IMU周期は点群のpublish_freqとは別。センサは1台を対象。
 
@@ -199,8 +199,11 @@ ros2 topic echo /sensors/mid360/points --once --field header
 
 `mid360.yaml` の `pos` [m]・`rot_deg` [roll,pitch,yaw、deg] は親frameから測定原点への変換。単独利用時のみ `enable_mount_tf: true` で配信。Viewer連携時はfalseを維持。SDK側のextrinsicはゼロ固定のため二重変換なし。
 
-Viewer連携時のTF接続: `topo_dual_arm_max_long/base_link → … → topo_dual_arm_max_long/chest_lidar_link → mid360_link`。Viewer側の機体YAMLで取付TFを配信するため、専用ドライバの `enable_mount_tf` はfalse。longのURDFが位置とpitch=45°を保持し、腰関節の実測角に追従。最後の変換はゼロの公称値で、45°の二重適用なし。腰角0の公称位置はbase_link基準で約[0.069326, 0, 0.352347] m、センサの+Xは前方斜め下。計測原点の差分は未校正であり、機体YAMLのmid360.pos・rot_degで補正。
-IMUを融合する用途ではIMU軸・原点と点群frameの対応も別途確認。
+Viewer連携時のTF接続: `topo_dual_arm_max_long/base_link → … → topo_dual_arm_max_long/chest_lidar_link → mid360_link`。Viewer側の機体YAMLで取付TFを配信するため、専用ドライバの `enable_mount_tf` はfalse。URDF側は機械取付位置・pitch=45°、最後のTFは計測軸との対応としてyaw=90°。計測+X=取付+Y、計測+Y=取付-X、+Zは共通。45°の二重適用なし。腰関節の受信角に追従。
+
+座標軸の根拠: [Livox公式マニュアル](https://terra-1-g.djicdn.com/851d20f7b9f64838a34cd02351370894/Livox/Livox_Mid-360_User_Manual_EN.pdf)のCoordinates図（冊子12頁）でコネクタ側は計測-X、[CAD由来メッシュ](../../urdf/topo_dual_arm_max_long/meshes/chest_lidar.json)では取付-Y。90°はこのURDFとの接続値であり、MID360一般の出力補正ではない。点群は公式の計測座標のまま、変換はROS標準の`tf2_ros/static_transform_publisher`。独自の点群回転処理なし。
+
+腰角0の公称位置はbase_link基準で約[0.069326, 0, 0.352347] m。計測原点の位置差分は未校正。IMUは公式仕様上、点群と同じ軸方向・別原点。使用中ドライバのIMUはframe固定・加速度がg単位のため、融合用途ではframe接続とSI単位への変換も別途必要。
 
 GNG/VLUT用のViewer連携は `gng_vlut_system/config/topo_dual_arm_max_long.yaml` で選択:
 
@@ -212,10 +215,12 @@ mid360:
   parent_frame_id: "chest_lidar_link"
   frame_id: "mid360_link"
   pos: [0.0, 0.0, 0.0]
-  rot_deg: [0.0, 0.0, 0.0]
+  rot_deg: [0.0, 0.0, 90.0]
 ```
 
 `enable_input` の既定はfalse。trueでMID-360入力と環境ボクセル化を有効化し、PointCloud2のframeを使用。取付親frameにはrobot_nameを自動付与。ドライバの起動・IP設定は専用Compose側。通信設定とViewerの入力選択を分離。
+
+TF設定変更の反映: 起動中の`gng_viewer_bridge.launch.py`を停止して再起動。上記の機体YAMLを明示指定する場合はビルド不要。Viewer連携で取付TFを配信しないMID360ドライバの再起動は不要。
 
 GNGコンテナ内で起動:
 
@@ -256,8 +261,8 @@ docker run --rm --network none mid360:local ros2 launch /opt/mid360/mid360.launc
 docker compose exec gng_cpu bash -lc 'source /opt/ros/humble/setup.bash; ROS_DOMAIN_ID=97 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3 /ros2_ws/src/integrations/mid360/test_mount_tf.py --urdf /ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf'
 ```
 
-確認済み: 腰角0°・90°でbase_linkからの位置・45°下向きの測定軸。検証用TFノードは終了時に停止。ROS Domain 97は検証専用とし、他用途で使用中なら変更。
+確認済み: 機体YAMLのyaw=90°、腰角0°・90°でbase_linkからの位置・計測+X軸・水平な機体の重力方向。検証用TFノードは終了時に停止。ROS Domain 97は検証専用とし、他用途で使用中なら変更。
 
-実機点群: 受信Hz・時刻同期・取付校正・実点群での自己除去は未検証。上記のARP読取り例はユーザー取得ログであり、エージェントによる点群受信試験ではない。
+実機の読取り確認（2026-10-09）: 10秒間に点群100件・IMU 1,994件、点群frame=`mid360_link`。同じIMU平均への数値変換でbase_linkの+Zとの角度は補正前60.04°、yaw=90°補正後0.67°。位置校正・絶対方位・時刻同期・実点群での自己除去・再起動後の画面表示は未検証。既存のドライバ・Viewerプロセスは停止・変更なし。
 
 公式仕様: [livox_ros_driver2](https://github.com/Livox-SDK/livox_ros_driver2)、[Livox SDK2](https://github.com/Livox-SDK/Livox-SDK2)。ROS 2では `xfer_format=0` のPointCloud2を使用。

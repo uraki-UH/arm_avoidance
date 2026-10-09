@@ -1,10 +1,12 @@
 """MID-360入力選択・取付TFのlaunch検証。"""
 
 import importlib.util
+import math
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 pytest.importorskip("launch")
 spec = importlib.util.spec_from_file_location(
@@ -31,6 +33,21 @@ def test_mount_prefix_and_no_double_pitch():
 def test_external_tf_owner():
     assert module.mid360_input({"enable_input": True, "enable_mount_tf": False}, "robot") == (
         "/sensors/mid360/points", [])
+
+
+def test_long_sensor_axes():
+    workspace = Path(__file__).resolve().parents[2]
+    params = yaml.safe_load((workspace / 'gng_vlut_system/config/topo_dual_arm_max_long.yaml').read_text())
+    config = params['/**']['ros__parameters']['mid360']
+    standalone = yaml.safe_load((workspace / 'integrations/mid360/mid360.yaml').read_text())
+    # 計測+Xはコネクタの反対側。取付リンクの+Yに対応
+    assert config['rot_deg'] == standalone['rot_deg'] == [0, 0, 90]
+    with patch.object(module, 'Node') as node:
+        module.mid360_input(config, 'topo_dual_arm_max_long')
+    args = node.call_args.kwargs['arguments']
+    assert float(args[args.index('--yaw') + 1]) == pytest.approx(math.pi / 2)
+    assert float(args[args.index('--pitch') + 1]) == 0
+    assert float(args[args.index('--roll') + 1]) == 0
 
 
 @pytest.mark.parametrize("extra", [
