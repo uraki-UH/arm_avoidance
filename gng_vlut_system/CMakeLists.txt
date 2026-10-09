@@ -13,7 +13,7 @@ if(enable_harmonic_runtime_only)
     DESTINATION share/${PROJECT_NAME}/launch)
   install(FILES config/dual_arm_effort.yaml DESTINATION share/${PROJECT_NAME}/config)
   install(DIRECTORY config/simulation DESTINATION share/${PROJECT_NAME}/config)
-  install(FILES scripts/task_program.py DESTINATION lib/${PROJECT_NAME})
+  install(FILES scripts/task_program.py scripts/task_components.py scripts/robot_graph_route.py DESTINATION lib/${PROJECT_NAME})
   install(PROGRAMS scripts/task_executor.py scripts/harmonic_launcher.py DESTINATION lib/${PROJECT_NAME})
   install(DIRECTORY
     ../urdf/topo_dual_arm_max ../urdf/topo_dual_arm_max_long
@@ -21,6 +21,8 @@ if(enable_harmonic_runtime_only)
   if(BUILD_TESTING)
     find_package(ament_cmake_pytest REQUIRED)
     ament_add_pytest_test(test_task_program test/test_task_program.py)
+    ament_add_pytest_test(test_task_components test/test_task_components.py)
+    ament_add_pytest_test(test_robot_graph_route test/test_robot_graph_route.py)
     ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
   endif()
   ament_package()
@@ -199,6 +201,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_dual_arm_launch test/test_dual_arm_launch.py)
   ament_add_pytest_test(test_avoidance_motion test/test_avoidance_motion.py)
   ament_add_pytest_test(test_task_program test/test_task_program.py)
+  ament_add_pytest_test(test_task_components test/test_task_components.py)
+  ament_add_pytest_test(test_robot_graph_route test/test_robot_graph_route.py)
   ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
   ament_add_pytest_test(test_pointcloud_avoidance test/test_pointcloud_avoidance.py)
   ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
@@ -277,6 +281,8 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
   scripts/object_class_recognition.py
   scripts/mobile_state_graph.py
   scripts/task_program.py
+  scripts/task_components.py
+  scripts/robot_graph_route.py
   scripts/joint_motion_state.py
   scripts/local_qp.py
   scripts/joint_command_model.py
@@ -289,6 +295,7 @@ install(PROGRAMS
   scripts/object_class_recognition_node.py
   scripts/mobile_state_graph_node.py
   scripts/task_executor.py
+  scripts/robot_graph_bridge.py
   scripts/harmonic_launcher.py
   scripts/joint_motion_observer.py
   scripts/dynamixel_neck_torque.py

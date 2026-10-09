@@ -55,6 +55,13 @@ struct world_bucket_query_stats
 class world_point_bucket_index
 {
 public:
+  // 座標と元点番号の同居。ROI照会後の点群再読出し不要
+  struct indexed_point
+  {
+    Eigen::Vector3f position;
+    std::uint32_t source_idx;
+  };
+
   explicit world_point_bucket_index(double bucket_size)
   : bucket_size_(bucket_size), inverse_bucket_size_(1.0 / bucket_size)
   {
@@ -78,7 +85,8 @@ public:
     }
   }
 
-  void add_point(const Eigen::Vector3f &point)
+  void add_point(const Eigen::Vector3f &point,
+    std::uint32_t source_idx = std::numeric_limits<std::uint32_t>::max())
   {
     if (!point.allFinite()) {
       ++nonfinite_point_num_;
@@ -88,12 +96,22 @@ public:
     if (bucket.empty()) {
       ++active_bucket_num_;
     }
-    bucket.push_back(point);
+    bucket.push_back({point, source_idx});
     ++point_num_;
   }
 
   template<typename Visitor>
   world_bucket_query_stats query_aabb(
+    const Eigen::Vector3d &min_corner,
+    const Eigen::Vector3d &max_corner,
+    Visitor visitor) const
+  {
+    return query_aabb_with_source(min_corner, max_corner,
+      [&](const Eigen::Vector3f &point, std::uint32_t) {visitor(point);});
+  }
+
+  template<typename Visitor>
+  world_bucket_query_stats query_aabb_with_source(
     const Eigen::Vector3d &min_corner,
     const Eigen::Vector3d &max_corner,
     Visitor visitor) const
@@ -121,11 +139,11 @@ public:
       ++stats.existing_bucket_num;
       stats.candidate_point_num += points.size();
       for (const auto &point : points) {
-        const Eigen::Vector3d value = point.template cast<double>();
+        const Eigen::Vector3d value = point.position.template cast<double>();
         if ((value.array() >= min_corner.array()).all() &&
           (value.array() <= max_corner.array()).all())
         {
-          visitor(point);
+          visitor(point.position, point.source_idx);
           ++stats.accepted_point_num;
         }
       }
@@ -194,8 +212,14 @@ public:
   template<typename Visitor>
   void visit_points(Visitor visitor) const
   {
+    visit_points_with_source([&](const Eigen::Vector3f &point, std::uint32_t) {visitor(point);});
+  }
+
+  template<typename Visitor>
+  void visit_points_with_source(Visitor visitor) const
+  {
     for (const auto &entry : buckets_) {
-      for (const auto &point : entry.second) {visitor(point);}
+      for (const auto &point : entry.second) {visitor(point.position, point.source_idx);}
     }
   }
 
@@ -228,7 +252,7 @@ private:
   double bucket_size_;
   double inverse_bucket_size_;
   std::unordered_map<
-    world_bucket_key, std::vector<Eigen::Vector3f>, world_bucket_key_hash> buckets_;
+    world_bucket_key, std::vector<indexed_point>, world_bucket_key_hash> buckets_;
   std::size_t active_bucket_num_{0};
   std::size_t point_num_{0};
   std::size_t nonfinite_point_num_{0};

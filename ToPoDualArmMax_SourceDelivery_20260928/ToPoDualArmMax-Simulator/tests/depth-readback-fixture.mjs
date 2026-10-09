@@ -4,7 +4,7 @@ export async function verify_depth_readback(){
  const scene=new THREE.Scene(),material=new THREE.MeshBasicMaterial({color:'#a04020',side:THREE.DoubleSide});
  const plane=new THREE.Mesh(new THREE.PlaneGeometry(20,20),material),box=new THREE.Mesh(new THREE.BoxGeometry(.35,.3,.25),material);
  plane.position.z=2;plane.rotation.set(.13,.19,0);box.position.set(.04,.02,1);scene.add(plane,box);
- const reference=new RGBDSensor(simulator.renderer,scene,{depth_readback:'float',enable_batched_readback:false}),candidate=new RGBDSensor(simulator.renderer,scene,{depth_readback:'packed'});
+ const reference=new RGBDSensor(simulator.renderer,scene,{depth_readback:'float',enable_batched_readback:false,enable_direct_depth:false,points_backend:'javascript'}),candidate=new RGBDSensor(simulator.renderer,scene,{depth_readback:'packed'});
  const results=[];
  const compare_frames=(left,right,label)=>{
   for(const key of ['depth','z16','xyz','colors','colorValid','pixels','rgba']){

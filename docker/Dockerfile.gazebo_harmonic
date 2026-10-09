@@ -15,7 +15,8 @@ COPY gng_vlut_system/launch/dual_arm_tasks.launch.py \
      gng_vlut_system/launch/dual_arm_effort_config.py \
      gng_vlut_system/launch/simulation_scenario.py /build_ws/src/gng_vlut_system/launch/
 COPY gng_vlut_system/scripts/task_program.py gng_vlut_system/scripts/task_executor.py \
-     gng_vlut_system/scripts/harmonic_launcher.py /build_ws/src/gng_vlut_system/scripts/
+     gng_vlut_system/scripts/harmonic_launcher.py gng_vlut_system/scripts/task_components.py \
+     gng_vlut_system/scripts/robot_graph_route.py /build_ws/src/gng_vlut_system/scripts/
 COPY gng_vlut_system/config/dual_arm_effort.yaml /build_ws/src/gng_vlut_system/config/
 COPY gng_vlut_system/config/simulation /build_ws/src/gng_vlut_system/config/simulation/
 COPY urdf/topo_dual_arm_max /build_ws/src/urdf/topo_dual_arm_max/

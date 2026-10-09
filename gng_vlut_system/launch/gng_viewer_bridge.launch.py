@@ -9,7 +9,8 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogI
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node, SetParameter
+from launch_ros.actions import Node, SetParameter, ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 
 
 def resolve_package_uri(raw_path: str) -> str:
@@ -93,6 +94,7 @@ def safe_bool(value, default):
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
+    enable_shared_roi_gng = safe_bool(LaunchConfiguration('enable_shared_roi_gng').perform(context), False)
     joint_control_backend = LaunchConfiguration("joint_control_backend").perform(context)
     yaml_joint_control_backend = "viewer"
     params_file = resolve_package_uri(LaunchConfiguration("params_file").perform(context))
@@ -604,7 +606,7 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
-    if yaml_enable_environment_self_filter:
+    if yaml_enable_environment_self_filter and not enable_shared_roi_gng:
         filter_params = []
         if params_file and os.path.exists(params_file):
             filter_params.append(params_file)
@@ -675,21 +677,32 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration('enable_environment_voxelization').perform(context),
         yaml_enable_environment_voxelization,
     )
+    if enable_shared_roi_gng and not enable_environment_voxelization:
+        raise ValueError('共有GNGにはenable_environment_voxelizationが必要です')
     if enable_environment_voxelization:
         if not enable_self_recognition_viz or not yaml_enable_environment_self_filter:
             raise ValueError('Viewerの環境ROIには自己認識と自己除去の有効化が必要です')
         environment = yaml_environment_voxelization
         base_frame = str(environment.get('base_frame', 'base_link')).lstrip('/')
         target_frame = base_frame if base_frame.startswith(robot_name + '/') else robot_name + '/' + base_frame
-        # world座標の仮定なし。ロボット基準へのTF変換後の直接ROI生成
+        world_index = environment.get('world_index', {})
+        # 共有時だけ機体YAMLの粗索引設定。従来の単独Viewerは直接登録
+        enable_world_index = safe_bool(
+            LaunchConfiguration('enable_environment_world_index').perform(context),
+            safe_bool(world_index.get('enable_build', False), False) if enable_shared_roi_gng else False)
+        # 索引必要時だけ一回のworld登録とROI照会。単一ROIでは直接登録
         roi_params = {
             'enable_viewer_status': True,
             'input_topic': environment.get('input_topic', '/camera/camera/depth/color/points'),
             'output_topic': self_recognition_ns.get('raw_environment_voxel_topic', 'roi_voxels'),
             'source_frame_id': environment.get('source_frame_id', ''),
-            'target_frame_id': target_frame, 'world_frame_id': target_frame,
-            'enable_world_index': False, 'enable_roi_query': False,
-            'enable_world_bucket_publish': False, 'allow_unconnected_source_as_world': False,
+            'target_frame_id': target_frame,
+            'world_frame_id': str(world_index.get('frame_id', target_frame)) if enable_world_index else target_frame,
+            'enable_world_index': enable_world_index, 'enable_roi_query': enable_world_index,
+            'enable_world_bucket_publish': enable_world_index and safe_bool(world_index.get('enable_bucket_publish', True), True),
+            'world_bucket_topic': str(world_index.get('bucket_topic', 'world_index_buckets')),
+            'bucket_size': float(world_index.get('bucket_size', 0.2)),
+            'allow_unconnected_source_as_world': False,
             'voxel_size': self_recognition_resolution,
             'enable_reachability_filter': True,
             'reachability_map_topic': '' if enable_independent_arms else environment.get('reachability_map_topic', 'Tmap_static'),
@@ -707,9 +720,52 @@ def launch_setup(context, *args, **kwargs):
                 roi_params[key] = float(environment.get(key, fallback))
             key = 'reachability_margin_' + axis
             roi_params[key] = float(environment.get(key, 0.2))
-        actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
-                            name='viewer_environment_voxelization', namespace=robot_name,
-                            parameters=[roi_params], output='screen'))
+        input_topic = LaunchConfiguration('environment_input_topic').perform(context).strip()
+        if input_topic:
+            roi_params['input_topic'] = input_topic
+        if enable_shared_roi_gng:
+            # 既存ROI登録と同一プロセスのCPU入力。点群再配信・別自己除去ノードなし
+            store = robot_name + '/roi_gng'
+            roi_params.update({
+                'shared_point_store': store, 'allow_latest_transform': False,
+                'source_frame_id': '',
+                'self_filter.mask_topic': self_recognition_ns.get('mask_topic', 'self_voxel'),
+                'self_filter.output_topic': self_recognition_ns.get('filtered_environment_voxel_topic', 'self_filter_roi_voxels'),
+                'self_filter.inflation': float(self_recognition_ns.get('self_exclusion_inflation', 0.02)),
+                'self_filter.max_mask_age_sec': float(self_recognition_ns.get('max_self_mask_age_sec', 0.5)),
+            })
+            ais_share = get_package_share_directory('ais_gng')
+            config_path = LaunchConfiguration('shared_gng_config').perform(context)
+            if not os.path.isabs(config_path):
+                config_path = os.path.join(ais_share, 'config', 'gng_cpu', config_path)
+            with open(config_path, encoding='utf-8') as stream:
+                gng_params = yaml.safe_load(stream).get('ais_gng_node', {}).get('ros__parameters', {})
+            with open(os.path.join(ais_share, 'config', 'plane_cluster_incremental.yaml'), encoding='utf-8') as stream:
+                plane_config = yaml.safe_load(stream)
+            plane_params = {'plane_cluster.' + name: value for name, value in
+                            plane_config.get('plane_cluster_incremental_node', {}).get('ros__parameters', {}).items()}
+            plane_params.update(plane_config.get('ais_gng_node', {}).get('ros__parameters', {}))
+            # 共通平面設定→センサ設定→共有入力設定の優先順
+            gng_params = {**plane_params, **gng_params,
+                          'input.shared_point_store': store,
+                          'input.base_frame_id': target_frame, 'input.local_coordinates': False,
+                          'input.enable_strict_transform': True,
+                          'self_filter.mask_topic': '',
+                          'self_filter.max_mask_age_sec': roi_params['self_filter.max_mask_age_sec'],
+                          'surface_model.enable': False}
+            actions.append(ComposableNodeContainer(
+                package='rclcpp_components', executable='component_container',
+                name='roi_gng_container', namespace=robot_name, output='screen',
+                composable_node_descriptions=[
+                    ComposableNode(package='gng_vlut_system', plugin='robot_sim::bridge::WorldIndexToVoxelNode',
+                                   name='viewer_environment_voxelization', namespace=robot_name, parameters=[roi_params]),
+                    ComposableNode(package='ais_gng', plugin='fuzzrobo::AiSGNGComponent',
+                                   name='ais_gng_node', namespace=robot_name, parameters=[gng_params]),
+                ]))
+        else:
+            actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
+                                name='viewer_environment_voxelization', namespace=robot_name,
+                                parameters=[roi_params], output='screen'))
         danger_source = str(environment.get('danger_source', 'environment_inflation'))
         if danger_source not in ('environment_inflation', 'vlut_distance'):
             raise ValueError('danger_sourceにはenvironment_inflationまたはvlut_distanceが必要です')
@@ -778,6 +834,14 @@ def generate_launch_description():
                               description='Dynamixel実測姿勢の表示。未指定時は機体YAMLを使用'),
         DeclareLaunchArgument('enable_environment_voxelization', default_value='',
                               description='環境点群のROI生成。未指定時は機体YAMLを使用'),
+        DeclareLaunchArgument('enable_environment_world_index', default_value='false',
+                              description='world索引の共有。既定OFF、空指定時は機体YAMLのworld_index.enable_buildを使用'),
+        DeclareLaunchArgument('enable_shared_roi_gng', default_value='false',
+                              description='ROI登録・自己判定の共有と同一プロセスのCPU GNG起動'),
+        DeclareLaunchArgument('shared_gng_config', default_value='at128.yaml',
+                              description='共有CPU GNGのセンサ設定。絶対パスまたはgng_cpu内のファイル名'),
+        DeclareLaunchArgument('environment_input_topic', default_value='',
+                              description='ROI入力点群の上書き。未指定時は機体YAMLを使用'),
         DeclareLaunchArgument("enable_dynamixel_input", default_value=""),
         DeclareLaunchArgument("dynamixel_input_topic", default_value="/dynamixel/state/present"),
         DeclareLaunchArgument('enable_realsense_mount_tf', default_value='',

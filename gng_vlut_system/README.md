@@ -330,6 +330,27 @@ VLUT用の占有・危険ボクセルへの変換には除去後のトピック�
 名称変更後は両方のlaunchを再起動し、Viewerで手動選択していた旧トピックを
 新しい名前に変更してください。
 
+### ROI登録とAiS-GNGの自己判定共有
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=topo_dual_arm_max_long.yaml enable_environment_voxelization:=true \
+  enable_shared_roi_gng:=true enable_environment_world_index:=true \
+  environment_input_topic:=/sim/lidar/points
+```
+
+- 入力: `environment_input_topic`。未指定時は機体YAMLの点群トピック。取得時刻のセンサ→world・ロボット基準TFが必須。
+- 登録: 全点を一回だけworld_bucketへ登録 → ROIと自己領域の候補を細ボクセルへ一回登録 → 同じ占有配列の自己ラベル参照。bucket内に座標・元点番号を同居、ROIでのXYZ再読出し・別の自己用点群登録・点群再配信なし。
+- 粗索引: `enable_environment_world_index:=true`。同じ索引をworld表示・ROI・共有storeへ渡す方式。幅・frame・表示トピックは機体YAMLの`environment_voxelization.world_index`。別world索引ノードとの同一入力への二重起動禁止。
+- 単一ROI: 粗索引不要なら`enable_environment_world_index:=false`（既定）。直接ROI登録と自己ラベル共有だけ。粗索引の新規構築を追加しても総時間の短縮保証なし。
+- VLUT: 自己領域を除いたROIセル。GNG: 同じ判定で自己点を除いた元点。ROI外の環境点もGNGの抽出対象、ROI外の自己点も除外対象。
+- 自己領域: `self_recognition.self_exclusion_inflation`込み。単独GNGの追加膨張なしの方式とは除去境界が異なる点に注意。
+- 起動: 同一containerのROI処理とCPU GNG。別の`self_voxel_filter_node`は起動なし。既存の`ais_gng.launch.py`との同一入力への二重起動禁止。
+- GNG設定: `shared_gng_config:=at128.yaml`。CPUセンサ設定または絶対パス。出力はロボットnamespace内の`topological_map`等。曲面推定・データセットexporterの同時起動は対象外。
+- 既定: 共有OFF・粗索引OFF。学習器内部の別用途のボクセル索引は従来どおり。速度差は入力点数・自己点率・ROI占有数に依存。
+
+共有型の変更後は、関連ノードを停止した状態で`voxel_idx`・`pointcloud_sampling`・`ais_gng`・`gng_vlut_system`・`fuzzy_voxel_grid`をReleaseビルドしてから起動してください。旧型のcomponentと新型の共有ライブラリの混在不可。
+
 ## 4. テストとデバッグ
 
 ### ボクセル色変化テスト

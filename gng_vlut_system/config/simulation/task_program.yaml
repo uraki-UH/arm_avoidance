@@ -1,8 +1,19 @@
 # 環境とは独立した低速の関節タスク例。max_longの空環境向け。
 version: 1
 defaults:
-  move: direct
+  move: joint_move
   hold: position
+# 動作ごとの部品構成。追加方式も実行器の分岐なし。
+methods:
+  move:
+    joint_move:
+      targets: direct
+      route: straight
+      trajectory: quintic
+    joint_path:
+      targets: waypoints
+      route: straight
+      trajectory: quintic
 limits:
   max_velocity: 0.2
   max_acceleration: 0.5
@@ -25,5 +36,5 @@ tasks:
   - kind: hold
     duration_sec: 1.0
   - kind: move
-    method: waypoints
+    method: joint_path
     path: return_home

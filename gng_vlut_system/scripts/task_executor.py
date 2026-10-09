@@ -25,9 +25,10 @@ from task_program import joint_sample, load_program, read_joint_bounds, run_stat
 class trajectory_backend:
     """受理前の取消要求を保持した、同時指令数1のActionアダプタ。"""
 
-    def __init__(self, node, joint_names, limits):
+    def __init__(self, node, joint_names, limits, preflight=None):
         self.node, self.joint_names = node, joint_names
         self.limits = limits
+        self.preflight = preflight
         self.client = ActionClient(node, FollowJointTrajectory, 'dual_arm_controller/follow_joint_trajectory')
         self.is_busy = False
         self.result = None
@@ -37,6 +38,8 @@ class trajectory_backend:
     def begin(self, points):
         if self.is_busy:
             raise RuntimeError('同時軌道指令は禁止です')
+        if self.preflight is not None:
+            self.preflight()
         self.is_busy, self.result, self.handle, self.has_cancel_request = True, None, None, False
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = list(self.joint_names)
@@ -105,8 +108,11 @@ class task_executor(Node):
         data = yaml.safe_load(Path(self.get_parameter('task_file').value).read_text())
         bounds = read_joint_bounds(self.get_parameter('urdf').value)
         self.program = load_program(data, bounds)
-        self.backend = trajectory_backend(self, self.program.joint_names, self.program.limits)
+        self.backend = trajectory_backend(self, self.program.joint_names, self.program.limits, self.validate_inputs)
         self.runner = task_runner(self.program, self.backend)
+        self.input_subscriptions = [self.create_subscription(String, source.topic,
+            lambda message, source=source: self.on_input(source, message), 10)
+            for source in self.program.input_sources]
         self.sample = None
         self.sample_received_sec = None
         self.enable_autostart = self.get_parameter('enable_autostart').value
@@ -117,6 +123,30 @@ class task_executor(Node):
                                 lambda request, response, command=name: self.on_command(command, response))
         self.create_service(SetBool, 'task_executor/obstacle', self.on_obstacle)
         self.create_timer(0.05, self.tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
+
+    def on_input(self, source, message):
+        try:
+            source.accept(json.loads(message.data), self.now_sec())
+        except (ValueError, TypeError) as error:
+            source.has_valid_input = False
+            source.has_plan_change = source.has_active_plan
+            self.get_logger().warning(str(error))
+        self.check_inputs()
+
+    def validate_inputs(self):
+        for source in self.program.input_sources:
+            if source.has_active_plan and (source.has_plan_change or not source.is_fresh(self.now_sec())):
+                raise ValueError('軌道送信前に姿勢グラフが変更・期限切れになりました')
+
+    def check_inputs(self):
+        if self.runner.state == run_state.running:
+            for source in self.program.input_sources:
+                if source.has_active_plan and (source.has_plan_change or not source.is_fresh(self.now_sec())):
+                    self.runner.interrupt(self.now_sec(), '姿勢グラフの経路変更・入力期限切れ')
+                    break
+        if self.runner.state in (run_state.idle, run_state.succeeded, run_state.canceled, run_state.failed):
+            for source in self.program.input_sources:
+                source.release()
 
     def now_sec(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -152,6 +182,8 @@ class task_executor(Node):
             if command in ('start', 'resume'):
                 self.check_output()
                 getattr(self.runner, command)(self.now_sec(), self.fresh_sample())
+                for source in self.program.input_sources:
+                    source.release()
             else:
                 self.runner.interrupt(self.now_sec(), is_cancel=command == 'cancel')
             self.enable_autostart = False
@@ -167,6 +199,7 @@ class task_executor(Node):
 
     def tick(self):
         try:
+            self.check_inputs()
             if self.runner.state == run_state.running:
                 self.check_output()
             self.runner.tick(self.now_sec(), self.fresh_sample())

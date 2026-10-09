@@ -15,6 +15,7 @@
     "build": "npm run typecheck && vite build",
     "typecheck": "tsc --noEmit",
     "dev": "vite build --watch",
+    "test:rgbd": "node --test tests/rgbd-points.test.mjs",
     "test:ros": "tsx --tsconfig tests/tsconfig.json --test tests/ros-results.test.ts",
     "test:browser": "node tests/ros-results.browser.mjs",
     "test:performance": "node tests/performance.browser.mjs",

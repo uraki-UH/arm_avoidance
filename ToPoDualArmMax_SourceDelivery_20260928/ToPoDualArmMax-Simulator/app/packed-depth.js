@@ -14,15 +14,16 @@ export function create_packed_depth_material(){
 }
 
 const is_little_endian=new Uint8Array(new Uint32Array([1]).buffer)[0]===1;
-// GPU下端原点のRGBA8から上端原点のfloat32配列への復元。
-export function unpack_depth(raw,width,height){
+// RGBA8からfloat32への復元と任意の上下反転。非反転時は元バッファを参照。
+export function unpack_depth(raw,width,height,enable_flip_rows=true){
+ if(is_little_endian&&!enable_flip_rows)return new Float32Array(raw.buffer,raw.byteOffset,raw.byteLength/4);
  const output=new Float32Array(width*height);
  if(is_little_endian){
   const values=new Float32Array(raw.buffer,raw.byteOffset,raw.byteLength/4);
-  for(let row=0;row<height;row++)output.set(values.subarray((height-1-row)*width,(height-row)*width),row*width);
+  for(let row=0;row<height;row++)output.set(values.subarray((enable_flip_rows?height-1-row:row)*width,((enable_flip_rows?height-1-row:row)+1)*width),row*width);
  }else{
   const view=new DataView(raw.buffer,raw.byteOffset,raw.byteLength);
-  for(let row=0;row<height;row++)for(let column=0;column<width;column++)output[row*width+column]=view.getFloat32(((height-1-row)*width+column)*4,true);
+  for(let row=0;row<height;row++)for(let column=0;column<width;column++)output[row*width+column]=view.getFloat32(((enable_flip_rows?height-1-row:row)*width+column)*4,true);
  }
  return output;
 }

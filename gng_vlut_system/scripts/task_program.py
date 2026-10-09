@@ -59,6 +59,7 @@ class task_program:
     bounds: tuple
     tasks: tuple
     limits: dict
+    input_sources: tuple = ()
 
 
 def checked_mapping(value, allowed, label):
@@ -118,10 +119,17 @@ class task_method:
     plan: Callable
 
 
-def load_program(data, joint_bounds, methods=None):
+def load_program(data, joint_bounds, methods=None, components=None):
     """未知設定・未実装方式・関節制限違反の起動前検査。"""
     methods = task_methods if methods is None else methods
-    checked_mapping(data, ('version', 'defaults', 'limits', 'poses', 'paths', 'tasks'), 'program')
+    checked_mapping(data, ('version', 'defaults', 'methods', 'inputs', 'limits', 'poses', 'paths', 'tasks'), 'program')
+    input_sources = ()
+    if 'inputs' in data:
+        from task_components import bind_sources
+        components, input_sources = bind_sources(data['inputs'], tuple(joint_bounds), components)
+    if 'methods' in data:
+        from task_components import configured_methods
+        methods = configured_methods(data['methods'], methods, components, tuple(joint_bounds))
     if type(data.get('version')) is not int or data['version'] != 1:
         raise ValueError('version: 1 が必要です')
     defaults = {'move': 'direct', 'hold': 'position'}
@@ -175,7 +183,7 @@ def load_program(data, joint_bounds, methods=None):
             tasks.append(task_spec(kind, method, targets, strategy.plan, duration))
         except (KeyError, TypeError) as error:
             raise ValueError(f'未対応方式・不足設定・未知参照: {item}') from error
-    return task_program(tuple(joint_bounds), tuple(joint_bounds.values()), tuple(tasks), limits)
+    return task_program(tuple(joint_bounds), tuple(joint_bounds.values()), tuple(tasks), limits, input_sources)
 
 
 def plan_segment(start, target, bounds, limits):

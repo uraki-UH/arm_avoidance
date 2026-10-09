@@ -57,14 +57,73 @@ docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
 
 | 種別 `kind` | 方式 `method` | 目標の指定 |
 | --- | --- | --- |
-| `move` | `direct`（既定） | `target: <posesの名前>` |
-| `move` | `waypoints` | `path: <pathsの名前>` |
+| `move` | `joint_move`（設定例の既定）、`direct`（互換） | `target: <posesの名前>` |
+| `move` | `joint_path`（設定例）、`waypoints`（互換） | `path: <pathsの名前>` |
 | `hold` | `position`（既定） | `duration_sec: <保持秒数>` |
 
 `defaults`で種別ごとの方式、各タスクの`method`で個別上書き。
+`methods.<種別>.<方式名>`で部品を構成。`targets`（目標解釈）→`route`（経路生成）→
+`refiners`（順序付き経路補正、省略時は空）→`trajectory`（軌道化）→`validators`（順序付き検査、省略時は空）。
+設定例の`joint_move`は`direct`＋`straight`＋`quintic`、`joint_path`は目標解釈だけ`waypoints`。
+組込み部品・互換方式への上書き、未登録名・未知キーは起動前に拒否。失敗時の暗黙の別方式への切替なし。
 未指定関節は前回の指令位置を保持し、最初だけ開始時の実測位置を採用。
 経由点間は停止姿勢間の5次補間。設定例は左右`joint4`の移動→1秒保持→経由点→復帰。
 未知キー・方式・姿勢名・関節名・非有限値・関節目標の制限違反は起動前に拒否。
+
+### ロボット姿勢グラフの接続とオンライン更新
+
+経路部品名はGNGではなく`robot_graph`。GNGなどの学習方式と独立し、ロボットに対応する関節姿勢・辺・通行可否を使用。
+環境点群の`/topological_map`を姿勢グラフとして入力する構成ではない。
+既定longの左右独立7関節グラフは、入力に別名を付けてタスクごとに選択可能。
+
+```yaml
+inputs:
+  left_graph:
+    type: robot_graph
+    robot_id: topo_dual_arm_max_long
+    topic: /sim_topo_dual_arm_max_long/left/robot_Tmap_updates
+    joint_names: [L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7]
+    max_state_age_sec: 1.0
+    max_connect_dist_th: 0.000001
+    max_plan_sec: 0.2
+methods:
+  move:
+    left_move:
+      targets: direct
+      route: left_graph
+      trajectory: quintic
+```
+
+`tasks`の`method: left_move`で選択。`joint_names`は学習時の角度配列順に一致させること。
+グラフにない関節は実測保持、その関節への移動要求は拒否。右腕は別入力・方式として同じ形で追加。
+探索は通行可能ノード・辺上のDijkstra、コストは関節角のユークリッド距離。
+実測・目標と入口・出口の許容差は関節ごとの最大絶対差。接続外の任意姿勢へ直線で飛ばす代替経路なし。
+既定の微小許容差では、実測・目標が既存ノード姿勢にほぼ一致する必要がある。
+
+既存トピックの接続はHumble側の[robot_graph_bridge.py](../scripts/robot_graph_bridge.py)。
+`graph_topic`（`TopologicalMap`）、`feature_topic`（`TopologicalNodeFeatureArray`）、
+`robot_id`・`joint_names`・`frame_id`・`output_topic`をROSパラメータで指定。
+左右別発行元は`/<robot_name>/Tmap_<profile>`と`/<robot_name>/<profile>/topological_node_features`を指定。
+既定longの左腕は`/topo_dual_arm_max_long/Tmap_left_arm`と`/topo_dual_arm_max_long/left_arm/topological_node_features`。
+実際の`graph_topic`は起動設定の`topic_name`に合わせること。グラフ本体・特徴の購読は継続。
+発行元`topofuzzy_bridge_node`も更新版の再ビルドが必要。同一バッチの共通stampがない旧版とは接続不可。
+同一frame・stampの組だけを受理し、ノードIDで角度を結合。辺の配列添字をノードIDへ変換。
+同一時刻の内容変更・時刻巻戻りは拒否。時計巻戻り後はアダプタを再起動。
+アダプタは全体snapshotを出力。オンライン発行元は、以下の同じ入力契約へdeltaを直接送信可能。
+
+入力は`std_msgs/String`のJSON。共通項目は`kind`・`robot_id`・`graph_id`・`revision`・`stamp_sec`（受信側と同じROS時計）。
+- `snapshot`: `joint_names`、`nodes: [{id, positions, can_traverse}]`、`edges: [{nodes: [id, id], can_traverse}]`。
+- `delta`: `base_revision`と、その次の`revision`。`nodes`・`edges`は追加／更新、`remove_nodes`・`remove_edges`は削除。省略した項目は維持。
+- `heartbeat`: 共通項目だけ。現在の世代と一致する場合のみ入力期限を更新。発行元で通行可否を再確認せずに鮮度を偽装しないこと。
+
+`graph_id`は発行元セッション識別子。差分欠落・未知参照・別ロボット・関節順序不一致・不正値は拒否し、snapshot再取得待ち。
+計画は一つの世代の不変スナップショットを参照。使用ノードの角度・可否、使用辺の削除・可否変更で取消→実測停止→`paused`。
+経路外だけの更新では取消なし。入力期限切れでも中断。再開は既存の`resume`操作で、最新世代・実測姿勢から再計画。自動再開なし。
+現実装は差分受信でも辞書を複製して交換。局所更新コストの最適化・探索木の差分更新は未実施。
+
+通行可否は発行元の判定。既存アダプタはlabel=1をノード通行可、両端が通行可の辺を候補にするが、辺途中の衝突保証はない。
+動的障害物・左右腕間干渉・入口出口の連続区間検査、追従中QPは別部品での接続が必要。実機での回避性能は未検証。
+検証: 局所細分化・欠落差分・関節角更新・左右別入力と取消要求を単体／隔離ROS通信で確認。Gazebo実運動での経路更新追従は未検証。
 
 ### 起動と操作
 
@@ -146,15 +205,21 @@ docker compose -f docker/compose.harmonic_launcher.yaml down
 ### 差替え境界と検証範囲
 
 - [task_program.py](../scripts/task_program.py): `task_kind`・`run_state`のenum、設定検証、方式登録表`task_methods`、ROS非依存の進行管理。
-- 方式追加: `task_method(resolve_targets, plan)`の登録。設定解釈と実行時の区間計画を一組で差替え。計画関数の引数は実測開始位置・目標位置・URDF制限・設定制限、返却値は時刻付き`motion_point`列。
+- [task_components.py](../scripts/task_components.py): 部品登録表`planning_components`と名前付き方式の組立て。`default_components()`へ実装関数を登録し、YAMLで組合せを選択。動作enum・進行管理の変更は不要。
+- 部品契約: `route(request) -> 関節位置列`、`refiner(request, route) -> 関節位置列`、`trajectory(request, route) -> motion_point列`、`validator(request, route, points) -> bool`。検査は`True`だけを受理。
+- `planning_request`: 関節名順序、実測始点、目標、URDF制限、読取専用の設定制限。中断後の再計画でも、その時点の実測始点から全選択部品を再実行。
+- 独自環境の注入: `load_program(..., components=登録表)`。点群やグラフを持つアダプタの関数を登録可能。ROS購読・入力期限の監視はアダプタ側の責務。YAMLから任意のPython関数名やモジュールをimportする機構なし。
+- 従来の`task_method(resolve_targets, plan)`による一括差替えも維持。`refiners`は実行前の経路補正用であり、追従中のQPフィードバック制御ではない。TAMPはこの上位でタスク列を生成する接続が必要。
+- 部品共通検査: 経路の始終点・寸法・有限値・関節位置制限。軌道化後は既存の共通検査へ接続。組込み`quintic`は各経由点で停止し、連結後の時間・点数上限も確認。
 - 共通検査: 始終点、時刻、配列寸法、有限値、各指令点の位置・速度・加速度。独自方式の連続区間の干渉検査は計画側の責務。
 - [task_executor.py](../scripts/task_executor.py): 関節状態・サービス・状態配信と標準Actionへの接続。取消受理前の再送禁止。別の軌道トピック発行元も開始前・実行中に検出。ただし別Actionクライアントとの排他保証は対象外。
 - 設定例の指令上限: 0.2 rad/s、0.5 rad/s²。到達誤差: 0.05 rad。停止確認: 0.03 rad/s、継続時間0.25秒。関節状態期限: ROS時刻・実時間とも0.5秒。
 - 重力補償なしの既存effort制御では、保持中の肩関節に約0.043 radの静的偏差。0.05 radはこの例の到達条件であり、位置精度の保証ではない。
 - 取消はコントローラの保持処理。指令生成時の速度・加速度制限は、実測値や取消過渡の制限ではない。max_long試験では取消直後の状態サンプルで全関節最大角速度約0.81 rad/sを観測。停止過渡の補償・減速設計は未完了。
-- 未接続: GNG／QP、自動障害物検出、経路の自己・環境衝突検査、把持・開放、Isaac、実機出力。`gng`／`local_qp`の方式名も未登録。高速回避・人との近接試験への使用不可。
+- 未接続: 追従中QP、自動障害物検出、経路の自己・環境衝突検査、把持・開放、Isaac、実機出力。姿勢グラフ接続は上記`robot_graph`。`gng`／`local_qp`という別名への自動変換なし。高速回避・人との近接試験への使用不可。
 
-単体検証: `python3 -m pytest gng_vlut_system/test/test_task_program.py -q`（Action試験はJazzy環境）。
+単体検証: `python3 -m pytest gng_vlut_system/test/test_task_program.py gng_vlut_system/test/test_task_components.py -q`（Action試験はJazzy環境）。
+部品組替え・補正順序・不正出力拒否・再計画始点・従来互換を含む59テスト合格。Harmonic用インストール後の部品importも確認。
 Harmonicの空環境・max_longで移動中断、停止確認、明示再開、保持、経由点復帰、取消を確認。
 インストール済みパッケージだけの構成でも同試験に合格。ソースworkspaceやURDFの外部マウントなしでの起動を確認。
 Humble入口でも移動・中断・再開・保持・復帰・取消、引数なし起動、Ctrl+C終了、多重起動拒否を確認。

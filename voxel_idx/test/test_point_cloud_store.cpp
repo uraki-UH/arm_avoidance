@@ -7,6 +7,40 @@
 
 using namespace voxel_idx;
 
+TEST(point_cloud_store, bucket_query_preserves_original_indices_without_xyz_reload)
+{
+  world_point_bucket_index point_idx(.2);
+  point_idx.begin_frame(5);
+  point_idx.add_point({.01f, 0, 0}, 4);
+  point_idx.add_point({NAN, 0, 0}, 1);
+  point_idx.add_point({-.05f, 0, 0}, 2);
+  point_idx.add_point({5, 0, 0}, 0);
+  std::map<std::uint32_t, float> points;
+  const auto stats = point_idx.query_aabb_with_source(Eigen::Vector3d::Constant(-.1),
+    Eigen::Vector3d::Constant(.1), [&](const auto &point, std::uint32_t source_idx) {
+      points.emplace(source_idx, point.x());
+    });
+  EXPECT_EQ(stats.accepted_point_num, 2U);
+  ASSERT_EQ(points.size(), 2U);
+  EXPECT_FLOAT_EQ(points.at(4), .01f);
+  EXPECT_FLOAT_EQ(points.at(2), -.05f);
+  std::size_t num_points = 0;
+  point_idx.visit_points_with_source([&](const auto &, std::uint32_t source_idx) {
+    EXPECT_NE(source_idx, 1U);
+    ++num_points;
+  });
+  EXPECT_EQ(num_points, 3U);
+  point_idx.begin_frame(1);
+  point_idx.add_point({.02f, 0, 0}, 0);
+  points.clear();
+  point_idx.query_aabb_with_source(Eigen::Vector3d::Constant(-1),
+    Eigen::Vector3d::Constant(1), [&](const auto &point, std::uint32_t source_idx) {
+      points.emplace(source_idx, point.x());
+    });
+  ASSERT_EQ(points.size(), 1U);
+  EXPECT_FLOAT_EQ(points.at(0), .02f);
+}
+
 TEST(point_cloud_store, roi_only_frame_shares_source_without_world_copy)
 {
   auto channel = shared_point_frames("test_roi_only");

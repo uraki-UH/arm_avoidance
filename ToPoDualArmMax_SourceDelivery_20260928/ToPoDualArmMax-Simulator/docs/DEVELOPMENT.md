@@ -56,6 +56,15 @@ RGB-Dの非同期読出しは`--readback-mode batch`が既定。画像群を1つ
 `--readback-mode separate`で従来の画像別読出しと比較可能。
 `--show-preview`でRGB-Dタブを表示して計測。既定は非表示で、プレビュー描画を保留。
 `--verify-profile`でRGB-D解像度変更後のプレビュー・取得配列・GPU描画サイズ・画角の維持を検査。停止中・取得中・連続取得中・非表示からの復帰・カスタム校正・公称値への復帰が対象。`--cases rgbd --duration-ms 500 --captures 2 --verify-profile`で実行可能。
+`--depth-preview gpu`でGPU色付け、`--depth-preview cpu`で従来のCPU色付けを比較。既定はGPU。
+`--depth-layout direct`で深度読出し配列の直接参照、`--depth-layout flipped`で従来の中間反転コピーを比較。既定は直接参照。
+`--points-backend wasm`でC++/WebAssembly版、`--points-backend javascript`で従来の点群生成を比較。既定はWebAssemblyで、実際に使用した方式も検査。
+`--view-scheduling priority`でRGB-D回収待ち中の描画投入を抑制、`continuous`で毎フレーム描画。既定は`priority`。視点・ギズモ操作やデモ・姿勢再生・IKは通常描画を優先。
+`view_frame`は実際の3D描画間隔、`frame`は描画を省略した回も含むブラウザのコールバック間隔。取得時間だけでなく両方を比較。
+`--suppress-main-view`はGPU競合の切分け専用。通常の3D表示を停止した測定であり、使用中の改善値とは区別。
+点群生成と描画調整の比較は旧条件`--points-backend javascript --view-scheduling continuous`と新条件`--points-backend wasm --view-scheduling priority`で実施。
+取得・描画のGPU待ちやCPUコピーも含むため、方式を交互に3回以上測定。センサ出力は完全一致、表示用の色だけはRGB8の1段階差を許容。
+`--verify-profile`ではプレビューの上下方向・欠損色・境界値・狭い深度範囲・GPU利用不可時のCPU代替も検査。画像回収の遅延時の3D表示継続・視点変更時の描画優先も検査。
 表示条件が異なる結果同士の`--baseline`比較は拒否。
 `methods.webgl.getBufferSubData`にCPUコピーの回数・時間、`methods.webgl.getParameter`にGPU状態照会の回数・時間を記録。
 `--verify-depth`では1280×720までの出力一致、外部回転、同時取得、RGBA float代替、バッファ再利用、失敗後の復旧・破棄時の中断、再表示時のプレビュー一致も検査。
@@ -77,6 +86,26 @@ RGBA8格納には[GLSLのfloatBitsToUint](https://registry.khronos.org/OpenGL/sp
 `--baseline`は計測条件・描画環境とセンサ出力を照合し、各条件の増減率を保存。
 `--max-regression-percent 20`を併記すると、フレームp95またはセンサ平均取得時間の悪化が許容率を超えた場合に終了コード1。
 既定では機種依存の時間上限なし。入力・描画の成立と例外の有無だけを合否判定。
+
+## RGB-D点群カーネルの再生成
+
+配布済みの`app/rgbd-points.wasm`をブラウザから読込。実行時のネイティブライブラリは不要。
+`native/rgbd_points.cpp`を変更した場合は、Clangとwasm-ldのある環境で次を実行。
+
+```bash
+bash tools/build_rgbd_points.sh /path/to/clang++
+npm run test:rgbd
+```
+
+ワークスペースの既存Docker環境では次のコマンドを使用可能。
+
+```bash
+docker exec gng_cpu_container bash /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/tools/build_rgbd_points.sh /opt/emsdk/upstream/bin/clang++
+```
+
+コンパイラオプションは倍精度の演算順を保持し、fast-math・積和融合を無効化。生成したwasmもソースと合わせて更新。
+`test:rgbd`で参照版とのバイト一致、欠損・丸め境界・バッファ再利用・読込失敗時の代替を検査。
+`--verify-depth --verify-profile`による実GPUでの検査も実施。
 
 ## URDF / STLの変更とキャッシュ再生成
 

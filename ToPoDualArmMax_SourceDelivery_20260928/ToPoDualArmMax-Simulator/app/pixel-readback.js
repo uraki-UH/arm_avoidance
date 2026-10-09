@@ -14,6 +14,7 @@ export class pixel_readback_pool {
   finally{context.bindBuffer(context.PIXEL_PACK_BUFFER,null);}
   return new pixel_readback_batch(this,entry,byte_length);
  }
+ get has_pending(){for(const entry of this.entries)if(entry.is_pending)return true;return false;}
  dispose(){
   this.is_disposed=true;
   for(const entry of this.entries)this.context.deleteBuffer(entry.buffer);

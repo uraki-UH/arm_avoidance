@@ -271,6 +271,57 @@ def test_harmonic_standard_topic_remapping(tmp_path):
         name+':='+target for name, target in topics.items()}
 
 
+@pytest.mark.parametrize('enable_shared', [False, True])
+@pytest.mark.parametrize('enable_world_index', [False, True])
+def test_viewer_shared_roi_replaces_duplicate_filter(tmp_path, enable_shared, enable_world_index):
+    """直接登録・共有world索引とCPU GNGの同居、入力とマスクの共有。"""
+    from launch.actions import DeclareLaunchArgument
+    module = load('gng_viewer_bridge.launch')
+    params = tmp_path/'params.yaml'
+    params.write_text(yaml.safe_dump({'/**': {'ros__parameters': {
+        'robot_name': 'sim_test',
+        'urdf_path': str(workspace/'urdf/topo_dual_arm_max/topo_dual_arm_max.urdf'),
+        'self_recognition': {'enable': True, 'enable_environment_self_filter': True},
+        'environment_voxelization': {'enable': True, 'world_index': {
+            'enable_build': enable_world_index, 'frame_id': 'world', 'bucket_size': .3}},
+    }}}))
+    context = LaunchContext()
+    def package_path(name):
+        return str(workspace/'ais_gng_cpu/src/ais_gng') if name == 'ais_gng' else str(share)
+    with patch.object(module, 'get_package_share_directory', side_effect=package_path):
+        for action in module.generate_launch_description().entities:
+            if isinstance(action, DeclareLaunchArgument):
+                action.execute(context)
+        assert context.launch_configurations['enable_environment_world_index'] == 'false'
+        context.launch_configurations.update({
+            'params_file': str(params), 'robot_name': 'sim_test',
+            'enable_environment_voxelization': 'true', 'enable_self_recognition_viz': 'true',
+            'enable_shared_roi_gng': str(enable_shared).lower(),
+            'enable_environment_world_index': '',
+            'environment_input_topic': '/test/points',
+        })
+        with patch.object(module, 'Node', side_effect=lambda **kw: kw), \
+                patch.object(module, 'ComposableNode', side_effect=lambda **kw: kw), \
+                patch.object(module, 'ComposableNodeContainer', side_effect=lambda **kw: kw):
+            actions = module.launch_setup(context)
+    nodes = [action for action in actions if isinstance(action, dict)]
+    filters = [node for node in nodes if node.get('executable') == 'self_voxel_filter_node']
+    containers = [node for node in nodes if 'composable_node_descriptions' in node]
+    assert len(filters) == int(not enable_shared)
+    assert len(containers) == int(enable_shared)
+    if enable_shared:
+        roi, gng = containers[0]['composable_node_descriptions']
+        roi_params, gng_params = roi['parameters'][0], gng['parameters'][0]
+        assert roi_params['shared_point_store'] == gng_params['input.shared_point_store']
+        assert roi_params['input_topic'] == '/test/points'
+        assert roi_params['enable_world_index'] == enable_world_index
+        assert roi_params['enable_roi_query'] == enable_world_index
+        assert roi_params['world_frame_id'] == ('world' if enable_world_index else 'sim_test/base_link')
+        assert roi_params['bucket_size'] == .3
+        assert not roi_params['allow_latest_transform']
+        assert gng_params['self_filter.mask_topic'] == ''
+
+
 def test_viewer_external_measured_state(tmp_path):
     """外部実測の直接購読とTF・初回姿勢・制御出力の二重起動防止。"""
     from launch.actions import DeclareLaunchArgument

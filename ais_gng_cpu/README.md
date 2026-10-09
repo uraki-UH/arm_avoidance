@@ -53,6 +53,8 @@ getBase2LidarFrameのTF取得失敗メッセージ`Could not transform ...`はDE
 
 ## 自己点候補の学習除外
 
+VLUT用ROIを同時生成する場合は、[ROI登録との共有構成](../gng_vlut_system/README.md#roi登録とais-gngの自己判定共有)を選択可能。直接ROI登録、または一回だけ構築したworld_bucketからのROI登録。`input.shared_point_store`で同一プロセスの元点・セルラベルを参照し、GNG側の点群購読・自己形状照合を省略。単独の`self_filter.mask_topic`との併用不可。以下は単独GNG用の設定。
+
 既存の自己ボクセルマスクで元点を判定し、抽出候補から除外。環境点群の粗いグリッドを別途作成せず、残った実測点を既存のGNGボクセル処理へ投入。通常・unknown・重点学習のすべてが除外後の入力を使用。
 
 GNGを停止した状態で、Docker内のワークスペースへ反映します。

@@ -151,10 +151,10 @@ public:
       shared_points_ = voxel_idx::shared_point_frames(shared_store);
     }
     enable_shared_roi_ = !get_parameter("self_filter.mask_topic").as_string().empty();
-    if (enable_shared_roi_ && (!shared_points_ || enable_world_index_ || enable_roi_query_ ||
+    if (enable_shared_roi_ && (!shared_points_ || enable_world_index_ != enable_roi_query_ ||
         get_parameter("allow_latest_transform").as_bool() || allow_unconnected_source_as_world_ ||
         !source_frame_id_.empty())) {
-      throw std::invalid_argument("共有ROIには共有store、直接ROI登録、取得時刻TF、点群の実frameが必要");
+      throw std::invalid_argument("共有ROIには共有store、索引とROI照会の同時設定、取得時刻TF、点群の実frameが必要");
     }
 
     reachability_bounds_.enable_filter =
@@ -276,6 +276,7 @@ private:
             }
             // float32の量子化境界を含む保守的な粗検索余白
             self_bounds_.margin.setConstant(msg->voxel_size * 1e-4);
+            voxel_accumulator_->set_self_cells(self_ids_);
           }
           self_mask_message_ = msg;
           self_mask_received_at_ = std::chrono::steady_clock::now();
@@ -293,16 +294,22 @@ private:
     if (!self_mask_message_ || stamp == 0 || msg->header.frame_id.empty() ||
       std::chrono::duration<double>(start - self_mask_received_at_).count() > max_self_mask_age_sec_ ||
       std::abs(double(stamp - rclcpp::Time(self_mask_message_->header.stamp).nanoseconds()) * 1e-9) > max_self_mask_age_sec_ ||
+      std::abs(double(now().nanoseconds() - rclcpp::Time(self_mask_message_->header.stamp).nanoseconds()) * 1e-9) > max_self_mask_age_sec_ ||
       std::abs((now() - rclcpp::Time(msg->header.stamp)).seconds()) > max_self_mask_age_sec_) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "共有ROI待機: 点群または自己マスクの未受信・失効");
       return;
     }
     if (!update_map_bounds(map_source_.get(), target_frame_id_, *msg, reachability_bounds_,
         voxel_codec_, voxel_accumulator_)) {return;}
+    if (!voxel_accumulator_->has_self_cells()) {voxel_accumulator_->set_self_cells(self_ids_);}
     Eigen::Isometry3d source_to_world, source_to_target;
     if (!lookupTransform(world_frame_id_, msg->header.frame_id, *msg, source_to_world) ||
       !lookupTransform(target_frame_id_, msg->header.frame_id, *msg, source_to_target)) {return;}
-    accumulateDirectPoints(*msg, source_to_target, *voxel_accumulator_);
+    if (enable_world_index_) {
+      build_world_index(*msg, source_to_world);
+      const Eigen::Isometry3d world_to_target = source_to_target * source_to_world.inverse();
+      accumulate_shared_index_points(*msg, world_to_target);
+    } else {accumulateDirectPoints(*msg, source_to_target, *voxel_accumulator_);}
     const auto &raw_ids = voxel_accumulator_->finish_voxel_ids();
     const auto membership = voxel_accumulator_->point_membership();
     std::vector<long> filtered_ids;
@@ -315,6 +322,7 @@ private:
     roi_publisher_->publish(voxel_codec_.makeMessage(header, raw_ids));
     filtered_roi_pub_->publish(voxel_codec_.makeMessage(header, filtered_ids));
     voxel_idx::point_frame frame;
+    if (enable_world_index_) {frame.point_idx = world_index_;}
     frame.source_owner = msg;
     frame.source_type = "sensor_msgs/msg/PointCloud2";
     frame.source_to_world = source_to_world;
@@ -323,8 +331,87 @@ private:
     frame.roi_points = membership;
     frame.self_mask_stamp_ns = rclcpp::Time(self_mask_message_->header.stamp).nanoseconds();
     shared_points_->publish(this, std::move(frame));
+    if (enable_world_index_) {
+      auto world_header = msg->header;
+      world_header.frame_id = world_frame_id_;
+      publishWorldBuckets(world_header);
+      for (auto &consumer : additional_consumers_) {
+        consumer.has_bounds = update_map_bounds(consumer.map_source.get(),
+          consumer.target_frame_id, *msg, consumer.bounds,
+          *consumer.voxel_codec, consumer.voxel_accumulator);
+      }
+      publishAdditionalConsumers(*msg);
+    }
     status_reporter_.report({double(msg->width) * msg->height,
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()});
+  }
+
+  // 同一world索引からROIとROI外の自己領域を一括照会。元点の再読出しなし
+  void accumulate_shared_index_points(const sensor_msgs::msg::PointCloud2 &msg,
+    const Eigen::Isometry3d &world_to_target)
+  {
+    voxel_accumulator_->begin_frame(std::size_t(msg.width) * msg.height);
+    const bool is_identity = isIdentityTransform(world_to_target);
+    const bool has_self_outside_roi = !self_ids_.empty() &&
+      (!reachability_bounds_.contains(self_bounds_.min_corner - self_bounds_.margin) ||
+      !reachability_bounds_.contains(self_bounds_.max_corner + self_bounds_.margin));
+    const auto add_index_point = [&](const Eigen::Vector3f &world_point, std::uint32_t idx) {
+      const Eigen::Vector3d point = is_identity ? world_point.cast<double>().eval() :
+        (world_to_target * world_point.cast<double>()).eval();
+      voxel_accumulator_->add_shared_point(point, idx,
+        [&]() {return has_self_outside_roi && self_bounds_.contains(point);},
+        [this](long id) {return self_ids_.count(id) != 0;});
+    };
+    if (!reachability_bounds_.enable_filter) {
+      // 無制限ROIでは全bucketの照会。巨大な仮想AABBなし
+      world_index_->visit_points_with_source(add_index_point);
+      return;
+    }
+    Eigen::Vector3d min_target = reachability_bounds_.min_corner - reachability_bounds_.margin;
+    Eigen::Vector3d max_target = reachability_bounds_.max_corner + reachability_bounds_.margin;
+    if (has_self_outside_roi) {
+      min_target = min_target.cwiseMin(self_bounds_.min_corner - self_bounds_.margin);
+      max_target = max_target.cwiseMax(self_bounds_.max_corner + self_bounds_.margin);
+    }
+    auto query_bounds = reachability_bounds_;
+    query_bounds.min_corner = min_target;
+    query_bounds.max_corner = max_target;
+    query_bounds.margin.setZero();
+    const auto bounds = makeWorldQueryBounds(query_bounds, world_to_target.inverse());
+    world_index_->query_aabb_with_source(bounds.first, bounds.second, add_index_point);
+  }
+
+  // 元点番号付きworld登録を全点の一回走査へ集約。公開中snapshotの不変性維持
+  void build_world_index(const sensor_msgs::msg::PointCloud2 &msg,
+    const Eigen::Isometry3d &source_to_world)
+  {
+    if (!world_index_.unique()) {
+      const double bucket_size = world_index_->bucket_size();
+      world_index_.swap(spare_world_idx_);
+      if (!world_index_ || !world_index_.unique()) {
+        world_index_ = std::make_shared<voxel_idx::world_point_bucket_index>(bucket_size);
+      }
+    }
+    const pointcloud_sampling::detail::xyz_reader reader(msg);
+    world_index_->begin_frame(reader.num_points);
+    const bool is_identity = isIdentityTransform(source_to_world);
+    const auto add_point = [&](const Eigen::Vector3f &point, std::uint32_t idx) {
+      const Eigen::Vector3f world_point = is_identity ? point :
+        (source_to_world * point.cast<double>()).cast<float>().eval();
+      world_index_->add_point(world_point, idx);
+    };
+    if (reader.is_native_float32 && !reader.has_row_padding && msg.point_step % 4 == 0 &&
+      reader.offsets == std::array<std::uint32_t, 3>{0, 4, 8}) {
+      sensor_msgs::PointCloud2ConstIterator<float> x(msg, "x"), y(msg, "y"), z(msg, "z");
+      for (std::uint32_t idx = 0; idx < reader.num_points; ++idx, ++x, ++y, ++z) {
+        add_point({*x, *y, *z}, idx);
+      }
+    } else {
+      for (std::uint32_t idx = 0; idx < reader.num_points; ++idx) {
+        std::array<double, 3> xyz{};
+        if (reader.read(idx, xyz)) {add_point({float(xyz[0]), float(xyz[1]), float(xyz[2])}, idx);}
+      }
+    }
   }
 
   std::unique_ptr<map_bounds_source> make_map_bounds_source(
@@ -727,15 +814,28 @@ private:
     accumulator.begin_frame(static_cast<std::size_t>(msg.width) * msg.height);
     if (accumulator.has_point_membership()) {
       const pointcloud_sampling::detail::xyz_reader reader(msg);
-      for (uint32_t idx = 0; idx < reader.num_points; ++idx) {
-        std::array<double, 3> xyz{};
-        if (!reader.read(idx, xyz)) {continue;}
-        const Eigen::Vector3d source_point(xyz[0], xyz[1], xyz[2]);
+      const bool has_self_outside_roi = !self_ids_.empty() &&
+        (!reachability_bounds_.contains(self_bounds_.min_corner - self_bounds_.margin) ||
+        !reachability_bounds_.contains(self_bounds_.max_corner + self_bounds_.margin));
+      const auto add_source_point = [&](const Eigen::Vector3d &source_point, uint32_t idx) {
         const Eigen::Vector3d target_point = is_source_to_target_identity
           ? source_point : (source_to_target * source_point).eval();
         accumulator.add_shared_point(target_point, idx,
-          !self_ids_.empty() && self_bounds_.contains(target_point),
+          [&]() {return has_self_outside_roi && self_bounds_.contains(target_point);},
           [this](long id) {return self_ids_.count(id) != 0;});
+      };
+      // 通常のXYZ float32配置は既存ROIと同じ読出し。有限性検査は登録側だけ
+      if (reader.is_native_float32 && !reader.has_row_padding && msg.point_step % 4 == 0 &&
+        reader.offsets == std::array<uint32_t, 3>{0, 4, 8}) {
+        sensor_msgs::PointCloud2ConstIterator<float> x(msg, "x"), y(msg, "y"), z(msg, "z");
+        for (uint32_t idx = 0; idx < reader.num_points; ++idx, ++x, ++y, ++z) {
+          add_source_point({*x, *y, *z}, idx);
+        }
+      } else {
+        for (uint32_t idx = 0; idx < reader.num_points; ++idx) {
+          std::array<double, 3> xyz{};
+          if (reader.read(idx, xyz)) {add_source_point({xyz[0], xyz[1], xyz[2]}, idx);}
+        }
       }
       return;
     }
@@ -896,25 +996,7 @@ private:
     }
 
     const auto world_index_build_start = std::chrono::steady_clock::now();
-    // 読取中snapshotの変更禁止。解放済みのバッファだけを再利用。
-    if (!world_index_.unique()) {
-      const double bucket_size = world_index_->bucket_size();
-      world_index_.swap(spare_world_idx_);
-      if (!world_index_ || !world_index_.unique()) {
-        world_index_ = std::make_shared<voxel_idx::world_point_bucket_index>(bucket_size);
-      }
-    }
-    world_index_->begin_frame(input_point_num);
-    sensor_msgs::PointCloud2ConstIterator<float> point_x(*msg, "x");
-    sensor_msgs::PointCloud2ConstIterator<float> point_y(*msg, "y");
-    sensor_msgs::PointCloud2ConstIterator<float> point_z(*msg, "z");
-    for (; point_x != point_x.end(); ++point_x, ++point_y, ++point_z) {
-      const Eigen::Vector3f source_point(*point_x, *point_y, *point_z);
-      const Eigen::Vector3f world_point = is_source_to_world_identity
-        ? source_point
-        : (source_to_world * source_point.cast<double>()).cast<float>();
-      world_index_->add_point(world_point);
-    }
+    build_world_index(*msg, source_to_world);
     const double world_index_build_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - world_index_build_start).count();
     if (shared_points_) {

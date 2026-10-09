@@ -3,11 +3,12 @@ import {CloudColorControls,displayPLY} from './pointcloud-colors.js';
 import * as THREE from 'three';
 import {RGBDSensor,nominalCalibration,validateCalibration,deproject,binaryPLY} from './rgbd-core.js';
 import {zipFiles} from './capture-zip.js';
+import {depth_preview} from './depth-preview.js';
 const $=id=>document.getElementById(id);
 const colorLUT=Float32Array.from({length:256},(_,i)=>{const x=i/255;return x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4);});
 export class RGBDWorkspace {
  constructor({scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly}){
-  Object.assign(this,{scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly});this.sensor=new RGBDSensor(renderer,scene);this.sensor.configure(nominalCalibration(848,480,848,480));this.live=false;this.lastTime=0;this.rate=0;this.cloudOnly=false;this.last_capture_end_ms=0;this.last_capture_ms=0;this.is_capture_pending=false;this.capture_generation=0;this.is_refresh_pending=false;
+  Object.assign(this,{scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly});this.sensor=new RGBDSensor(renderer,scene);this.sensor.configure(nominalCalibration(848,480,848,480));this.live=false;this.lastTime=0;this.rate=0;this.cloudOnly=false;this.last_capture_end_ms=0;this.last_capture_ms=0;this.is_capture_pending=false;this.capture_generation=0;this.is_refresh_pending=false;this.enable_gpu_depth_preview=true;this.enable_readback_priority=true;this.depth_preview=null;
   this.cloud=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({size:2,sizeAttenuation:false,vertexColors:true,toneMapped:false}));this.cloud.frustumCulled=false;this.cloud.layers.set(1);this.cloud.visible=false;scene.add(this.cloud);
   this.frustum=new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xb553bb,transparent:true,opacity:.55}));overlay.add(this.frustum);this.frustum.visible=false;
   this.ui();this.lastSummary={ready:true,live:false,frame:null};
@@ -95,6 +96,7 @@ export class RGBDWorkspace {
   this.pending_preview_frame=null;
   this.update_preview_calibration(f.calibration);
   const rgb=$('rgb-preview'),d=$('depth-preview'),kc=f.calibration.color,k=f.calibration.depth;rgb.getContext('2d').putImageData(new ImageData(f.rgba,kc.width,kc.height),0,0);
+  if(this.enable_gpu_depth_preview){this.depth_preview??=new depth_preview();if(this.depth_preview.draw(d.getContext('2d'),f))return;}
   const rgba=new Uint8ClampedArray(k.width*k.height*4),lo=f.calibration.min_depth_m,hi=f.calibration.max_depth_m;
   for(let i=0;i<f.depth.length;i++){const z=f.depth[i],a=i*4;if(z){const t=THREE.MathUtils.clamp((z-lo)/(hi-lo),0,1);rgba[a]=255*Math.max(0,1-Math.abs(t*3-2));rgba[a+1]=255*Math.max(0,1-Math.abs(t*3-1));rgba[a+2]=255*Math.max(0,1-Math.abs(t*3));}else{rgba[a]=18;rgba[a+1]=20;rgba[a+2]=29;}rgba[a+3]=255;}d.getContext('2d').putImageData(new ImageData(rgba,k.width,k.height),0,0);
  }
