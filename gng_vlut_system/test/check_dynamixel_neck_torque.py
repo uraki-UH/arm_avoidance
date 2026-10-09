@@ -138,8 +138,9 @@ def main():
         assert '首トルク停止:' in log
     else:
         assert is_triggered and torque == [False, False] and current == [0., 0.], events
-        assert len(events) < 100, '終了時指令の過剰再送'
         first_off = next(idx for idx, event in enumerate(events) if event == ('torque', [False, False]))
+        # 通常運転・補償立上げ分を除く終了処理の再送数。3秒・10 Hz・2種の指令
+        assert len(events[first_off:]) <= 62, '終了時指令の過剰再送'
         assert all(event[1] == ([False, False] if event[0] == 'torque' else [0., 0.]) for event in events[first_off:])
         assert ('OFF未確認' if args.case in ('stale', 'gravity_stale', 'no_off_report') else 'OFF報告あり') in log, log
     print(json.dumps({'case': args.case, 'num_commands': len(events), 'is_triggered': is_triggered,
