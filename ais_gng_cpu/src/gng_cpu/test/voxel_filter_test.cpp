@@ -60,6 +60,8 @@ void test_registered_input() {
         }
     }
     stage = "再実行・不正入力・復帰";
+    // 学習等で上書きされた元点ラベルの再初期化、範囲外点ラベルの消去
+    std::fill(registered_labels.begin(), registered_labels.end(), 7);
     registered.applyFilter(points, points.size(), registered_labels);
     require(normal_labels == registered_labels);
     require(!registered.set_registered_input(nullptr, 1, points.size(), registered_labels));

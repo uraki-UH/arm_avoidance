@@ -58,7 +58,7 @@ void VoxelGrid::apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vecto
     if (!has_registered_input) {voxel_index_num = 0;}
     if(inpcl_num == 0){
         filtered_pcl_num = 0;
-        return; // 入力点群がない場合は何もしない
+        return; // 空入力
     }
     if (!enable_voxel_downsampling) {
         // YAML範囲内の全点の保持。各点と元番号の一対一対応。
@@ -77,12 +77,11 @@ void VoxelGrid::apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vecto
     }
     uint32_t index;
     uint32_t i, n;
-    // リセット
+    // 範囲内ラベルの初期化
     std::fill(labels.begin(), labels.begin() + inpcl_num, 0);
     if (has_registered_input) {
         // 外部の登録済み配列の利用。座標再量子化・再ソートなし
         if (!is_registered_input_valid) {voxel_index_num = 0; return;}
-        for (i = 0; i < voxel_index_num; ++i) {labels[voxel_index[i].raw_index] = 0b001;}
     } else {
         for (i = n = 0; i < inpcl_num; ++i) {
             index = voxel_config->getIndex(input_pcl[i].p);
@@ -106,6 +105,8 @@ void VoxelGrid::apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vecto
         uint32_t end_idx = begin_idx;
         uint32_t coarse_idx = 0;
         do {
+            // セル範囲走査と同時の外部入力ラベル確定。専用走査なし
+            if (has_registered_input) {labels[voxel_index[end_idx].raw_index] = 0b001;}
             if constexpr (enable_tracking) {
                 const auto &point = input_pcl[voxel_index[end_idx].raw_index];
                 const auto idx = tracking->add_point(point.p);

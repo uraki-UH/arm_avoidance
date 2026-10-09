@@ -32,7 +32,7 @@
   "max_joint_step": 0.025,
   "mode": "independent_arm",
   "num_local_neighbors": 6,
-  "num_nodes": 9987,
+  "num_nodes": 9988,
   "profile": "left_arm",
   "root_link": "L_shoulder_mount",
   "urdf_path": "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf",

@@ -46,8 +46,7 @@ std::shared_ptr<const point_registration> point_registration_query::read(
   if (is_same_frame && has_result_ && selected_indices_ == source_indices) {return current_;}
   has_result_ = false;
   if (!is_same_frame) {
-    cell_slots_.resize(source_num);
-    has_cell_.assign(source_num, 0);
+    cell_slots_.assign(source_num, unregistered_cell);
     num_registered_points_ = 0;
     frame_ = frame;
     source_pose_ = source_pose;
@@ -58,24 +57,31 @@ std::shared_ptr<const point_registration> point_registration_query::read(
   }
   auto &points = current_->points;
   points.clear(); points.reserve(source_indices.size());
+  // 登録と同時の全桁集計。ソート各段での入力再走査なし
+  std::array<std::array<std::uint32_t, 256>, 4> counts{};
   for (std::size_t idx = 0; idx < source_indices.size(); ++idx) {
     const auto source_idx = source_indices[idx];
     if (source_idx >= source_num) {throw std::invalid_argument("登録元点番号の範囲外");}
-    if (!has_cell_[source_idx]) {
-      cell_slots_[source_idx] = cell_idx(xyz + 3 * idx);
-      has_cell_[source_idx] = 1;
+    auto &cell = cell_slots_[source_idx];
+    if (cell == unregistered_cell) {
+      cell = cell_idx(xyz + 3 * idx);
       ++num_registered_points_;
     }
-    if (cell_slots_[source_idx] != UINT32_MAX) {
-      points.push_back((std::uint64_t{cell_slots_[source_idx]} << 32) | idx);
+    if (cell != UINT32_MAX) {
+      points.push_back((std::uint64_t{cell} << 32) | idx);
+      ++counts[0][cell & 255];
+      ++counts[1][(cell >> 8) & 255];
+      ++counts[2][(cell >> 16) & 255];
+      ++counts[3][cell >> 24];
     }
   }
-  // セル番号だけの4段安定基数ソート。代表元点の入力順保持、比較ソートなし
-  sort_buffer_.resize(points.size());
-  for (unsigned shift = 32; shift < 64; shift += 8) {
-    std::array<std::size_t, 256> offsets{};
-    for (const auto point : points) {++offsets[(point >> shift) & 255];}
-    std::size_t offset = 0;
+  // セル番号の安定基数ソート。同値桁の省略、代表元点の入力順保持
+  for (unsigned pass = 0; pass < counts.size() && !points.empty(); ++pass) {
+    const unsigned shift = 32 + 8 * pass;
+    auto &offsets = counts[pass];
+    if (offsets[(points.front() >> shift) & 255] == points.size()) {continue;}
+    sort_buffer_.resize(points.size());
+    std::uint32_t offset = 0;
     for (auto &count : offsets) {const auto next = offset + count; count = offset; offset = next;}
     for (const auto point : points) {sort_buffer_[offsets[(point >> shift) & 255]++] = point;}
     points.swap(sort_buffer_);

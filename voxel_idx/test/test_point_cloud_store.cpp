@@ -98,6 +98,38 @@ TEST(point_cloud_store, registration_invalid_input_empty_and_nonfinite_points)
   EXPECT_EQ(query.read(frame, 4, {0, 1, 2, 3}, xyz)->points, result->points);
 }
 
+TEST(point_cloud_store, registration_constant_digits_and_odd_sort_passes)
+{
+  point_registration_spec spec; spec.size = 1; spec.target_frame = "robot";
+  spec.min_pos = {{0, 0, 0}}; spec.max_pos = {{1024, 1024, 4095}};
+  spec.num_cells = {{1024, 1024, 4095}};
+  point_registration_query query(spec);
+  std::mt19937 random(17);
+  std::shared_ptr<const point_registration> previous;
+  std::vector<std::uint64_t> saved;
+  // 同値全桁・単独桁・3桁・4桁の安定順序と、保持中snapshotの保護
+  for (const auto mask : {0U, 0xffU, 0xff00U, 0xff0000U, 0xff000000U, 0xffffffU, UINT32_MAX}) {
+    std::vector<float> xyz;
+    std::vector<std::uint32_t> indices;
+    std::vector<std::uint64_t> expected;
+    for (std::uint32_t idx = 0; idx < 1024; ++idx) {
+      const std::uint32_t cell = ((random() & mask) | (0x92345678U & ~mask)) % (1024U * 1024U * 4095U);
+      xyz.push_back(static_cast<float>(cell % 1024) + .25f);
+      xyz.push_back(static_cast<float>((cell / 1024) % 1024) + .25f);
+      xyz.push_back(static_cast<float>(cell / (1024 * 1024)) + .25f);
+      indices.push_back(1023 - idx);
+      expected.push_back((std::uint64_t{cell} << 32) | idx);
+    }
+    std::sort(expected.begin(), expected.end());
+    const auto frame = std::make_shared<const point_frame>();
+    const auto result = query.read(frame, 1024, indices, xyz.data());
+    EXPECT_EQ(result->points, expected);
+    EXPECT_EQ(query.num_registered_points(), 1024U);
+    if (previous) {EXPECT_EQ(previous->points, saved);}
+    previous = result; saved = result->points;
+  }
+}
+
 TEST(point_cloud_store, registration_acquisition_pose_is_per_frame_without_new_query)
 {
   point_registration_spec spec; spec.target_frame = "robot";
