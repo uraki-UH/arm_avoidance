@@ -50,6 +50,20 @@ class config_test(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(Exception):
                 self.read(dict(self.config, **change))
 
+    def test_empty_ip_has_setup_instruction(self):
+        with self.assertRaisesRegex(ValueError, 'host_ip.*mid360.yaml'):
+            self.read(dict(self.config, host_ip=''))
+
+    def test_unassigned_host_stops_before_node_creation(self):
+        context = LaunchContext()
+        context.launch_configurations['config'] = 'mock.yaml'
+        with patch.object(module.socket, 'socket') as sock, patch.object(module, 'Node') as node, \
+                patch.object(module, 'read_config', return_value=self.config):
+            sock.return_value.__enter__.return_value.bind.side_effect = OSError('Cannot assign requested address')
+            with self.assertRaisesRegex(ValueError, 'host_ip=192.168.1.5.*IPv4'):
+                module.start(context)
+            node.assert_not_called()
+
     def test_optional_tf_and_cleanup(self):
         for enable_tf in (False, True):
             config = copy.deepcopy(self.config)

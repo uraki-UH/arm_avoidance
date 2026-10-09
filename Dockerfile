@@ -47,11 +47,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-realsense2-camera-msgs \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js / npm for the frontend dev server
+# Viewer・双腕シミュレータのNode.js / npm
 RUN mkdir -p /etc/apt/keyrings \
  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
     | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
- && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+ && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
     > /etc/apt/sources.list.d/nodesource.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends nodejs \
@@ -68,7 +68,7 @@ RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.o
 # YOLO人物検出
 RUN pip3 install --no-cache-dir "numpy<2" "ultralytics>=8.3,<9"
 
-# 局所回避の二次計画ソルバー
+# 局所回避の二次計画ソルバーとブラウザ物理シミュレーション
 RUN pip3 install --no-cache-dir "osqp==1.0.4" "mujoco==3.3.7"
 
 # PCL RGB-D人物検出用HOG+SVM
@@ -105,6 +105,12 @@ WORKDIR /ros2_ws
 WORKDIR /ros2_ws/src/ToPoFuzzy-Viewer/frontend
 COPY ToPoFuzzy-Viewer/frontend/package*.json /ros2_ws/src/ToPoFuzzy-Viewer/frontend/
 RUN npm ci
+
+# ホストのソースマウントに隠れない、双腕UI依存の取得キャッシュ
+WORKDIR /opt/topo-simulator-ui
+COPY ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/package*.json ./
+RUN npm ci --no-audit --no-fund \
+ && rm -rf node_modules
 
 WORKDIR /ros2_ws/src
 

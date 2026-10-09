@@ -1,9 +1,11 @@
 services:
   mid360:
     build: .
-    image: uraki-mid360:local
+    image: mid360:local
     network_mode: host
     ipc: host
+    init: true
+    stop_grace_period: 15s
     environment:
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
       ROS_LOCALHOST_ONLY: ${ROS_LOCALHOST_ONLY:-0}

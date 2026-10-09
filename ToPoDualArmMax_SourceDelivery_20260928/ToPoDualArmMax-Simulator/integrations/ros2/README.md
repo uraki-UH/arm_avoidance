@@ -21,7 +21,7 @@ Docker内で `bash start_ros.sh` を直接実行した場合は、Ctrl+Cで今�
 
 ## ROS処理結果の表示専用接続
 
-Simulatorルートで `npm ci && npm run build` を実行後、通常の `bash start_ros.sh` で起動します。
+通常の `bash start_ros.sh` で起動します。UI未生成時やThree.js本体の欠損時は依存取得とビルドを自動実行します。生成済みUIのソース更新時は、Simulatorルートで `npm ci && npm run build` を実行してください。Dockerの依存準備・更新手順は[アプリREADME](../../README.md)を参照してください。
 点群送信用ブリッジとは別に、同じROSドメインで更新済みのViewerゲートウェイを起動します。
 ToPoFuzzy-Viewerの画面起動は不要です。
 

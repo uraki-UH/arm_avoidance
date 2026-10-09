@@ -50,6 +50,14 @@ services:
     # network_mode: host を使うので ports は不要
     # command: "sh /ros2_ws/src/ais_gng/release.sh"
 
+  # MID-360実機ドライバ。サービス指定またはlidarプロファイルによる有効化
+  mid360:
+    extends:
+      file: integrations/mid360/compose.yaml
+      service: mid360
+    profiles:
+      - lidar
+
   # RGB-D・LiDARデータセット専用のROS 2ノード実行環境
   dataset_player:
     build:

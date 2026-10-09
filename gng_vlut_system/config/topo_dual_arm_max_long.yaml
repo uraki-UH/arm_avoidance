@@ -176,7 +176,7 @@
       max_x: 1.5
       min_y: -1.5
       max_y: 1.5
-      min_z: -1.5
+      min_z: -0.5
       max_z: 1.5
       max_attempts: 256
 

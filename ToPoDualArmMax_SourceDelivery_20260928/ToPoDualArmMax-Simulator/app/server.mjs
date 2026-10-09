@@ -5,7 +5,9 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT||8877);
-if(!fs.existsSync(path.join(root,'generated/ros-results.js'))){console.error('ROS UI build missing: run npm ci && npm run build');process.exit(1);}
+const required_assets=['generated/ros-results.js','vendor/three/build/three.module.js','vendor/three/build/three.core.js'];
+const missing_assets=required_assets.filter(name=>!fs.existsSync(path.join(root,name)));
+if(missing_assets.length){console.error('起動用ファイル不足: '+missing_assets.join(', ')+' / npm ci && npm run build を実行してください');process.exit(1);}
 if(!Number.isInteger(port)||port<1024||port>65535)throw Error('PORT must be 1024..65535');
 const startedAt=Math.round((Date.now()-process.uptime()*1000)/1000);
 const instance=createHash('sha256').update(process.platform==='win32'?root.toLowerCase():root).digest('hex').slice(0,16);

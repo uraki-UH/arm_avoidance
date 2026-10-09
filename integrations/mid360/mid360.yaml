@@ -1,6 +1,6 @@
 # 実機接続PCの有線LAN IPv4とセンサIPv4。接続前に実値へ変更
-host_ip: ""
-lidar_ip: ""
+host_ip: "192.168.1.5"
+lidar_ip: "192.168.1.141"
 publish_freq: 10.0
 points_topic: /sensors/mid360/points
 imu_topic: /sensors/mid360/imu

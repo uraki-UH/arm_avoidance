@@ -18,7 +18,11 @@ from launch_ros.actions import Node
 
 def read_config(path):
     config = yaml.safe_load(Path(path).read_text())
+    if not isinstance(config, dict):
+        raise ValueError("MID360_CONFIG: YAMLの設定項目が必要です")
     for key in ("host_ip", "lidar_ip"):
+        if not isinstance(config.get(key), str) or not config[key].strip():
+            raise ValueError(f"{key}: mid360.yamlに実機接続用IPv4を設定してください（現在は未設定）")
         addr = ipaddress.IPv4Address(config[key])
         if addr.is_unspecified or addr.is_multicast or addr.is_loopback:
             raise ValueError(f"{key}: 実機接続用IPv4を指定してください")
@@ -65,11 +69,18 @@ def sdk_config(config):
     }
 
 
+def check_host_ip(config):
+    # 指定IPのホスト割当確認。NIC設定の変更なし
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.bind((config["host_ip"], 0))
+    except OSError as error:
+        raise ValueError(f"host_ip={config['host_ip']}: ローカルIPへのbind失敗。有線LANのIPv4割当を確認してください: {error}") from error
+
+
 def start(context):
     config = read_config(LaunchConfiguration("config").perform(context))
-    # 指定IPのホスト割当確認。NIC設定の変更なし
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.bind((config["host_ip"], 0))
+    check_host_ip(config)
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
         json.dump(sdk_config(config), tmp)
         config_path = tmp.name
@@ -107,3 +118,17 @@ def generate_launch_description():
         DeclareLaunchArgument("config", default_value=os.environ.get("MID360_CONFIG", "/config/mid360.yaml")),
         OpaqueFunction(function=start),
     ])
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="MID-360起動前確認（LiDAR通信・ノード起動なし）")
+    parser.add_argument("--check-config", action="store_true", required=True)
+    parser.add_argument("--config", default=os.environ.get("MID360_CONFIG", "/config/mid360.yaml"))
+    args = parser.parse_args()
+    try:
+        config = read_config(args.config)
+        check_host_ip(config)
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
+        parser.exit(1, f"MID-360設定確認: NG | {error}\n")
+    print(f"MID-360設定確認: OK | PC={config['host_ip']} | LiDAR={config['lidar_ip']} | 実機の応答は未確認")

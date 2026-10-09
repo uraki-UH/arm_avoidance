@@ -23,7 +23,7 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 
 ## ロボットおよび対応する学習済みGNGの起動
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+  params_file:=/ros2_ws/src/gng_vlut_system/config/topo_dual_arm_max_long.yaml
 
 元マップは`/ToPoDualArm/Tmap_static`、集約マップは`/ToPoDualArm/Tmap_vis_L0`。ViewerのTopicsで表示を選択。追加launchは不要。[集約データの再生成](gng_vlut_system/docs/releases/2026-09-15_spatial_tmap_aggregation.md)。
 

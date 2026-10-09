@@ -6,7 +6,7 @@
 
 ## 最初に起動する
 
-必要なもの: **Node.js 22以上**とWebGL 2対応のブラウザ（Chrome / Edge等）。Node.js 24.19.0で検証しています。Node.jsは https://nodejs.org/ から導入し、`node --version` が実行できる状態にしてください。ソースからの初回起動では、以下のUIビルドが必要です。生成済みの `app/generated/` を含む配布物は、Node.jsだけで起動できます。
+必要なもの: **Node.js 22以上**とWebGL 2対応のブラウザ（Chrome / Edge等）。Node.js 24.19.0で検証しています。Node.jsは https://nodejs.org/ から導入し、`node --version` が実行できる状態にしてください。ソースからの初回起動では、以下のUIビルドが必要です。`npm run build`はThree.js本体と内部依存も`app/vendor/three/build/`へ配置します。生成済みの`app/generated/`とThree.js本体の両方を含む配布物は、Node.jsだけで起動できます。
 
 ```bash
 npm ci
@@ -53,6 +53,10 @@ GPU描画・ROS連携をまとめて起動する場合は、ホスト側のワ�
 ```bash
 bash scripts/open_dual_arm_nvidia.sh
 ```
+
+DockerfileでNode.js 22・MuJoCo・OSQPと、ロックファイルに対応するシミュレータのnpm依存を取得します。依存キャッシュはソースのマウント外に保持します。`app/generated/ros-results.js`、`app/vendor/three/build/three.module.js`、`three.core.js`のいずれかがない場合、`start_ros.sh`がキャッシュ優先で`npm ci`とUIビルドを実行します。同時起動時の重複ビルドは抑止します。必要ファイルが揃っている場合は再ビルドしないため、UIソース更新後はアプリのルートで`npm ci && npm run build`を実行してください。起動前にも不足ファイルを検査し、不足時はファイル名とビルドコマンドを表示します。
+
+Dockerfileの更新は既存コンテナへ自動反映されません。ワークスペースルートの`docker compose build gng_cpu`でイメージを更新し、コンテナ内の作業を終了できる時点で`docker compose up -d --no-deps gng_cpu`を実行してください。コンテナ再作成時は、その中で動作中のノードも停止します。
 
 専用ランチャーはURL入力不要、既定はLongです。標準モデルは末尾に `standard` を指定。topofuzzy viewerと別のChromeプロファイル、X11、1440×1000の初期ウィンドウで開きます。サーバーとROS/物理ブリッジは未起動ならDocker内で背景起動し、応答確認後にブラウザを開きます。既存サービスは再利用します。ブラウザを閉じてもバックエンドは継続し、停止コマンドとログの場所は新規起動時に表示します。ブラウザだけを開く場合は `enable_backend=0` を指定します。既存の汎用ランチャーも引き続き利用可能で、Markdownリンク形式の引数はURLに補正します。
 
