@@ -446,8 +446,9 @@ private:
   mutable std::mutex mutex_;
   std::weak_ptr<const point_frame> frame_;
   std::array<float, 7> source_pose_{{0, 0, 0, 0, 0, 0, 1}};
+  // 未登録と範囲外の別値。セル数上限による有効セル番号との非重複
+  static constexpr std::uint32_t unregistered_cell = UINT32_MAX - 1;
   std::vector<std::uint32_t> cell_slots_, selected_indices_;
-  std::vector<std::uint8_t> has_cell_;
   std::size_t num_registered_points_{0};
   bool has_result_{false};
   std::vector<std::uint64_t> sort_buffer_;
