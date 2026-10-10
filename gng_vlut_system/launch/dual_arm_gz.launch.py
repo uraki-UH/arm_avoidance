@@ -102,10 +102,10 @@ def launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('urdf', default_value=str(default_urdf('topo_dual_arm_max'))),
+        DeclareLaunchArgument('urdf', default_value=str(default_urdf())),
         DeclareLaunchArgument('control_config', default_value=str(package_dir/'config/dual_arm_effort.yaml')),
         DeclareLaunchArgument('scenario', default_value='empty', description='環境シナリオ名またはYAMLパス'),
-        DeclareLaunchArgument('namespace', default_value='sim_topo_dual_arm_max'),
+        DeclareLaunchArgument('namespace', default_value='sim_topo_dual_arm_max_long'),
         DeclareLaunchArgument('state_topic', default_value='joint_states'),
         DeclareLaunchArgument('trajectory_topic', default_value='dual_arm_controller/joint_trajectory'),
         DeclareLaunchArgument('description_topic', default_value='robot_description'),

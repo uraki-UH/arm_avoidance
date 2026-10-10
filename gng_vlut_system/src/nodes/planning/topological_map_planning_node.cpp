@@ -137,16 +137,6 @@ static std::vector<std::string> orderedControlledJointNames(
   return names;
 }
 
-static uint8_t pathLabelFromStatus(const ::GNG::Status &status) {
-  if (status.is_colliding) {
-    return 2;
-  }
-  if (status.is_danger) {
-    return 3;
-  }
-  return 1;
-}
-
 static std::vector<double> eigenToStdVector(const Eigen::VectorXf &q) {
   std::vector<double> out(static_cast<std::size_t>(q.size()));
   for (int i = 0; i < q.size(); ++i) {
@@ -577,40 +567,10 @@ private:
         continue;
       }
 
-      const uint8_t next_label = n.label == 2 ? 2 : (n.label == 3 ? 3 : 1);
-      has_pending_plan_ = has_pending_plan_ || !node.status.active ||
-          pathLabelFromStatus(node.status) != next_label;
+      const bool has_changed = topological_map_avoidance::apply_environment_label(node.status, n.label);
+      has_pending_plan_ = has_pending_plan_ || has_changed;
 
-      // FIXME: self_collision_free は静的な自己干渉の判定結果であり、環境障害物の
-      // ラベルで書き換えるべきではない。障害物が消えたときに true へ戻してしまうため、
-      // 元々自己干渉していたノードが安全と誤判定される。挙動が変わる修正のため
-      // 別途対応する。詳細は TASK_CANDIDATES.md を参照。
-      switch (n.label) {
-      case 2: // collision
-        node.status.is_colliding = true;
-        node.status.is_danger = false;
-        node.status.self_collision_free = false;
-        node.status.collision_count = 1;
-        node.status.danger_count = 0;
-        break;
-      case 3: // danger
-        node.status.is_colliding = false;
-        node.status.is_danger = true;
-        node.status.self_collision_free = true;
-        node.status.collision_count = 0;
-        node.status.danger_count = 1;
-        break;
-      default:
-        node.status.is_colliding = false;
-        node.status.is_danger = false;
-        node.status.self_collision_free = true;
-        node.status.collision_count = 0;
-        node.status.danger_count = 0;
-        break;
-      }
-      node.status.active = true;
-
-      if (!node.status.is_colliding) {
+      if (node.status.active && node.status.self_collision_free && !node.status.is_colliding) {
         cached_safe_goal_ids_.push_back(id);
       }
     }

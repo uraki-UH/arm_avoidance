@@ -71,6 +71,9 @@ RUN pip3 install --no-cache-dir "numpy<2" "ultralytics>=8.3,<9"
 # 局所回避の二次計画ソルバーとブラウザ物理シミュレーション
 RUN pip3 install --no-cache-dir "osqp==1.0.4" "mujoco==3.3.7"
 
+# Isaac向けUSD形状・物理属性の構造検証
+RUN pip3 install --no-cache-dir "usd-core==25.5.1"
+
 # PCL RGB-D人物検出用HOG+SVM
 RUN mkdir -p /opt/pcl_people \
  && curl -L --fail --silent --show-error \

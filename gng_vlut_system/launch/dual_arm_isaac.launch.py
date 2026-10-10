@@ -24,5 +24,5 @@ def launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('namespace', default_value='sim_topo_dual_arm_max'),
+        DeclareLaunchArgument('namespace', default_value='sim_topo_dual_arm_max_long'),
         OpaqueFunction(function=launch_setup)])

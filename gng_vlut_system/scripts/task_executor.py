@@ -2,6 +2,7 @@
 """Gazebo専用タスク実行ノード。標準軌道Actionへの単一出力。"""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import time
 
@@ -109,7 +110,8 @@ class task_executor(Node):
         bounds = read_joint_bounds(self.get_parameter('urdf').value)
         self.program = load_program(data, bounds)
         self.backend = trajectory_backend(self, self.program.joint_names, self.program.limits, self.validate_inputs)
-        self.runner = task_runner(self.program, self.backend)
+        self.planning_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='task_planning')
+        self.runner = task_runner(self.program, self.backend, self.planning_executor.submit)
         self.input_subscriptions = [self.create_subscription(String, source.topic,
             lambda message, source=source: self.on_input(source, message), 10)
             for source in self.program.input_sources]
@@ -128,12 +130,14 @@ class task_executor(Node):
         try:
             source.accept(json.loads(message.data), self.now_sec())
         except (ValueError, TypeError) as error:
-            source.has_valid_input = False
-            source.has_plan_change = source.has_active_plan
+            source.invalidate()
             self.get_logger().warning(str(error))
         self.check_inputs()
 
     def validate_inputs(self):
+        error = self.runner.feedback_error(self.now_sec(), self.fresh_sample())
+        if error:
+            raise ValueError('軌道送信前の状態不正: ' + error)
         for source in self.program.input_sources:
             if source.has_active_plan and (source.has_plan_change or not source.is_fresh(self.now_sec())):
                 raise ValueError('軌道送信前に姿勢グラフが変更・期限切れになりました')
@@ -227,6 +231,8 @@ def main(args=None):
         pass
     finally:
         if node is not None:
+            node.runner.cancel_plan()
+            node.planning_executor.shutdown(wait=True, cancel_futures=True)
             if rclpy.ok():
                 node.backend.cancel()
             node.destroy_node()

@@ -72,6 +72,53 @@ docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
 経由点間は停止姿勢間の5次補間。設定例は左右`joint4`の移動→1秒保持→経由点→復帰。
 未知キー・方式・姿勢名・関節名・非有限値・関節目標の制限違反は起動前に拒否。
 
+### 追加の経路計画（任意依存）
+
+選択場所: [task_program.yaml](../config/simulation/task_program.yaml)の`tasks[].method`。既定は従来の`joint_move`。
+
+| `method` / `route` | 計画器 |
+| --- | --- |
+| `bit_star` | BIT* |
+| `rrt` / `rrt_connect` / `rrt_star` | RRT / RRTConnect / RRT* |
+| `informed_rrt_star` | Informed RRT* |
+| `chomp` / `stomp` | CHOMP / STOMP |
+
+設定場所: `methods.move.<方式>.route_options`。`service_namespace`は計画サーバーの名前空間、
+`group_name`は`dual_arm`・`left_arm`・`right_arm`。独自グループは`joint_names`も指定。
+計画時間: `max_plan_sec`（設定例5秒）。通信待ち: `max_wait_sec`（設定例5秒）。
+グループ外の関節は実測保持。グループ外への移動要求は拒否。
+
+追加依存: 実行時だけの`moveit_msgs`・MoveIt計画サーバー・選択プラグイン。
+通常ビルドでの依存追加なし。BIT* / Informed RRT*の登録拡張は`enable_optional_motion_planners=ON`でビルド。
+依存未配置時は拡張だけを省略し、通常ビルドを継続。使用時の不足・未登録・計画失敗は明示的なエラー。
+
+Dockerの追加計画器を含むイメージ:
+
+```bash
+docker build -f docker/Dockerfile.gazebo_harmonic \
+  --build-arg enable_optional_motion_planners=ON \
+  -t uraki-gazebo-harmonic:planners .
+```
+
+計画サーバー入口: [dual_arm_planners.launch.py](../launch/dual_arm_planners.launch.py)。
+同じROS版・`ROS_DOMAIN_ID`の環境で`ros2 launch gng_vlut_system dual_arm_planners.launch.py planners:=bit_star`。
+複数方式はカンマ区切り。選択方式のプラグインだけを読込。
+タスク実行器も上記イメージで再ビルドされた部品を使用。
+ソース環境のビルド指定は`colcon build --packages-select gng_vlut_system --cmake-args -Denable_optional_motion_planners=ON`。
+計画サーバーからの軌道実行なし。実行は従来のタスク実行器と`FollowJointTrajectory`。
+
+軌道化: 各経由点で停止する既存の`quintic`と、位置・速度・加速度・時間の共通検査。
+CHOMP / STOMPの時間付けや通過速度は引継がない。
+STOMPの端点接続: 最大0.005、干渉検査間隔0.0005（関節座標単位）。元経路を保持し、
+実測始点・要求終点との追加接続を再検査。大きなずれ・干渉・検査サービス不足は拒否。
+計画待ちは別スレッド。受信・中断を継続し、中断後の遅延結果は破棄。
+
+障害物入力: MoveItの`planning_scene` / `collision_object`。Gazeboの物体やGNG点群との自動同期は未接続。
+干渉検査は離散検査。計画可能性・時間は機体形状と計画予算に依存。
+検証環境のMoveIt 2.12.4では、標準STOMP単独でもサーバー終了時のSIGSEGVを観測。
+[STOMPの端点ずれの上流報告](https://github.com/moveit/moveit2/issues/2554)、
+[OMPLの公式設定](https://moveit.picknik.ai/main/doc/examples/ompl_interface/ompl_interface_tutorial.html)。
+
 ### ロボット姿勢グラフの接続とオンライン更新
 
 経路部品名はGNGではなく`robot_graph`。GNGなどの学習方式と独立し、ロボットに対応する関節姿勢・辺・通行可否を使用。
@@ -208,9 +255,11 @@ docker compose -f docker/compose.harmonic_launcher.yaml down
 
 - [task_program.py](../scripts/task_program.py): `task_kind`・`run_state`のenum、設定検証、方式登録表`task_methods`、ROS非依存の進行管理。
 - [task_components.py](../scripts/task_components.py): 部品登録表`planning_components`と名前付き方式の組立て。`default_components()`へ実装関数を登録し、YAMLで組合せを選択。動作enum・進行管理の変更は不要。
+- 追加経路部品: `route_factories`へ設定工場を登録し、`route_options`から生成。`task_method.enable_async`で待ち時間のある計画を別スレッドへ接続。従来の同期部品は同じ実行順。
 - 部品契約: `route(request) -> 関節位置列`、`refiner(request, route) -> 関節位置列`、`trajectory(request, route) -> motion_point列`、`validator(request, route, points) -> bool`。検査は`True`だけを受理。
 - `planning_request`: 関節名順序、実測始点、目標、URDF制限、読取専用の設定制限。中断後の再計画でも、その時点の実測始点から全選択部品を再実行。
 - 独自環境の注入: `load_program(..., components=登録表)`。点群やグラフを持つアダプタの関数を登録可能。ROS購読・入力期限の監視はアダプタ側の責務。YAMLから任意のPython関数名やモジュールをimportする機構なし。
+- 姿勢グラフの状態: 読取専用の`snapshot`に内容・世代・受信時刻を保持。更新は`accept()`、不正入力時の無効化は`invalidate()`、計画解放は`release()`。状態フラグの直接変更なし。
 - 従来の`task_method(resolve_targets, plan)`による一括差替えも維持。`refiners`は実行前の経路補正用であり、追従中のQPフィードバック制御ではない。TAMPはこの上位でタスク列を生成する接続が必要。
 - 部品共通検査: 経路の始終点・寸法・有限値・関節位置制限。軌道化後は既存の共通検査へ接続。組込み`quintic`は各経由点で停止し、連結後の時間・点数上限も確認。
 - 共通検査: 始終点、時刻、配列寸法、有限値、各指令点の位置・速度・加速度。独自方式の連続区間の干渉検査は計画側の責務。
@@ -218,7 +267,7 @@ docker compose -f docker/compose.harmonic_launcher.yaml down
 - 設定例の指令上限: 0.2 rad/s、0.5 rad/s²。到達誤差: 0.05 rad。停止確認: 0.03 rad/s、継続時間0.25秒。関節状態期限: ROS時刻・実時間とも0.5秒。
 - 重力補償なしの既存effort制御では、保持中の肩関節に約0.043 radの静的偏差。0.05 radはこの例の到達条件であり、位置精度の保証ではない。
 - 取消はコントローラの保持処理。指令生成時の速度・加速度制限は、実測値や取消過渡の制限ではない。max_long試験では取消直後の状態サンプルで全関節最大角速度約0.81 rad/sを観測。停止過渡の補償・減速設計は未完了。
-- 未接続: 追従中QP、自動障害物検出、経路の自己・環境衝突検査、把持・開放、Isaac、実機出力。姿勢グラフ接続は上記`robot_graph`。`gng`／`local_qp`という別名への自動変換なし。高速回避・人との近接試験への使用不可。
+- 未接続: 追従中QP、自動障害物検出、既定の直線経路の自己・環境衝突検査、把持・開放、Isaac、実機出力。追加計画器の干渉検査はMoveItのシーン上。姿勢グラフ接続は上記`robot_graph`。`gng`／`local_qp`という別名への自動変換なし。高速回避・人との近接試験への使用不可。
 
 単体検証: `python3 -m pytest gng_vlut_system/test/test_task_program.py gng_vlut_system/test/test_task_components.py -q`（Action試験はJazzy環境）。
 部品組替え・補正順序・不正出力拒否・再計画始点・従来互換を含む59テスト合格。Harmonic用インストール後の部品importも確認。
@@ -330,6 +379,8 @@ objects:
 
 `test_dual_arm_launch.py`で全シナリオのSDF・USD形状、質量・慣性・摩擦、姿勢、保存後の再読込、
 入力拒否、max／longの初期姿勢との非干渉を検証。
+USD構造試験の依存: `usd-core==25.5.1`（Dockerfileに同梱）。旧コンテナでは`python3 -m pip install usd-core==25.5.1`で追加。
+USD未導入時はUSD専用試験のみ省略、SDF試験は独立して実行。
 Harmonicでは全6環境の起動、箱・円柱の落下と台上接触、球の往復と回転を確認。
 作業台環境のmaxで、既存の速度追従・トルク上限・停止試験に合格。
 環境を付けた駆動検証は次のコマンドで再実行可能（専用ROS_DOMAIN_ID=96、未使用の出力先）。
@@ -356,7 +407,7 @@ Isaacは実USD APIによる構造検証まで。本体での物理実行は下�
 ## 標準ROS 2トピックとViewerの接続
 
 Harmonicの物理処理とViewer表示の間は標準ROS 2メッセージ。専用の関節状態リレーは不要。
-既定の名前空間は`/sim_topo_dual_arm_max`。相対トピック名はこの名前空間内、絶対名は指定した接続先。
+既定の機体はLong、名前空間は`/sim_topo_dual_arm_max_long`。相対トピック名はこの名前空間内、絶対名は指定した接続先。
 
 | 用途 | 既定トピック | 型 | Harmonicのlaunch引数 |
 | --- | --- | --- | --- |
@@ -387,10 +438,10 @@ Viewer側は更新済みの`gng_vlut_system`をビルド・source後、既存コ
 
 ```bash
 ros2 launch /ros2_ws/src/gng_vlut_system/launch/gng_viewer_bridge.launch.py \
-  params_file:= robot_name:=sim_topo_dual_arm_max \
-  urdf_path:=/ros2_ws/src/urdf/topo_dual_arm_max/topo_dual_arm_max.urdf \
+  params_file:= robot_name:=sim_topo_dual_arm_max_long \
+  urdf_path:=/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf \
   joint_control_backend:=external \
-  state_topic:=/sim_topo_dual_arm_max/joint_states \
+  state_topic:=/sim_topo_dual_arm_max_long/joint_states \
   enable_robot_state_publisher:=false use_sim_time:=true robot_base_frame:=world
 ```
 
@@ -450,11 +501,11 @@ export ROS_DOMAIN_ID=96
 docker compose -f docker/compose.dual_arm_isaac.yaml up --build
 ```
 
-既定の機体はmax。longへの変更は起動前に次を設定:
+既定の機体はLong。標準Maxへの変更は起動前に次を設定:
 
 ```bash
-export ROBOT_URDF=urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf
-export ROBOT_NAMESPACE=sim_topo_dual_arm_max_long
+export ROBOT_URDF=urdf/topo_dual_arm_max/topo_dual_arm_max.urdf
+export ROBOT_NAMESPACE=sim_topo_dual_arm_max
 ```
 
 終了:

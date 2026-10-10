@@ -1,15 +1,21 @@
 """同梱URDFに基づく固定基台の関節モデルとトルク制限付きPD駆動。"""
 from pathlib import Path
+from collections.abc import Mapping
 import math
 import xml.etree.ElementTree as et
-import numpy as np
+from types import MappingProxyType
 
 
 def numbers(value):
     return [float(x) for x in value.split()]
 
 
+def text(values):
+    return ' '.join(map(str, values))
+
+
 def rotation(rpy):
+    import numpy as np
     r, p, y = rpy
     cr, cp, cy = np.cos([r, p, y])
     sr, sp, sy = np.sin([r, p, y])
@@ -17,6 +23,7 @@ def rotation(rpy):
 
 
 def origin(element, mujoco):
+    import numpy as np
     node = element.find('origin')
     if node is None:
         return dict(pos='0 0 0', quat='1 0 0 0')
@@ -26,8 +33,8 @@ def origin(element, mujoco):
 
 
 class PhysicsRobot:
-    def __init__(self, root, world, config, mujoco):
-        from physics_scene import vector, quaternion, text
+    def __init__(self, root, base, config, mujoco):
+        import numpy as np
         self.mujoco = mujoco
         model_name = config.get('model')
         if model_name not in ('standard', 'long'):
@@ -39,12 +46,13 @@ class PhysicsRobot:
         joints = urdf.findall('joint')
         self.joints = {x.get('name'): x for x in joints if x.get('type') != 'fixed'}
         self.independent = {name: joint for name, joint in self.joints.items() if joint.find('mimic') is None}
-        self.locks = config.get('locked_joints', [])
-        if not isinstance(self.locks, list) or any(x not in self.independent for x in self.locks):
+        locks = config.get('locked_joints', [])
+        if not isinstance(locks, list) or any(x not in self.independent for x in locks):
             raise ValueError('固定対象の関節名が不正です')
-        self.initial = self.validate(config.get('pose', {}))
-        self.targets = dict(self.initial)
-        self.commands = dict(self.initial)
+        self.locks = tuple(locks)
+        self.initial = MappingProxyType(self.validate(config.get('pose', {})))
+        self._targets = dict(self.initial)
+        self._commands = dict(self.initial)
         asset = et.SubElement(root, 'asset')
         equality = et.SubElement(root, 'equality')
         actuator = et.SubElement(root, 'actuator')
@@ -54,7 +62,6 @@ class PhysicsRobot:
         for joint in joints:
             children.setdefault(joint.find('parent').get('link'), []).append(joint)
             child_names.add(joint.find('child').get('link'))
-        base = et.SubElement(world, 'body', name='robot_base', pos=text(vector(config['position'], 3)), quat=text(quaternion(config['quaternion'])))
         def add_link(parent, name, joint=None):
             body = et.SubElement(parent, 'body', name='robot_' + name, **(origin(joint, mujoco) if joint is not None else {}))
             if joint is not None and joint.get('type') != 'fixed':
@@ -109,12 +116,20 @@ class PhysicsRobot:
                 self.max_effort[name] = effort
                 et.SubElement(actuator, 'general', name=name, joint=name, gainprm='40', biastype='affine', biasprm='0 -40 -3', forcelimited='true', forcerange=f'{-effort} {effort}')
 
-    def validate(self, pose):
-        if not isinstance(pose, dict) or any(name not in self.independent for name in pose):
+    @property
+    def targets(self) -> Mapping[str, float]:
+        return MappingProxyType(self._targets)
+
+    @property
+    def commands(self) -> Mapping[str, float]:
+        return MappingProxyType(self._commands)
+
+    def validate(self, pose: Mapping[str, float], *, base_pose: Mapping[str, float] | None = None) -> dict[str, float]:
+        if not isinstance(pose, Mapping) or any(name not in self.independent for name in pose):
             raise ValueError('関節目標の形式または関節名が不正です')
         result = {}
         for name, joint in self.independent.items():
-            value = pose.get(name, 0)
+            value = pose.get(name, base_pose[name] if base_pose is not None else 0)
             if type(value) not in (int, float) or not math.isfinite(value) or abs(value) > 10000:
                 raise ValueError('関節角度が不正です')
             if joint.get('type') != 'continuous':
@@ -122,6 +137,17 @@ class PhysicsRobot:
                 value = min(float(limit.get('upper')), max(float(limit.get('lower')), value))
             result[name] = value
         return result
+
+    def set_targets(self, pose: Mapping[str, float], *, command_pose: Mapping[str, float] | None = None):
+        """部分目標の反映と、検査済み経路の補間開始姿勢の一括更新。"""
+        targets = self.validate(pose, base_pose=self._targets)
+        commands = self._commands if command_pose is None else self.validate(command_pose, base_pose=self._commands)
+        self._targets, self._commands = targets, commands
+
+    def hold_position(self):
+        """現在の実測関節姿勢による、目標と補間状態の同期。"""
+        pose = {name: value for name, value in self.state().items() if name in self.independent}
+        self.set_targets(pose, command_pose=pose)
 
     def bind(self, model, data):
         self.model, self.data = model, data
@@ -142,10 +168,10 @@ class PhysicsRobot:
         timestep = self.model.opt.timestep
         for name, idx, dof, max_velocity in self.control_entries:
             max_step = max_velocity * timestep
-            delta = self.targets[name]-self.commands[name]
-            self.commands[name] += min(max(delta, -max_step), max_step)
+            delta = self._targets[name]-self._commands[name]
+            self._commands[name] += min(max(delta, -max_step), max_step)
             # トルク制限内のPDと重力・コリオリ補償。目標速度の制限と実速度は別
-            self.data.ctrl[idx] = self.commands[name]+self.data.qfrc_bias[dof]/40
+            self.data.ctrl[idx] = self._commands[name]+self.data.qfrc_bias[dof]/40
 
     def state(self):
         return {name: float(self.data.qpos[idx]) for name, idx in self.state_entries}

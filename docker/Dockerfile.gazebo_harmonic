@@ -1,4 +1,5 @@
 FROM ros:jazzy-ros-base AS dependencies
+ARG enable_optional_motion_planners=OFF
 
 # 現行Gazeboと標準の関節軌道制御。Classic関連パッケージの依存なし
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -7,23 +8,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     assimp-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# 選択時だけのMoveIt計画器。既定イメージへの追加依存なし。
+RUN if [ "$enable_optional_motion_planners" = ON ]; then \
+      apt-get update && apt-get install -y --no-install-recommends \
+        ros-jazzy-moveit-ros-move-group ros-jazzy-moveit-configs-utils \
+        ros-jazzy-moveit-planners-ompl ros-jazzy-moveit-planners-chomp \
+        ros-jazzy-moveit-planners-stomp && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 # Classic依存を含まない実行プロファイルによる正規amentインストール。
 FROM dependencies AS package_build
 COPY gng_vlut_system/CMakeLists.txt gng_vlut_system/package.xml /build_ws/src/gng_vlut_system/
 COPY gng_vlut_system/launch/dual_arm_tasks.launch.py \
      gng_vlut_system/launch/dual_arm_gz.launch.py \
      gng_vlut_system/launch/dual_arm_effort_config.py \
+     gng_vlut_system/launch/dual_arm_planners.launch.py \
      gng_vlut_system/launch/simulation_scenario.py /build_ws/src/gng_vlut_system/launch/
 COPY gng_vlut_system/scripts/task_program.py gng_vlut_system/scripts/task_executor.py \
      gng_vlut_system/scripts/harmonic_launcher.py gng_vlut_system/scripts/task_components.py \
-     gng_vlut_system/scripts/robot_graph_route.py /build_ws/src/gng_vlut_system/scripts/
+     gng_vlut_system/scripts/robot_graph_route.py gng_vlut_system/scripts/optional_motion_planners.py \
+     /build_ws/src/gng_vlut_system/scripts/
 COPY gng_vlut_system/config/dual_arm_effort.yaml /build_ws/src/gng_vlut_system/config/
+COPY gng_vlut_system/config/optional_ompl_planners.xml /build_ws/src/gng_vlut_system/config/
+COPY gng_vlut_system/src/plugins/optional_ompl_planners.cpp /build_ws/src/gng_vlut_system/src/plugins/
 COPY gng_vlut_system/config/simulation /build_ws/src/gng_vlut_system/config/simulation/
 COPY urdf/topo_dual_arm_max /build_ws/src/urdf/topo_dual_arm_max/
 COPY urdf/topo_dual_arm_max_long /build_ws/src/urdf/topo_dual_arm_max_long/
 WORKDIR /build_ws
 RUN . /opt/ros/jazzy/setup.sh && colcon build --base-paths src/gng_vlut_system \
-    --install-base /opt/gng_harmonic --cmake-args -Denable_harmonic_runtime_only=ON -DBUILD_TESTING=OFF
+    --install-base /opt/gng_harmonic --cmake-args -Denable_harmonic_runtime_only=ON \
+    -Denable_optional_motion_planners=${enable_optional_motion_planners} -DBUILD_TESTING=OFF
 
 # ソースworkspaceのマウント不要な実行イメージ。
 FROM dependencies

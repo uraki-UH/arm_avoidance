@@ -36,6 +36,18 @@ namespace robot_sim::planning::topological_map_avoidance {
 using GNGType = ::GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>;
 using graph_planner_type = robot_sim::planning::graph_planner<GNGType>;
 
+// 環境ラベルだけの反映。学習済みの自己干渉判定・構造上の有効性の保持
+static inline bool apply_environment_label(::GNG::Status &status, uint8_t label) {
+  const bool is_colliding = label == 2;
+  const bool is_danger = label == 3;
+  const bool has_changed = status.is_colliding != is_colliding || status.is_danger != is_danger;
+  status.is_colliding = is_colliding;
+  status.is_danger = is_danger;
+  status.collision_count = is_colliding ? 1 : 0;
+  status.danger_count = is_danger ? 1 : 0;
+  return has_changed;
+}
+
 // 退避完了候補の自身・直接隣接の安全確認。経路途中のノードとは別条件
 template <typename graph_type>
 static inline bool has_safe_retreat_neighbors(const graph_type &graph, int node_id) {

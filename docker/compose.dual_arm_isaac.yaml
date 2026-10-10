@@ -6,11 +6,11 @@ services:
     command:
       - /workspace/gng_vlut_system/launch/dual_arm_isaac.py
       - --urdf
-      - /workspace/${ROBOT_URDF:-urdf/topo_dual_arm_max/topo_dual_arm_max.urdf}
+      - /workspace/${ROBOT_URDF:-urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf}
       - --scenario
       - ${SIM_SCENARIO:-empty}
       - --namespace
-      - ${ROBOT_NAMESPACE:-sim_topo_dual_arm_max}
+      - ${ROBOT_NAMESPACE:-sim_topo_dual_arm_max_long}
     network_mode: host
     gpus: all
     environment:
@@ -34,7 +34,7 @@ services:
       - >-
         source /opt/ros/jazzy/setup.bash &&
         exec ros2 launch /workspace/gng_vlut_system/launch/dual_arm_isaac.launch.py
-        namespace:=${ROBOT_NAMESPACE:-sim_topo_dual_arm_max}
+        namespace:=${ROBOT_NAMESPACE:-sim_topo_dual_arm_max_long}
     network_mode: host
     ipc: service:isaac
     depends_on: [isaac]

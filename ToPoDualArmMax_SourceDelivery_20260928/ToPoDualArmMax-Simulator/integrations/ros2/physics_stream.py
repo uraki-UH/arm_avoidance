@@ -51,8 +51,9 @@ class physics_session:
                     not math.isfinite(stamp) or not 0 <= time.time()-stamp < self.max_leader_age_sec or
                     (self.leader_stamp_sec is not None and stamp < self.leader_stamp_sec)):
                 return
+        self.scene.robot.set_targets(value['joints'])
+        if self.enable_leader_follow:
             self.leader_stamp_sec = stamp
-        self.scene.robot.targets = self.scene.robot.validate(value['joints'])
 
     def step(self):
         if self.close_event.is_set():
@@ -65,9 +66,7 @@ class physics_session:
         stamp = self.leader_stamp_sec if self.leader_stamp_sec is not None else self.leader_began_sec
         if self.enable_leader_follow and not self.is_leader_stopped and time.time()-stamp >= self.max_leader_age_sec:
             self.is_leader_stopped = True
-            actual = self.scene.robot.state()
-            self.scene.robot.targets = {name: actual[name] for name in self.scene.robot.independent}
-            self.scene.robot.commands = dict(self.scene.robot.targets)
+            self.scene.robot.hold_position()
         if self.close_event.is_set():
             return None
         result = self.scene.step()

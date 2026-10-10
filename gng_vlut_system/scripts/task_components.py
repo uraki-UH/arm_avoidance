@@ -1,5 +1,5 @@
 """タスク方式を構成する目標解釈・経路・軌道化・検査の登録表。"""
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import math
 from types import MappingProxyType
 from typing import Callable
@@ -27,6 +27,7 @@ class planning_components:
     refiners: dict
     trajectories: dict
     validators: dict
+    route_factories: dict = field(default_factory=dict)
 
 
 def straight_route(request):
@@ -51,13 +52,15 @@ def quintic_trajectory(request, route):
 
 def default_components():
     """呼出しごとに独立した登録表。別実行器への登録の漏出防止。"""
+    from optional_motion_planners import motion_planner_kind, make_moveit_route
     return planning_components(
         sources={'robot_graph': make_robot_graph_source},
         targets={(task_kind.move, 'direct'): direct_targets,
                  (task_kind.move, 'waypoints'): waypoint_targets,
                  (task_kind.hold, 'position'): position_targets},
         routes={'straight': straight_route},
-        refiners={}, trajectories={'quintic': quintic_trajectory}, validators={})
+        refiners={}, trajectories={'quintic': quintic_trajectory}, validators={},
+        route_factories={kind.value: make_moveit_route(kind) for kind in motion_planner_kind})
 
 
 def checked_route(route, request):
@@ -114,7 +117,7 @@ def configured_methods(definitions, existing, components=None, joint_names=()):
         for name, specification in entries.items():
             if not isinstance(name, str) or not name or (kind, name) in methods:
                 raise ValueError(f'方式名が不正または重複しています: {name}')
-            checked_mapping(specification, ('targets', 'route', 'refiners', 'trajectory', 'validators'), name)
+            checked_mapping(specification, ('targets', 'route', 'route_options', 'refiners', 'trajectory', 'validators'), name)
             try:
                 target_name = specification['targets']
                 route_name = specification['route']
@@ -129,15 +132,25 @@ def configured_methods(definitions, existing, components=None, joint_names=()):
                         or len(set(refine_names)) != len(refine_names)):
                     raise ValueError('部品名と検査部品の配列が不正です')
                 resolver = components.targets[(kind, target_name)]
-                route = components.routes[route_name]
+                if route_name in components.route_factories:
+                    route = components.route_factories[route_name](specification.get('route_options', {}), joint_names)
+                else:
+                    if 'route_options' in specification:
+                        raise ValueError('この経路部品にはroute_optionsを指定できません')
+                    route = components.routes[route_name]
                 trajectory = components.trajectories[trajectory_name]
                 refiners = tuple(components.refiners[value] for value in refine_names)
                 validators = tuple(components.validators[value] for value in names)
                 if not all(callable(value) for value in (resolver, route, *refiners, trajectory, *validators)):
                     raise ValueError('部品には呼出し可能な関数が必要です')
+                enable_async = getattr(route, 'enable_async', False)
+                if not isinstance(enable_async, bool):
+                    raise ValueError('enable_asyncには真偽値が必要です')
             except (KeyError, TypeError) as error:
                 raise ValueError(f'未登録または不足した計画部品: {name}') from error
-            methods[(kind, name)] = task_method(resolver, compose_planner(route, refiners, trajectory, validators, joint_names))
+            methods[(kind, name)] = task_method(resolver,
+                compose_planner(route, refiners, trajectory, validators, joint_names),
+                enable_async=enable_async)
     return methods
 
 
@@ -154,7 +167,8 @@ def bind_sources(definitions, joint_names, components=None):
     components = replace(components, routes=dict(components.routes))
     sources = []
     for name, settings in definitions.items():
-        if not isinstance(name, str) or not name or name in components.routes:
+        if (not isinstance(name, str) or not name or name in components.routes
+                or name in components.route_factories):
             raise ValueError(f'入力部品名と経路部品名の重複: {name}')
         if not isinstance(settings, dict):
             raise ValueError('入力設定には辞書が必要です')

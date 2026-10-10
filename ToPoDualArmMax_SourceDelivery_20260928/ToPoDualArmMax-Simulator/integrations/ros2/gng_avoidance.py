@@ -220,8 +220,8 @@ class gng_filter:
                 or not guard.can_bridge(positions, self.target, .005)):
             self.target = positions.copy()
         # 旧目標に向かう補間状態の持越し防止。検査済みの実測姿勢からの駆動
-        self.robot.commands.update(zip(self.names, map(float, positions)))
-        self.robot.targets = dict(zip(self.names, map(float, self.target)))
+        self.robot.set_targets(dict(zip(self.names, map(float, self.target))),
+                               command_pose=dict(zip(self.names, map(float, positions))))
         self.status['clearance_m'] = gap
         if self.future is None and now >= self.next_plan_sec:
             self.requested_sec = now

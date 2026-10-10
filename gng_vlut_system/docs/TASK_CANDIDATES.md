@@ -155,7 +155,7 @@ C空間で一様にノードを置く手法ではこの自由度がノード列�
 | `self_collision_free` | 静的な自己干渉の有無 | 自己干渉プロバイダ。オフライン学習時に確定 |
 | `is_colliding` | 動的な環境衝突の有無 | 障害物ラベル、VLUT。実行時 |
 
-**問題1**: `topological_map_planning_node.cpp` が環境障害物のラベル反映時に `self_collision_free` を書き換えている(該当箇所に FIXME 済み)。障害物が消えると `true` に戻すため、元々自己干渉していたノードが安全と誤判定されうる。実害の有無は、学習時に自己干渉ノードを GNG から除外しているかどうかで決まる(未確認)。
+環境ラベル更新: `topological_map_planning_node.cpp`は`is_colliding`・`is_danger`と対応する個数だけを更新。学習済みの`self_collision_free`・`active`を保持し、無効・自己干渉ノードは安全候補から除外。障害物消失後も保持する経路探索の回帰検証済み。
 
 **問題2**: `gng_self_collision_provider` は `self_collision_free` にしか書かないが、`gng_geometric_self_collision_provider` は `is_colliding` にも書く。プロバイダ間で挙動が違う。
 

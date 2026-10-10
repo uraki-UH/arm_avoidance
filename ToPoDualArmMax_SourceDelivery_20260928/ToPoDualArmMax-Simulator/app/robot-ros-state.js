@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export const robot_frames=Object.freeze({world:'world',base:'base_footprint',camera:'sim_camera_depth_optical_frame',lidar:'sim_mid360_frame'});
-export const pose_sources=Object.freeze({simulator:'simulator',ros:'ros',leader:'leader'});
+export {pose_sources} from './robot.js';
 const joint_topologies=new WeakMap();
 
 // HTTPブリッジに対応するWebSocket接続先。既定HTTPポートと明示ポートの共通規則

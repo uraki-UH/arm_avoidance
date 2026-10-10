@@ -1,6 +1,7 @@
 """ブラウザ配置からのMuJoCo接触モデルと固定刻みシミュレーション。"""
 import math
 import xml.etree.ElementTree as et
+from physics_robot import PhysicsRobot, text
 
 
 def vector(value, length, bound=100):
@@ -14,10 +15,6 @@ def quaternion(value):
     if abs(sum(x*x for x in value)-1) > .001:
         raise ValueError('姿勢の四元数が不正です')
     return [value[3], *value[:3]]
-
-
-def text(values):
-    return ' '.join(map(str, values))
 
 
 class PhysicsScene:
@@ -69,8 +66,9 @@ class PhysicsScene:
                 et.SubElement(body, 'geom', type='box', pos=text(vector(geom['position'], 3)), quat=text(quaternion(geom['quaternion'])), size=text(size), mass=str(mass/len(geoms)), friction='.8 .005 .0001', contype='1', conaffinity='1')
         self.robot = None
         if robot is not None:
-            from physics_robot import PhysicsRobot
-            self.robot = PhysicsRobot(root, world, robot, mujoco)
+            base = et.SubElement(world, 'body', name='robot_base', pos=text(vector(robot['position'], 3)),
+                                 quat=text(quaternion(robot['quaternion'])))
+            self.robot = PhysicsRobot(root, base, robot, mujoco)
         self.model = mujoco.MjModel.from_xml_string(et.tostring(root, encoding='unicode'))
         self.data = mujoco.MjData(self.model)
         if self.robot:
@@ -87,12 +85,15 @@ class PhysicsScene:
     def move(self, poses):
         if not isinstance(poses, list) or len(poses) > 512:
             raise ValueError('姿勢指定数が不正です')
+        updates = []
         for pose in poses:
             if pose['id'] not in self.kinematic:
                 raise ValueError('姿勢指定対象ではありません')
             idx = self.model.body_mocapid[self.body_ids[pose['id']]]
-            self.data.mocap_pos[idx] = vector(pose['position'], 3)
-            self.data.mocap_quat[idx] = quaternion(pose['quaternion'])
+            updates.append((idx, vector(pose['position'], 3), quaternion(pose['quaternion'])))
+        for idx, position, quat in updates:
+            self.data.mocap_pos[idx] = position
+            self.data.mocap_quat[idx] = quat
 
     def step(self):
         if self.avoidance:

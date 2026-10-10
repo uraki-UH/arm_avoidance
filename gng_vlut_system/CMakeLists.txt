@@ -1,19 +1,56 @@
 cmake_minimum_required(VERSION 3.10)
 project(gng_vlut_system)
 
+# C++実行部品を含む全構成の既定最適化。
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# 追加計画器の既定無効化。依存未配置時も通常ビルドの継続。
+option(enable_optional_motion_planners "MoveIt/OMPLのBIT*登録拡張" OFF)
+macro(add_optional_motion_planners)
+  if(enable_optional_motion_planners)
+    find_package(moveit_core QUIET)
+    find_package(moveit_ros_planning QUIET)
+    find_package(ompl QUIET)
+    find_package(pluginlib QUIET)
+    # ROS版による公開ヘッダ配置の違い。OMPLプラグインの公開APIと共有ライブラリだけ。
+    find_path(optional_ompl_include_dir moveit/ompl_interface/ompl_interface.h
+      HINTS "${moveit_core_DIR}/../../../include"
+      PATH_SUFFIXES moveit_planners_ompl moveit_planners)
+    find_library(optional_ompl_library moveit_ompl_interface
+      HINTS "${moveit_core_DIR}/../../../lib")
+    if(NOT moveit_core_FOUND OR NOT moveit_ros_planning_FOUND OR NOT ompl_FOUND OR NOT pluginlib_FOUND
+        OR NOT optional_ompl_include_dir OR NOT optional_ompl_library)
+      message(STATUS "追加計画器の依存未配置: BIT*登録拡張のビルド省略")
+    else()
+      add_library(optional_ompl_planners SHARED src/plugins/optional_ompl_planners.cpp)
+      target_compile_features(optional_ompl_planners PRIVATE cxx_std_17)
+      target_include_directories(optional_ompl_planners PRIVATE ${optional_ompl_include_dir} ${OMPL_INCLUDE_DIRS})
+      target_link_libraries(optional_ompl_planners ${optional_ompl_library} ${OMPL_LIBRARIES})
+      ament_target_dependencies(optional_ompl_planners moveit_core moveit_ros_planning pluginlib)
+      pluginlib_export_plugin_description_file(moveit_core config/optional_ompl_planners.xml)
+      install(TARGETS optional_ompl_planners LIBRARY DESTINATION lib)
+    endif()
+  endif()
+endmacro()
+
 # Jazzy/HarmonicのPython実行環境。既定OFFによる従来C++ビルドの維持。
 option(enable_harmonic_runtime_only "Harmonic実行部品だけのインストール" OFF)
 if(enable_harmonic_runtime_only)
   find_package(ament_cmake REQUIRED)
+  add_optional_motion_planners()
   install(FILES
     launch/dual_arm_tasks.launch.py
     launch/dual_arm_gz.launch.py
     launch/dual_arm_effort_config.py
+    launch/dual_arm_planners.launch.py
     launch/simulation_scenario.py
     DESTINATION share/${PROJECT_NAME}/launch)
   install(FILES config/dual_arm_effort.yaml DESTINATION share/${PROJECT_NAME}/config)
   install(DIRECTORY config/simulation DESTINATION share/${PROJECT_NAME}/config)
-  install(FILES scripts/task_program.py scripts/task_components.py scripts/robot_graph_route.py DESTINATION lib/${PROJECT_NAME})
+  install(FILES scripts/task_program.py scripts/task_components.py scripts/robot_graph_route.py
+    scripts/optional_motion_planners.py DESTINATION lib/${PROJECT_NAME})
   install(PROGRAMS scripts/task_executor.py scripts/harmonic_launcher.py DESTINATION lib/${PROJECT_NAME})
   install(DIRECTORY
     ../urdf/topo_dual_arm_max ../urdf/topo_dual_arm_max_long
@@ -23,16 +60,12 @@ if(enable_harmonic_runtime_only)
     find_package(ament_cmake_pytest REQUIRED)
     ament_add_pytest_test(test_task_program test/test_task_program.py)
     ament_add_pytest_test(test_task_components test/test_task_components.py)
+    ament_add_pytest_test(test_optional_motion_planners test/test_optional_motion_planners.py)
     ament_add_pytest_test(test_robot_graph_route test/test_robot_graph_route.py)
     ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
   endif()
   ament_package()
   return()
-endif()
-
-# Set default build type to Release for optimized performance
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
 endif()
 
 # C++17
@@ -45,6 +78,7 @@ find_package(ament_cmake QUIET)
 
 # --- 1. ROS 2 Build ---
 find_package(ament_cmake REQUIRED)
+add_optional_motion_planners()
 find_package(ament_cmake_auto REQUIRED)
 find_package(arrow_visualization REQUIRED)
 include_directories(${arrow_visualization_INCLUDE_DIRS})
@@ -203,6 +237,7 @@ if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   ament_add_pytest_test(test_avoidance_motion test/test_avoidance_motion.py)
   ament_add_pytest_test(test_task_program test/test_task_program.py)
   ament_add_pytest_test(test_task_components test/test_task_components.py)
+  ament_add_pytest_test(test_optional_motion_planners test/test_optional_motion_planners.py)
   ament_add_pytest_test(test_robot_graph_route test/test_robot_graph_route.py)
   ament_add_pytest_test(test_harmonic_launcher test/test_harmonic_launcher.py)
   ament_add_pytest_test(test_pointcloud_avoidance test/test_pointcloud_avoidance.py)
@@ -285,6 +320,7 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
   scripts/mobile_state_graph.py
   scripts/task_program.py
   scripts/task_components.py
+  scripts/optional_motion_planners.py
   scripts/robot_graph_route.py
   scripts/joint_motion_state.py
   scripts/local_qp.py

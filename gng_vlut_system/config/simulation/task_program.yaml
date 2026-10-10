@@ -14,6 +14,23 @@ methods:
       targets: waypoints
       route: straight
       trajectory: quintic
+    # 追加依存は下記方式の実行時だけ。未選択時のプラグイン読込なし。
+    bit_star: &optional_move
+      targets: direct
+      route: bit_star
+      route_options:
+        service_namespace: /sim_topo_dual_arm_max_long
+        group_name: dual_arm
+        max_plan_sec: 5.0
+        max_wait_sec: 5.0
+        num_attempts: 1
+      trajectory: quintic
+    rrt: {<<: *optional_move, route: rrt}
+    rrt_connect: {<<: *optional_move, route: rrt_connect}
+    rrt_star: {<<: *optional_move, route: rrt_star}
+    informed_rrt_star: {<<: *optional_move, route: informed_rrt_star}
+    chomp: {<<: *optional_move, route: chomp}
+    stomp: {<<: *optional_move, route: stomp}
 limits:
   max_velocity: 0.2
   max_acceleration: 0.5

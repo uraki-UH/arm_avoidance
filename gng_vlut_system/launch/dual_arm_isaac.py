@@ -10,7 +10,7 @@ import xml.etree.ElementTree as et
 
 import yaml
 
-from dual_arm_effort_config import load_model, effort_joints, controller_parameters, validate_namespace
+from dual_arm_effort_config import load_model, effort_joints, controller_parameters, validate_namespace, default_urdf
 from simulation_scenario import load_scenario, save_scenario, add_isaac_environment
 
 
@@ -162,10 +162,10 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--urdf', type=Path, default=package_dir.parent/'urdf/topo_dual_arm_max/topo_dual_arm_max.urdf')
+    parser.add_argument('--urdf', type=Path, default=default_urdf())
     parser.add_argument('--control-config', type=Path, default=package_dir/'config/dual_arm_effort.yaml')
     parser.add_argument('--scenario', default='empty', help='環境シナリオ名またはYAMLパス')
-    parser.add_argument('--namespace', default='sim_topo_dual_arm_max')
+    parser.add_argument('--namespace', default='sim_topo_dual_arm_max_long')
     parser.add_argument('--output-dir', type=Path)
     parser.add_argument('--enable-gui', action='store_true')
     parser.add_argument('--max-run-sec', type=float, default=0.0)

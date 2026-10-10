@@ -104,7 +104,7 @@ class local_qp:
         return candidate
 
     def _clearance_jacobian(self, positions, active, centers, nearest_points):
-        """観測点群・自己干渉・床・机の距離ヤコビアン。制約行の順序を維持。"""
+        """観測点群・自己干渉・環境形状の距離ヤコビアン。制約行の順序を維持。"""
         geometry = self.geometry
         # 球中心の前進差分と距離法線の合成。関節ごとの最近傍再探索なし。
         jacobian_step = 1e-5
@@ -123,10 +123,25 @@ class local_qp:
         first, second = geometry.self_pairs.T
         self_jacobian = distance_gradient(centers[first]-centers[second],
                                           center_jacobian[first]-center_jacobian[second])
-        table_offset = centers[geometry.is_arm]-np.array([.70, 0., .20])
-        table_delta = np.sign(table_offset)*np.maximum(np.abs(table_offset)-np.array([.175, .4, .2]), 0.)
-        return np.vstack((cloud_jacobian, self_jacobian, center_jacobian[geometry.is_arm, 2, :],
-                          distance_gradient(table_delta, center_jacobian[geometry.is_arm])))
+        arm_centers = centers[geometry.is_arm]
+        arm_jacobian = center_jacobian[geometry.is_arm]
+        rows = [cloud_jacobian, self_jacobian]
+        for kind, position, rotation_matrix, half_size in geometry.environment_shapes:
+            if kind == 'plane':
+                rows.append(np.einsum('i,nij->nj', rotation_matrix[:, 2], arm_jacobian))
+            elif kind == 'box':
+                local = (arm_centers-position) @ rotation_matrix
+                delta = np.abs(local)-half_size
+                outward = np.sign(local)*np.maximum(delta, 0.)
+                normal = outward/np.maximum(np.linalg.norm(outward, axis=1, keepdims=True), 1e-12)
+                # 箱内部の符号付き距離における最近接面の法線
+                inside_idx = np.flatnonzero(np.all(delta <= 0., axis=1))
+                face_idx = np.argmax(delta[inside_idx], axis=1)
+                normal[inside_idx, face_idx] = np.where(local[inside_idx, face_idx] < 0., -1., 1.)
+                rows.append(np.einsum('ni,nij->nj', normal @ rotation_matrix.T, arm_jacobian))
+            else:
+                raise ValueError('未対応の環境衝突形状: '+kind)
+        return np.vstack(rows)
 
     def _build_problem(self, positions, target, active, current_gaps, min_gaps, jacobian):
         """追従・局所退避の目的関数と、関節範囲・速度・加速度・距離制約の組立て。"""

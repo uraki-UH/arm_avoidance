@@ -51,6 +51,7 @@ class task_spec:
     targets: tuple
     planner: Callable
     duration_sec: float = 0.0
+    enable_async: bool = False
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class task_method:
 
     resolve_targets: Callable
     plan: Callable
+    enable_async: bool = False
 
 
 def load_program(data, joint_bounds, methods=None, components=None):
@@ -180,7 +182,7 @@ def load_program(data, joint_bounds, methods=None, components=None):
             duration = positive(item['duration_sec'], 'duration_sec') if kind == task_kind.hold else 0.0
             if duration >= limits['max_task_sec']:
                 raise ValueError('保持時間にはタスク期限内の余裕が必要です')
-            tasks.append(task_spec(kind, method, targets, strategy.plan, duration))
+            tasks.append(task_spec(kind, method, targets, strategy.plan, duration, strategy.enable_async))
         except (KeyError, TypeError) as error:
             raise ValueError(f'未対応方式・不足設定・未知参照: {item}') from error
     return task_program(tuple(joint_bounds), tuple(joint_bounds.values()), tuple(tasks), limits, input_sources)
@@ -245,7 +247,7 @@ def check_segment(points, start, target, bounds, limits):
 class task_runner:
     """方式選択と切り離した進行管理。backendはbegin/cancel/is_busy/resultを提供。"""
 
-    def __init__(self, program, backend):
+    def __init__(self, program, backend, submit_plan=None):
         self.program, self.backend = program, backend
         self.state = run_state.idle
         self.reason = ''
@@ -258,6 +260,20 @@ class task_runner:
         self.active_sec = self.hold_sec = 0.0
         self.stop_started_sec = None
         self.stop_state = run_state.paused
+        self.submit_plan = submit_plan
+        self._pending_plan = None
+        self._planned_start = None
+        self._has_plan_cancel = False
+
+    @property
+    def has_pending_plan(self):
+        return self._pending_plan is not None
+
+    def cancel_plan(self):
+        """未送信の計画の破棄。実行中の計算は完了まで重複禁止。"""
+        if self._pending_plan is not None:
+            self._has_plan_cancel = True
+            self._pending_plan.cancel()
 
     def feedback_error(self, now, sample):
         if sample is None or not math.isfinite(now) or not math.isfinite(sample.stamp_sec):
@@ -281,7 +297,7 @@ class task_runner:
         error = self.feedback_error(now, sample)
         if error:
             raise ValueError(error)
-        if (self.has_obstacle or self.backend.is_busy or self.stopped_since is None
+        if (self.has_obstacle or self.backend.is_busy or self.has_pending_plan or self.stopped_since is None
                 or now - self.stopped_since < self.program.limits['settle_sec'] or not self.is_stopped(sample)):
             raise ValueError('障害物なし・停止継続・指令完了の確認が必要です')
 
@@ -307,6 +323,7 @@ class task_runner:
         if self.state not in (run_state.running, run_state.stopping, run_state.paused):
             raise ValueError('中断対象のタスクがありません')
         if self.state != run_state.stopping:
+            self.cancel_plan()
             self.backend.cancel()
             self.stop_started_sec = now
         if self.state != run_state.stopping or is_cancel:
@@ -319,10 +336,14 @@ class task_runner:
             self.interrupt(now, '障害物入力による中断')
 
     def fail(self, reason):
+        self.cancel_plan()
         self.backend.cancel()
         self.state, self.reason = run_state.failed, reason
 
     def tick(self, now, sample):
+        if self._has_plan_cancel and self._pending_plan is not None and self._pending_plan.done():
+            self._pending_plan = None
+            self._has_plan_cancel = False
         error = self.feedback_error(now, sample)
         if self.last_sec is not None and now < self.last_sec:
             error = '時刻の巻戻り'
@@ -345,10 +366,18 @@ class task_runner:
     def _tick_stopping(self, now):
         if now - self.stop_started_sec > self.program.limits['max_stopping_sec']:
             self.fail('停止確認の期限切れ')
-        elif (not self.backend.is_busy and self.stopped_since is not None
+        elif (not self.backend.is_busy and not self.has_pending_plan and self.stopped_since is not None
               and now - self.stopped_since >= self.program.limits['settle_sec']):
             self.state = self.stop_state
             self.target = None
+
+    def begin_plan(self, points, start):
+        """同期・非同期共通の送信前検査。計画待ちを含む残り時間の確認。"""
+        points = check_segment(points, start, self.target, self.program.bounds, self.program.limits)
+        if self.active_sec + points[-1].time_sec > self.program.limits['max_task_sec']:
+            raise ValueError('計画待ちを含む軌道時間がタスク期限を超過しています')
+        self.backend.begin(points)
+        self.reference_positions = self.target
 
     def _tick_running(self, elapsed, sample):
         self.active_sec += elapsed
@@ -364,10 +393,27 @@ class task_runner:
                 self.fail('再計画始点・目標の位置制限違反')
                 return
             try:
+                if self.submit_plan is not None and task.enable_async:
+                    self._planned_start = sample.positions
+                    self._pending_plan = self.submit_plan(task.planner, sample.positions, self.target,
+                                                          self.program.bounds, self.program.limits)
+                    return
                 points = task.planner(sample.positions, self.target, self.program.bounds, self.program.limits)
-                self.backend.begin(check_segment(points, sample.positions, self.target, self.program.bounds, self.program.limits))
-                self.reference_positions = self.target
+                self.begin_plan(points, sample.positions)
             except (ValueError, RuntimeError) as error:
+                self.fail(str(error))
+            return
+        if self.has_pending_plan:
+            if not self._pending_plan.done():
+                return
+            pending_plan, self._pending_plan = self._pending_plan, None
+            try:
+                points = pending_plan.result()
+                if (not self.is_stopped(sample) or max(abs(actual - planned) for actual, planned in
+                        zip(sample.positions, self._planned_start)) > self.program.limits['max_position_error_th']):
+                    raise ValueError('計画待ち中に実測始点が変化しました')
+                self.begin_plan(points, self._planned_start)
+            except Exception as error:
                 self.fail(str(error))
             return
         if self.backend.is_busy:
@@ -396,5 +442,6 @@ class task_runner:
         task = self.program.tasks[self.task_idx] if self.task_idx < len(self.program.tasks) else None
         return dict(state=self.state.value, task_idx=self.task_idx, waypoint_idx=self.waypoint_idx,
                     kind=task.kind.value if task else None, method=task.method if task else None,
-                    has_obstacle=self.has_obstacle, active_sec=self.active_sec, hold_sec=self.hold_sec,
+                    has_obstacle=self.has_obstacle, has_pending_plan=self.has_pending_plan,
+                    active_sec=self.active_sec, hold_sec=self.hold_sec,
                     reason=self.reason)

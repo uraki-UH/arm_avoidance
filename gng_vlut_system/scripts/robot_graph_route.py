@@ -1,5 +1,6 @@
 """ロボット姿勢グラフの世代付き更新と経路生成。学習方式に非依存。"""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from collections.abc import Mapping
 import heapq
 import math
 import time
@@ -12,9 +13,11 @@ from task_program import checked_mapping, positive
 class graph_snapshot:
     graph_id: str
     revision: int
-    joint_names: tuple
-    nodes: object
-    edges: object
+    joint_names: tuple[str, ...]
+    nodes: Mapping[int, tuple[tuple[float, ...], bool]]
+    edges: Mapping[tuple[int, int], bool]
+    received_sec: float
+    stamp_sec: float
 
 
 def integer(value):
@@ -50,22 +53,56 @@ class robot_graph_route:
         self.max_state_age_sec = positive(settings.get('max_state_age_sec', 1.0), 'max_state_age_sec')
         self.max_connect_dist_th = positive(settings.get('max_connect_dist_th', 1e-6), 'max_connect_dist_th')
         self.max_plan_sec = positive(settings.get('max_plan_sec', .2), 'max_plan_sec')
-        self.snapshot = None
-        self.received_sec = None
-        self.stamp_sec = None
-        self.has_valid_input = False
-        self.has_active_plan = False
-        self.has_plan_change = False
-        self.plan_nodes = frozenset()
-        self.plan_edges = frozenset()
+        self._snapshot: graph_snapshot | None = None
+        self._has_valid_input = False
+        self._has_active_plan = False
+        self._has_plan_change = False
+        self._plan_nodes = frozenset()
+        self._plan_edges = frozenset()
+
+    @property
+    def snapshot(self):
+        return self._snapshot
+
+    @property
+    def received_sec(self):
+        return self._snapshot.received_sec if self._snapshot else None
+
+    @property
+    def stamp_sec(self):
+        return self._snapshot.stamp_sec if self._snapshot else None
+
+    @property
+    def has_valid_input(self):
+        return self._has_valid_input
+
+    @property
+    def has_active_plan(self):
+        return self._has_active_plan
+
+    @property
+    def has_plan_change(self):
+        return self._has_plan_change
+
+    @property
+    def plan_nodes(self):
+        return self._plan_nodes
+
+    @property
+    def plan_edges(self):
+        return self._plan_edges
+
+    def invalidate(self):
+        """入力の不成立と、使用中の経路への無効化通知の一括反映。"""
+        self._has_valid_input = False
+        self._has_plan_change = self._has_active_plan
 
     def accept(self, packet, now_sec, received_sec=None):
         """全検査成功後だけの交換。欠落差分・不正更新後は全体再取得待ち。"""
         try:
             self._accept(packet, now_sec, time.monotonic() if received_sec is None else received_sec)
         except (KeyError, TypeError, ValueError, OverflowError) as error:
-            self.has_valid_input = False
-            self.has_plan_change = self.has_active_plan
+            self.invalidate()
             raise ValueError(f'姿勢グラフ更新を拒否: {error}') from error
 
     def _accept(self, packet, now_sec, received_sec):
@@ -87,7 +124,7 @@ class robot_graph_route:
                 raise ValueError('heartbeatへのデータ混入')
             if not self.has_valid_input or old is None or (graph_id, revision) != (old.graph_id, old.revision):
                 raise ValueError('heartbeatの世代不一致')
-            self.received_sec, self.stamp_sec = received_sec, stamp
+            self._snapshot = replace(old, received_sec=received_sec, stamp_sec=stamp)
             return
         if kind == 'snapshot':
             if any(key in packet for key in ('base_revision', 'remove_nodes', 'remove_edges')):
@@ -137,14 +174,13 @@ class robot_graph_route:
             edges[key] = edge['can_traverse']
         if not nodes:
             raise ValueError('空の姿勢グラフ')
-        new = graph_snapshot(graph_id, revision, names, MappingProxyType(nodes), MappingProxyType(edges))
+        new = graph_snapshot(graph_id, revision, names, MappingProxyType(nodes), MappingProxyType(edges), received_sec, stamp)
         if old and graph_id == old.graph_id and revision == old.revision and (old.nodes != new.nodes or old.edges != new.edges):
             raise ValueError('同一世代の内容変更')
         if self.has_active_plan and old:
-            self.has_plan_change |= (graph_id != old.graph_id or any(old.nodes.get(key) != new.nodes.get(key)
+            self._has_plan_change |= (graph_id != old.graph_id or any(old.nodes.get(key) != new.nodes.get(key)
                 for key in self.plan_nodes) or any(old.edges.get(key) != new.edges.get(key) for key in self.plan_edges))
-        self.snapshot, self.has_valid_input = new, True
-        self.received_sec, self.stamp_sec = received_sec, stamp
+        self._snapshot, self._has_valid_input = new, True
 
     def is_fresh(self, now_sec=None):
         return (self.has_valid_input and self.received_sec is not None
@@ -152,8 +188,8 @@ class robot_graph_route:
                 and (now_sec is None or 0 <= now_sec - self.stamp_sec <= self.max_state_age_sec))
 
     def release(self):
-        self.has_active_plan = False
-        self.has_plan_change = False
+        self._has_active_plan = False
+        self._has_plan_change = False
 
     def __call__(self, request):
         if not self.is_fresh():
@@ -212,9 +248,9 @@ class robot_graph_route:
         while path[-1] != start:
             path.append(previous[path[-1]])
         path.reverse()
-        self.plan_nodes = frozenset(path)
-        self.plan_edges = frozenset(tuple(sorted(pair)) for pair in zip(path, path[1:]))
-        self.has_active_plan, self.has_plan_change = True, False
+        self._plan_nodes = frozenset(path)
+        self._plan_edges = frozenset(tuple(sorted(pair)) for pair in zip(path, path[1:]))
+        self._has_active_plan, self._has_plan_change = True, False
         points = [request.start]
         for key in path:
             if allowed[key] != points[-1]:

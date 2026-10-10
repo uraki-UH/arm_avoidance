@@ -372,7 +372,7 @@ ros2 launch gng_vlut_system dynamixel_current_pose.launch.py \
 
 Max／Longの既定換算: [dynamixel_joint_state_bridge_max_ids_31_52.yaml](../../dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_max_ids_31_52.yaml)。旧設定と手編集済みのID31〜52設定は保持。`mapping_file`の明示指定は自動選択より優先。実機表示launchの既定モデルはLong。Viewer launchでは機体YAMLの`dynamixel_mapping_file`を使用。
 
-肩の下垂姿勢: 右ID32の+90°→`R_joint2`の+90°、左ID42の−90°→`L_joint2`の−90°。肩の旧±90°オフセットによる相殺なし。他の腕軸・首の符号は手編集済み設定を継承。
+肩の下垂姿勢: 右ID32の+90°→`R_joint2`の+90°、左ID42の+90°→`L_joint2`の−90°。肩の旧±90°オフセットによる相殺なし。他の腕軸・首の符号と原点は現行の手編集済み設定を継承。
 
 フォロワーグリッパー: 閉じ原点0°、右ID38の正方向・左ID48の負方向で開き、換算係数は右+1・左−1。mimicは親の反転角。ROSの実測値は丸め込みなし。シミュレータの直接表示はグリッパーとmimicだけをURDF開閉端へ飽和し、45°付近の端点超過でも表示更新を継続。腕の可動域外は警告と前回表示の保持。リーダー制御の可動域検査は維持。
 

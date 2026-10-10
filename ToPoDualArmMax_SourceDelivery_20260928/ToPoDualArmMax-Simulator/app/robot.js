@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+export const pose_sources = Object.freeze({simulator: 'simulator', ros: 'ros', leader: 'leader'});
+
 const vector = (s, fallback = [0,0,0]) => s ? s.trim().split(/\s+/).map(Number) : fallback;
 const direct = (e, tag) => [...e.children].filter(c => c.tagName === tag);
 function origin(e, object) {
@@ -9,19 +11,24 @@ function origin(e, object) {
 }
 
 export class Robot extends THREE.Group {
+  #joint_positions = new Map();
+  #mimic_children = new Map();
+  #mimic_order = [];
+  #pose_source = pose_sources.simulator;
+
   constructor(xml) {
     super();
     const doc = new DOMParser().parseFromString(xml, 'application/xml');
     if (doc.querySelector('parsererror')) throw new Error('URDFのXMLを解析できません。');
     this.urdf = doc.documentElement;
     this.name = this.urdf.getAttribute('name');
-    this.links = {}; this.joints = {}; this.visuals = [];
+    this.links = Object.create(null); this.joints = Object.create(null); this.visuals = [];
     for (const e of direct(this.urdf, 'link')) {
       const group = new THREE.Group(); group.name = e.getAttribute('name');
       this.links[group.name] = group;
       for (const v of direct(e, 'visual')) this.visuals.push({link: group, element: v});
     }
-    const children = new Set();
+    const children = new Set(), joint_positions = this.#joint_positions;
     for (const e of direct(this.urdf, 'joint')) {
       const frame = new THREE.Group(); origin(e.querySelector('origin'), frame);
       const name = e.getAttribute('name'), child = this.links[e.querySelector('child').getAttribute('link')];
@@ -30,29 +37,110 @@ export class Robot extends THREE.Group {
       parent.add(frame); frame.add(child); children.add(child.name);
       const limit = e.querySelector('limit'), mimic = e.querySelector('mimic');
       const type = e.getAttribute('type');
-      this.joints[name] = {name, type, frame, child, q: 0,
+      if (Object.hasOwn(this.joints, name)) throw new Error(`URDFの関節名重複: ${name}`);
+      this.#joint_positions.set(name, 0);
+      this.joints[name] = {name, type, frame, child,
+        get q() { return joint_positions.get(name); },
         axis: new THREE.Vector3(...vector(e.querySelector('axis')?.getAttribute('xyz'), [1,0,0])).normalize(),
         lower: type === 'continuous' ? -Infinity : +(limit?.getAttribute('lower') ?? 0),
         upper: type === 'continuous' ? Infinity : +(limit?.getAttribute('upper') ?? 0),
         velocity: +(limit?.getAttribute('velocity') ?? 2),
         mimic: mimic ? {joint: mimic.getAttribute('joint'), multiplier: +(mimic.getAttribute('multiplier') ?? 1), offset: +(mimic.getAttribute('offset') ?? 0)} : null
       };
+      const joint = this.joints[name];
+      if (!['fixed', 'continuous', 'revolute', 'prismatic'].includes(type) ||
+          (type !== 'fixed' && (!joint.axis.toArray().every(Number.isFinite) || joint.axis.lengthSq() < 1e-12)) ||
+          (type !== 'continuous' && (![joint.lower, joint.upper].every(Number.isFinite) || joint.lower > joint.upper))) {
+        throw new Error(`URDFの関節定義不整合: ${name}`);
+      }
     }
     for (const [name, link] of Object.entries(this.links)) if (!children.has(name)) this.add(link);
-    this.actuated = Object.values(this.joints).filter(j => j.type !== 'fixed' && !j.mimic);
+    // mimicの依存順と子関節対応の初期化。関節更新中の全関節走査を省略
+    const visited = new Set(), pending = new Set();
+    const visit = joint => {
+      if (visited.has(joint.name)) return;
+      if (pending.has(joint.name)) throw new Error(`URDFのmimic循環: ${joint.name}`);
+      pending.add(joint.name);
+      if (joint.mimic) {
+        const parent = this.joints[joint.mimic.joint];
+        if (!parent || parent.type === 'fixed' || ![joint.mimic.multiplier, joint.mimic.offset].every(Number.isFinite)) {
+          throw new Error(`URDFのmimic不整合: ${joint.name}`);
+        }
+        visit(parent);
+        this.#mimic_order.push(joint);
+        const followers = this.#mimic_children.get(parent.name) ?? [];
+        followers.push(joint);
+        this.#mimic_children.set(parent.name, followers);
+        Object.freeze(joint.mimic);
+      }
+      pending.delete(joint.name);
+      visited.add(joint.name);
+      Object.freeze(joint.axis);
+      Object.freeze(joint);
+    };
+    for (const joint of Object.values(this.joints)) visit(joint);
+    Object.defineProperties(this, {
+      links: {value: Object.freeze(this.links), writable: false, configurable: false},
+      joints: {value: Object.freeze(this.joints), writable: false, configurable: false},
+      actuated: {value: Object.freeze(Object.values(this.joints).filter(j => j.type !== 'fixed' && !j.mimic)), writable: false, configurable: false},
+    });
+    this.#apply_pose({}, false);
   }
-  setJoint(name, q, updateMimic = true) {
-    if(['ros','leader'].includes(this.pose_source)&&!this.is_receiving_pose)return;
-    const j = this.joints[name]; if (!j || j.type === 'fixed' || !Number.isFinite(q)) return;
-    j.q = Math.max(j.lower, Math.min(j.upper, q));
-    if (j.type === 'prismatic') j.child.position.copy(j.axis).multiplyScalar(j.q);
-    else j.child.quaternion.setFromAxisAngle(j.axis, j.q);
-    if (updateMimic) for (const m of Object.values(this.joints)) if (m.mimic?.joint === name) this.setJoint(m.name, j.q * m.mimic.multiplier + m.mimic.offset, false);
+  get pose_source() { return this.#pose_source; }
+  set pose_source(source) {
+    if (!Object.values(pose_sources).includes(source)) throw new Error('姿勢の入力元が不正です');
+    this.#pose_source = source;
+  }
+  #apply_joint(joint, q) {
+    const value = Math.max(joint.lower, Math.min(joint.upper, q));
+    this.#joint_positions.set(joint.name, value);
+    if (joint.type === 'prismatic') joint.child.position.copy(joint.axis).multiplyScalar(value);
+    else joint.child.quaternion.setFromAxisAngle(joint.axis, value);
+    return value;
+  }
+  #apply_followers(joint, q) {
+    const value = this.#apply_joint(joint, q);
+    for (const follower of this.#mimic_children.get(joint.name) ?? []) {
+      this.#apply_followers(follower, value * follower.mimic.multiplier + follower.mimic.offset);
+    }
+  }
+  setJoint(name, q) {
+    if (this.#pose_source !== pose_sources.simulator) return false;
+    const joint = this.joints[name];
+    if (!joint || joint.type === 'fixed' || joint.mimic || !Number.isFinite(q)) throw new Error(`関節目標が不正です: ${name}`);
+    this.#apply_followers(joint, q);
+    return true;
   }
   getPose() { return Object.fromEntries(this.actuated.map(j => [j.name, j.q])); }
-  setPose(pose) { for (const [name,q] of Object.entries(pose)) this.setJoint(name, q); this.updateMatrixWorld(true); }
+  #apply_pose(pose, is_received) {
+    if (!pose || typeof pose !== 'object' || Array.isArray(pose)) throw new Error('関節姿勢の形式が不正です');
+    const values = new Map();
+    // 入力全体の検証後の更新。関節角と描画姿勢の部分反映の防止
+    for (const [name, q] of Object.entries(pose)) {
+      const joint = this.joints[name];
+      if (!joint || joint.type === 'fixed' || !Number.isFinite(q) || (!is_received && joint.mimic)) {
+        throw new Error(`関節姿勢が不正です: ${name}`);
+      }
+      values.set(name, Math.max(joint.lower, Math.min(joint.upper, q)));
+    }
+    for (const joint of this.#mimic_order) {
+      // 実測mimic角は保持。未受信の子関節のみURDFの従属関係から補完
+      if (!is_received || (!values.has(joint.name) && values.has(joint.mimic.joint))) {
+        const parent_q = values.get(joint.mimic.joint) ?? this.joints[joint.mimic.joint].q;
+        const q = parent_q * joint.mimic.multiplier + joint.mimic.offset;
+        values.set(joint.name, Math.max(joint.lower, Math.min(joint.upper, q)));
+      }
+    }
+    for (const [name, q] of values) this.#apply_joint(this.joints[name], q);
+    this.updateMatrixWorld(true);
+  }
+  setPose(pose) {
+    if (this.#pose_source !== pose_sources.simulator) return false;
+    this.#apply_pose(pose, false);
+    return true;
+  }
   set_received_pose(pose) {
-    this.is_receiving_pose=true;try{this.setPose(pose);}finally{this.is_receiving_pose=false;}
+    this.#apply_pose(pose, true);
   }
   tcp(side) { this.links[`${side}_tcp`].updateWorldMatrix(true, false); return {position: this.links[`${side}_tcp`].getWorldPosition(new THREE.Vector3()), quaternion: this.links[`${side}_tcp`].getWorldQuaternion(new THREE.Quaternion())}; }
   chain(side) { return Array.from({length: 7}, (_,i) => this.joints[`${side}_joint${i+1}`]); }

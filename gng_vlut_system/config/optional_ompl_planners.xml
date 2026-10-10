@@ -1,0 +1,7 @@
+<library path="optional_ompl_planners">
+  <class name="gng_vlut_system/OptionalOMPLPlanners"
+         type="gng_vlut_system::optional_ompl_planners"
+         base_class_type="planning_interface::PlannerManager">
+    <description>標準OMPLとBIT*・Informed RRT*の追加登録</description>
+  </class>
+</library>
