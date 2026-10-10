@@ -1,5 +1,4 @@
 import os
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable
@@ -8,23 +7,11 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
 
-def load_root_params(params_file: str) -> dict:
-    if not params_file or not os.path.exists(params_file):
-        return {}
-    try:
-        with open(params_file, "r", encoding="utf-8") as f:
-            params_yaml = yaml.safe_load(f) or {}
-    except Exception:
-        return {}
+import sys
+from pathlib import Path
 
-    for root_key in ("/**", "ros__parameters"):
-        candidate = params_yaml.get(root_key, {})
-        if isinstance(candidate, dict) and "ros__parameters" in candidate:
-            candidate = candidate["ros__parameters"]
-        if isinstance(candidate, dict):
-            return candidate
-    return {}
-
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import load_root_parameters as load_root_params
 
 def configure_gazebo_paths(context, *args, **kwargs):
     del args, kwargs
@@ -73,8 +60,8 @@ def generate_launch_description():
     
     return LaunchDescription([
         # --- Arguments ---
-        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
+        DeclareLaunchArgument("robot_name", default_value=""),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")),
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("resource_root_dir", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),

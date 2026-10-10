@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {bridge_socket_url,pose_sources} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 export const physics_modes={static:'固定（接触あり）',dynamic:'動的（落下・接触）',kinematic:'姿勢指定（接触あり）',hinge:'ヒンジ（世界に固定した回転軸）',slide:'スライド（世界に固定した直線軸）'};
 
@@ -122,8 +123,8 @@ export class PhysicsPanel {
  }
  start(){
   this.stop();
-  if(this.robot().pose_source==='ros'&&this.enable_robot_physics){$('physics-status').textContent='ROS追従中です。姿勢の入力元をシミュレータ操作へ切り替えてください';return;}
-  if(this.robot().pose_source==='leader'&&!this.enable_robot_physics){$('physics-status').textContent='物理フォロワーにはロボットの力学が必要です';return;}
+  if(this.robot().pose_source===pose_sources.ros&&this.enable_robot_physics){$('physics-status').textContent='ROS追従中です。姿勢の入力元をシミュレータ操作へ切り替えてください';return;}
+  if(this.robot().pose_source===pose_sources.leader&&!this.enable_robot_physics){$('physics-status').textContent='物理フォロワーにはロボットの力学が必要です';return;}
   try{
    const environment=this.environment,robot=this.robot();this.robot_model=robot;this.targets=robot.getPose();this.actual={...this.targets};this.base_signature=JSON.stringify([robot.position.toArray(),robot.quaternion.toArray()]);
    environment.setEditing(false);const bodies=[];this.kinematic=[];
@@ -132,19 +133,19 @@ export class PhysicsPanel {
    robot.updateWorldMatrix(true,true);
    const enable_dynamics=this.enable_robot_physics;this.enable_dynamics=enable_dynamics;this.actual_joints=null;
    this.leader_anchor=null;this.leader_stamp_sec=null;this.is_leader_stopped=false;this.leader_received_ms=performance.now();
-   const robot_config=enable_dynamics?{model:robot.modelId,pose:this.targets,position:robot.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:robot.getWorldQuaternion(new THREE.Quaternion()).toArray(),locked_joints:[...$('physics-locks').querySelectorAll('input:checked')].map(input=>input.value),enable_self_collision:$('physics-self-collision').checked,enable_leader_follow:robot.pose_source==='leader',max_leader_age_sec:this.max_leader_age_ms/1000}:null;
-   const endpoint=new URL($('ros-endpoint').value);endpoint.protocol=endpoint.protocol==='https:'?'wss:':'ws:';endpoint.port=String(Number(endpoint.port||8879)+1);endpoint.pathname='/physics';endpoint.search='';endpoint.hash='';
+   const robot_config=enable_dynamics?{model:robot.modelId,pose:this.targets,position:robot.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:robot.getWorldQuaternion(new THREE.Quaternion()).toArray(),locked_joints:[...$('physics-locks').querySelectorAll('input:checked')].map(input=>input.value),enable_self_collision:$('physics-self-collision').checked,enable_leader_follow:robot.pose_source===pose_sources.leader,max_leader_age_sec:this.max_leader_age_ms/1000}:null;
+   const endpoint=bridge_socket_url($('ros-endpoint').value,'/physics');
    this.scene_signature=JSON.stringify(environment.getState());
    const socket=this.socket=new WebSocket(endpoint);
    socket.onopen=()=>{if(this.socket===socket)socket.send(JSON.stringify({type:'start',bodies,robot:robot_config,avoidance:{mode:enable_dynamics?$('physics-avoidance').value:'none'}}));};
    socket.onmessage=event=>{if(this.socket!==socket)return;try{const value=JSON.parse(event.data);if(value.type==='error')throw Error(value.error);if(value.type==='physics'){
     // 物理フォロワーの実測と指令処理は描画周期から独立
-    if(robot.pose_source==='leader'&&value.joints){if(!this.actual_joints)this.leader_received_ms=performance.now();this.actual_joints=value.joints;this.actual=Object.fromEntries(robot.actuated.map(joint=>[joint.name,value.joints[joint.name]]));this.motion_state=value.motion??null;if(value.is_leader_stopped&&!this.is_leader_stopped)this.hold_leader('物理側のリーダー入力失効。物理の再開始が必要');}
+    if(robot.pose_source===pose_sources.leader&&value.joints){if(!this.actual_joints)this.leader_received_ms=performance.now();this.actual_joints=value.joints;this.actual=Object.fromEntries(robot.actuated.map(joint=>[joint.name,value.joints[joint.name]]));this.motion_state=value.motion??null;if(value.is_leader_stopped&&!this.is_leader_stopped)this.hold_leader('物理側のリーダー入力失効。物理の再開始が必要');}
     this.latest=value;
    }if(value.type==='ready')$('physics-status').textContent='MuJoCo接続済み';}catch(error){this.stop('物理エラー：'+error.message);}};
    socket.onerror=()=>{if(this.socket===socket)this.stop('物理ブリッジに接続できません。一括起動とMuJoCoの導入を確認してください');};
    socket.onclose=()=>{if(this.socket===socket)this.stop('物理接続が切れました');};
-   if(robot.pose_source==='leader')this.leader_timer=setInterval(()=>{if(this.actual_joints&&!this.is_leader_stopped&&performance.now()-this.leader_received_ms>this.max_leader_age_ms)this.hold_leader('リーダー入力の失効。物理の再開始が必要');this.send_poses();},33);
+   if(robot.pose_source===pose_sources.leader)this.leader_timer=setInterval(()=>{if(this.actual_joints&&!this.is_leader_stopped&&performance.now()-this.leader_received_ms>this.max_leader_age_ms)this.hold_leader('リーダー入力の失効。物理の再開始が必要');this.send_poses();},33);
    environment.object_interaction?.refresh();
   }catch(error){this.stop('物理エラー：'+error.message);}
  }
@@ -161,8 +162,10 @@ export class PhysicsPanel {
   if(!this.socket||!this.enable_dynamics||this.robot()!==this.robot_model)return;
   const robot=this.robot();
   // 指令値の回収と物理姿勢の維持。受信のない描画フレームでも目標への瞬間移動を防止
-  if(robot.pose_source!=='leader')for(const [name,value] of Object.entries(robot.getPose()))if(value!==this.actual[name])this.targets[name]=value;
-  robot.set_received_pose(this.actual_joints??this.actual);
+  if(robot.pose_source!==pose_sources.leader)for(const [name,value] of Object.entries(robot.getPose()))if(value!==this.actual[name])this.targets[name]=value;
+  const actual=this.actual_joints??this.actual;
+  // 同じ実測姿勢の再適用なし。通信・描画からの重複呼出し時も関節行列の更新は差分のみ
+  if(Object.entries(actual).some(([name,value])=>robot.joints[name]?.q!==value))robot.set_received_pose(actual);
  }
  hold_leader(message='リーダー入力停止。物理の再開始が必要'){
   if(this.socket&&this.enable_dynamics&&this.actual)this.targets={...this.actual};
@@ -192,12 +195,12 @@ export class PhysicsPanel {
   if(item&&!$('physics-constraint').contains(document.activeElement)){const c=item.physics?.constraint||{axis:[0,0,1],pivot:[0,0,0],range:item.physics?.mode==='hinge'?[-Math.PI/2,Math.PI/2]:[-.2,.2]};$('physics-axis').selectedIndex=c.axis.findIndex(x=>x!==0);$('physics-pivot').value=c.pivot.join(' ');$('physics-range').value=c.range.map(x=>item.physics?.mode==='hinge'?x*180/Math.PI:x).join(' ');}
   if(!this.socket)return;if(this.robot()!==this.robot_model){this.stop('モデル切替のため停止');return;}
   if(this.base_signature!==JSON.stringify([current_robot.position.toArray(),current_robot.quaternion.toArray()])){this.stop('基台配置の変更により停止。再開始で反映します');return;}
-  if(current_robot.pose_source==='leader'&&this.actual_joints&&!this.is_leader_stopped&&now-this.leader_received_ms>this.max_leader_age_ms)this.hold_leader('リーダー入力の失効。物理の再開始が必要');
+  if(current_robot.pose_source===pose_sources.leader&&this.actual_joints&&!this.is_leader_stopped&&now-this.leader_received_ms>this.max_leader_age_ms)this.hold_leader('リーダー入力の失効。物理の再開始が必要');
   this.sync_robot_pose();
   if(this.latest){
    const frame=this.latest;this.latest=null;if(frame.avoidance)$('physics-status').textContent=`MuJoCo · OSCBF · ${frame.avoidance.solve_ms.toFixed(1)} ms · 近接 ${frame.avoidance.num_constraints} 組`;
    if(this.enable_dynamics&&frame.joints){if(!this.actual_joints)this.leader_received_ms=now;this.motion_state=frame.motion??null;this.actual_joints=frame.joints;current_robot.set_received_pose(frame.joints);this.actual=current_robot.getPose();}
-   if(current_robot.pose_source==='leader'&&frame.is_leader_stopped&&!this.is_leader_stopped)this.hold_leader('物理側のリーダー入力失効。物理の再開始が必要');
+   if(current_robot.pose_source===pose_sources.leader&&frame.is_leader_stopped&&!this.is_leader_stopped)this.hold_leader('物理側のリーダー入力失効。物理の再開始が必要');
    for(const pose of frame.poses){
     const item=this.environment.items.find(x=>'object_'+x.id===pose.id);
     if(!item){this.stop('物体構成変更のため停止');return;}
@@ -214,7 +217,7 @@ export class PhysicsPanel {
    this.scene_signature=JSON.stringify(this.environment.getState());
    this.scene.userData.physics_time_sec=frame.time_sec;$('physics-status').textContent=`MuJoCo実行中 · ${frame.time_sec.toFixed(2)} s · 接触 ${frame.contacts}件`;
   }
-  if(current_robot.pose_source==='leader'&&this.is_leader_stopped)$('physics-status').textContent=this.leader_detail??'リーダー入力停止。物理の再開始が必要';
-  if(current_robot.pose_source!=='leader'&&now-this.last_ms>=33){this.last_ms=now;this.send_poses();}
+  if(current_robot.pose_source===pose_sources.leader&&this.is_leader_stopped)$('physics-status').textContent=this.leader_detail??'リーダー入力停止。物理の再開始が必要';
+  if(current_robot.pose_source!==pose_sources.leader&&now-this.last_ms>=33){this.last_ms=now;this.send_poses();}
  }
 }

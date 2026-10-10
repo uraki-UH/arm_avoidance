@@ -709,6 +709,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
     const source_registry = useRef(new stream_source_registry());
     source_registry.current.allow_server_selection = !is_read_only;
     const source_url = useRef(url);
+    const pending_source_restores_ref = useRef(new Set<string>());
     const [pointClouds, setPointClouds] = useState<Record<string, PointCloudData>>({});
     const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
@@ -985,6 +986,9 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
         try {
             if (source_url.current !== url) source_registry.current.choices.clear();
             source_url.current = url;
+            pending_source_restores_ref.current = new Set([...source_registry.current.choices]
+                .filter(([source_id, is_active]) => is_active && !source_id.startsWith('robot:'))
+                .map(([source_id]) => source_id));
             source_registry.current.clear();
             setSources([]);
             setPointClouds({}); setGraphData({}); setMarkerData({}); setRobotData({}); setVoxelData({});
@@ -1309,6 +1313,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                 if (wsRef.current !== socket) return;
                 wsRef.current = null;
                 setIsConnected(false);
+                pending_source_restores_ref.current.clear();
                 source_registry.current.clear();
                 setSources([]);
                 setPointClouds({}); setGraphData({}); setMarkerData({}); setRobotData({}); setVoxelData({});
@@ -1430,6 +1435,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
         const api = createViewerRpcApi(sendRpc, update_sources);
         const set_active = async (source_id: string, is_active: boolean, remove_layer = true) => {
             const registry = source_registry.current;
+            pending_source_restores_ref.current.delete(source_id);
             const is_robot = source_id.startsWith('robot:');
             if (is_robot && is_active && !registry.robots.has(source_id.slice('robot:'.length))) {
                 throw new Error('ロボットのモデルが未受信です。');
@@ -1472,6 +1478,24 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
             unsubscribeSource: (source_id: string, remove_layer = true) => set_active(source_id, false, remove_layer),
         };
     }, [sendRpc, update_sources, is_read_only, clear_source_layer]);
+
+    useEffect(() => {
+        if (!isConnected) return;
+        const expected_socket = wsRef.current;
+        const registry = source_registry.current;
+        // 再接続先の入力一覧確定後の保存済み購読復帰。新規選択との二重要求の抑止。
+        for (const source_id of pending_source_restores_ref.current) {
+            if (!registry.choices.get(source_id)) {
+                pending_source_restores_ref.current.delete(source_id);
+                continue;
+            }
+            if (!registry.topics.has(source_id)) continue;
+            pending_source_restores_ref.current.delete(source_id);
+            void rpcApi.subscribeSource(source_id).catch(error => {
+                if (expected_socket === wsRef.current) setError(`入力の購読復帰に失敗しました: ${String(error)}`);
+            });
+        }
+    }, [isConnected, sources, rpcApi]);
 
     return {
         sources,

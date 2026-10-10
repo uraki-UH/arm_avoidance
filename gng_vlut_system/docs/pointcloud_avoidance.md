@@ -88,7 +88,7 @@ overrides:
 
 | 管理場所 | 責務 |
 | --- | --- |
-| `scripts/avoidance_motion.py` | `motion_flags`、`select_motion`による優先順位、`motion_components`による動作差替え |
+| `scripts/avoidance_motion.py` | `motion_kind`列挙型、`motion_flags`、`select_motion`による優先順位、`motion_components`による動作差替え |
 | `scripts/gng_avoidance_planner.py` | GNG探索、対象腕選択、復帰継続時間、速度制限・区間安全検査 |
 | `scripts/dual_arm_gng_lidar_demo.py` | ROS入力・鮮度管理・探索プロセス・軌道出力・診断 |
 | `scripts/dual_arm_avoidance_demo.py` | 開始・停止ラッチ・異常停止・接近待機・実行監視 |
@@ -96,6 +96,7 @@ overrides:
 判定フラグは毎回の観測から生成する読み取り専用値。設定ON/OFFの追加なし。
 `select_motion`は停止要求 → 入力不成立 → 対象関節なしの保持 → 退避 → 復帰待ち → 復帰／初期姿勢保持の順で選択。
 `motion_phase`は障害物シナリオの表示状態とは独立。診断トピック`avoidance/gng_status`に動作と判定フラグを出力。
+動作の語彙は`motion_kind`、実装の対応は`motion_components`に集約。文字列・JSONの動作名は従来と共通、未登録動作と呼出し不能な部品は実行前に拒否。
 
 動作差替え: `Callable[[motion_input], motion_result]`。入力は実測姿勢のコピー`positions`・対象関節だけを初期姿勢に戻した目標`home`・最大関節ステップ`step`。出力は目標姿勢`target`・候補有無`has_candidate`・GNG経路使用`is_gng_target`。ROSノード全体の受け渡しなし。
 

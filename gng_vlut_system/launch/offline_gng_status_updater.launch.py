@@ -12,7 +12,7 @@ def generate_launch_description():
     
     params_file_arg = DeclareLaunchArgument(
         "params_file",
-        default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml"),
+        description="旧単腕後処理ツール用の専用YAML。robot_urdf_path・data_directory・experiment_idの明示設定",
     )
 
     node = Node(

@@ -23,6 +23,7 @@ export class graph_scene {
     private is_dirty = true;
     private has_disposed = false;
     private has_focus_request = false;
+    private inspection_picker: ((client_x: number, client_y: number) => boolean) | null = null;
     constructor(private options: scene_options) {
         extend(THREE);
         this.frames = new frame_tree(options.robot);
@@ -36,6 +37,8 @@ export class graph_scene {
         this.root = createRoot(document.createElement('canvas'));
         this.root.configure({ gl: renderer as unknown as THREE.WebGLRenderer, scene: this.root_scene,
             camera: options.camera, events, frameloop: 'never', dpr: 1,
+            // 描画キャンバスへの標準選択イベント接続。切り離したFiber所有canvasとの分離。
+            onCreated: state => { state.events.connect?.(canvas); },
             size: { width: rect.width, height: rect.height, top: rect.top, left: rect.left, updateStyle: false } });
         this.state = this.root.render(null).getState();
         this.state.raycaster.layers.set(3);
@@ -58,6 +61,8 @@ export class graph_scene {
             return null;
         };
     }
+    set_inspection_picker(picker: ((client_x: number, client_y: number) => boolean) | null) { this.inspection_picker = picker; }
+    has_inspection_at(client_x: number, client_y: number) { return this.inspection_picker?.(client_x, client_y) ?? false; }
     request_focus() { this.has_focus_request = true; }
     private focus_visible() {
         const bounds = new THREE.Box3();
@@ -119,6 +124,7 @@ export class graph_scene {
     dispose() {
         if (this.has_disposed) return;
         this.has_disposed = true;
+        this.inspection_picker = null;
         this.resize_observer.disconnect();
         this.state.events.disconnect?.();
         this.root.unmount();

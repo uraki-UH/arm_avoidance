@@ -1,8 +1,5 @@
-import math
 import os
-import struct
 
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
@@ -11,33 +8,25 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-VLUT_FILE_SIGNATURE = b"VLUT"
-VLUT_FILE_ID = int.from_bytes(VLUT_FILE_SIGNATURE, byteorder="big")
 DEFAULT_VOXEL_SIZE = "0.02"
 
 
-def _find_root_parameters(params_yaml):
-    for root_key in ("/**", "ros__parameters"):
-        candidate = params_yaml.get(root_key, {})
-        if isinstance(candidate, dict) and "ros__parameters" in candidate:
-            candidate = candidate["ros__parameters"]
-        if isinstance(candidate, dict):
-            return candidate
-    return {}
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import (
+    root_parameters as _find_root_parameters,
+    read_vlut_voxel_size as _read_vlut_voxel_size,
+    parameter_file_data,
+)
 
 def _resolve_vlut_file(params_file, explicit_vlut_file):
     if explicit_vlut_file:
         return explicit_vlut_file
-    if not params_file or not os.path.isfile(params_file):
+    if not params_file:
         return ""
-
-    try:
-        with open(params_file, "r", encoding="utf-8") as stream:
-            params_yaml = yaml.safe_load(stream) or {}
-    except (OSError, yaml.YAMLError) as ex:
-        print(f"[point_to_vlut] VLUT設定YAMLの読込失敗: {ex}")
-        return ""
+    params_yaml = parameter_file_data(params_file)
 
     root_parameters = _find_root_parameters(params_yaml)
     gng_parameters = root_parameters.get("gng", {})
@@ -53,36 +42,6 @@ def _resolve_vlut_file(params_file, explicit_vlut_file):
     if str(gng_parameters.get("enable_independent_arms", False)).lower() in ("true", "1", "yes", "on"):
         return os.path.join(data_directory, experiment_id, "left_arm", vlut_filename)
     return os.path.join(data_directory, experiment_id, vlut_filename)
-
-
-def _read_vlut_voxel_size(vlut_file):
-    if not vlut_file:
-        return None
-    try:
-        with open(vlut_file, "rb") as stream:
-            header = stream.read(12)
-    except OSError as ex:
-        print(f"[point_to_vlut] VLUT読込失敗: file={vlut_file} error={ex}")
-        return None
-
-    if len(header) != 12:
-        print(f"[point_to_vlut] VLUTヘッダ長不足: file={vlut_file}")
-        return None
-
-    file_id, version, voxel_size = struct.unpack("<IIf", header)
-    if file_id != VLUT_FILE_ID or version < 1:
-        print(
-            "[point_to_vlut] VLUTヘッダ未対応: "
-            f"file={vlut_file} file_id=0x{file_id:08x} version={version}"
-        )
-        return None
-    if not math.isfinite(voxel_size) or voxel_size <= 0.0:
-        print(
-            "[point_to_vlut] VLUT解像度不正: "
-            f"file={vlut_file} voxel_size={voxel_size}"
-        )
-        return None
-    return voxel_size
 
 
 def _is_enabled(raw_value):

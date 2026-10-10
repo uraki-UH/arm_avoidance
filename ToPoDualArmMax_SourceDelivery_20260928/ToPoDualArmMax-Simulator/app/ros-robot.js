@@ -52,7 +52,7 @@ export class RosRobotPanel{
   const robot=this.rgbd.robot;
   if(this.model!==robot.modelId){this.follow_panel.disconnect();this.stop();this.model=robot.modelId;const e=new THREE.Euler().setFromQuaternion(robot.quaternion,'ZYX');[...robot.position.toArray(),...['x','y','z'].map(k=>THREE.MathUtils.radToDeg(e[k]))].forEach((v,idx)=>$('ros-base-'+['x','y','z','roll','pitch','yaw'][idx]).value=v);}
   this.instance_panel.bind();
-  this.joint_stream.tick();
+  this.joint_stream.tick(now);
   if(this.active){
    const {command,start}=this.active,t=(now-start)/1000,points=command.points;let idx=1;while(idx<points.length-1&&points[idx].time_sec<t)idx++;
    const a=points[idx-1],b=points[idx],u=Math.min(1,Math.max(0,(t-a.time_sec)/(b.time_sec-a.time_sec))),pose={};

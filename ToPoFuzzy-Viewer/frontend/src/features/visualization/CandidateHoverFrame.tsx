@@ -17,7 +17,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
     layer_settings: Record<string, LayerSettings>;
 }) {
     const { gl, scene, camera, invalidate } = useThree();
-    const { resolve_frame } = useContext(ViewerEnvironment);
+    const { resolve_frame, set_inspection_picker } = useContext(ViewerEnvironment);
     const [bounds, set_bounds] = useState<graph_bounds | null>(null);
     const settings_ref = useRef({ transforms, layer_settings });
     settings_ref.current = { transforms, layer_settings };
@@ -51,8 +51,18 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
         let press: { x: number; y: number; has_dragged: boolean } | null = null;
         let previous_cursor = '', last_hit_ms = 0, next_request_ms = 0, suspend_until_ms = 0;
         const can_pick_source = (source: string) =>
-            source !== '/topological_map' && settings_ref.current.layer_settings[source]?.enable_bounding_box === true;
-        const pick = (client_x: number, client_y: number) => {
+            source !== '/topological_map' && settings_ref.current.layer_settings[source]?.enable_bounding_box === true &&
+                settings_ref.current.layer_settings[source]?.visible !== false;
+        const get_visible_sources = () => {
+            const sources = new Map<string, unknown>();
+            scene.traverseVisible(object => {
+                const source = object.userData.inspection_source;
+                if (typeof source !== 'string' || !can_pick_source(source)) return;
+                if (!sources.has(source)) sources.set(source, object.userData.inspection_revision);
+            });
+            return sources;
+        };
+        const pick = (client_x: number, client_y: number, sources: ReadonlyMap<string, unknown>) => {
             const rect = canvas.getBoundingClientRect();
             raycaster.setFromCamera(new THREE.Vector2((client_x - rect.left) / rect.width * 2 - 1,
                 -(client_y - rect.top) / rect.height * 2 + 1), camera);
@@ -60,7 +70,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
             const settings = settings_ref.current;
             // 点・球メッシュへのraycastなし。表示と同じTF・手動変換を適用したAABBとの交差のみ。
             for (const entry of cache.values()) for (const candidate of entry.bounds) {
-                if (!can_pick_source(candidate.source_id)) continue;
+                if (!can_pick_source(candidate.source_id) || !sources.has(candidate.source_id)) continue;
                 const tf = candidate.frame_id === 'world' ? undefined : settings.transforms[candidate.frame_id];
                 const manual = settings.layer_settings[candidate.source_id]?.graphTransform;
                 if (resolve_frame) {
@@ -102,19 +112,27 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
         const leave = () => { pointer.is_active = false; press = null; clear(); };
         const down = (event: PointerEvent) => {
             leave();
-            if (event.button === 0 && event.isPrimary) press = { x: event.clientX, y: event.clientY, has_dragged: false };
+            if (event.button === 0 && event.isPrimary && !event.ctrlKey && !event.metaKey) press = { x: event.clientX, y: event.clientY, has_dragged: false };
         };
         const click = (event: MouseEvent) => {
-            const can_inspect = press && !press.has_dragged && event.button === 0 &&
+            if (event.ctrlKey || event.metaKey) {
+                press = null;
+                // 修飾クリックの物体操作優先。前回pointerdownを保持したFiber側への二重伝播なし。
+                if (set_inspection_picker && pick(event.clientX, event.clientY, get_visible_sources())) event.stopImmediatePropagation();
+                return;
+            }
+            const can_inspect = press && !press.has_dragged && event.button === 0 && !event.ctrlKey && !event.metaKey &&
                 Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 5;
             press = null;
-            const candidate = can_inspect ? pick(event.clientX, event.clientY) : null;
+            const candidate = can_inspect ? pick(event.clientX, event.clientY, get_visible_sources()) : null;
             if (!candidate) return;
             // 枠内の空隙からの選択と、既存ノードクリックとの二重発火防止
             event.stopImmediatePropagation();
             on_inspect(candidate.source_id, candidate.selection);
         };
         const wheel = () => { suspend_until_ms = performance.now() + 180; clear(); };
+        // 埋込先の物体操作との入力所有権共有。最新カメラでの候補境界判定のみ。
+        set_inspection_picker?.((client_x, client_y) => pick(client_x, client_y, get_visible_sources()) !== null);
         canvas.addEventListener('pointermove', move);
         canvas.addEventListener('pointerup', move);
         canvas.addEventListener('pointerdown', down);
@@ -129,12 +147,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
             if (!pointer.is_active || now < suspend_until_ms || document.elementFromPoint(pointer.x, pointer.y) !== canvas) {
                 clear(); return;
             }
-            const sources = new Map<string, unknown>();
-            scene.traverseVisible(object => {
-                const source = object.userData.inspection_source;
-                if (typeof source !== 'string' || !can_pick_source(source)) return;
-                if (!sources.has(source)) sources.set(source, object.userData.inspection_revision);
-            });
+            const sources = get_visible_sources();
             for (const source of cache.keys()) if (!sources.has(source)) cache.delete(source);
             for (const source of sources.keys()) if (!cache.has(source)) cache.set(source, { revision: unrequested, bounds: [], last_request_ms: 0 });
             const selected_key = selected ? bounds_key(selected) : '';
@@ -164,7 +177,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
                 }
             }
 
-            const nearest = pick(pointer.x, pointer.y);
+            const nearest = pick(pointer.x, pointer.y, sources);
             if (!nearest) { if (now - last_hit_ms >= 350) clear(); return; }
             last_hit_ms = now;
             selected = nearest;
@@ -173,6 +186,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
         }, 100);
         return () => {
             is_alive = false;
+            set_inspection_picker?.(null);
             clear();
             window.clearInterval(timer);
             canvas.removeEventListener('pointermove', move);
@@ -184,7 +198,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
             canvas.removeEventListener('wheel', wheel);
             window.removeEventListener('blur', leave);
         };
-    }, [resolve_frame, enable_picking, get_bounds, on_inspect, gl, scene, camera]);
+    }, [resolve_frame, set_inspection_picker, enable_picking, get_bounds, on_inspect, gl, scene, camera]);
 
     if (!is_enabled || !bounds || bounds.source_id === '/topological_map' ||
         layer_settings[bounds.source_id]?.enable_bounding_box !== true) return null;

@@ -12,8 +12,8 @@ function disposeGroup(group){group.traverse(x=>{if(x.isMesh){x.geometry.dispose(
 function grain(){const c=document.createElement('canvas');c.width=512;c.height=512;const ctx=c.getContext('2d');ctx.fillStyle='#b98b5e';ctx.fillRect(0,0,512,512);for(let y=0;y<512;y++){ctx.strokeStyle=`rgba(74,35,7,${.045+.035*Math.sin(y*1.9)})`;ctx.beginPath();for(let x=0;x<513;x+=8){const yy=y+2*Math.sin(x*.019+y*.07);x?ctx.lineTo(x,yy):ctx.moveTo(x,yy);}ctx.stroke();}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);return t;}
 
 export class WorkEnvironment {
-  constructor({scene,overlay,camera,renderer,orbit,toast,onEdit,onChange}){
-    Object.assign(this,{scene,overlay,camera,renderer,orbit,toast,onEdit,onChange});this.items=[];this.nextId=1;this.selected=null;this.selected_ids=new Set();this.selection_boxes=new Map();this.editing=false;
+  constructor({scene,overlay,camera,renderer,orbit,toast,onEdit,onChange,has_priority_pick=()=>false}){
+    Object.assign(this,{scene,overlay,camera,renderer,orbit,toast,onEdit,onChange,has_priority_pick});this.items=[];this.nextId=1;this.selected=null;this.selected_ids=new Set();this.selection_boxes=new Map();this.editing=false;
     this.state={type:'wood',x:.50,y:0,z:.12,yaw:0,roll:0,pitch:0,width:.60,depth:.80,height:.26,color:'#ffffff',visible:true};
     this.root=new THREE.Group();this.root.name='Workspace table';scene.add(this.root);this.table=new THREE.Group();this.objectRoot=new THREE.Group();this.root.add(this.table,this.objectRoot);
     this.wood=material('#ffffff',.04,.48);this.wood.map=grain();this.wood.userData.shared=true;

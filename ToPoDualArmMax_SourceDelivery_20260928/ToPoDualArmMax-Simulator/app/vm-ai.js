@@ -1,16 +1,10 @@
 import * as THREE from 'three';
-import {decodeFrame} from './vm-packet.js';
+import {decodeFrame,encode_input} from './vm-packet.js';
+import {points_in_base,transform_points,robot_frames} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 
-export function worldPoints(xyz,matrix){
- const out=new Float32Array(xyz.length),m=matrix;
- for(let i=0;i<xyz.length;i+=3){const x=xyz[i],y=xyz[i+1],z=xyz[i+2];out[i]=m[0]*x+m[4]*y+m[8]*z+m[12];out[i+1]=m[1]*x+m[5]*y+m[9]*z+m[13];out[i+2]=m[2]*x+m[6]*y+m[10]*z+m[14];}
- return out;
-}
-export function encodeInput(meta,points){
- const json=new TextEncoder().encode(JSON.stringify(meta)),offset=8+Math.ceil(json.length/4)*4;
- const bytes=new Uint8Array(offset+points.byteLength);bytes.set([84,80,67,49]);new DataView(bytes.buffer).setUint32(4,json.length,true);bytes.set(json,8);bytes.set(new Uint8Array(points.buffer,points.byteOffset,points.byteLength),offset);return bytes;
-}
+// 既存公開APIの互換名。座標変換とTPC1形式は共通実装へ委譲
+export {transform_points as worldPoints,encode_input as encodeInput};
 function geometry(points){return new THREE.BufferGeometry().setAttribute('position',new THREE.BufferAttribute(points,3));}
 function dispose(group){while(group.children.length){const o=group.children[0];group.remove(o);o.geometry?.dispose();o.material?.dispose();}}
 function cubes(rows){
@@ -71,11 +65,11 @@ export class VMAIWorkspace{
    }else f=await this.rgbd.capture();
    if(generation!==this.generation||!f||!f.xyz.length)return;
    this.lastSensorId=f.id;
-   const points=worldPoints(f.xyz,this.source==='mid360'?f.pose:f.depthWorld);
-   const meta={client:this.client,frame_id:'base_footprint',sensor:this.source,sensor_frame:f.id,count:points.length/3,robot_pose:f.robotPose,robot_model:this.robot.modelId};
-   const start=performance.now(),r=await fetch('/api/input',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-VM':'1'},body:encodeInput(meta,points)});
+   const points=points_in_base(f.xyz,this.source==='mid360'?f.pose:f.depthWorld,f.robot_state);
+   const meta={client:this.client,frame_id:robot_frames.base,sensor:this.source,sensor_frame:f.id,count:points.length/3,robot_pose:f.robotPose,robot_model:this.robot.modelId};
+   const start=performance.now(),r=await fetch('/api/input',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-VM':'1'},body:encode_input(meta,points)});
    if(!r.ok)throw Error(r.status===409?'別タブが点群を送信中です。このタブでは結果を表示します。':await r.text());
-   const result=await r.json();if(generation!==this.generation)return;this.sent++;this.waiting={stamp:result.stamp_ns,start};this.inputHistory.set(result.stamp_ns,{start,points:meta.count,robotPose:f.robotPose,sensor:meta.sensor,sensorFrame:f.id});
+   const result=await r.json();if(generation!==this.generation)return;this.sent++;this.waiting={stamp:result.stamp_ns,start};this.inputHistory.set(result.stamp_ns,{start,points:meta.count,robotPose:f.robotPose,sensor:meta.sensor,sensorFrame:f.id,base_to_world:f.robot_state.base_to_world});
    while(this.inputHistory.size>128)this.inputHistory.delete(this.inputHistory.keys().next().value);
    this.error=null;
   }catch(e){if(generation!==this.generation)return;this.error=e.message;this.running=false;$('ai-start').textContent='▶ VM処理を開始';}
@@ -90,6 +84,10 @@ export class VMAIWorkspace{
  resetForRobot(robot){this.generation++;this.robot=robot;this.running=false;this.busy=false;this.pollBusy=false;this.onlyOwnFrames=true;this.waiting=null;this.lastSensorId=null;this.frame=null;this.matched=null;this.lastReceived=null;this.latency=null;this.inputHistory.clear();dispose(this.group);this.group.visible=false;this.publish();}
  draw(f){
   dispose(this.group);
+  this.group.matrixAutoUpdate=false;
+  if(this.matched?.base_to_world)this.group.matrix.fromArray(this.matched.base_to_world);
+  else{this.robot.links[robot_frames.base].updateWorldMatrix(true,false);this.group.matrix.copy(this.robot.links[robot_frames.base].matrixWorld);}
+  this.group.updateMatrixWorld(true);
   if($('ai-points').checked)this.group.add(new THREE.Points(geometry(f.points),new THREE.PointsMaterial({color:0x507caa,size:1.5,sizeAttenuation:false,toneMapped:false})));
   if($('ai-graph').checked){
    this.group.add(new THREE.Points(geometry(f.nodes),new THREE.PointsMaterial({color:0xff9700,size:5,sizeAttenuation:false,toneMapped:false})));

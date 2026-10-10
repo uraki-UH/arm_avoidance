@@ -88,7 +88,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "params_file",
-            default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml"),
+            default_value=os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml"),
         ),
         DeclareLaunchArgument(
             "robot_urdf_path",

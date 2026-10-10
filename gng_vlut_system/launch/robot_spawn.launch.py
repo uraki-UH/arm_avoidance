@@ -1,5 +1,4 @@
 import os
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -8,38 +7,14 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import resolve_package_path, load_root_parameters as load_root_params
+
 def resolve_package_uri(raw_path: str) -> str:
-    if not raw_path.startswith("package://"):
-        return raw_path
-
-    pkg_and_path = raw_path[len("package://"):]
-    pkg_name, _, rel_path = pkg_and_path.partition("/")
-    if not pkg_name or not rel_path:
-        return raw_path
-
-    try:
-        pkg_share = get_package_share_directory(pkg_name)
-    except Exception:
-        return raw_path
-    return os.path.join(pkg_share, rel_path)
-
-
-def load_root_params(params_file: str) -> dict:
-    if not params_file or not os.path.exists(params_file):
-        return {}
-    try:
-        with open(params_file, "r", encoding="utf-8") as f:
-            params_yaml = yaml.safe_load(f) or {}
-    except Exception:
-        return {}
-
-    for root_key in ("/**", "ros__parameters"):
-        candidate = params_yaml.get(root_key, {})
-        if isinstance(candidate, dict) and "ros__parameters" in candidate:
-            candidate = candidate.get("ros__parameters", {})
-        if isinstance(candidate, dict):
-            return candidate
-    return {}
+    return resolve_package_path(raw_path, get_package_share_directory)
 
 
 def launch_setup(context, *args, **kwargs):
@@ -48,10 +23,11 @@ def launch_setup(context, *args, **kwargs):
     publish_initial_joint_state = LaunchConfiguration("publish_initial_joint_state").perform(context).lower() in ("true", "1", "yes", "on")
     joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context).strip()
     robot_description_topic = LaunchConfiguration("robot_description_topic").perform(context).strip() or "robot_description"
-    if not robot_description_topic.startswith("/"):
-        robot_description_topic = f"/{robot_name}/{robot_description_topic}"
     params_file = LaunchConfiguration("params_file").perform(context).strip()
     root_params = load_root_params(params_file)
+    robot_name = robot_name or str(root_params.get("robot_name", "topo_dual_arm_max_long"))
+    if not robot_description_topic.startswith("/"):
+        robot_description_topic = f"/{robot_name}/{robot_description_topic}"
     resource_root_dir = LaunchConfiguration("resource_root_dir").perform(context).strip() or str(root_params.get("resource_root_dir", "")).strip()
     mesh_root_dir = LaunchConfiguration("mesh_root_dir").perform(context).strip() or str(root_params.get("mesh_root_dir", "")).strip()
 
@@ -138,8 +114,8 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
+        DeclareLaunchArgument("robot_name", default_value=""),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")),
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("resource_root_dir", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),

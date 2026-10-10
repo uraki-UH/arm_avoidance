@@ -2,6 +2,7 @@
 import argparse
 import json
 import math
+import os
 import struct
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -14,6 +15,14 @@ root = Path(__file__).resolve().parents[2] / 'app'
 topics = {'rgbd': '/sim/rgbd/points', 'object_full': '/sim/object/full_points',
           'object_visible': '/sim/object/visible_points', 'mid360': '/sim/lidar/points'}
 max_body_bytes = 50000000
+default_ui_port = 8877
+default_bridge_port = 8879
+
+
+def validate_bridge_port(port):
+    """HTTPと直後の関節・物理WebSocket用ポートの範囲検査。"""
+    if type(port) is not int or not 1024 <= port <= 65534:
+        raise ValueError('ブリッジHTTPポートは1024〜65534。次のポートをWebSocketに使用します')
 
 
 def parse_packet(raw):
@@ -71,7 +80,7 @@ def parse_packet(raw):
     return meta, data
 
 
-def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory=None, follow=None):
+def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory=None, follow=None, connection=None):
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(root), **kwargs)
@@ -113,7 +122,8 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
             if urlsplit(self.path).path == '/api/follow':
                 return self.respond(200, follow.snapshot() if follow is not None else {'has_manager': False})
             if urlsplit(self.path).path == '/api/points/status':
-                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 4, 'topics': topics, 'pointcloud_backend': 'cpp'})
+                return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 4, 'topics': topics,
+                                         'pointcloud_backend': 'cpp', **(connection or {})})
             super().do_GET()
 
         def do_POST(self):
@@ -163,14 +173,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tf-topic', default='/tf', help='標準TFの配信先。/sim/tf指定で専用配信のみ')
     parser.add_argument('--host', default='127.0.0.1')
-    parser.add_argument('--port', type=int, default=8879)
+    parser.add_argument('--port', type=int, default=default_bridge_port)
     parser.add_argument('--allow-origin', action='append', default=[])
     args = parser.parse_args()
-    if not 1024 <= args.port <= 65534:
-        parser.error('HTTPポートは1024～65534。次のポートを関節WebSocketに使用します')
+    try:
+        validate_bridge_port(args.port)
+    except ValueError as error:
+        parser.error(str(error))
+    if not args.tf_topic.startswith('/'):
+        parser.error('TFトピックには絶対名が必要です')
     from joint_stream import start_joint_stream
     allowed = set(args.allow_origin) | {f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost')
-                                       for port in (8877, args.port)}
+                                       for port in (default_ui_port, args.port)}
     ensure_native()
     rclpy.init()
     node = Node('topo_browser_pointcloud_bridge')
@@ -195,28 +209,25 @@ def main():
 
 
     def publish(meta, data):
-        if meta.get('robot_state') is not None:
-            exchange.validate(meta['robot_state'])
         stamp = node.get_clock().now().to_msg()
+        transforms = exchange.sensor_transforms(meta['robot_state'], stamp) if meta.get('robot_state') is not None else []
         # 画素ごとの検査・逆投影・色付けをC++で実行。通信・姿勢更新用GILの解放。
         msg, depth_messages = create_point_messages(meta, data, stamp)
         with lock:
             publishers[meta['source']].publish(msg)
             for publisher, message in zip(depth_publishers, depth_messages):
                 publisher.publish(message)
+            # 取得時センサTFのみの配信。現在姿勢の配信元は関節専用経路
+            exchange.publish_transforms(transforms)
             if meta.get('robot_state') is not None:
-                exchange.publish(meta['robot_state'], stamp)
-            else:
-                pose = JointState()
-                pose.header = msg.header
-                pose.name = list(meta.get('robot_pose', {}))
-                pose.position = [float(v) for v in meta.get('robot_pose', {}).values()]
-                joints.publish(pose)
+                exchange.publish_description(meta['robot_state']['robot_model'])
             info.publish(String(data=json.dumps(dict(meta, stamp_sec=stamp.sec, stamp_nanosec=stamp.nanosec))))
         return {'topic': topics[meta['source']], 'depth_topics': depth_topics if meta.get('depth_image') else [], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
 
     stop_joint_stream = start_joint_stream(node, exchange, args.host, args.port + 1, allowed, follow)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed, publish_state, exchange.latest, follow))
+    connection = dict(host=args.host, http_port=args.port, websocket_port=args.port+1,
+                      tf_topic=args.tf_topic, ros_domain_id=int(os.environ.get('ROS_DOMAIN_ID', '0')))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed, publish_state, exchange.latest, follow, connection))
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

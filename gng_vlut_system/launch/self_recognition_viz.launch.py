@@ -1,7 +1,4 @@
 import os
-import math
-import struct
-import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -11,101 +8,35 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import (
+    resolve_package_path,
+    read_vlut_voxel_size,
+    root_parameters as _root_parameters,
+    parameter_file_data,
+    node_parameter_source,
+)
+
+
 def resolve_package_uri(raw_path: str) -> str:
-    if not raw_path.startswith("package://"):
-        return raw_path
-
-    pkg_and_path = raw_path[len("package://"):]
-    pkg_name, _, rel_path = pkg_and_path.partition("/")
-    if not pkg_name or not rel_path:
-        return raw_path
-
-    try:
-        pkg_share = get_package_share_directory(pkg_name)
-    except Exception:
-        return raw_path
-    return os.path.join(pkg_share, rel_path)
-
-
-def read_vlut_voxel_size(vlut_file: str):
-    if not vlut_file:
-        return None
-    try:
-        with open(vlut_file, "rb") as stream:
-            header = stream.read(12)
-    except OSError:
-        return None
-    if len(header) != 12:
-        return None
-    file_id, version, voxel_size = struct.unpack("<IIf", header)
-    if file_id != int.from_bytes(b"VLUT", byteorder="big") or version < 1:
-        return None
-    if not math.isfinite(voxel_size) or voxel_size <= 0.0:
-        return None
-    return voxel_size
-
-
-def _root_parameters(params_yaml):
-    for root_key in ("/**", "ros__parameters"):
-        candidate = params_yaml.get(root_key, {})
-        if isinstance(candidate, dict) and "ros__parameters" in candidate:
-            candidate = candidate["ros__parameters"]
-        if isinstance(candidate, dict):
-            return candidate
-    return {}
+    return resolve_package_path(raw_path, get_package_share_directory)
 
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     params_file = LaunchConfiguration("params_file").perform(context)
     
-    # --- YAMLから設定を自動抽出するロジック ---
-    robot_name_default = LaunchConfiguration("robot_name").perform(context)
-    robot_name = robot_name_default
-    yaml_urdf_path = ""
-    yaml_vlut_resolution = 0.0
-    
-    if params_file and os.path.exists(params_file):
-        try:
-            with open(params_file, 'r') as f:
-                config = yaml.safe_load(f)
-                # YAMLの全階層から robot_name を探す（/**: やノード別設定に対応）
-                def find_robot_name(d):
-                    if not isinstance(d, dict): return None
-                    if 'ros__parameters' in d.get('ros__parameters', {}):
-                        return d['ros__parameters']['robot_name']
-                    if 'ros__parameters' in d:
-                        return d['ros__parameters'].get('robot_name')
-                    for v in d.values():
-                        res = find_robot_name(v)
-                        if res: return res
-                    return None
-                
-                extracted_name = find_robot_name(config)
-                if extracted_name:
-                    robot_name = extracted_name
-
-                root_params = _root_parameters(config or {})
-
-                if isinstance(root_params, dict):
-                    candidate_robot_description = root_params.get('urdf_path', '')
-                    if candidate_robot_description:
-                        yaml_urdf_path = str(candidate_robot_description).strip()
-                    gng_params = root_params.get("gng", {})
-                    if isinstance(gng_params, dict):
-                        try:
-                            yaml_vlut_resolution = float(gng_params.get("vlut_resolution", 0.0))
-                        except Exception:
-                            yaml_vlut_resolution = 0.0
-        except Exception as e:
-            print(f"Warning: Failed to parse YAML for robot_name: {e}")
-
-    # コマンドラインで明示的に指定された場合はそちらを優先
-    # LaunchConfigurationは一度performしないと値が取れないため注意
-    user_robot_name = LaunchConfiguration("robot_name").perform(context)
-    # デフォルト値以外が指定されていれば、それを優先
-    if user_robot_name and user_robot_name != robot_name_default:
-        robot_name = user_robot_name
+    # 機体設定と明示引数による自己認識対象の決定
+    config = parameter_file_data(params_file)
+    parameter_source = node_parameter_source(params_file, config)
+    root_params = _root_parameters(config)
+    robot_name = LaunchConfiguration("robot_name").perform(context).strip() or str(
+        root_params.get("robot_name", "topo_dual_arm_max_long"))
+    yaml_urdf_path = str(root_params.get("urdf_path", "")).strip()
+    yaml_vlut_resolution = float(root_params.get("gng", {}).get("vlut_resolution", 0.0))
 
     urdf_path = LaunchConfiguration("urdf_path").perform(context)
     if not urdf_path and yaml_urdf_path:
@@ -183,7 +114,7 @@ def launch_setup(context, *args, **kwargs):
 
     final_params_list = []
     if params_file and os.path.exists(params_file):
-        final_params_list.append(params_file)
+        final_params_list.append(parameter_source)
     final_params_list.append(node_params)
 
     # 名前空間の決定 (既に上でYAML等から決定済み)
@@ -219,9 +150,9 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("robot_name", default_value=""),
         DeclareLaunchArgument("urdf_path", default_value=""),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topo_dual_arm_max_long.yaml")),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("marker_frame_id", default_value="world"),
         DeclareLaunchArgument("joint_topic", default_value="joint_states"),

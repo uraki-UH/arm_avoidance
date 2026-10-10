@@ -13,39 +13,19 @@ from launch_ros.actions import Node, SetParameter, ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import (
+    resolve_package_path, read_vlut_voxel_size, parameter_file_data, root_parameters,
+    namespaced_frame, namespaced_topic, roi_filter_parameters, world_index_parameters,
+    environment_danger_inflation, node_parameter_source,
+)
+
+
 def resolve_package_uri(raw_path: str) -> str:
-    if not raw_path.startswith("package://"):
-        return raw_path
-
-    pkg_and_path = raw_path[len("package://"):]
-    pkg_name, _, rel_path = pkg_and_path.partition("/")
-    if not pkg_name or not rel_path:
-        return raw_path
-
-    try:
-        pkg_share = get_package_share_directory(pkg_name)
-    except Exception:
-        return raw_path
-    return os.path.join(pkg_share, rel_path)
-
-
-def read_vlut_voxel_size(vlut_file: str):
-    if not vlut_file:
-        return None
-    try:
-        with open(vlut_file, "rb") as stream:
-            header = stream.read(12)
-    except OSError:
-        return None
-    if len(header) != 12:
-        return None
-    file_id, version, voxel_size = struct.unpack("<IIf", header)
-    if file_id != int.from_bytes(b"VLUT", byteorder="big") or version < 1:
-        return None
-    if not math.isfinite(voxel_size) or voxel_size <= 0.0:
-        return None
-    return voxel_size
-
+    return resolve_package_path(raw_path, get_package_share_directory)
 
 
 def read_vlut_bounds(vlut_file: str):
@@ -67,7 +47,7 @@ def safe_float(value, default):
         if value is None or value == "":
             return default
         return float(value)
-    except Exception:
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -76,7 +56,7 @@ def safe_int(value, default):
         if value is None or value == "":
             return default
         return int(value)
-    except Exception:
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -153,7 +133,6 @@ def launch_setup(context, *args, **kwargs):
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
     gng_source_frame_id = LaunchConfiguration("gng_source_frame_id").perform(context)
     publish_hz_str = LaunchConfiguration("publish_hz").perform(context)
-    publish_hz = safe_float(publish_hz_str, 30.0)
     topic_name = LaunchConfiguration("topic_name").perform(context)
     node_feature_topic = LaunchConfiguration("node_feature_topic").perform(context)
     edge_mode = LaunchConfiguration("edge_mode").perform(context)
@@ -193,126 +172,130 @@ def launch_setup(context, *args, **kwargs):
     yaml_vlut_resolution = 0.0
     yaml_enable_independent_arms = False
     yaml_gng_sampling = {}
-    if params_file and os.path.exists(params_file):
-        try:
-            with open(params_file, "r", encoding="utf-8") as f:
-                params_yaml = yaml.safe_load(f) or {}
-            
-            # robot_name を全階層から探す
-            def find_robot_name(d):
-                if not isinstance(d, dict): return None
-                if 'robot_name' in d.get('ros__parameters', {}):
-                    return d['ros__parameters']['robot_name']
-                if 'ros__parameters' in d:
-                    return d['ros__parameters'].get('robot_name')
-                for v in d.values():
-                    res = find_robot_name(v)
-                    if res: return res
-                return None
-            
-            extracted_name = find_robot_name(params_yaml)
-            if extracted_name:
-                yaml_robot_name = extracted_name
+    root_ros_params = {}
+    parameter_source = params_file
+    gng_ns = {}
+    self_recognition_ns = {}
+    if params_file:
+        params_yaml = parameter_file_data(params_file)
+        parameter_source = node_parameter_source(params_file, params_yaml)
 
-            root_ros_params = {}
-            for root_key in ('/**', 'ros__parameters'):
-                candidate = params_yaml.get(root_key, {})
-                if isinstance(candidate, dict) and 'ros__parameters' in candidate:
-                    candidate = candidate.get('ros__parameters', {})
-                if isinstance(candidate, dict):
-                    root_ros_params = candidate
-                    break
+        # ノード別設定からのrobot_name探索
+        def find_robot_name(d):
+            if not isinstance(d, dict): return None
+            if 'robot_name' in d.get('ros__parameters', {}):
+                return d['ros__parameters']['robot_name']
+            if 'ros__parameters' in d:
+                return d['ros__parameters'].get('robot_name')
+            for v in d.values():
+                res = find_robot_name(v)
+                if res: return res
+            return None
 
-            if isinstance(root_ros_params, dict):
-                yaml_joint_control_backend = root_ros_params.get('joint_control_backend', 'viewer')
-                # 学習の出力先とは独立したViewer用の保存済みモデル。明示引数を優先
-                viewer_params = root_ros_params.get('viewer', {})
-                if isinstance(viewer_params, dict) and not has_result_override:
-                    gng_model_path = str(viewer_params.get('gng_model_path') or '')
-                    vlut_path = str(viewer_params.get('vlut_path') or '')
-                yaml_enable_environment_voxelization = safe_bool(
-                    root_ros_params.get('enable_environment_voxelization'), False
-                )
-                yaml_environment_voxelization = root_ros_params.get('environment_voxelization', {})
-                yaml_mid360 = root_ros_params.get('mid360', {})
-                yaml_voxel_idx = root_ros_params.get('voxel_idx_shift', {})
-                yaml_enable_dynamixel_current_pose = safe_bool(
-                    root_ros_params.get('enable_dynamixel_current_pose'), False
-                )
-                yaml_dynamixel_mapping_file = root_ros_params.get('dynamixel_mapping_file', '')
-                yaml_enable_dynamixel_joint_state_input = safe_bool(root_ros_params.get('enable_dynamixel_joint_state_input'), False)
-                yaml_dynamixel_joint_state_input_config = root_ros_params.get('dynamixel_joint_state_input_config', yaml_dynamixel_joint_state_input_config)
-                yaml_enable_realsense_mount_tf = safe_bool(
-                    root_ros_params.get('enable_realsense_mount_tf'), False
-                )
-                yaml_realsense_mount_config = root_ros_params.get(
-                    'realsense_mount_config', yaml_realsense_mount_config
-                )
-                gng_ns = root_ros_params.get('gng', {}) if isinstance(root_ros_params.get('gng', {}), dict) else {}
-                yaml_enable_independent_arms = safe_bool(gng_ns.get('enable_independent_arms'), False)
-                yaml_gng_sampling = root_ros_params.get('gng_params', {})
-                yaml_data_dir = gng_ns.get('data_directory', yaml_data_dir)
-                yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
-                gng_model_filename = gng_ns.get('gng_model_filename', gng_model_filename)
-                vlut_filename = gng_ns.get('vlut_filename', vlut_filename)
-                yaml_vlut_resolution = safe_float(
-                    gng_ns.get("vlut_resolution"), yaml_vlut_resolution
-                )
-                yaml_resource_root_dir = root_ros_params.get('resource_root_dir', yaml_resource_root_dir)
-                yaml_mesh_root_dir = root_ros_params.get('mesh_root_dir', yaml_mesh_root_dir)
-                candidate_robot_description = root_ros_params.get('urdf_path', '')
-                if candidate_robot_description is not None:
-                    yaml_urdf_path = str(candidate_robot_description).strip()
-                gripper_volume_ns = root_ros_params.get('gripper_volume_graph', {})
-                if isinstance(gripper_volume_ns, dict):
-                    yaml_gripper_volume_enabled = safe_bool(
-                        gripper_volume_ns.get('enabled'), yaml_gripper_volume_enabled
-                    )
-                    candidate_config_file = gripper_volume_ns.get('definitions_file', '')
-                    if candidate_config_file is not None:
-                        yaml_gripper_volume_config_file = str(candidate_config_file).strip()
-                    candidate_cache_directory = gripper_volume_ns.get('cache_directory', '')
-                    if candidate_cache_directory is not None:
-                        yaml_gripper_volume_cache_directory = str(
-                            candidate_cache_directory
-                        ).strip()
-                    candidate_cache_mode = gripper_volume_ns.get('cache_mode', '')
-                    if candidate_cache_mode is not None and str(candidate_cache_mode).strip():
-                        yaml_gripper_volume_cache_mode = str(candidate_cache_mode).strip()
+        root_ros_params = root_parameters(params_yaml)
+        extracted_name = root_ros_params.get("robot_name") or find_robot_name(params_yaml)
+        if extracted_name:
+            yaml_robot_name = extracted_name
 
-                self_recognition_ns = root_ros_params.get('self_recognition', {})
-                if isinstance(self_recognition_ns, dict):
-                    yaml_enable_self_recognition_viz = safe_bool(
-                        self_recognition_ns.get('enable_self_recognition_viz'),
-                        yaml_enable_self_recognition_viz,
-                    )
-                    yaml_enable_environment_self_filter = safe_bool(
-                        self_recognition_ns.get('enable_environment_self_filter'),
-                        yaml_enable_environment_self_filter,
-                    )
-                if 'enable_self_recognition_viz' in root_ros_params:
-                    yaml_enable_self_recognition_viz = safe_bool(
-                        root_ros_params.get('enable_self_recognition_viz'),
-                        yaml_enable_self_recognition_viz,
-                    )
-                if 'enable_joint_state_publisher' in root_ros_params:
-                    yaml_enable_joint_state_publisher = safe_bool(
-                        root_ros_params.get('enable_joint_state_publisher'),
-                        yaml_enable_joint_state_publisher,
-                    )
+        if isinstance(root_ros_params, dict):
+            yaml_joint_control_backend = root_ros_params.get('joint_control_backend', 'viewer')
+            # 学習の出力先とは独立したViewer用の保存済みモデル。明示引数を優先
+            viewer_params = root_ros_params.get('viewer', {})
+            if isinstance(viewer_params, dict) and not has_result_override:
+                gng_model_path = str(viewer_params.get('gng_model_path') or '')
+                vlut_path = str(viewer_params.get('vlut_path') or '')
+            yaml_enable_environment_voxelization = safe_bool(
+                root_ros_params.get('enable_environment_voxelization'), False
+            )
+            yaml_environment_voxelization = root_ros_params.get('environment_voxelization', {})
+            yaml_mid360 = root_ros_params.get('mid360', {})
+            yaml_voxel_idx = root_ros_params.get('voxel_idx_shift', {})
+            yaml_enable_dynamixel_current_pose = safe_bool(
+                root_ros_params.get('enable_dynamixel_current_pose'), False
+            )
+            yaml_dynamixel_mapping_file = root_ros_params.get('dynamixel_mapping_file', '')
+            yaml_enable_dynamixel_joint_state_input = safe_bool(root_ros_params.get('enable_dynamixel_joint_state_input'), False)
+            yaml_dynamixel_joint_state_input_config = root_ros_params.get('dynamixel_joint_state_input_config', yaml_dynamixel_joint_state_input_config)
+            yaml_enable_realsense_mount_tf = safe_bool(
+                root_ros_params.get('enable_realsense_mount_tf'), False
+            )
+            yaml_realsense_mount_config = root_ros_params.get(
+                'realsense_mount_config', yaml_realsense_mount_config
+            )
+            gng_ns = root_ros_params.get('gng', {}) if isinstance(root_ros_params.get('gng', {}), dict) else {}
+            yaml_enable_independent_arms = safe_bool(gng_ns.get('enable_independent_arms'), False)
+            yaml_gng_sampling = root_ros_params.get('gng_params', {})
+            yaml_data_dir = gng_ns.get('data_directory', yaml_data_dir)
+            yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
+            gng_model_filename = gng_ns.get('gng_model_filename', gng_model_filename)
+            vlut_filename = gng_ns.get('vlut_filename', vlut_filename)
+            yaml_vlut_resolution = safe_float(
+                gng_ns.get("vlut_resolution"), yaml_vlut_resolution
+            )
+            yaml_resource_root_dir = root_ros_params.get('resource_root_dir', yaml_resource_root_dir)
+            yaml_mesh_root_dir = root_ros_params.get('mesh_root_dir', yaml_mesh_root_dir)
+            candidate_robot_description = root_ros_params.get('urdf_path', '')
+            if candidate_robot_description is not None:
+                yaml_urdf_path = str(candidate_robot_description).strip()
+            gripper_volume_ns = root_ros_params.get('gripper_volume_graph', {})
+            if isinstance(gripper_volume_ns, dict):
+                yaml_gripper_volume_enabled = safe_bool(
+                    gripper_volume_ns.get('enabled'), yaml_gripper_volume_enabled
+                )
+                candidate_config_file = gripper_volume_ns.get('definitions_file', '')
+                if candidate_config_file is not None:
+                    yaml_gripper_volume_config_file = str(candidate_config_file).strip()
+                candidate_cache_directory = gripper_volume_ns.get('cache_directory', '')
+                if candidate_cache_directory is not None:
+                    yaml_gripper_volume_cache_directory = str(
+                        candidate_cache_directory
+                    ).strip()
+                candidate_cache_mode = gripper_volume_ns.get('cache_mode', '')
+                if candidate_cache_mode is not None and str(candidate_cache_mode).strip():
+                    yaml_gripper_volume_cache_mode = str(candidate_cache_mode).strip()
 
-            for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
-                ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
-                if ros_params:
-                    gng_ns = ros_params.get("gng", {}) if isinstance(ros_params.get("gng", {}), dict) else {}
-                    yaml_data_dir = gng_ns.get("data_directory", yaml_data_dir)
-                    yaml_exp_id = gng_ns.get("experiment_id", yaml_exp_id)
-                    gng_model_filename = gng_ns.get("gng_model_filename", gng_model_filename)
-                    vlut_filename = gng_ns.get("vlut_filename", vlut_filename)
-                    break
+            self_recognition_ns = root_ros_params.get('self_recognition', {})
+            if isinstance(self_recognition_ns, dict):
+                yaml_enable_self_recognition_viz = safe_bool(
+                    self_recognition_ns.get('enable_self_recognition_viz'),
+                    yaml_enable_self_recognition_viz,
+                )
+                yaml_enable_environment_self_filter = safe_bool(
+                    self_recognition_ns.get('enable_environment_self_filter'),
+                    yaml_enable_environment_self_filter,
+                )
+            if 'enable_self_recognition_viz' in root_ros_params:
+                yaml_enable_self_recognition_viz = safe_bool(
+                    root_ros_params.get('enable_self_recognition_viz'),
+                    yaml_enable_self_recognition_viz,
+                )
+            if 'enable_joint_state_publisher' in root_ros_params:
+                yaml_enable_joint_state_publisher = safe_bool(
+                    root_ros_params.get('enable_joint_state_publisher'),
+                    yaml_enable_joint_state_publisher,
+                )
 
-        except Exception:
-            pass
+        for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
+            ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
+            if ros_params:
+                gng_ns = ros_params.get("gng", {}) if isinstance(ros_params.get("gng", {}), dict) else {}
+                yaml_data_dir = gng_ns.get("data_directory", yaml_data_dir)
+                yaml_exp_id = gng_ns.get("experiment_id", yaml_exp_id)
+                gng_model_filename = gng_ns.get("gng_model_filename", gng_model_filename)
+                vlut_filename = gng_ns.get("vlut_filename", vlut_filename)
+                break
+
+
+    # 明示launch引数・機体YAML・既定値の順による共通配信周期
+    publish_hz_value = publish_hz_str or root_ros_params.get("publish_hz", 30.0)
+    if isinstance(publish_hz_value, bool):
+        raise ValueError("publish_hzには真偽値ではなく数値が必要です")
+    try:
+        publish_hz = float(publish_hz_value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("publish_hzには数値が必要です") from error
+    if not math.isfinite(publish_hz) or publish_hz <= 0.0:
+        raise ValueError("publish_hzには有限の正の値が必要です")
 
     # 関節出力先の優先順位: 明示launch引数、機体YAML、従来のviewer。
     joint_control_backend = joint_control_backend or yaml_joint_control_backend
@@ -382,8 +365,8 @@ def launch_setup(context, *args, **kwargs):
     if self_recognition_resolution is None or self_recognition_resolution <= 0.0:
         self_recognition_resolution = yaml_vlut_resolution
 
-    resource_root = yaml_resource_root_dir
-    mesh_root = yaml_mesh_root_dir
+    resource_root = LaunchConfiguration("resource_root_dir").perform(context).strip() or yaml_resource_root_dir
+    mesh_root = LaunchConfiguration("mesh_root_dir").perform(context).strip() or yaml_mesh_root_dir
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     # YAMLの値を上書き（消去）しないよう、明示的に指定された（空でない）パラメータのみを抽出
@@ -394,7 +377,7 @@ def launch_setup(context, *args, **kwargs):
         common_params["urdf_path"] = urdf_path
     if arm_leaf_link_names:
         common_params["robot.arm_leaf_link_names"] = arm_leaf_link_names
-    
+
     # 座標系(frame_id)などは明示的に指定された場合のみ上書き
     def add_if_not_empty(name, config_name):
         val = LaunchConfiguration(config_name).perform(context)
@@ -402,8 +385,8 @@ def launch_setup(context, *args, **kwargs):
             common_params[name] = val
 
     add_if_not_empty("frame_id", "robot_base_frame")
-    add_if_not_empty("publish_hz", "publish_hz")
-    
+    common_params["publish_hz"] = publish_hz
+
     if resource_root:
         common_params["resource_root_dir"] = resource_root
     if mesh_root:
@@ -422,12 +405,12 @@ def launch_setup(context, *args, **kwargs):
 
     viewer_bridge_params = []
     if params_file and os.path.exists(params_file):
-        viewer_bridge_params.append(params_file)
-    
+        viewer_bridge_params.append(parameter_source)
+
     # 上書き用辞書を追加（ROS 2では後から追加したパラメータがYAMLを上書きする）
     if common_params:
         viewer_bridge_params.append(common_params)
-    
+
     # 内部ストリーム用のトピック名を常にセット（これはノード内部で必須のパラメータ）
     has_stream_topic = any("stream_topic" in p if isinstance(p, dict) else False for p in viewer_bridge_params)
     if not has_stream_topic:
@@ -530,7 +513,7 @@ def launch_setup(context, *args, **kwargs):
             name="topofuzzy_bridge_node",
             namespace=robot_name,
             parameters=[
-                params_file,
+                parameter_source,
                 {
                     "gng_model_path": gng_file,
                     "enable_viewer_status": True,
@@ -576,7 +559,7 @@ def launch_setup(context, *args, **kwargs):
             actions.append(Node(
                 package="gng_vlut_system", executable="topofuzzy_bridge_node",
                 name="topofuzzy_" + name, namespace=robot_name,
-                parameters=[params_file, {
+                parameters=[parameter_source, {
                     "gng_model_path": profile["gng_path"], "vlut_path": profile["vlut_path"],
                     "topic_name": "Tmap_" + name,
                     "node_feature_topic": name + "/topological_node_features",
@@ -596,7 +579,7 @@ def launch_setup(context, *args, **kwargs):
         actions.append(Node(
             package="gng_vlut_system", executable="independent_arm_pair_node",
             name="independent_arm_pair_node", namespace=robot_name,
-            parameters=[params_file, {
+            parameters=[parameter_source, {
                 "left_model_path": profiles_by_name["left_arm"]["metadata_path"],
                 "right_model_path": profiles_by_name["right_arm"]["metadata_path"],
                 "urdf_path": urdf_path, "resource_root_dir": resource_root, "mesh_root_dir": mesh_root,
@@ -624,7 +607,7 @@ def launch_setup(context, *args, **kwargs):
         # 起動時の自己認識ボクセル生成ノード
         self_recognition_params = []
         if params_file and os.path.exists(params_file):
-            self_recognition_params.append(params_file)
+            self_recognition_params.append(parameter_source)
         node_params = {
             "urdf_path": urdf_path,
             "joint_topic": viewer_joint_state_topic,
@@ -651,7 +634,7 @@ def launch_setup(context, *args, **kwargs):
     if yaml_enable_environment_self_filter and not enable_shared_roi_gng:
         filter_params = []
         if params_file and os.path.exists(params_file):
-            filter_params.append(params_file)
+            filter_params.append(parameter_source)
         actions.append(
             Node(
                 package="gng_vlut_system",
@@ -659,7 +642,12 @@ def launch_setup(context, *args, **kwargs):
                 name="self_voxel_filter_node",
                 namespace=robot_name,
                 output="screen",
-                parameters=filter_params + [{"enable_viewer_status": True}],
+                parameters=filter_params + [{
+                    "enable_viewer_status": True,
+                    **({"self_recognition.filtered_environment_voxel_topic":
+                        namespaced_topic(robot_name, yaml_environment_voxelization["voxel_topic"])}
+                       if yaml_environment_voxelization.get("voxel_topic") else {}),
+                }],
             )
         )
 
@@ -731,8 +719,19 @@ def launch_setup(context, *args, **kwargs):
             environment['input_topic'] = mid360_topic
             environment['source_frame_id'] = ''
         base_frame = str(environment.get('base_frame', 'base_link')).lstrip('/')
-        target_frame = base_frame if base_frame.startswith(robot_name + '/') else robot_name + '/' + base_frame
+        target_frame = namespaced_frame(robot_name, base_frame)
         world_index = environment.get('world_index', {})
+        filtered_topic = namespaced_topic(robot_name, environment.get('voxel_topic') or
+            self_recognition_ns.get('filtered_environment_voxel_topic', 'self_filter_roi_voxels'))
+        sampling = {**yaml_gng_sampling, **gng_ns}
+        if enable_independent_arms and independent_bounds:
+            sampling.update({f'{direction}_{axis}': independent_bounds[direction][idx]
+                             for idx, axis in enumerate('xyz') for direction in ('min', 'max')})
+        roi_environment = dict(environment)
+        if enable_independent_arms:
+            roi_environment['reachability_map_topic'] = ''
+        else:
+            roi_environment.setdefault('reachability_map_topic', 'Tmap_static')
         # 共有時だけ機体YAMLの粗索引設定。従来の単独Viewerは直接登録
         enable_world_index = safe_bool(
             LaunchConfiguration('enable_environment_world_index').perform(context),
@@ -744,29 +743,11 @@ def launch_setup(context, *args, **kwargs):
             'output_topic': self_recognition_ns.get('raw_environment_voxel_topic', 'roi_voxels'),
             'source_frame_id': environment.get('source_frame_id', ''),
             'target_frame_id': target_frame,
-            'world_frame_id': str(world_index.get('frame_id', target_frame)) if enable_world_index else target_frame,
-            'enable_world_index': enable_world_index, 'enable_roi_query': enable_world_index,
-            'enable_world_bucket_publish': enable_world_index and safe_bool(world_index.get('enable_bucket_publish', True), True),
-            'world_bucket_topic': str(world_index.get('bucket_topic', 'world_index_buckets')),
-            'bucket_size': float(world_index.get('bucket_size', 0.2)),
             'allow_unconnected_source_as_world': False,
             'voxel_size': self_recognition_resolution,
-            'enable_reachability_filter': True,
-            'reachability_map_topic': '' if enable_independent_arms else environment.get('reachability_map_topic', 'Tmap_static'),
+            **world_index_parameters(world_index, target_frame, enable_build=enable_world_index),
+            **roi_filter_parameters(roi_environment, robot_name, yaml_voxel_idx, sampling),
         }
-        for key, default in (('x_shift', 42), ('y_shift', 21), ('z_shift', 0), ('offset', 1000000)):
-            roi_params[key] = int(yaml_voxel_idx.get(key, default))
-        for idx, axis in enumerate('xyz'):
-            for direction, default in (('min', -0.1 if axis == 'x' else -1.0), ('max', 0.5 if axis == 'x' else 1.0)):
-                key = direction + '_reachability_' + axis
-                fallback = gng_ns.get(direction + '_' + axis,
-                    yaml_gng_sampling.get(direction + '_' + axis, default))
-                if enable_independent_arms:
-                    fallback = (independent_bounds[direction][idx] if independent_bounds else
-                                yaml_gng_sampling.get(direction + '_' + axis, default))
-                roi_params[key] = float(environment.get(key, fallback))
-            key = 'reachability_margin_' + axis
-            roi_params[key] = float(environment.get(key, 0.2))
         input_topic = LaunchConfiguration('environment_input_topic').perform(context).strip()
         if input_topic:
             roi_params['input_topic'] = input_topic
@@ -777,7 +758,7 @@ def launch_setup(context, *args, **kwargs):
                 'shared_point_store': store, 'allow_latest_transform': False,
                 'source_frame_id': '',
                 'self_filter.mask_topic': self_recognition_ns.get('mask_topic', 'self_voxel'),
-                'self_filter.output_topic': self_recognition_ns.get('filtered_environment_voxel_topic', 'self_filter_roi_voxels'),
+                'self_filter.output_topic': filtered_topic,
                 'self_filter.inflation': float(self_recognition_ns.get('self_exclusion_inflation', 0.02)),
                 'self_filter.max_mask_age_sec': float(self_recognition_ns.get('max_self_mask_age_sec', 0.5)),
             })
@@ -813,18 +794,14 @@ def launch_setup(context, *args, **kwargs):
             actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
                                 name='viewer_environment_voxelization', namespace=robot_name,
                                 parameters=[roi_params], output='screen'))
-        danger_source = str(environment.get('danger_source', 'environment_inflation'))
-        if danger_source not in ('environment_inflation', 'vlut_distance'):
-            raise ValueError('danger_sourceにはenvironment_inflationまたはvlut_distanceが必要です')
         # 自己除去後のROIをGNG状態更新の占有・危険入力へ接続
         actions.append(Node(package='gng_vlut_system', executable='voxel_to_vlut_node',
                             name='viewer_voxel_to_vlut', namespace=robot_name, output='screen',
                             parameters=[{
-                                'input_topic': self_recognition_ns.get('filtered_environment_voxel_topic', 'self_filter_roi_voxels'),
+                                'input_topic': filtered_topic,
                                 'occupied_voxels_topic': 'occupied_voxels', 'danger_voxels_topic': 'danger_voxels',
                                 'target_frame_id': target_frame, 'output_voxel_size': self_recognition_resolution,
-                                'danger_inflation': (float(environment.get('danger_inflation', 0.05))
-                                                     if danger_source == 'environment_inflation' else 0.0),
+                                'danger_inflation': environment_danger_inflation(environment),
                                 'publish_hz': float(environment.get('publish_hz', 30.0)),
                             }]))
     enable_dynamixel_joint_state_input = safe_bool(
@@ -915,6 +892,8 @@ def generate_launch_description():
             description="Reflect mux target joint values directly without velocity interpolation",
         ),
         DeclareLaunchArgument("urdf_path", default_value=""),
+        DeclareLaunchArgument("resource_root_dir", default_value=""),
+        DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("robot_base_frame", default_value=""),
         DeclareLaunchArgument("arm_leaf_link_names", default_value=""),
         DeclareLaunchArgument("gng_frame_id", default_value=""),

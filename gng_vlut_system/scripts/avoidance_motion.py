@@ -1,8 +1,22 @@
 """回避動作の入力フラグ・優先順位・目標生成部品。ROS非依存。"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Callable
 
 import numpy as np
+
+
+class motion_kind(str, Enum):
+    """動作選択の共通語彙。診断・既存設定の文字列表現との互換。"""
+    stopped = 'stopped'
+    fault = 'fault'
+    monitoring = 'monitoring'
+    avoiding = 'avoiding'
+    waiting_for_clearance = 'waiting_for_clearance'
+    returning = 'returning'
+
+    def __str__(self):
+        return self.value
 
 
 @dataclass(frozen=True)
@@ -16,19 +30,19 @@ class motion_flags:
     is_home: bool = False
 
 
-def select_motion(flags: motion_flags) -> str:
+def select_motion(flags: motion_flags) -> motion_kind:
     """停止・入力失効を最優先とする動作選択。"""
     if flags.is_stop_requested:
-        return 'stopped'
+        return motion_kind.stopped
     if not flags.has_valid_input:
-        return 'fault'
+        return motion_kind.fault
     if not flags.has_active_joints:
-        return 'monitoring'
+        return motion_kind.monitoring
     if not flags.has_safe_neighbors or not flags.can_finish_retreat:
-        return 'avoiding'
+        return motion_kind.avoiding
     if not flags.can_return:
-        return 'waiting_for_clearance'
-    return 'monitoring' if flags.is_home else 'returning'
+        return motion_kind.waiting_for_clearance
+    return motion_kind.monitoring if flags.is_home else motion_kind.returning
 
 
 @dataclass(frozen=True)
@@ -72,11 +86,22 @@ class motion_components:
     returning: motion_component = return_target
     hold: motion_component = hold_target
     stop: motion_component = stop_target
+    _components: dict = field(init=False, repr=False, compare=False)
 
-    def execute(self, action: str, request: motion_input) -> motion_result:
-        if action == 'fault':
+    def __post_init__(self):
+        components = {
+            motion_kind.avoiding: self.retreat,
+            motion_kind.returning: self.returning,
+            motion_kind.waiting_for_clearance: self.hold,
+            motion_kind.monitoring: self.hold,
+            motion_kind.stopped: self.stop,
+        }
+        if not all(callable(component) for component in components.values()):
+            raise ValueError('動作部品には呼出し可能な関数が必要です')
+        object.__setattr__(self, '_components', components)
+
+    def execute(self, action: motion_kind | str, request: motion_input) -> motion_result:
+        action = motion_kind(action)
+        if action is motion_kind.fault:
             return motion_result(request.positions.copy(), False)
-        component = {'avoiding': self.retreat, 'returning': self.returning,
-                     'waiting_for_clearance': self.hold, 'monitoring': self.hold,
-                     'stopped': self.stop}[action]
-        return component(request)
+        return self._components[action](request)

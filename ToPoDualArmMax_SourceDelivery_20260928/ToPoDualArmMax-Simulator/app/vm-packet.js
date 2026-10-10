@@ -1,5 +1,9 @@
 const TYPES = { f32: Float32Array, u32: Uint32Array, i32: Int32Array, u8: Uint8Array };
 const REQUIRED = { points: ['f32',3], nodes:['f32',3], nodeLabels:['u8',1], nodeClusterIds:['i32',1], edges:['u32',2], fvgAdd:['f32',10], fvgDelete:['f32',10], fvgMemory:['f32',10] };
+export function encode_input(meta,points){
+ const json=new TextEncoder().encode(JSON.stringify(meta)),offset=8+Math.ceil(json.length/4)*4;
+ const bytes=new Uint8Array(offset+points.byteLength);bytes.set([84,80,67,49]);new DataView(bytes.buffer).setUint32(4,json.length,true);bytes.set(json,8);bytes.set(new Uint8Array(points.buffer,points.byteOffset,points.byteLength),offset);return bytes;
+}
 export function decodeFrame(buffer) {
   if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 12 || buffer.byteLength > 32*1024*1024) throw new Error('不正なフレームサイズ');
   const header = new DataView(buffer);

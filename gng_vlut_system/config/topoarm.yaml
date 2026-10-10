@@ -21,11 +21,8 @@
       ground_z_threshold: 0.0
       gng_dimension: 6
       spatial_map_resolution: 0.02
-      self_recognition_resolution: 0.02
       arm_cache_resolution: 0.008
-      danger_threshold: 0.025
       vlut_resolution: 0.02
-      sensing_resolution: 0.02
       vlut_only: false
       use_voxel_collision: true
 

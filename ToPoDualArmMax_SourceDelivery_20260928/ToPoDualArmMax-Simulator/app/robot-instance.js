@@ -1,9 +1,10 @@
+import {pose_sources} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 
 // 操作対象の姿勢入力と外観。Viewer内のROSロボットとは独立した個体
 export class RobotInstancePanel {
  constructor(panel){
-  this.panel=panel;this.robot=null;
+  this.panel=panel;this.robot=null;this.material_sets=new WeakMap();
   const section=document.createElement('section');
   section.innerHTML=`<h3>操作対象ロボット</h3><label>姿勢の入力元<select id="robot-pose-source"><option value="simulator">シミュレータ操作</option><option value="ros">ROS入力 → s（描画）</option><option value="leader">ROS入力 → s（力学）</option></select></label><label><input id="robot-visible" type="checkbox" checked>ロボットを表示</label><label>不透明度 <input id="robot-opacity" type="range" min="0" max="1" step="0.05" value="1"><output id="robot-opacity-value">100%</output></label>`;
   $('robot-panel').prepend(section);
@@ -12,21 +13,25 @@ export class RobotInstancePanel {
  }
  bind(){
   const robot=this.panel.rgbd.robot;if(this.robot===robot)return;
-  this.robot=robot;robot.pose_source='simulator';$('robot-pose-source').value='simulator';
-  // 共用パレットからの分離。床・他個体の材質への影響防止
-  this.materials=[];
-  for(const mesh of robot.renderMeshes){
-   const originals=Array.isArray(mesh.material)?mesh.material:[mesh.material];
-   const copies=originals.map(original=>{const material=original.clone();this.materials.push({material,opacity:original.opacity,transparent:original.transparent,depth_write:original.depthWrite});return material;});
-   mesh.material=Array.isArray(mesh.material)?copies:copies[0];
+  this.robot=robot;robot.pose_source=pose_sources.simulator;$('robot-pose-source').value=pose_sources.simulator;
+  // 個体ごとに初回だけ共用パレットから分離。再選択時も初期の材質と不透明度の維持
+  if(!this.material_sets.has(robot)){
+   const materials=[];
+   for(const mesh of robot.renderMeshes){
+    const originals=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+    const copies=originals.map(original=>{const material=original.clone();materials.push({material,opacity:original.opacity,transparent:original.transparent,depth_write:original.depthWrite});return material;});
+    mesh.material=Array.isArray(mesh.material)?copies:copies[0];
+   }
+   this.material_sets.set(robot,materials);
   }
+  this.materials=this.material_sets.get(robot);
   this.appearance();
  }
  set_source(source){
   const previous=this.robot?.pose_source;
   this.bind();this.robot.pose_source=source;$('robot-pose-source').value=source;
-  if(source==='ros'){window.simulator?.physics_panel?.stop('ROS追従のため物理停止');this.panel.active=null;window.simulator?.apply_ros_pose(this.robot.getPose());}
-  if(source==='leader'||previous==='leader'){
+  if(source===pose_sources.ros){window.simulator?.physics_panel?.stop('ROS追従のため物理停止');this.panel.active=null;window.simulator?.apply_ros_pose(this.robot.getPose());}
+  if(source===pose_sources.leader||previous===pose_sources.leader){
    window.simulator?.physics_panel?.hold_leader('入力元の切替。物理の再開始が必要');
    this.panel.active=null;
    window.simulator?.cancel_robot_motion();

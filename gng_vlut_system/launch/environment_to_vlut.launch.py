@@ -1,9 +1,6 @@
 import json
-import math
 import os
-import struct
 
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
@@ -12,34 +9,26 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-VLUT_FILE_SIGNATURE = b"VLUT"
-VLUT_FILE_ID = int.from_bytes(VLUT_FILE_SIGNATURE, byteorder="big")
 DEFAULT_VOXEL_SIZE = 0.02
 
 
-def _root_parameters(params_yaml):
-    for root_key in ("/**", "ros__parameters"):
-        candidate = params_yaml.get(root_key, {})
-        if isinstance(candidate, dict) and "ros__parameters" in candidate:
-            candidate = candidate["ros__parameters"]
-        if isinstance(candidate, dict):
-            return candidate
-    return {}
+import sys
+from pathlib import Path
 
-
-def _load_parameters(params_file):
-    try:
-        with open(params_file, "r", encoding="utf-8") as stream:
-            return _root_parameters(yaml.safe_load(stream) or {})
-    except (OSError, yaml.YAMLError) as ex:
-        raise RuntimeError(f"環境VLUT設定YAMLの読込失敗: {ex}") from ex
-
-
-def _is_enabled(value):
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import (
+    root_parameters as _root_parameters,
+    load_root_parameters as _load_parameters,
+    is_enabled as _is_enabled,
+    config_value as _value,
+    namespaced_frame as _namespaced_frame,
+    namespaced_topic as _namespaced_topic,
+    world_index_modes as _world_index_modes,
+    read_vlut_voxel_size as _read_vlut_voxel_size,
+    roi_filter_parameters,
+    world_index_parameters,
+    environment_danger_inflation,
+)
 
 def _as_launch_value(value):
     if isinstance(value, bool):
@@ -47,43 +36,9 @@ def _as_launch_value(value):
     return str(value)
 
 
-def _value(config, name, fallback):
-    value = config.get(name, fallback)
-    return fallback if value is None or value == "" else value
-
-
-def _namespaced_frame(robot_name, frame_id):
-    normalized = str(frame_id).strip().lstrip("/")
-    if not normalized:
-        normalized = "base_link"
-    if "/" in normalized:
-        return normalized
-    return f"{robot_name}/{normalized}" if robot_name else normalized
-
-
-def _namespaced_topic(robot_name, topic):
-    normalized = str(topic).strip()
-    if normalized.startswith("/"):
-        return normalized
-    normalized = normalized.lstrip("/")
-    return f"/{robot_name}/{normalized}" if robot_name else f"/{normalized}"
-
-
 def _reachability_map_topic(environment, robot_name):
     topic = str(environment.get("reachability_map_topic") or "").strip()
     return _namespaced_topic(robot_name, topic) if topic else ""
-
-
-def _world_index_modes(world_index):
-    legacy_enable = _is_enabled(_value(world_index, "enable", False))
-    enable_build = _is_enabled(_value(
-        world_index, "enable_build", legacy_enable))
-    enable_roi_query = _is_enabled(_value(
-        world_index, "enable_roi_query", legacy_enable))
-    if enable_roi_query and not enable_build:
-        raise RuntimeError(
-            "world_index.enable_roi_queryにはworld_index.enable_buildが必要")
-    return enable_build, enable_roi_query
 
 
 def _vlut_file_from_parameters(root_params):
@@ -99,24 +54,6 @@ def _vlut_file_from_parameters(root_params):
     if str(gng.get("enable_independent_arms", False)).lower() in ("true", "1", "yes", "on"):
         return os.path.join(data_directory, experiment_id, "left_arm", vlut_filename)
     return os.path.join(data_directory, experiment_id, vlut_filename)
-
-
-def _read_vlut_voxel_size(vlut_file):
-    if not vlut_file:
-        return None
-    try:
-        with open(vlut_file, "rb") as stream:
-            header = stream.read(12)
-    except OSError:
-        return None
-    if len(header) != 12:
-        return None
-    file_id, version, voxel_size = struct.unpack("<IIf", header)
-    if file_id != VLUT_FILE_ID or version < 1:
-        return None
-    if not math.isfinite(voxel_size) or voxel_size <= 0.0:
-        return None
-    return voxel_size
 
 
 def _shared_consumer_parameters(entry, default_input_topic, default_source_frame_id):
@@ -178,15 +115,7 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
     if voxel_size <= 0.0:
         raise RuntimeError(f"共有world index consumerのvoxel_size不正: robot={robot_name}")
 
-    danger_source = str(_value(
-        environment, "danger_source", "environment_inflation")).strip().lower()
-    if danger_source not in ("environment_inflation", "vlut_distance"):
-        raise RuntimeError(
-            "environment_voxelization.danger_sourceはenvironment_inflationまたは"
-            f"vlut_distanceが必要: robot={robot_name}")
-    danger_inflation = float(_value(environment, "danger_inflation", 0.05))
-    if danger_source == "vlut_distance":
-        danger_inflation = 0.0
+    danger_inflation = environment_danger_inflation(environment)
 
     return {
         "name": robot_name,
@@ -198,30 +127,7 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
         "raw_voxel_topic": raw_voxel_topic,
         "enable_environment_self_filter": enable_environment_self_filter,
         "voxel_size": voxel_size,
-        "x_shift": int(_value(voxel_idx_params, "x_shift", 42)),
-        "y_shift": int(_value(voxel_idx_params, "y_shift", 21)),
-        "z_shift": int(_value(voxel_idx_params, "z_shift", 0)),
-        "offset": int(_value(voxel_idx_params, "offset", 1000000)),
-        "enable_reachability_filter": _is_enabled(_value(
-            environment, "enable_reachability_filter", True)),
-        "reachability_map_topic": _reachability_map_topic(
-            {**environment, **entry}, robot_name),
-        "min_reachability_x": float(_value(
-            environment, "min_reachability_x", gng_params.get("min_x", -0.1))),
-        "max_reachability_x": float(_value(
-            environment, "max_reachability_x", gng_params.get("max_x", 0.5))),
-        "min_reachability_y": float(_value(
-            environment, "min_reachability_y", gng_params.get("min_y", -1.0))),
-        "max_reachability_y": float(_value(
-            environment, "max_reachability_y", gng_params.get("max_y", 1.0))),
-        "min_reachability_z": float(_value(
-            environment, "min_reachability_z", gng_params.get("min_z", -1.0))),
-        "max_reachability_z": float(_value(
-            environment, "max_reachability_z", gng_params.get("max_z", 1.0))),
-        "reachability_margin_x": float(_value(environment, "reachability_margin_x", 0.2)),
-        "reachability_margin_y": float(_value(environment, "reachability_margin_y", 0.2)),
-        "reachability_margin_z": float(_value(environment, "reachability_margin_z", 0.2)),
-        "max_dense_voxel_num": int(_value(environment, "max_dense_voxel_num", 8000000)),
+        **roi_filter_parameters({**environment, **entry}, robot_name, voxel_idx_params, gng_params),
         "danger_inflation": danger_inflation,
         "publish_hz": float(_value(environment, "publish_hz", 30.0)),
         "enable_static_tf": _is_enabled(_value(environment, "enable_static_tf", False)),
@@ -277,11 +183,11 @@ def _shared_world_index_actions(
     bucket_size = float(_value(world_index, "bucket_size", 0.2))
     if bucket_size <= 0.0:
         raise RuntimeError("world_index.bucket_sizeには正の値が必要")
-    enable_build, enable_roi_query = _world_index_modes(world_index)
-    enable_bucket_publish = _is_enabled(_value(
-        world_index, "enable_bucket_publish", True)) and enable_build
-    parallel_thread_num = max(1, int(_value(
-        world_index, "parallel_thread_num", 1)))
+    index_params = world_index_parameters(world_index, primary_consumer["target_frame_id"])
+    enable_build = index_params["enable_world_index"]
+    enable_roi_query = index_params["enable_roi_query"]
+    enable_bucket_publish = index_params["enable_world_bucket_publish"]
+    parallel_thread_num = index_params["parallel_thread_num"]
     allow_unconnected_source_as_world = _is_enabled(_value(
         environment, "allow_unconnected_source_as_world", True))
     additional_consumers_json = json.dumps([
@@ -415,24 +321,16 @@ def _launch_setup(context, *_args, **_kwargs):
         source_voxel_topic = _namespaced_topic(robot_name, _value(
             self_recognition, "raw_environment_voxel_topic", "roi_voxels"))
     source_frame_id = _value(environment, "source_frame_id", "")
-    enable_world_index_build, enable_world_index_roi_query = _world_index_modes(world_index)
-    world_index_frame_id = _value(world_index, "frame_id", "world")
+    index_params = world_index_parameters(world_index, target_frame_id)
+    enable_world_index_build = index_params["enable_world_index"]
+    enable_world_index_roi_query = index_params["enable_roi_query"]
+    world_index_frame_id = index_params["world_frame_id"]
     world_index_bucket_topic = _value(
         world_index, "bucket_topic", f"/{robot_name}/world_index_buckets")
-    enable_world_index_bucket_publish = _is_enabled(
-        _value(world_index, "enable_bucket_publish", True)) and enable_world_index_build
-    world_index_bucket_size = _value(world_index, "bucket_size", 0.2)
-    world_index_parallel_thread_num = max(1, int(_value(
-        world_index, "parallel_thread_num", 1)))
-    danger_source = str(_value(
-        environment, "danger_source", "environment_inflation")).strip().lower()
-    if danger_source not in ("environment_inflation", "vlut_distance"):
-        raise RuntimeError(
-            "environment_voxelization.danger_sourceはenvironment_inflationまたは"
-            "vlut_distanceが必要")
-    danger_inflation = _value(environment, "danger_inflation", 0.05)
-    if danger_source == "vlut_distance":
-        danger_inflation = 0.0
+    enable_world_index_bucket_publish = index_params["enable_world_bucket_publish"]
+    world_index_bucket_size = index_params["bucket_size"]
+    world_index_parallel_thread_num = index_params["parallel_thread_num"]
+    danger_inflation = environment_danger_inflation(environment)
 
     bridge_arguments = {
         "robot_name": robot_name,
@@ -442,23 +340,7 @@ def _launch_setup(context, *_args, **_kwargs):
         "source_frame_id": source_frame_id,
         "target_frame_id": target_frame_id,
         "params_file": params_file,
-        "x_shift": _value(voxel_idx_params, "x_shift", 42),
-        "y_shift": _value(voxel_idx_params, "y_shift", 21),
-        "z_shift": _value(voxel_idx_params, "z_shift", 0),
-        "offset": _value(voxel_idx_params, "offset", 1000000),
-        "enable_reachability_filter": _value(
-            environment, "enable_reachability_filter", True),
-        "reachability_map_topic": _reachability_map_topic(environment, robot_name),
-        "min_reachability_x": _value(environment, "min_reachability_x", gng_params.get("min_x", -0.1)),
-        "max_reachability_x": _value(environment, "max_reachability_x", gng_params.get("max_x", 0.5)),
-        "min_reachability_y": _value(environment, "min_reachability_y", gng_params.get("min_y", -1.0)),
-        "max_reachability_y": _value(environment, "max_reachability_y", gng_params.get("max_y", 1.0)),
-        "min_reachability_z": _value(environment, "min_reachability_z", gng_params.get("min_z", -1.0)),
-        "max_reachability_z": _value(environment, "max_reachability_z", gng_params.get("max_z", 1.0)),
-        "reachability_margin_x": _value(environment, "reachability_margin_x", 0.2),
-        "reachability_margin_y": _value(environment, "reachability_margin_y", 0.2),
-        "reachability_margin_z": _value(environment, "reachability_margin_z", 0.2),
-        "max_dense_voxel_num": _value(environment, "max_dense_voxel_num", 8000000),
+        **roi_filter_parameters(environment, robot_name, voxel_idx_params, gng_params),
         "world_index_enable": enable_world_index_build,
         "world_index_enable_build": enable_world_index_build,
         "world_index_enable_roi_query": enable_world_index_roi_query,
@@ -513,7 +395,7 @@ def _launch_setup(context, *_args, **_kwargs):
         "[environment_to_vlut] 統合起動設定: "
         f"robot={robot_name} input={input_topic} target_frame={target_frame_id} "
         f"source_voxel_topic={source_voxel_topic} voxel_topic={voxel_topic} "
-        f"self_filter={enable_environment_self_filter} tf={tf_mode} danger_source={danger_source} "
+        f"self_filter={enable_environment_self_filter} tf={tf_mode} danger_source={_value(environment, 'danger_source', 'environment_inflation')} "
         f"world_index_build={enable_world_index_build} "
         f"world_index_roi_query={enable_world_index_roi_query}"
     )
@@ -525,7 +407,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "params_file",
-            default_value=os.path.join(package_share, "config", "ToPoDualArm.yaml")),
+            default_value=os.path.join(package_share, "config", "topo_dual_arm_max_long.yaml")),
         DeclareLaunchArgument("robot_name", default_value=""),
         OpaqueFunction(function=_launch_setup),
     ])

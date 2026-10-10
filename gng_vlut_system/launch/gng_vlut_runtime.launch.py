@@ -1,5 +1,9 @@
-import os
-import yaml
+"""従来runtime引数を現行Viewer起動へ接続する互換入口。"""
+
+import math
+from pathlib import Path
+import sys
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
@@ -7,213 +11,80 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-def resolve_package_uri(raw_path: str) -> str:
-    if not raw_path.startswith("package://"):
-        return raw_path
-
-    pkg_and_path = raw_path[len("package://"):]
-    pkg_name, _, rel_path = pkg_and_path.partition("/")
-    if not pkg_name or not rel_path:
-        return raw_path
-
-    try:
-        pkg_share = get_package_share_directory(pkg_name)
-    except Exception:
-        return raw_path
-    return os.path.join(pkg_share, rel_path)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import load_root_parameters, resolve_package_path, namespaced_frame, is_enabled
 
 
 def launch_setup(context, *args, **kwargs):
-    pkg_share = get_package_share_directory("gng_vlut_system")
-    params_file = LaunchConfiguration("params_file").perform(context)
-    robot_name = LaunchConfiguration("robot_name").perform(context)
-    urdf_path = LaunchConfiguration("urdf_path").perform(context)
-    yaml_urdf_path = ""
-    yaml_resource_root_dir = ""
-    yaml_mesh_root_dir = ""
-    experiment_id = LaunchConfiguration("id").perform(context)
-    if not experiment_id:
-        experiment_id = LaunchConfiguration("experiment_id").perform(context)
-    if not experiment_id:
-        experiment_id = robot_name
+    def value(name):
+        return LaunchConfiguration(name).perform(context).strip()
 
-    data_dir = LaunchConfiguration("dir").perform(context)
-    if not data_dir:
-        data_dir = LaunchConfiguration("data_directory").perform(context)
-    yaml_data_dir = data_dir
-    yaml_exp_id = experiment_id
-    gng_model_filename = "gng.bin"
-    vlut_filename = "vlut.bin"
-    if params_file and os.path.exists(params_file):
-        try:
-            with open(params_file, "r", encoding="utf-8") as f:
-                params_yaml = yaml.safe_load(f) or {}
-            root_params = {}
-            for root_key in ('/**', 'ros__parameters'):
-                candidate = params_yaml.get(root_key, {})
-                if isinstance(candidate, dict) and 'ros__parameters' in candidate:
-                    candidate = candidate.get('ros__parameters', {})
-                if isinstance(candidate, dict):
-                    root_params = candidate
-                    break
-            if isinstance(root_params, dict):
-                candidate_urdf = root_params.get("urdf_path", "")
-                if candidate_urdf:
-                    yaml_urdf_path = str(candidate_urdf).strip()
-                yaml_resource_root_dir = root_params.get("resource_root_dir", yaml_resource_root_dir)
-                yaml_mesh_root_dir = root_params.get("mesh_root_dir", yaml_mesh_root_dir)
-            for node_key in ("offline_urdf_trainer", "gng_safety"):
-                ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
-                if ros_params:
-                    yaml_data_dir = ros_params.get("data_directory", yaml_data_dir)
-                    yaml_exp_id = ros_params.get("experiment_id", yaml_exp_id)
-                    gng_model_filename = ros_params.get("gng_model_filename", gng_model_filename)
-                    vlut_filename = ros_params.get("vlut_filename", vlut_filename)
-                    break
-        except Exception:
-            pass
+    for name in ("safety_margin", "tag", "mode"):
+        if value(name):
+            raise ValueError(f"{name}: 旧安全監視専用オプションは現行Viewer入口に接続できません")
 
-    if not data_dir:
-        data_dir = yaml_data_dir
-    if not experiment_id:
-        experiment_id = yaml_exp_id
-    if not os.path.isabs(data_dir):
-        data_dir = os.path.join(pkg_share, data_dir)
+    if is_enabled(value("enable_safety_monitor")):
+        raise ValueError(
+            "旧runtimeのsafety_monitor_nodeは現行ビルドの対象外です。"
+            "安全監視の接続確認前の起動はできません。"
+            "表示専用の場合だけenable_safety_monitor:=falseを指定してください")
+    if is_enabled(value("enable_joint_state_publisher")):
+        raise ValueError("外部実測の表示専用入口には初回姿勢配信を追加できません")
+    share = Path(get_package_share_directory("gng_vlut_system"))
+    params_file = resolve_package_path(value("params_file"), get_package_share_directory)
+    if not Path(params_file).is_file() and Path(params_file).parent == Path("."):
+        params_file = str(share / "config" / params_file)
+    params = load_root_parameters(params_file)
+    robot_name = value("robot_name") or str(params.get("robot_name", "topo_dual_arm_max_long"))
+    state_topic = value("state_topic") or f"/{robot_name}/joint_states"
+    arguments = {
+        "params_file": params_file,
+        "robot_name": robot_name,
+        "dir": value("dir") or value("data_directory"),
+        "id": value("id") or value("experiment_id"),
+        "urdf_path": value("urdf_path"),
+        "resource_root_dir": value("resource_root_dir"),
+        "mesh_root_dir": value("mesh_root_dir"),
+        "joint_control_backend": "external",
+        "state_topic": state_topic,
+        "enable_joint_state_publisher": "false",
+        "robot_base_frame": value("base_frame"),
+    }
+    actions = [IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(str(share / "launch/gng_viewer_bridge.launch.py")),
+        launch_arguments=arguments.items())]
+    calibration = [value("sensor_" + axis) for axis in ("x", "y", "z", "roll", "pitch", "yaw")]
+    if any(calibration):
+        values = [float(item or "0") for item in calibration]
+        if not all(math.isfinite(item) for item in values):
+            raise ValueError("sensor位置・角度には有限値が必要です")
+        frame = namespaced_frame(robot_name, value("base_frame") or params.get("frame_id", "base_link"))
+        child = value("sensor_frame_id")
+        for frame_name in (frame, child):
+            if not frame_name or frame_name.startswith("/") or any(char.isspace() for char in frame_name):
+                raise ValueError("sensor較正のTF名が不正です")
+        if frame == child:
+            raise ValueError("sensor較正の親子TFが同一です")
+        node_arguments = [item for key, item_value in zip(("x", "y", "z", "roll", "pitch", "yaw"), values)
+                          for item in ("--" + key, str(item_value))]
+        node_arguments += ["--frame-id", frame, "--child-frame-id", child]
+        actions.append(Node(package="tf2_ros", executable="static_transform_publisher",
+                            name="sensor_calibration_publisher", arguments=node_arguments))
+    return actions
 
-    gng_path = os.path.join(data_dir, experiment_id, gng_model_filename)
-    vlut_path = os.path.join(data_dir, experiment_id, vlut_filename)
-    enable_safety_monitor = LaunchConfiguration("enable_safety_monitor").perform(context).lower() in ("true", "1", "yes", "on")
-
-    if not urdf_path and yaml_urdf_path:
-        urdf_path = yaml_urdf_path
-    if not urdf_path:
-        raise FileNotFoundError(
-            "No robot description path was provided. "
-            "Set urdf_path in the params file or pass urdf_path explicitly."
-        )
-    urdf_path = resolve_package_uri(urdf_path)
-    if not os.path.exists(urdf_path):
-        raise FileNotFoundError(f"Robot description file does not exist: {urdf_path}")
-    resource_root = LaunchConfiguration("resource_root_dir").perform(context).strip() or yaml_resource_root_dir
-    mesh_root = LaunchConfiguration("mesh_root_dir").perform(context).strip() or yaml_mesh_root_dir
-
-    # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
-    # 明示的に指定された項目のみを上書き対象とする
-    viewer_params = {}
-    if urdf_path:
-        viewer_params["urdf_path"] = urdf_path
-    if resource_root:
-        viewer_params["resource_root_dir"] = resource_root
-    if mesh_root:
-        viewer_params["mesh_root_dir"] = mesh_root
-    
-    viewer_params.update({
-        "joint_state_topic": f"/{robot_name}/joint_states",
-        "stream_topic": "/viewer/internal/stream/robot",
-        "frame_id": LaunchConfiguration("base_frame"),
-        "publish_hz": 20.0,
-    })
-
-    return [
-        # 1. ロボットモデルの展開 (Digital Twin / TF)
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
-                launch_arguments={
-                    "robot_name": LaunchConfiguration("robot_name"),
-                    "urdf_path": LaunchConfiguration("urdf_path"),
-                    "resource_root_dir": LaunchConfiguration("resource_root_dir"),
-                    "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
-                    "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
-                }.items()
-            ),
-
-        # 2. センサ位置の静的TF配信 (キャリブレーション用)
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='sensor_calibration_publisher',
-            arguments=[
-                LaunchConfiguration("sensor_x"), LaunchConfiguration("sensor_y"), LaunchConfiguration("sensor_z"),
-                LaunchConfiguration("sensor_yaw"), LaunchConfiguration("sensor_pitch"), LaunchConfiguration("sensor_roll"),
-                LaunchConfiguration("base_frame"), LaunchConfiguration("sensor_frame_id")
-            ]
-        ),
-
-        # 3. GNG 座標変換ノード (Sensor -> Base Frame 高速変換)
-        Node(
-            package="pointcloud_transformer_cpp",
-            executable="gng_transformer_node_cpp",
-            name="gng_transformer",
-            parameters=[{
-                "target_frame": LaunchConfiguration("base_frame"),
-                "input_topic": "/gng_map",
-                "output_topic": "/Tmap_transformed",
-                "filter_radius": 3.0
-            }]
-        ),
-
-        # 4. 安全監視・判定ノード (中核ロジック)
-        *(
-            [
-                IncludeLaunchDescription(
-                    PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "gng_vlut_monitor.launch.py")),
-                    launch_arguments={
-                        "robot_name": LaunchConfiguration("robot_name"),
-                        "id": LaunchConfiguration("id"),
-                        "experiment_id": LaunchConfiguration("experiment_id"),
-                        "dir": LaunchConfiguration("dir"),
-                        "data_directory": LaunchConfiguration("data_directory"),
-                        "params_file": LaunchConfiguration("params_file"),
-                        "frame_id": LaunchConfiguration("base_frame"),
-                        "safety_margin": LaunchConfiguration("safety_margin"),
-                        "tag": LaunchConfiguration("tag"),
-                        "mode": LaunchConfiguration("mode"),
-                    }.items()
-                )
-            ]
-            if enable_safety_monitor and os.path.exists(gng_path) and os.path.exists(vlut_path)
-            else []
-        ),
-
-        # 5. 可視化ブリッジ (React Viewer用)
-        Node(
-            package="gng_vlut_system",
-            executable="robot_viewer_bridge_node",
-            name="robot_viewer_bridge",
-            parameters=[viewer_params]
-        )
-    ]
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory("gng_vlut_system")
-    
+    share = Path(get_package_share_directory("gng_vlut_system"))
+    defaults = {
+        "params_file": str(share / "config/topo_dual_arm_max_long.yaml"),
+        "robot_name": "", "id": "", "experiment_id": "", "dir": "", "data_directory": "",
+        "urdf_path": "", "resource_root_dir": "", "mesh_root_dir": "", "base_frame": "",
+        "state_topic": "", "enable_safety_monitor": "false", "enable_joint_state_publisher": "false",
+        "safety_margin": "", "tag": "", "mode": "",
+        "sensor_x": "", "sensor_y": "", "sensor_z": "", "sensor_roll": "", "sensor_pitch": "", "sensor_yaw": "",
+        "sensor_frame_id": "camera_link",
+    }
     return LaunchDescription([
-        # --- 基本設定 ---
-        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
-        DeclareLaunchArgument("id", default_value=""),
-        DeclareLaunchArgument("experiment_id", default_value=""),
-        DeclareLaunchArgument("dir", default_value="gng_results"),
-        DeclareLaunchArgument("data_directory", default_value=""),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml")),
-        DeclareLaunchArgument("urdf_path", default_value=""),
-        DeclareLaunchArgument("resource_root_dir", default_value=""),
-        DeclareLaunchArgument("mesh_root_dir", default_value=""),
-        DeclareLaunchArgument("base_frame", default_value="base_link"),
-        DeclareLaunchArgument("tag", default_value="dynamic"),
-        DeclareLaunchArgument("mode", default_value="dynamic"),
-        
-        # --- 安全設定 ---
-        DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
-        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
-        DeclareLaunchArgument("safety_margin", default_value="0.05"),
-        
-        # --- センサキャリブレーション（実測値をここに入力） ---
-        DeclareLaunchArgument("sensor_x", default_value="0.5"),
-        DeclareLaunchArgument("sensor_y", default_value="0.0"),
-        DeclareLaunchArgument("sensor_z", default_value="1.0"),
-        DeclareLaunchArgument("sensor_roll", default_value="0.0"),
-        DeclareLaunchArgument("sensor_pitch", default_value="0.0"),
-        DeclareLaunchArgument("sensor_yaw", default_value="0.0"),
-        DeclareLaunchArgument("sensor_frame_id", default_value="camera_link"),
-        OpaqueFunction(function=launch_setup)
+        *[DeclareLaunchArgument(name, default_value=default) for name, default in defaults.items()],
+        OpaqueFunction(function=launch_setup),
     ])

@@ -1,5 +1,6 @@
 """リーダー・フォロワー実測トピックの共通起動。USB・実機指令なし。"""
 from pathlib import Path
+import sys
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -8,6 +9,10 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from rclpy.validate_full_topic_name import validate_full_topic_name
 import yaml
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import load_root_parameters
 
 
 def resolve_path(value, package, directory='config'):
@@ -27,7 +32,7 @@ def launch_setup(context):
     def value(name):
         return LaunchConfiguration(name).perform(context)
 
-    params = yaml.safe_load(resolve_path(value('params_file'), 'gng_vlut_system').read_text())['/**']['ros__parameters']
+    params = load_root_parameters(resolve_path(value('params_file'), 'gng_vlut_system'))
     config = yaml.safe_load(resolve_path(value('config_file'), 'gng_vlut_system').read_text())
     bridge = Path(get_package_share_directory('dynamixel_joint_state_bridge'))/'config'
     urdf_path = resolve_path(value('urdf_path') or params['urdf_path'], 'gng_vlut_system')
@@ -58,7 +63,7 @@ def launch_setup(context):
             raise ValueError('実測入力トピックの重複・折返しです')
         topics.add(topic)
         mapping_file = resolve_path(value(role+'_mapping_file') or role_config.pop('mapping_file', '') or default_mappings[role], 'dynamixel_joint_state_bridge')
-        mapping = yaml.safe_load(mapping_file.read_text())['/**']['ros__parameters']
+        mapping = load_root_parameters(mapping_file)
         selected_names = role_config.get('joint_names')
         if selected_names and role_config.get('enable_gripper_input'):
             selected_names = list(selected_names)+['R_gripper_joint', 'L_gripper_joint']

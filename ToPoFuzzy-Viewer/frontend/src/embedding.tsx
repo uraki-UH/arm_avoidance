@@ -8,6 +8,7 @@ export interface viewer_environment {
     mesh_base_url: string;
     portal_target?: HTMLElement;
     resolve_frame?: (frame: string) => THREE.Matrix4 | null;
+    set_inspection_picker?: (picker: ((client_x: number, client_y: number) => boolean) | null) => void;
 }
 export const ViewerEnvironment = createContext<viewer_environment>({ mesh_base_url: '' });
 

@@ -9,6 +9,7 @@ const is_same_transform=(left,right)=>left.elements.every((value,idx)=>Math.abs(
 export class ObjectInteraction {
  constructor(environment){
   this.environment=environment;this.canvas=environment.renderer.domElement;
+  this.has_priority_pick=environment.has_priority_pick??(()=>false);
   this.ray=new THREE.Raycaster();this.hover=null;this.hover_robot=null;this.press=null;this.empty_press=null;this.pending=null;this.mode='direct';
   this.hover_box=new THREE.Box3Helper(new THREE.Box3(),0xffce45);
   this.preview_box=new THREE.Box3Helper(new THREE.Box3(),0x35d5bc);
@@ -62,6 +63,8 @@ export class ObjectInteraction {
   const env=this.environment;
   this.empty_press=null;
   if(event.button!==0||[env.gizmo,window.simulator?.gizmo].some(gizmo=>gizmo?.enabled&&(gizmo.dragging||gizmo.axis)))return;
+  // 可視ROS候補へのクリック優先。背後の環境物体による入力の遮断なし。
+  if(!event.ctrlKey&&!event.metaKey&&this.has_priority_pick(event.clientX,event.clientY))return;
   const item=this.pick(event);
   if(!item){this.empty_press={x:event.clientX,y:event.clientY,id:event.pointerId,has_moved:false};return;}
   if(env.editing)return;

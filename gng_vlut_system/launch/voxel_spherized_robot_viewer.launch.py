@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-import yaml
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -9,31 +8,10 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def _load_root_params(params_file_path: str) -> dict:
-    if not params_file_path or not os.path.exists(params_file_path):
-        return {}
+import sys
 
-    try:
-        with open(params_file_path, "r", encoding="utf-8") as f:
-            params_yaml = yaml.safe_load(f) or {}
-    except Exception:
-        return {}
-
-    if not isinstance(params_yaml, dict):
-        return {}
-
-    root_candidates = []
-    for key in ("/**", "ros__parameters"):
-        candidate = params_yaml.get(key)
-        if isinstance(candidate, dict) and "ros__parameters" in candidate:
-            candidate = candidate.get("ros__parameters", {})
-        if isinstance(candidate, dict):
-            root_candidates.append(candidate)
-
-    if root_candidates:
-        return root_candidates[0]
-    return params_yaml if isinstance(params_yaml, dict) else {}
-
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import load_root_parameters as _load_root_params
 
 def _get_nested(data: dict, path: list[str], default=None):
     cur = data

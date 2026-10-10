@@ -46,7 +46,7 @@ export function use_click_pick(on_pick?: (event: ThreeEvent<MouseEvent>) => void
             window.addEventListener('pointercancel', state.cancel, { ...options, once: true });
         },
         onClick: (event: ThreeEvent<MouseEvent>) => {
-            if (event.button !== 0 || event.delta > 5 || gesture.current.has_dragged) return;
+            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.delta > 5 || gesture.current.has_dragged) return;
             event.stopPropagation();
             on_pick(event);
         },

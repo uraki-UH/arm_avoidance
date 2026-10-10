@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """実レイ点群・VLUT状態・学習済み姿勢グラフによるGazebo専用退避。"""
 from concurrent.futures import ProcessPoolExecutor
+from collections import Counter
 from copy import deepcopy
 from dataclasses import asdict
 from multiprocessing import get_context
@@ -23,12 +24,13 @@ from gng_avoidance_planner import (
     gng_avoidance_policy, has_stable_return_clearance, graph_topology_hash, voxel_centers)
 
 
-def build_path_message(graph, path, labels, stamp):
+def build_path_message(graph, path, labels, stamp, node_by_id=None):
     """元グラフの時刻・ラベルを保持した、表示用経路メッセージの生成。"""
     message = TopologicalMap()
     message.header = deepcopy(graph.header)
     message.header.stamp = stamp
-    nodes = {node.id: node for node in graph.nodes}
+    nodes = node_by_id if node_by_id is not None else (
+        {node.id: node for node in graph.nodes} if path else {})
     message.nodes = [deepcopy(nodes[idx]) for idx in path if idx in nodes]
     for node in message.nodes:
         node.label = labels.get(node.id, 0)
@@ -42,6 +44,7 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         self.cloud_tree = None
         self.angles = {}
         self.labels = {}
+        self.label_counts = Counter()
         self.adjacency = {}
         self.graph_ids = ()
         self.graph_edges = None
@@ -58,6 +61,7 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         self.last_cloud_stamp = -1
         self.last_voxel_stamp = -1
         self.graph_message = None
+        self.graph_nodes = {}
         self.cell_radius = 0.02*np.sqrt(3)/2
         self.return_clear_since_sec = None
         self.return_check_sec = None
@@ -216,18 +220,20 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         source = getattr(self, 'external_environment', None)
         if source and not self.can_accept_environment_sample(message, 'graph', source['source_frame']):
             return
-        self.labels = {node.id: node.label for node in message.nodes}
+        self.update_labels({node.id: node.label for node in message.nodes})
         ids = tuple(node.id for node in message.nodes)
-        if not source or ids != self.graph_ids or message.edges != self.graph_edges:
-            if source:
-                transform = np.asarray(source['root_from_source'])
-                for node in message.nodes:
-                    point = transform[:3, :3] @ [node.pos.x, node.pos.y, node.pos.z] + transform[:3, 3]
-                    node.pos.x, node.pos.y, node.pos.z = map(float, point)
-                    normal = transform[:3, :3] @ [node.normal.x, node.normal.y, node.normal.z]
-                    node.normal.x, node.normal.y, node.normal.z = map(float, normal)
-                message.header.frame_id = self.voxel_frame
-            self.graph_message = message
+        if source:
+            message = deepcopy(message)
+            transform = np.asarray(source['root_from_source'])
+            for node in message.nodes:
+                point = transform[:3, :3] @ [node.pos.x, node.pos.y, node.pos.z] + transform[:3, 3]
+                node.pos.x, node.pos.y, node.pos.z = map(float, point)
+                normal = transform[:3, :3] @ [node.normal.x, node.normal.y, node.normal.z]
+                node.normal.x, node.normal.y, node.normal.z = map(float, normal)
+            message.header.frame_id = self.voxel_frame
+        # 座標更新とトポロジー更新の分離。同じ辺構成での最新位置反映
+        self.graph_message = message
+        self.graph_nodes = {node.id: node for node in message.nodes}
         # 安全ラベルのみ変わる学習済みグラフの隣接表再利用
         if ids != self.graph_ids or message.edges != self.graph_edges:
             self.adjacency = {idx: [] for idx in ids}
@@ -251,7 +257,7 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
             return
         if not self.can_accept_environment_sample(message, 'graph', source['source_frame']):
             return
-        self.labels = dict(zip(message.node_ids, message.labels))
+        self.update_labels(dict(zip(message.node_ids, message.labels)))
         self.graph_time = time.monotonic()
 
     def on_states(self, message):
@@ -261,8 +267,13 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         labels = dict(zip(message.data[::2], message.data[1::2]))
         if set(labels) != set(self.graph_ids) or any(value not in (1, 2, 3) for value in labels.values()):
             return
-        self.labels = labels
+        self.update_labels(labels)
         self.graph_time = time.monotonic()
+
+    def update_labels(self, labels):
+        """受信時の安全ラベルと診断用個数の一括更新。制御周期での全走査回避。"""
+        self.labels = labels
+        self.label_counts = Counter(labels.values())
 
     def is_fresh(self):
         now = time.monotonic()
@@ -325,9 +336,9 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
             'graph_age_sec': now_sec-self.graph_time,
             'real_joint_age_sec': now_sec-self.real_joint_time if self.external_environment else None,
             'environment_namespace': self.external_environment['source_namespace'] if self.external_environment else None,
-            'num_safe': sum(value == 1 for value in self.labels.values()),
-            'num_danger': sum(value == 3 for value in self.labels.values()),
-            'num_collision': sum(value == 2 for value in self.labels.values()),
+            'num_safe': self.label_counts[1],
+            'num_danger': self.label_counts[3],
+            'num_collision': self.label_counts[2],
             'num_local_steps': self.num_local_steps,
             'num_plans': self.num_plans, 'num_selected_gng': self.num_selected_gng,
             'node_path': list(self.path), 'cloud_clearance_m': self.cloud_gap,
@@ -340,7 +351,8 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         if not hasattr(self, 'diag'):
             return
         if self.graph_message is not None:
-            message = build_path_message(self.graph_message, self.path, self.labels, self.get_clock().now().to_msg())
+            message = build_path_message(self.graph_message, self.path, self.labels,
+                                         self.get_clock().now().to_msg(), self.graph_nodes)
             self.path_pub.publish(message)
         self.diag.publish(String(data=json.dumps(self.diagnostic_status(time.monotonic()))))
 

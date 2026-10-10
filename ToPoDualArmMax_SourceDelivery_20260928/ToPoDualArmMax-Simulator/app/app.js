@@ -328,7 +328,7 @@ function updateCloudLayers(){
  const only=rgbd?.cloudOnly||lidar?.cloudOnly;camera.layers.mask=0;if(!only)camera.layers.enable(0);if(rgbd?.cloud.visible)camera.layers.enable(1);if(lidar?.cloud.visible||lidar?.axes.visible)camera.layers.enable(2);if(ai)camera.layers.enable(3);updateMarkerVisibility();
 }
 function initWorkspace(){
- workspace=new WorkEnvironment({scene,overlay,camera,renderer,orbit,toast,onEdit:()=>updateMarkerVisibility()});
+ workspace=new WorkEnvironment({scene,overlay,camera,renderer,orbit,toast,onEdit:()=>updateMarkerVisibility(),has_priority_pick:(client_x,client_y)=>ros_results?.scene?.has_inspection_at(client_x,client_y)??false});
  workspace.register_static_surfaces({floor,pedestal});
  try{rgbd=new RGBDWorkspace({scene,overlay,renderer,camera,robot,environment:workspace,exclude:[grid,...Object.values(trails).map(x=>x.line),robot.links.camera_link],toast,download,aim:aimAtTable,onCloudOnly:()=>updateCloudLayers()});}
  catch(e){$('sensor-panel').textContent='RGB-Dを初期化できません：'+e.message;diagnostics.errors.push(String(e));}

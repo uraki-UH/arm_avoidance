@@ -128,7 +128,7 @@ export class RGBDSensor {
 }
 
 export function binaryPLY(frame,world=false){
-  const header=new TextEncoder().encode(`ply\nformat binary_little_endian 1.0\ncomment units meters\ncomment frame ${world?'base_footprint':'camera_depth_optical_frame'}\ncomment capture_id ${frame.id}\nelement vertex ${frame.valid}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nproperty uchar color_valid\nproperty uint pixel_index\nend_header\n`);
+  const header=new TextEncoder().encode(`ply\nformat binary_little_endian 1.0\ncomment units meters\ncomment frame ${world?'world':'camera_depth_optical_frame'}\ncomment capture_id ${frame.id}\nelement vertex ${frame.valid}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nproperty uchar color_valid\nproperty uint pixel_index\nend_header\n`);
   const buffer=new ArrayBuffer(header.length+frame.valid*20);new Uint8Array(buffer).set(header);const view=new DataView(buffer),m=new THREE.Matrix4().fromArray(frame.depthWorld),p=new THREE.Vector3();
   for(let i=0;i<frame.valid;i++){p.fromArray(frame.xyz,i*3);if(world)p.applyMatrix4(m);const j=header.length+i*20;view.setFloat32(j,p.x,true);view.setFloat32(j+4,p.y,true);view.setFloat32(j+8,p.z,true);for(let c=0;c<3;c++)view.setUint8(j+12+c,frame.colors[i*3+c]);view.setUint8(j+15,frame.colorValid[i]);view.setUint32(j+16,frame.pixels[i],true);}return buffer;
 }

@@ -23,11 +23,8 @@
       profile_names: "left_arm,right_arm"
       ground_z_threshold: -10.0
       spatial_map_resolution: 0.01
-      self_recognition_resolution: 0.01
       arm_cache_resolution: 0.005
-      danger_threshold: 0.025
       vlut_resolution: 0.02
-      sensing_resolution: 0.01
       vlut_only: false # 保存済みGNGからのVLUT単独構築
       use_voxel_collision: true
       # 左右各7自由度の学習プロファイル

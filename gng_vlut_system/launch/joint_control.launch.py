@@ -8,14 +8,17 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-import yaml
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from launch_config import load_root_parameters
 
 
 def launch_setup(context):
     def value(name):
         return LaunchConfiguration(name).perform(context)
     params_file = value('params_file')
-    params = yaml.safe_load(Path(params_file).read_text())['/**']['ros__parameters']
+    params = load_root_parameters(params_file)
     urdf_path = value('urdf_path') or params['urdf_path']
     robot_name = value('robot_name') or params['robot_name']
     backend = value('backend')
@@ -82,7 +85,7 @@ def launch_setup(context):
 
 def generate_launch_description():
     share = Path(get_package_share_directory('gng_vlut_system'))
-    defaults = {'params_file': str(share/'config/ToPoDualArm.yaml'), 'urdf_path': '', 'robot_name': '',
+    defaults = {'params_file': str(share/'config/topo_dual_arm_max_long.yaml'), 'urdf_path': '', 'robot_name': '',
                 'backend': 'viewer', 'use_sim_time': 'false', 'state_topic': 'joint_states',
                 'viewer_topic': 'viewer_joint_states',
                 'trajectory_topic': 'dual_arm_controller/joint_trajectory',

@@ -9,11 +9,21 @@ import subprocess
 import sys
 import time
 from urllib.request import urlopen
+from pointcloud_bridge import default_ui_port, default_bridge_port, validate_bridge_port
 
 root = Path(__file__).resolve().parents[2]
 
 
-def check_service(port, endpoint, key, expected):
+def validate_ports(port, bridge_port):
+    """UI・ROS HTTP・関節/物理WebSocketの3ポートの範囲と重複検査。"""
+    validate_bridge_port(bridge_port)
+    if type(port) is not int or not 1024 <= port <= 65535:
+        raise ValueError('UIポートは1024〜65535の整数が必要です')
+    if len({port, bridge_port, bridge_port+1}) != 3:
+        raise ValueError('UI・ROS HTTP・WebSocketには異なる3ポートが必要です')
+
+
+def check_service(port, endpoint, key, expected, settings=None):
     try:
         with socket.create_connection(('127.0.0.1', port), timeout=1):
             pass
@@ -27,6 +37,10 @@ def check_service(port, endpoint, key, expected):
     if value.get(key) == expected:
         if expected == 'topo-pointcloud-bridge' and value.get('protocol_version', 1) < 4:
             raise RuntimeError(f'{port}番のROSブリッジは旧版です。bash start_ros.sh --restartで再起動してください')
+        for name, setting in (settings or {}).items():
+            actual = value.get(name, '/tf' if name == 'tf_topic' else None)
+            if actual != setting:
+                raise RuntimeError(f'{port}番の{name}は{actual}です。指定値{setting}への変更には--restartが必要です')
         return True
     raise RuntimeError(f'{port}番は別サービスが使用中です')
 
@@ -100,7 +114,7 @@ def ensure_services(args):
 
     def is_ready():
         has_server = check_service(args.port, '/api/health', 'app', 'topo-motion-studio')
-        has_bridge = check_service(args.bridge_port, '/api/points/status', 'service', 'topo-pointcloud-bridge')
+        has_bridge = check_service(args.bridge_port, '/api/points/status', 'service', 'topo-pointcloud-bridge', {'tf_topic': args.tf_topic})
         return has_server and has_bridge
 
     # 複数ランチャーの同時起動による管理プロセス重複の防止
@@ -112,7 +126,7 @@ def ensure_services(args):
         with log_path.open('w') as log:
             child = subprocess.Popen(
                 [sys.executable, str(Path(__file__).resolve()), '--port', str(args.port),
-                 '--bridge-port', str(args.bridge_port)],
+                 '--bridge-port', str(args.bridge_port), '--tf-topic', args.tf_topic],
                 cwd=root, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                 start_new_session=True)
         try:
@@ -137,11 +151,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--restart', action='store_true', help='同じ配置・ポートの旧起動を停止して再起動')
     parser.add_argument('--ensure', action='store_true', help='未起動サービスを背景起動し、応答確認後に終了')
-    parser.add_argument('--port', type=int, default=8877)
-    parser.add_argument('--bridge-port', type=int, default=8879)
+    parser.add_argument('--port', type=int, default=default_ui_port)
+    parser.add_argument('--bridge-port', type=int, default=default_bridge_port)
+    parser.add_argument('--tf-topic', default='/tf', help='標準TFの配信先。/sim/tf指定で専用配信のみ')
     args = parser.parse_args()
-    if args.port == args.bridge_port or any(not 1024 <= p <= 65535 for p in (args.port, args.bridge_port)):
-        parser.error('異なる1024〜65535のポート番号が必要です')
+    try:
+        validate_ports(args.port, args.bridge_port)
+    except ValueError as error:
+        parser.error(str(error))
+    if not args.tf_topic.startswith('/'):
+        parser.error('TFトピックには絶対名が必要です')
     if args.ensure and args.restart:
         parser.error('--ensureと--restartの同時指定はできません')
     children = []
@@ -162,12 +181,13 @@ def main():
         revision = bridge_revision()
         services = [
             (args.port, '/api/health', 'app', 'topo-motion-studio',
-             ['node', 'app/server.mjs']),
+             ['node', 'app/server.mjs'], {}),
             (args.bridge_port, '/api/points/status', 'service', 'topo-pointcloud-bridge',
              [sys.executable, 'integrations/ros2/pointcloud_bridge.py', '--port', str(args.bridge_port),
-              '--allow-origin', f'http://127.0.0.1:{args.port}', '--allow-origin', f'http://localhost:{args.port}'])]
-        for port, endpoint, key, expected, command in services:
-            if check_service(port, endpoint, key, expected):
+              '--tf-topic', args.tf_topic, '--allow-origin', f'http://127.0.0.1:{args.port}',
+              '--allow-origin', f'http://localhost:{args.port}'], {'tf_topic': args.tf_topic})]
+        for port, endpoint, key, expected, command, settings in services:
+            if check_service(port, endpoint, key, expected, settings):
                 print(f'{port}番: 起動済みサービスを再利用', flush=True)
                 continue
             child = subprocess.Popen(command, cwd=root, env=dict(os.environ, PORT=str(args.port)), start_new_session=True)
@@ -179,12 +199,12 @@ def main():
             while True:
                 if child.poll() is not None:
                     raise RuntimeError(f'{port}番のサービス起動に失敗しました')
-                if check_service(port, endpoint, key, expected):
+                if check_service(port, endpoint, key, expected, settings):
                     break
                 if time.monotonic() >= end:
                     raise RuntimeError(f'{port}番の起動がタイムアウトしました')
                 time.sleep(.2)
-        print(f'起動完了: http://127.0.0.1:{args.port}/?model=long\nROS送信先: http://127.0.0.1:{args.bridge_port}\nROS_DOMAIN_ID={os.environ.get("ROS_DOMAIN_ID", "0")}\nCtrl+Cで今回起動したサービスのみ停止。既存ブリッジのROSドメインはその起動設定を使用。', flush=True)
+        print(f'起動完了: http://127.0.0.1:{args.port}/?model=long\nROS送信先: http://127.0.0.1:{args.bridge_port}\nWebSocket: {args.bridge_port+1} / TF: {args.tf_topic}\nROS_DOMAIN_ID={os.environ.get("ROS_DOMAIN_ID", "0")}\nCtrl+Cで今回起動したサービスのみ停止。既存ブリッジのROSドメインはその起動設定を使用。', flush=True)
         while True:
             if bridge_child is not None and bridge_revision() != revision:
                 updated = bridge_revision()

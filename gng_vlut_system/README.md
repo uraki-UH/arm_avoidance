@@ -164,6 +164,10 @@ ros2 launch gng_vlut_system robot_follow.launch.py
 `gng_results/topo_dual_arm_max_long_independent/`です。
 別モデルを使う場合は`params_file:=...`で対象の設定ファイルを指定します。
 
+配信周期`publish_hz`の優先順は明示launch引数 → 機体YAML → 30 Hz。ViewerとGNGで共通、不正値は起動時に拒否します。
+旧`gng_vlut_runtime.launch.py`は現行Viewerへの外部実測表示用の互換入口です。旧`dir`／`id`と`data_directory`／`experiment_id`は利用可能ですが、安全監視・`tag`／`mode`／`safety_margin`・初回姿勢配信の指定は対応不可として拒否します。
+単腕の旧後処理launch（`offline_gng_main5_clean`、`offline_gng_main6_island_pruning`、`offline_gng_status_updater`）は対象データ用の`params_file`を明示指定してください。
+
 
 `gng.enable_independent_arms: true`では左右各7関節を別々に学習します。
 上限は片腕10,000ノード、初期240万回・追加10万回の配置更新が片腕ごとの設定です。

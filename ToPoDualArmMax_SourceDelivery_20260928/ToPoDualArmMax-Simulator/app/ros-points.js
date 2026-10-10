@@ -1,12 +1,12 @@
-import {attach_camera,attach_lidar,points_to_base} from './robot-ros-state.js';
+import {attach_camera,attach_lidar,points_to_base,points_in_base,robot_frames} from './robot-ros-state.js';
 import {RosRobotPanel} from './ros-robot.js';
 import {ObjectCapturePanel} from './object-capture.js';
-import {encodeInput,worldPoints} from './vm-ai.js';
+import {encode_input} from './vm-packet.js';
 const $=id=>document.getElementById(id);
 const sources=['rgbd','mid360','object_full','object_visible'];
 export class RosPointsPanel{
  constructor({environment,rgbd,lidar,toast}){
-  Object.assign(this,{environment,rgbd,lidar,toast});this.is_running=false;this.is_busy=false;this.generation=0;this.last_sent_frames={};this.next_source_idx=0;
+  Object.assign(this,{environment,rgbd,lidar,toast});this.is_running=false;this.is_busy=false;this.generation=0;this.last_sent_frames={};this.next_source_idx=0;this.protocol_endpoint=null;
   $('ros-panel').innerHTML=`<h2>ROS2連携</h2>
   <label class="ros-connection"><span>接続先</span><input id="ros-endpoint" value="http://127.0.0.1:8879" type="url" aria-label="ROSブリッジ接続先（送受信共通）" spellcheck="false"></label>
   <section id="ros-send-panel"><h3>ブラウザ → ROS：送信</h3>
@@ -18,9 +18,9 @@ export class RosPointsPanel{
 </section>`;
   if(location.port==='8879')$('ros-endpoint').value=location.origin;
   this.object_capture=new ObjectCapturePanel({environment,rgbd});
-  $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='取得待ち';};
+  $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.protocol_endpoint=null;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='取得待ち';};
   for(const id of ['ros-endpoint','ros-depth',...sources.map(source=>'ros-send-'+source)])$(id).onchange=()=>{this.generation++;};
-  $('ros-endpoint').addEventListener('change',()=>{this.last_sent_frames={};this.robot_panel.set_connection_state('points',false);});
+  $('ros-endpoint').addEventListener('change',()=>{this.protocol_endpoint=null;this.last_sent_frames={};this.robot_panel.set_connection_state('points',false);});
   $('ros-depth').addEventListener('change',()=>{delete this.last_sent_frames.rgbd;});
   // 取得開始時だけ送信候補を選択。送信開始と手動の選択解除は独立
   const select_source=source=>{const checkbox=$('ros-send-'+source);if(checkbox&&!checkbox.checked){checkbox.checked=true;this.generation++;}};
@@ -47,6 +47,14 @@ export class RosPointsPanel{
    if($('ros-send-'+source).checked&&frame&&frame!==this.last_sent_frames[source]){this.next_source_idx=(idx+1)%sources.length;this.send(source);return;}
   }
  }
+ // 接続先ごとの着色点群プロトコル確認。再接続・通信失敗時の失効
+ async ensure_protocol(endpoint){
+  if(this.protocol_endpoint===endpoint.origin)return;
+  const response=await fetch(new URL('/api/points/status',endpoint),{signal:AbortSignal.timeout(5000)});
+  const status=await response.json();
+  if(!response.ok||(status.protocol_version??1)<2)throw Error('ROSブリッジが旧版です。bash start_ros.sh --restartで再起動してください');
+  this.protocol_endpoint=endpoint.origin;
+ }
  async send(source){
   if(!sources.includes(source)||!$('ros-send-'+source).checked||this.is_busy)return null;
   this.is_busy=true;const generation=this.generation;
@@ -58,38 +66,33 @@ export class RosPointsPanel{
    const item=is_object?captured.item:null,object_pose=is_object?captured.object_pose:null;
    const robot_state=structuredClone(frame.robot_state),robot_pose=frame.robotPose,robot_model=frame.robotModel,captured_at_ms=robot_state.captured_at_ms;
    let points,depth_frame,lidar_frame,color_frame;
-   if(source==='object_full')points=frame.points.slice();
+   if(source==='object_full')points=points_to_base(frame.points.slice(),robot_state);
    else if(source==='mid360'){
-    lidar_frame=frame;attach_lidar(robot_state,frame.pose);points=worldPoints(frame.xyz,frame.pose);
+    lidar_frame=frame;attach_lidar(robot_state,frame.pose);points=points_in_base(frame.xyz,frame.pose,robot_state);
    }else{
     if(source==='rgbd'&&$('ros-depth').checked)depth_frame=frame;
-    color_frame=frame;attach_camera(robot_state,frame.depthWorld);points=worldPoints(frame.xyz,frame.depthWorld);
+    color_frame=frame;attach_camera(robot_state,frame.depthWorld);points=points_in_base(frame.xyz,frame.depthWorld,robot_state);
    }
-   points_to_base(points,robot_state);
-   const meta={robot_state,source,frame_id:'base_footprint',count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:is_object?item.id:null,object_to_world:is_object?object_pose:null};
-   if(lidar_frame){meta.captured_at_ms=robot_state.captured_at_ms;meta.lidar={sensor_type:lidar_frame.config.sensor_type||'mid360',frame_id:'sim_mid360_frame',scan_start_sec:lidar_frame.scanStart,duration_sec:lidar_frame.config.duration,num_slots:lidar_frame.config.beams,scan_pattern:lidar_frame.config.scanPattern};}
+   const meta={robot_state,source,frame_id:robot_frames.base,count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:is_object?item.id:null,object_to_world:is_object?object_pose:null};
+   if(lidar_frame){meta.captured_at_ms=robot_state.captured_at_ms;meta.lidar={sensor_type:lidar_frame.config.sensor_type||'mid360',frame_id:robot_frames.lidar,scan_start_sec:lidar_frame.scanStart,duration_sec:lidar_frame.config.duration,num_slots:lidar_frame.config.beams,scan_pattern:lidar_frame.config.scanPattern};}
    let color_data;
    if(color_frame){
     meta.color_format='rgb8_valid8';color_data=new Uint8Array(meta.count*4);
     for(let idx=0;idx<meta.count;idx++){color_data.set(color_frame.colors.subarray(idx*3,idx*3+3),idx*4);color_data[idx*4+3]=color_frame.colorValid[idx];}
    }
-   if(color_frame){
-    const status_response=await fetch(new URL('/api/points/status',endpoint),{signal:AbortSignal.timeout(5000)});
-    const status=await status_response.json();
-    if(!status_response.ok||(status.protocol_version??1)<2)throw Error('ROSブリッジが旧版です。bash start_ros.sh --restartで再起動してください');
-   }
+   if(color_frame)await this.ensure_protocol(endpoint);
    let body;
    if(depth_frame){
     meta.depth_image={...depth_frame.calibration.depth,optical_to_world:depth_frame.depthWorld};
-    const packed=encodeInput(meta,points);body=new Blob([packed,depth_frame.depth,...(color_data?[color_data]:[])]);
-   }else body=color_data?new Blob([encodeInput(meta,points),color_data]):encodeInput(meta,points);
+    const packed=encode_input(meta,points);body=new Blob([packed,depth_frame.depth,...(color_data?[color_data]:[])]);
+   }else body=color_data?new Blob([encode_input(meta,points),color_data]):encode_input(meta,points);
    if(generation!==this.generation||!$('ros-send-'+source).checked)return null;
    const response=await fetch(new URL('/api/points',endpoint),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-Points':'1'},body,signal:AbortSignal.timeout(10000)});
    if(!response.ok)throw Error(await response.text());const result=await response.json();
    if(generation===this.generation){this.last_sent_frames[source]=captured;this.robot_panel.set_connection_state('points',this.is_running);}
    if(generation===this.generation)$('ros-status').textContent=`${result.topic}${result.depth_topics?'\n'+result.depth_topics.join('\n'):''}\n${meta.count.toLocaleString()} 点送信済み\nframe: ${meta.frame_id}`;
    return result;
-  }catch(error){this.is_running=false;this.update_button();$('ros-status').textContent='送信エラー：'+error.message+'\npointcloud_bridge.py の起動と送信先を確認してください';return null;}
+  }catch(error){this.protocol_endpoint=null;this.is_running=false;this.update_button();$('ros-status').textContent='送信エラー：'+error.message+'\npointcloud_bridge.py の起動と送信先を確認してください';return null;}
   finally{this.is_busy=false;}
  }
 }

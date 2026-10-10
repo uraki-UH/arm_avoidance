@@ -39,7 +39,8 @@ export function mount_viewer(container: HTMLElement, options: scene_options) {
         const [error, set_error] = useState('');
         const host = useMemo<viewer_host>(() => {
             const environment = { mesh_base_url: endpoint.replace(/^ws/, 'http').replace(/\/observe$/, '/meshes/'),
-                portal_target: panel, resolve_frame: (frame: string) => scene.frames.resolve(frame) };
+                portal_target: panel, resolve_frame: (frame: string) => scene.frames.resolve(frame),
+                set_inspection_picker: (picker: ((client_x: number, client_y: number) => boolean) | null) => scene.set_inspection_picker(picker) };
             return { endpoint, environment, scene_surface: scene.surface(environment), layout: embedded_layout, sidebar: embedded_sidebar,
                 on_transforms: (items, is_static) => scene.frames.update(items, is_static),
                 on_clear: () => scene.frames.clear(), on_state: state => { api = state; } };

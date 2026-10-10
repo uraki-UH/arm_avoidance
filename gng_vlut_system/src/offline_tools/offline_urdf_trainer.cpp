@@ -1445,12 +1445,8 @@ public:
     gng_dimension_ = this->declare_parameter<int>("gng.dimension", 12);
     spatial_map_resolution_ =
         this->declare_parameter<double>("gng.spatial_map_resolution", 0.02);
-    sensing_resolution_ =
-        this->declare_parameter<double>("gng.sensing_resolution", 0.02);
     arm_cache_resolution_ =
         this->declare_parameter<double>("gng.arm_cache_resolution", 0.008);
-    danger_threshold_ =
-        this->declare_parameter<double>("gng.danger_threshold", 0.025);
     vlut_resolution_ =
         this->declare_parameter<double>("gng.vlut_resolution", 0.02);
     vlut_only_ = this->declare_parameter<bool>("gng.vlut_only", false);
@@ -2509,9 +2505,7 @@ private:
   std::string active_independent_profile_;
   double spatial_map_resolution_;
   double vlut_resolution_;
-  double sensing_resolution_;
   double arm_cache_resolution_;
-  double danger_threshold_;
   double spatial_map_inflation_ = 0.0;
   double self_recognition_inflation_ = 0.0;
   std::vector<std::string> environment_ignore_links_;

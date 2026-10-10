@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 import xml.etree.ElementTree as element_tree
 
+sensor_frames = ('sim_camera_depth_optical_frame', 'sim_mid360_frame')
+
 
 def finite_values(values, size):
     return isinstance(values, list) and len(values) == size and all(type(v) in (int, float) and math.isfinite(v) for v in values)
@@ -78,6 +80,8 @@ class RobotExchange:
         self.base_pose = create_publisher(PoseStamped, '/sim/base_pose', 10)
         self.description = create_publisher(String, '/sim/robot_description', QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.model = None
+        self.description_model = None
+        self.description_lock = threading.RLock()
         self.commands = {}
         self.sequence = 0
         self.lock = threading.Lock()
@@ -96,18 +100,47 @@ class RobotExchange:
         model = state['robot_model']
         expected = dict(self.parents[model], base_footprint='world')
         actual = {t['child']: t['parent'] for t in state['transforms']}
-        if 'sim_camera_depth_optical_frame' in actual:
-            expected['sim_camera_depth_optical_frame'] = 'base_footprint'
-        if 'sim_mid360_frame' in actual:
-            expected['sim_mid360_frame'] = 'base_footprint'
+        for frame in sensor_frames:
+            if frame in actual:
+                expected[frame] = 'base_footprint'
         if actual != expected or set(state['robot_pose']) != self.joint_names[model]:
             raise ValueError('URDFと状態の構成が一致しません')
 
-    def publish(self, state, stamp=None, outputs=None):
-        from geometry_msgs.msg import TransformStamped, PoseStamped
+    def transform_message(self, value, stamp):
+        from geometry_msgs.msg import TransformStamped
+        msg = TransformStamped()
+        msg.header.stamp, msg.header.frame_id, msg.child_frame_id = stamp, value['parent'], value['child']
+        msg.transform.translation.x, msg.transform.translation.y, msg.transform.translation.z = map(float, value['translation'])
+        msg.transform.rotation.x, msg.transform.rotation.y, msg.transform.rotation.z, msg.transform.rotation.w = map(float, value['rotation'])
+        return msg
+
+    def sensor_transforms(self, state, stamp):
+        """取得時センサTFの構築。現在のロボット状態・モデルの更新なし。"""
+        self.validate(state)
+        return [self.transform_message(value, stamp) for value in state['transforms']
+                if value['child'] in sensor_frames]
+
+    def publish_transforms(self, transforms):
         from tf2_msgs.msg import TFMessage
-        from sensor_msgs.msg import JointState
+        if transforms:
+            message = TFMessage(transforms=transforms)
+            self.tf.publish(message)
+            if self.standard_tf is not None:
+                self.standard_tf.publish(message)
+
+    def publish_description(self, model):
+        """URDFの初回配信。古い取得モデルによる現在モデルの巻戻し防止。"""
         from std_msgs.msg import String
+        with self.description_lock:
+            if self.model is not None and self.model != model:
+                return
+            if self.description_model != model:
+                self.description.publish(String(data=self.descriptions[model]))
+                self.description_model = model
+
+    def publish(self, state, stamp=None, outputs=None):
+        from geometry_msgs.msg import PoseStamped
+        from sensor_msgs.msg import JointState
         outputs = ['base', 'tf', 'joints'] if outputs is None else outputs
         if not isinstance(outputs, list) or any(value not in ('base', 'tf', 'joints') for value in outputs):
             raise ValueError('状態送信項目が不正です')
@@ -115,11 +148,14 @@ class RobotExchange:
         stamp = stamp or self.node.get_clock().now().to_msg()
         transforms = []
         for value in state['transforms']:
-            msg = TransformStamped()
-            msg.header.stamp, msg.header.frame_id, msg.child_frame_id = stamp, value['parent'], value['child']
-            msg.transform.translation.x, msg.transform.translation.y, msg.transform.translation.z = map(float, value['translation'])
-            msg.transform.rotation.x, msg.transform.rotation.y, msg.transform.rotation.z, msg.transform.rotation.w = map(float, value['rotation'])
-            transforms.append(msg)
+            # 取得時センサTFの配信元は点群経路のみ
+            if value['child'] in sensor_frames:
+                continue
+            if 'tf' not in outputs and not (value['child'] == 'base_footprint' and 'base' in outputs):
+                continue
+            msg = self.transform_message(value, stamp)
+            if 'tf' in outputs:
+                transforms.append(msg)
             if value['child'] == 'base_footprint' and 'base' in outputs:
                 base = PoseStamped()
                 base.header = msg.header
@@ -127,9 +163,7 @@ class RobotExchange:
                 base.pose.orientation = msg.transform.rotation
                 self.base_pose.publish(base)
         if 'tf' in outputs:
-            self.tf.publish(TFMessage(transforms=transforms))
-        if self.standard_tf is not None and 'tf' in outputs:
-            self.standard_tf.publish(TFMessage(transforms=transforms))
+            self.publish_transforms(transforms)
         joints = JointState()
         joints.header.stamp, joints.header.frame_id = stamp, 'base_footprint'
         joints.name = list(state['robot_pose'])
@@ -140,9 +174,9 @@ class RobotExchange:
                 setattr(joints, field, [float(values[name]) for name in joints.name])
         if 'joints' in outputs:
             self.joints.publish(joints)
-        if self.model != state['robot_model']:
+        with self.description_lock:
             self.model = state['robot_model']
-            self.description.publish(String(data=self.descriptions[self.model]))
+            self.publish_description(self.model)
         return dict(model=self.model, stamp_sec=stamp.sec, stamp_nanosec=stamp.nanosec)
 
     def receive(self, model, message):
