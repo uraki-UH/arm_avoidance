@@ -1,8 +1,52 @@
 # ToPoDualArmのDynamixel単独動作・Gazebo指令転送
 
-パンチルトだけを元の角度へ戻さず動かす用途: [ID51・52専用の電流抵抗・終了時OFF](dynamixel_neck_torque.md)。以下の位置保持・Gazebo追従とは別launch。
+パンチルトの電流制御: [ID51・52の重力補償・減衰](dynamixel_neck_torque.md)。手動操作の共通launchで`target:=neck`を指定可能。
 
 通常動作の対象: XM430-W350・XM540-W270、電流ベース位置制御・速度基準profile。初期対象はユーザー指定の左腕7関節（ID41〜47）。旧launch・旧設定は保持。
+
+## s・r・fの共通追従構成
+
+sはブラウザの操作対象Simulator、rは実機リーダー、fは実機フォロワーです。共通launchで入力変換・経路管理・実機監視とSimulatorを起動し、接続はブラウザで選択します。
+
+```bash
+# コンテナ内。既存USBドライバの利用、初期は実機出力OFF
+ros2 launch gng_vlut_system robot_follow.launch.py \
+  params_file:=topo_dual_arm_max_long.yaml profile:=r_display
+```
+
+ブラウザは `http://127.0.0.1:8877/?model=long`。更新後は再読み込みし、「ROS2連携 → s・r・fの接続構成」を使用します。接続先は既定 `http://127.0.0.1:8879`。
+
+| profile | 接続 |
+| --- | --- |
+| `manual` | sの手動操作、fの出力経路なし |
+| `r_display` / `f_display` | r / f → sの描画姿勢 |
+| `r_dynamics` / `f_dynamics` | r / f → sのMuJoCoモータ目標 |
+| `r_to_f` | r → f |
+| `s_to_f` | sの現在姿勢 → f |
+| `r_display_f` | r → sの描画姿勢、r → f |
+| `r_dynamics_f` | r → sのMuJoCoモータ目標、sの物理実姿勢 → f |
+
+描画追従は校正済み絶対角。力学追従は有限トルクのPD駆動・接触計算で、選択後に「sの力学を開始」を押します。力学・実機追従の腕は既定で開始時からの角度差です。実機へ渡すsの姿勢は物理の現在角で、MuJoCo目標角そのものではありません。
+
+[robot_follow.yaml](../config/robot_follow.yaml)の各profileに `simulator_source`、`simulator_mode`、`follower_source`、`follow_mode` を指定します。`follow_mode: absolute` は絶対角、`relative` は開始時からの角度差。1つの対象に入力元は1つ、f → s → fの循環は拒否します。sの内部入力トピックは固定、r/fの実測トピックは `roles` で指定し、共通入力変換の出力へ反映します。YAMLの編集反映には共通launchの再起動が必要です。起動後の登録済みprofileの変更はブラウザまたは `/robot_follow/manager` の `profile` パラメータで可能です。
+
+共通入力は既定でr/fとも位置・速度の同時実測 `fresh`。既存の読取り専用readerからfの描画だけを確認する場合は `follower_input_type:=present` を指定できます。フォロワー実機制御の監視は引き続きhandlerの `fresh_joint_states`・status・extra・goalで、presentによる代用なし。共通launchはUSB接続・ドライバ起動を含みません。
+
+既存実測配信の利用時は `enable_joint_state_input:=false`。既存Simulatorの再利用をせず別途管理する場合は `enable_simulator:=false`。GNGとロボットをViewerへ送る場合は `enable_viewer:=true`。このViewerは共通入力を重複起動せず、ブラウザの `/sim/joint_states` とTFを使用します。同じ管理launchや同じ実測入力の多重起動は拒否対象です。管理中のsの状態送信は1ブラウザだけです。
+
+実機出力の許可は `allow_hardware_output:=true` と確認済み `max_current_ma:=...` の明示指定。ブラウザの「fの操作」で、「fの出力を準備」→ 保持確認 →「fの追従を開始」の順に操作します。停止ラッチがある場合は、実測静止を確認して「停止解除・出力OFF」を先に押します。選択だけでトルクON・追従開始は行いません。端末操作は `enable_keyboard:=true`。出力設定は `hardware_config`、実測入力のバス・校正は `input_config` で変更します。
+既定の実機対象は腕14関節、開始時姿勢から5°・速度2°/s・加速度30°/s²の小動作範囲です。グリッパー・首の実機駆動は対象外です。既存の電流目標・保持目標の読返し、静止・可動域・出力競合の確認を維持します。
+
+構成変更は世代番号を更新し、旧世代のs姿勢・f目標を破棄してfを停止します。停止解除と再準備・再開始が必要です。実測入力とブラウザの状態取得は既定0.3秒で失効、端末heartbeatは0.4秒で失効。入力・通信の復旧だけで実機の再開は行いません。sの送信端切断はs追従中のfへ停止要求、力学入力失効はsを保持してfの目標配信を止めます。「fを停止」は保持による停止、「fのトルクOFF」は支持が外れる可能性のあるトルク解除です。
+
+構成検査は `python3 -B -m pytest -q -p no:cacheprovider gng_vlut_system/test/test_robot_follow_model.py`。疑似サーボの再検証は、コンテナ内の隔離domain223・実機とは異なる `/fixturefollow/dynamixel` を使用します。
+
+```bash
+ROS_DOMAIN_ID=223 ROS_LOCALHOST_ONLY=1 \
+  python3 -B /ros2_ws/src/gng_vlut_system/test/check_robot_follow_control.py
+```
+
+ブラウザ・実MuJoCoの再検証はSimulatorフォルダで `node tests/robot-follow.browser.mjs`。既存アプリサーバー8877、Chrome、更新済みgng_vlut_systemのビルドが必要です。隔離domain224・専用ブリッジ・専用ブラウザを使用し、試験終了時に所有プロセスを停止します。実USB・実モータでの新構成の駆動は未検証です。
 
 ## 起動と操作
 
@@ -142,37 +186,76 @@ ros2 launch gng_vlut_system dynamixel_sim_control.launch.py \
 
 最新の試験結果と未検証範囲: [リリース記録](releases/2026-10-01_dynamixel_sim_control.md)。
 
-## 両腕の重力補償付き手動操作
+## 重力補償・保持付きの手動操作
 
-対象: フォロワー右腕ID31〜37・左腕ID41〜47。首51・52とグリッパー38・48への指令なし。
+共通入口: `dynamixel_hand_guiding.launch.py`。対象と制御方式はlaunchオプションで選択。
+`target:=follower`（既定）は右ID31〜37・左ID41〜47、`target:=leader`は右ID1〜7・左ID11〜17、`target:=neck`はID51・52。
+グリッパーとリーダー首ID21・22は対象外。対象変更は終了後の再起動。
 既定モデル: `topo_dual_arm_max_long`。設定: [dynamixel_hand_guiding.yaml](../config/dynamixel_hand_guiding.yaml)。
 
-目的: 元の角度へ戻す位置保持ではなく、自重の支持と小さな速度抵抗による手動操作。
+`control_mode:=gravity`（既定）: 自重の支持と小さな速度抵抗による手動操作。
+`control_mode:=adaptive_hold`: 静止時の保持、操作中の保持解除、調整後の角度での再保持。
 `init/torque_auto_enable`はhandler起動時のON設定であり、柔らかさ・重力補償の制御モードとは別。
 
 ```bash
 ros2 launch gng_vlut_system dynamixel_hand_guiding.launch.py
+
+# 保持付きのリーダー手動操作。実機出力なし
+ros2 launch gng_vlut_system dynamixel_hand_guiding.launch.py \
+  target:=leader control_mode:=adaptive_hold
+
+# 首も同じ入口。既存dynamixel_neck_torque.launch.pyも共通入口へ転送
+ros2 launch gng_vlut_system dynamixel_hand_guiding.launch.py \
+  target:=neck control_mode:=adaptive_hold
+
+# s・r・f共通launchからの追加起動。手動操作の出力許可は独立
+ros2 launch gng_vlut_system robot_follow.launch.py \
+  profile:=r_display hand_guiding_target:=leader hand_guiding_control_mode:=adaptive_hold
 ```
 
-既定: `allow_hardware_output: false`。実機指令publisherなし、トルク・モード・ゲイン変更なし。
+共通入口の既定: `allow_hardware_output:=false`。YAMLの許可より優先、実機指令publisherなし。
+腕の校正設定は`config_file`、保持設定は`mode_config_file`で指定。後者の既定は[dynamixel_adaptive_hold.yaml](../config/dynamixel_adaptive_hold.yaml)。
+保持ゲイン・上限・外力閾値はプレビュー用仮値、実機の推奨値ではない。軸順配列またはスカラ共通値に対応。
+重力補償モードでは保持設定の読込み・操作入力の購読・保持計算なし。
 更新済みhandlerの`/dynamixel/fresh_joint_states`を購読し、`/dynamixel_hand_guiding/status`へ状態と支持トルクを配信。
 トルク換算未設定時の`current_ma`はnull。校正・可動域・速度条件の不一致は`error`へ表示。
 USBの新規接続なし。既存3 Mbps handlerの継続利用、同じUSBへの二重起動禁止。
 
-計算: URDF質量・重心による支持トルク`g(q)`と、モータ速度に対する粘性抵抗。
+重力補償モードの計算: URDF質量・重心による支持トルク`g(q)`と、モータ速度に対する粘性抵抗。
 モータ電流は`I = (ramp * scale * g(q) - damping_gain * motor_velocity) / torque_nm_per_ma`。
 `scale`は対応表の角度換算符号、位置目標・位置PID・積分項なし。
 首用と共通のゼロ電流読返し→トルクON報告→補償立上げ、終了時OFF要求の経路。
+
+保持付き制御は上記に保持トルクを追加。開始時の現在角度を保持目標へ取り込み、操作検出で保持の強さを`release_ramp_sec`で減少。
+操作終了と静止が`min_hold_duration_sec`続いた時点で、その角度を新しい保持目標へ一度だけ取り込み、`hold_ramp_sec`で保持を復帰。
+保持中の目標角度は固定で、垂れへの追従なし。操作中も重力補償と既存の減衰は継続。
+保持トルクは`hold_gain_nm_per_rad * (保持目標 - motor角度)`を`max_hold_torque_nm`で制限。支持電流を確保した残りの電流範囲だけを保持に使用。
+解除・保持の外力閾値はヒステリシス付き。外力入力では右腕・左腕を別グループ、首は2軸を1グループとして判定。
+
+操作入力は`interaction_source`で選択:
+
+- `manual`（既定）: `/dynamixel_hand_guiding/allow_guiding`の`std_msgs/msg/Bool`。`true`で対象全体の手動操作、`false`で静止確認後の保持。配信元1個による継続送信が必要
+- `external_effort`: `/dynamixel_hand_guiding/external_effort`の`sensor_msgs/msg/JointState`。`header.frame_id=dynamixel_motor`、`name`は対象motor IDの文字列、`effort`はモータ座標の外力トルク[N m]、現在時刻のstamp。位置・速度配列は空で可
+
+外力入力には力センサまたは校正済み推定器が必要。Dynamixelの生電流や重力を含む総トルクの直接接続は不可。外力推定器自体は未実装。
+操作許可中の静止だけでは保持へ戻らず、ゆっくりした微調整にも対応。入力の欠測・失効・配信元重複は実機出力停止対象。
+プレビューでは`has_fresh_interaction`・`is_guiding`・`hold_blend`・`hold_target_rad`を状態トピックへ配信。保持目標はmotor座標、グループ配列は右／左の順、首は1要素。
 
 実機有効化に必要な確認・設定:
 
 - 質量・重心・関節符号・原点の実機校正。基台直立、waist固定0、グリッパー角度0、把持物なしの計算条件
 - `torque_nm_per_ma`: モータ出力トルク／電流[N m/mA]の校正済み正数14要素。カタログのストール値からの自動換算なし
 - `max_current_ma`: 機種・支持・荷重に対応した許容電流[mA]14要素
-- 配列順: 右31〜37、左41〜47。`damping_gain`の単位は[N m/(rad/s)]、首用の[mA/(rad/s)]とは別
-- `has_verified_calibration: true`、`allow_hardware_output: true`。未校正・未設定時の実機有効化拒否
+- 配列順: 右7軸、左7軸。`damping_gain`の単位は[N m/(rad/s)]、首用の[mA/(rad/s)]とは別
+- 腕の`calibration_target`と`target`の一致、`has_verified_calibration: true`、launchの`allow_hardware_output:=true`。未校正・対象不一致・未設定時の実機有効化拒否
+- リーダーの質量・重心・原点・電流換算はフォロワーとは別の校正対象。必要に応じて`urdf_path`・`mapping_file`・`driver_namespace`を指定
+- 首の保持付き制御は校正済み重力補償の有効化と`torque_nm_per_ma`の2軸設定が必要。首の設定は[dynamixel_neck_torque.yaml](../config/dynamixel_neck_torque.yaml)
 - 対応機種: XM430-W350・XM540-W270。`current`モード、Reverse無効、Goal更新時自動トルクON無効、開始前トルクOFFと静止
 - 同じhandlerへ指令する位置保持・リーダー追従・首制御等との同時使用禁止。モータモード・Current Limit・ゲインの自動書換えなし
+
+`robot_follow.launch.py`では`hand_guiding_target:=none`が既定、追加ノードなし。選択肢は`leader`・`neck`。
+`hand_guiding_config`・`hand_guiding_mode_config`・`hand_guiding_interaction_source`で設定、`allow_hand_guiding_hardware_output:=true`で手動操作だけの出力を許可。
+フォロワーと手動操作の両方を実機出力する場合、別のhandler名前空間が必要。同じバスの場合はノード起動前の構成拒否。
 
 モード0の電流指令とモード5の電流上限は別の用途。[ROBOTISのGoal Current仕様](https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#goal-current102)。
 モードを変更する場合は腕を機械的に支持し、トルクOFFでの確認が必要。未確認の値による一括モード変更・一括トルクONなし。
@@ -183,7 +266,7 @@ USBの新規接続なし。既存3 Mbps handlerの継続利用、同じUSBへの
 終了・立上げ・通信異常時の落下防止保証なし。腕の機械的支持と独立した停止手段の準備が必要。
 完全な重力補償だけで任意位置の静止を保証する方式ではなく、モデル誤差・摩擦・追加荷重によるドリフトの可能性。
 
-検証範囲: 静的位置エネルギー勾配・MuJoCo支持トルクとの一致、隔離疑似handlerによる電流出力順序・実測失効・対象14軸OFF、実機入力の出力OFFプレビュー。
+検証範囲: 静的位置エネルギー勾配・MuJoCo支持トルクとの一致、仮想1軸MuJoCoによる補償誤差下の保持・外力操作・新角度での再保持、3対象の共通launchと隔離疑似handlerによる解除・再保持・操作入力失効時のゼロ電流と対象軸OFF。
 実機の柔らかさ・重力支持・電流係数: 未校正・未検証。既存実機のトルク変更なし。
 
 ## 実機リーダー・フォロワー制御
@@ -197,9 +280,9 @@ Gazeboなしの専用起動。既定モデルは`topo_dual_arm_max_long`、設�
 | グリッパー | 8・18 | 38・48 | 入力換算は設定で有効化可能、実機出力は対象外 |
 | 首 | 21・22 | 51・52 | 対象外 |
 
-グリッパーの新機構は、右ID8が反時計回り、左ID18が時計回りで閉じる入力換算に対応。モータの開閉端をURDFの開度へ線形換算し、可動域外は開閉端で飽和。LongのURDFは0 radが閉、約0.785398 radが開。旧対応表は保持し、新換算は`enable_leader_gripper_input: true`時の入力だけに適用。フォロワーID38・48の校正は別途必要で、`joint_names`への追加は不可。リーダー・首への指令なし。モータモードの自動変更なし。
+グリッパーの新機構は、右ID8が反時計回り、左ID18が時計回りで閉じる入力換算に対応。モータの開閉端をURDFの開度へ線形換算し、可動域外は開閉端で飽和。LongのURDFは0 radが閉、約0.785398 radが開。旧対応表は保持し、新換算は共通入力設定の`leader.enable_gripper_input: true`時の入力だけに適用。フォロワーID38・48の校正は別途必要で、`joint_names`への追加は不可。リーダー・首への指令なし。モータモードの自動変更なし。
 
-新入力は原点未確認のため既定OFF。`dynamixel_leader_follower.yaml`の`leader_right_gripper_open_deg`／`leader_right_gripper_closed_deg`、`leader_left_gripper_open_deg`／`leader_left_gripper_closed_deg`でモータの開閉端を設定。仮置きは0°で開、右+180°／左−180°で閉。実際の閉じ切りが150°なら、閉じ端を右+150°／左−150°へ変更。開いた状態の実測原点を確認したうえで有効化。
+新入力は原点未確認のため既定OFF。[dynamixel_joint_state_input.yaml](../config/dynamixel_joint_state_input.yaml)の`leader`節で、`right_gripper_open_deg`／`right_gripper_closed_deg`、`left_gripper_open_deg`／`left_gripper_closed_deg`によるモータの開閉端を設定。仮置きは0°で開、右+180°／左−180°で閉。実際の閉じ切りが150°なら、閉じ端を右+150°／左−150°へ変更。開いた状態の実測原点を確認したうえで有効化。
 
 有効時の`/leader/joint_states`は腕14軸とグリッパー2軸の16軸。mimicはモデル側で展開。ID8・18を含む全入力の鮮度を満たす場合だけ配信し、グリッパー欠測時の旧開度による鮮度更新なし。実機指令の対象は`joint_names`の腕だけ。
 
@@ -215,15 +298,29 @@ source /ros2_ws/install/setup.bash
 
 USBを専有する`dynamixel_handler`は別起動。既存handlerがある場合は再利用、同じUSBへの二重起動は禁止。Wizardとの同時通信も避けること。既存の起動方法は`ros2 launch dynamixel_handler dynamixel_handler_launch.xml`。ドライバの起動・終了時設定は別管理のため、トルク自動ON無効・終了時の脱力に対する支持条件の確認が必要。
 
-コンテナ内の対話端末から:
+共通実測入力を先に起動。Long設定のViewer launchが入力トピックの変換・配信を所有します。
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=topo_dual_arm_max_long.yaml
+```
+
+Viewerを使用しない場合は`ros2 launch gng_vlut_system dynamixel_joint_state_input.launch.py`だけを起動。
+両launchの同時起動は避け、入力を別途配信済みの場合はViewerに`enable_dynamixel_joint_state_input:=false`を指定。
+実機追従を使う場合に、別の対話端末で次を追加。
 
 ```bash
 ros2 launch gng_vlut_system dynamixel_leader_follower.launch.py
 ```
 
-既定は`allow_hardware_output: false`。実機指令publisherの生成なし、Hによる有効化も拒否。リーダーが接続済みなら、フォロワー未接続でも`/leader/joint_states`の配信とブラウザ物理フォロワーの使用が可能。
+既定は`allow_hardware_output: false`。実機指令publisherの生成なし、Hによる有効化も拒否。共通入力は制御ノードとは独立し、フォロワー未接続でもリーダーだけの角度配信とブラウザ物理フォロワーの使用が可能。
 
-入出力は`fresh_joint_states`。今回の通信で位置・速度を取得できたIDだけを使用、キャッシュ済み`state/present`からの代用なし。必要な入力・状態topicは既存の「実機小動作の準備」と同じ。
+リーダー共通入力は`/<leader_driver_namespace>/fresh_joint_states`からID・符号・原点・グリッパー開度を換算し、関節名・rad・rad/s・最古の構成関節の実測時刻を`/leader/joint_states`へ配信。`header.frame_id`は校正済み入力を示す`dynamixel_leader`。これはTF座標系の指定とは別の入力種別です。部分欠測・過去時刻の再送による鮮度更新なし。
+
+追従制御は校正済みリーダートピックを購読し、ID・角度の再換算や`/leader/joint_states`の再配信を行いません。フォロワーの制御監視は引き続き`fresh_joint_states`とhandlerの状態topicを使用。キャッシュ済み`state/present`による制御監視の代用なし。
+
+フォロワー表示は既存の読取り専用readerにも対応する`input_type: present`が既定で、`/<driver_namespace>/state/present`から`/follower/joint_states`へ配信。関節対応表の固定腰・mimicを含み、Max／Longでは21関節です。位置・速度の同時実測を使う場合は入力設定の`follower.input_type: fresh`へ変更。表示用present経路を実機制御監視へ接続する構成ではありません。
+
+共通入力の接続先・対応表・リーダーグリッパー校正は`dynamixel_joint_state_input.yaml`に集約。従来の制御設定にあった`enable_leader_gripper_input`と`leader_*_gripper_*_deg`は、入力設定の`leader.enable_gripper_input`と`leader.*_gripper_*_deg`へ移動。両端末の入力設定の重複なし。必要な実機監視topicは既存の「実機小動作の準備」と同じ。
 
 YAMLの主な設定:
 
@@ -231,11 +328,8 @@ YAMLの主な設定:
 | --- | --- |
 | `joint_names` | 実機出力対象関節。初回は1関節での符号・追従・停止確認 |
 | `driver_namespace` | フォロワーhandlerのtopic接頭辞。既定`/dynamixel` |
-| `leader_driver_namespace` | リーダーhandlerのtopic接頭辞。同一USBは`/dynamixel`、別USBは別namespaceのhandlerに対応した値 |
-| `mapping_file` / `leader_mapping_file` | 必要時の校正済み対応表への変更。フォロワーはMax／Long用設定をモデル名で選択、リーダーは旧ID設定。明示指定を優先 |
-| `enable_leader_gripper_input` | 既定false。グリッパー2軸の入力専用換算と配信 |
-| `leader_right_gripper_open_deg` / `leader_right_gripper_closed_deg` | 右モータの開閉端 [deg] |
-| `leader_left_gripper_open_deg` / `leader_left_gripper_closed_deg` | 左モータの開閉端 [deg] |
+| `leader_driver_namespace` | リーダー・フォロワーの同一バスID重複検査用。共通入力側の接続先と対応した値 |
+| `mapping_file` / `leader_mapping_file` | 実機出力の逆換算／リーダーIDの照合。共通入力側の対応表と整合した設定 |
 | `enable_relative_follow` | 既定true。追従開始時からのリーダー角度差をフォロワーへ反映 |
 | `allow_hardware_output` | 実機出力許可。変更だけではトルクONなし |
 | `max_current_ma` | 許容電流。既定0は未設定・H拒否。機種・支持・荷重に基づく明示設定が必要 |

@@ -91,10 +91,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--namespace', required=True)
     parser.add_argument('--sim-namespace', default='sim_ToPoDualArm')
-    parser.add_argument('--target-source', choices=['gazebo', 'leader'], default='gazebo')
+    parser.add_argument('--target-source', choices=['gazebo', 'leader', 'joint_state'], default='gazebo')
     parser.add_argument('--tty-path', required=True)
     args = parser.parse_args(remove_ros_args()[1:])
-    is_leader = args.target_source == 'leader'
+    is_leader = args.target_source in ('leader', 'joint_state')
     stream = os.fdopen(os.open(args.tty_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK), 'r+b', buffering=0)
     def emit(message):
         node.get_logger().info(message)
@@ -179,7 +179,7 @@ def main():
     previous = None
     previous_sim = None
     emit('H: 実機出力ON／停止（保持目標読返し後の対象IDトルクONを含む）')
-    emit('J/K: 単関節±小角度 / F: '+('リーダー' if is_leader else 'Gazebo')+'追従ON/OFF / R: 停止解除・出力OFF')
+    emit('J/K: 単関節±小角度 / F: '+('共通目標' if args.target_source == 'joint_state' else 'リーダー' if is_leader else 'Gazebo')+'追従ON/OFF / R: 停止解除・出力OFF')
     emit('Space: 保持して停止 / Ctrl+C: 停止・所有出力のトルクOFF要求・終了' if is_leader else 'gazebo操作 | '+gazebo_key_help)
     emit('E: 選択IDのトルクOFF＋指令停止ラッチ（出力許可時のみ）。脱力・落下に備えた腕の支持が必要')
     emit('PC/USB故障時の独立非常停止とは別のソフト停止。実測停止表示を確認')
@@ -200,12 +200,14 @@ def main():
                 state = latest.get('hardware', {})
                 label = (state.get('mode'), state.get('detail'), state.get('ids'), state.get('is_stopped'),
                          time.monotonic()-received.get('hardware', -1e9) < .5, state.get('has_torque_off_report'),
-                         state.get('has_fresh_leader'), state.get('has_fresh_state'))
+                         state.get('has_fresh_target') if args.target_source == 'joint_state' else state.get('has_fresh_leader'), state.get('has_fresh_state'))
                 if label != previous:
                     emit(f'実機 ID={label[2]} mode={label[0]} / {label[1]} / 実測停止={label[3] if label[4] else "未確認・状態失効"}')
                     if state.get('is_torque_off_latched'):
                         emit(f'トルクOFF報告={label[5] if label[4] else "未確認・状態失効"}（電源遮断の確認とは別）')
-                    if is_leader:
+                    if args.target_source == 'joint_state':
+                        emit(f'目標元={state.get("target_role")} 受信={label[6] if label[4] else "未確認"} / フォロワー受信={label[7] if label[4] else "未確認"}')
+                    elif is_leader:
                         emit(f'リーダー ID={state.get("leader_ids")} 受信={label[6] if label[4] else "未確認"} / フォロワー受信={label[7] if label[4] else "未確認"}')
                     previous = label
                 sim_label = gazebo_status_label(latest, received, time.monotonic())

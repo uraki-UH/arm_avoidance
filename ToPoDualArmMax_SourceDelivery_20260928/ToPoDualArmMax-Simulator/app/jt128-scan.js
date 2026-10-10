@@ -132,9 +132,12 @@ export const jt128_channels=Object.freeze([
  [18.19,88.64,0],
  [117.3,88.99,0]
 ].map(row=>Object.freeze(row)));
+// 固定チャンネルの仰角成分。走査ごとの三角関数・配列展開の省略
+const channel_cos=jt128_channels.map(channel=>Math.cos(channel[1]*Math.PI/180));
+const channel_sin=jt128_channels.map(channel=>Math.sin(channel[1]*Math.PI/180));
 export function jt128_direction(beam_idx,out){
- const channel_idx=beam_idx%128,[azimuth_deg,elevation_deg]=jt128_channels[channel_idx];
+ const channel_idx=beam_idx%128,azimuth_deg=jt128_channels[channel_idx][0];
  // X前・Y左・Z上への時計回り走査角の変換。1回転900列の単一リターン近似
- const azimuth=-(Math.floor(beam_idx/128)*.4+azimuth_deg)*Math.PI/180,elevation=elevation_deg*Math.PI/180,cos_e=Math.cos(elevation);
- return out.set(cos_e*Math.cos(azimuth),cos_e*Math.sin(azimuth),Math.sin(elevation));
+ const azimuth=-(Math.floor(beam_idx/128)*.4+azimuth_deg)*Math.PI/180,cos_e=channel_cos[channel_idx];
+ return out.set(cos_e*Math.cos(azimuth),cos_e*Math.sin(azimuth),channel_sin[channel_idx]);
 }

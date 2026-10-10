@@ -71,7 +71,7 @@ def parse_packet(raw):
     return meta, data
 
 
-def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory=None):
+def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory=None, follow=None):
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(root), **kwargs)
@@ -100,7 +100,7 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
                 return self.respond(403, {'error': '許可されていないOriginです'})
             self.send_response(204)
             self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-ToPo-Points')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-ToPo-Points, X-ToPo-Follow')
             self.end_headers()
 
         def do_GET(self):
@@ -110,11 +110,26 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
                     return self.respond(200, latest_trajectory(model))
                 except ValueError as error:
                     return self.respond(400, {'error': str(error)})
+            if urlsplit(self.path).path == '/api/follow':
+                return self.respond(200, follow.snapshot() if follow is not None else {'has_manager': False})
             if urlsplit(self.path).path == '/api/points/status':
                 return self.respond(200, {'service': 'topo-pointcloud-bridge', 'protocol_version': 4, 'topics': topics, 'pointcloud_backend': 'cpp'})
             super().do_GET()
 
         def do_POST(self):
+            if urlsplit(self.path).path == '/api/follow':
+                if self.headers.get('Origin') not in allowed_origins or self.headers.get('X-ToPo-Follow') != '1':
+                    return self.respond(403, {'error': '許可されていない構成操作です'})
+                try:
+                    size = int(self.headers.get('Content-Length', '0'))
+                    if follow is None or not 0 < size <= 4096:
+                        raise ValueError('構成操作の入力不正')
+                    data = json.loads(self.rfile.read(size))
+                    if not isinstance(data, dict):
+                        raise ValueError('構成操作の形式不正')
+                    return self.respond(200, follow.perform(data))
+                except (ValueError, TypeError, TimeoutError) as error:
+                    return self.respond(400, {'error': str(error)})
             if urlsplit(self.path).path not in ('/api/points', '/api/state'):
                 return self.respond(404, {'error': 'APIが見つかりません'})
             if self.headers.get('Origin') not in allowed_origins or self.headers.get('X-ToPo-Points') != '1':
@@ -159,15 +174,20 @@ def main():
     ensure_native()
     rclpy.init()
     node = Node('topo_browser_pointcloud_bridge')
-    publishers = {key: node.create_publisher(PointCloud2, topic, 2) for key, topic in topics.items()}
-    joints = node.create_publisher(JointState, '/sim/joint_states', 2)
-    info = node.create_publisher(String, '/sim/points/info', 2)
+    from lazy_output import output_registry
+    # 実送信中のトピックだけのROS配信口。未使用センサの候補表示の防止
+    outputs = output_registry(node)
+    publishers = {key: outputs.create_publisher(PointCloud2, topic, 2) for key, topic in topics.items()}
+    joints = outputs.create_publisher(JointState, '/sim/joint_states', 2)
+    info = outputs.create_publisher(String, '/sim/points/info', 2)
     from depth_output import create_point_messages, depth_topics
     from sensor_msgs.msg import Image, CameraInfo
-    depth_publishers = [node.create_publisher(kind, topic, 2) for kind, topic in
+    depth_publishers = [outputs.create_publisher(kind, topic, 2) for kind, topic in
                         zip((Image, CameraInfo, PointCloud2), depth_topics)]
     lock = threading.Lock()
-    exchange = RobotExchange(node, joints, args.tf_topic)
+    exchange = RobotExchange(node, joints, args.tf_topic, outputs.create_publisher)
+    from follow_bridge import follow_bridge
+    follow = follow_bridge(node, outputs)
 
     def publish_state(state):
         with lock:
@@ -195,8 +215,8 @@ def main():
             info.publish(String(data=json.dumps(dict(meta, stamp_sec=stamp.sec, stamp_nanosec=stamp.nanosec))))
         return {'topic': topics[meta['source']], 'depth_topics': depth_topics if meta.get('depth_image') else [], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
 
-    stop_joint_stream = start_joint_stream(node, exchange, args.host, args.port + 1, allowed)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed, publish_state, exchange.latest))
+    stop_joint_stream = start_joint_stream(node, exchange, args.host, args.port + 1, allowed, follow)
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed, publish_state, exchange.latest, follow))
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -210,6 +230,7 @@ def main():
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
+        outputs.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

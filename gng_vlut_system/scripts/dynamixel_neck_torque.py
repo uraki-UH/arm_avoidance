@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """ID51・52専用の電流制限付き重力補償・粘性抵抗と終了時OFF要求。"""
 import ctypes
+import json
 import math
 import os
 import signal
@@ -13,6 +14,9 @@ from rclpy.signals import SignalHandlerOptions
 from rcl_interfaces.msg import ParameterDescriptor
 from dynamixel_handler_msgs.msg import DynamixelExtra, DynamixelGoal, DynamixelStatus
 from sensor_msgs.msg import JointState
+from std_msgs.msg import String
+
+from hand_guiding_control import setup_guiding
 
 
 def numeric_pair(values, name):
@@ -43,7 +47,7 @@ class neck_torque(Node):
         fixed = ParameterDescriptor(read_only=True)
         numeric = ParameterDescriptor(read_only=True, dynamic_typing=True)
         self.driver = self.declare_parameter('driver_namespace', '/dynamixel', fixed).value.rstrip('/')
-        allow_output = self.declare_parameter('allow_hardware_output', False, fixed).value
+        self.allow_hardware_output = self.declare_parameter('allow_hardware_output', False, fixed).value
         def pair(name):
             return numeric_pair(self.declare_parameter(name, [0.0, 0.0], numeric).value, name)
         self.max_current = pair('max_current_ma')
@@ -57,8 +61,6 @@ class neck_torque(Node):
             raise ValueError('gravity_ramp_sec: 正の有限値が必要です')
         if self.get_parameter('use_sim_time').value:
             raise ValueError('実機監視にはuse_sim_time=falseが必要です')
-        if not allow_output:
-            raise ValueError('出力未許可: YAMLのallow_hardware_outputを確認してください')
         if (len(self.max_current) != 2 or len(self.gains) != 2
                 or any(not math.isfinite(v) or v < 2.69 for v in self.max_current)
                 or any(not math.isfinite(v) or v <= 0 for v in self.gains)):
@@ -69,7 +71,18 @@ class neck_torque(Node):
                 raise ValueError('重力補償係数が未設定、または補償振幅がmax_current_maを超えています')
         if not self.driver.startswith('/') or self.driver == '':
             raise ValueError('driver_namespaceには絶対名前空間が必要です')
-        self.setup_io()
+        self.guiding = setup_guiding(self)
+        if self.guiding is not None:
+            self.torque_nm_per_ma = pair('torque_nm_per_ma')
+            if any(v < 0 for v in self.torque_nm_per_ma):
+                raise ValueError('torque_nm_per_maには非負の校正値が必要です')
+            self.has_verified_calibration = self.declare_parameter('has_verified_calibration', False, fixed).value
+            if self.allow_hardware_output and (not self.has_verified_calibration or
+                    not self.enable_gravity_compensation or any(v <= 0 for v in self.torque_nm_per_ma)):
+                raise ValueError('保持付き実機出力には校正確認・重力補償・トルク換算係数が必要です')
+        self.setup_io(self.allow_hardware_output)
+        if not self.allow_hardware_output:
+            self.get_logger().info('首: プレビューのみ（トルク変更なし）')
 
     def setup_io(self, allow_output=True):
         """電流制御の状態監視と配信口。首・両腕で共通の起動終了経路。"""
@@ -78,6 +91,10 @@ class neck_torque(Node):
         self.joints, self.status, self.extra, self.goals = {}, {}, {}, {}
         self.status_sec = self.extra_sec = self.goal_sec = -math.inf
         self.stage_sec = time.monotonic()
+        self.report_sec = -math.inf
+        self.report_current_ma = None
+        self.report_error = None
+        self.report_pub = self.create_publisher(String, '~/status', 1)
         self.goal_pub = self.create_publisher(DynamixelGoal, self.driver + '/command/goal', 1) if allow_output else None
         self.torque_pub = self.create_publisher(DynamixelStatus, self.driver + '/command/status', 1) if allow_output else None
         self.create_subscription(JointState, self.driver + '/fresh_joint_states', self.on_joints, qos_profile_sensor_data)
@@ -136,6 +153,8 @@ class neck_torque(Node):
     def check_driver(self):
         if not self.has_feedback():
             raise ValueError('実測・モータ状態・電流目標の欠測または失効')
+        if self.guiding is not None:
+            self.guiding.check_ready(time.monotonic())
         for motor_id in self.ids:
             torque, error, ping, mode = self.status[motor_id]
             model, auto_torque, reverse = self.extra[motor_id]
@@ -160,7 +179,38 @@ class neck_torque(Node):
 
     def step(self):
         now = time.monotonic()
-        if self.state == 'waiting' and not self.has_feedback():
+        if self.allow_hardware_output:
+            self.step_output()
+        elif self.guiding is not None and self.has_fresh_state():
+            try:
+                self.report_current_ma = self.control_currents(now)
+                self.report_error = None
+            except ValueError as error:
+                self.report_current_ma = None
+                self.report_error = str(error)
+        self.publish_control_report(now)
+
+    def publish_control_report(self, now):
+        if now - self.report_sec < .5:
+            return
+        self.report_sec = now
+        report = {'state': self.state if self.allow_hardware_output else 'preview',
+                  'allow_hardware_output': self.allow_hardware_output,
+                  'control_mode': 'gravity' if self.guiding is None else 'adaptive_hold',
+                  'has_fresh_state': self.has_fresh_state(), 'id_list': list(self.ids)}
+        if self.guiding is not None:
+            report.update(self.guiding.report())
+            report['current_ma'] = self.report_current_ma if report['has_fresh_state'] and report['has_fresh_interaction'] else None
+            if self.report_error:
+                report['error'] = self.report_error
+        elif report['has_fresh_state']:
+            report['current_ma'] = self.control_currents(now)
+        self.report_pub.publish(String(data=json.dumps(report, ensure_ascii=False, allow_nan=False)))
+
+    def step_output(self):
+        now = time.monotonic()
+        if self.state == 'waiting' and (not self.has_feedback() or
+                (self.guiding is not None and not self.guiding.has_fresh_input(now))):
             if now - self.stage_sec > 12.:
                 raise ValueError('起動に必要な状態の受信待機時間超過')
             return
@@ -188,7 +238,8 @@ class neck_torque(Node):
             self.send_current([0.] * len(self.ids))
             if self.status_sec > self.stage_sec and all(self.status[motor_id][0] for motor_id in self.ids):
                 self.state, self.stage_sec = 'running', now
-                mode = self.control_label if self.enable_gravity_compensation else '減衰のみ（静止時0 mA）'
+                mode = ('保持付き手動操作' if self.guiding is not None else
+                        self.control_label if self.enable_gravity_compensation else '減衰のみ（静止時0 mA）')
                 self.get_logger().info(f'{self.label}: {mode} | Ctrl+C: トルクOFF')
             elif now - self.stage_sec > 3.:
                 raise ValueError('トルクON報告の待機時間超過')
@@ -198,11 +249,15 @@ class neck_torque(Node):
                 raise ValueError('運転中のトルクOFF。自動再開なし')
             if any(abs(self.goals[motor_id][0]) > limit + .01 for motor_id, limit in zip(self.ids, self.max_current)):
                 raise ValueError('電流目標の上限逸脱')
-            self.send_current(self.control_currents(now))
+            self.report_current_ma = self.control_currents(now)
+            self.send_current(self.report_current_ma)
 
     def control_currents(self, now):
-        """モータ角度の重力項と減衰。目標姿勢・積分・自動増量なし。"""
+        """モータ角度の重力項・減衰と選択時だけの保持項。"""
         ramp = min(1., max(0., (now - self.stage_sec) / self.gravity_ramp_sec))
+        hold = None if self.guiding is None else self.guiding.update(now)
+        if hold is not None and not all(self.torque_nm_per_ma):
+            return None
         values = []
         for idx, motor_id in enumerate(self.ids):
             _, velocity, position = self.joints[motor_id]
@@ -210,6 +265,13 @@ class neck_torque(Node):
             if self.enable_gravity_compensation:
                 gravity = ramp * (self.gravity_cos_ma[idx] * math.cos(position)
                                   + self.gravity_sin_ma[idx] * math.sin(position))
+            if hold is not None:
+                support = gravity - self.gains[idx] * velocity
+                limit = self.max_current[idx]
+                if self.allow_hardware_output and abs(support) > limit:
+                    raise ValueError(f'ID{motor_id}: 重力補償・減衰の電流上限超過')
+                # 支持電流を確保した残りの範囲での保持。合成後の一度だけの量子化
+                gravity += max(-limit - support, min(limit - support, ramp * hold[idx] / self.torque_nm_per_ma[idx]))
             values.append(damping_current(velocity, self.gains[idx], self.max_current[idx], gravity))
         return values
 

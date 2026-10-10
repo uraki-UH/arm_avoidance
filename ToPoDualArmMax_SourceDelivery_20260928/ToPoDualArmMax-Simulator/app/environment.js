@@ -26,7 +26,7 @@ export class WorkEnvironment {
   }
   enhanceUI(){}
   ui(){
-    $('environment-panel').innerHTML=`<div class="panel-heading"><div><span class="eyebrow">WORKSPACE</span><h2>テーブルと物体</h2></div><span class="chip">m / mm</span></div>
+    $('environment-panel').innerHTML=`<div class="panel-heading"><div><span class="eyebrow">WORKSPACE</span></div><span class="chip">m / mm</span></div>
     <label class="field-label">テーブルの種類<select id="table-type">${Object.entries(TABLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>
     <div class="field-grid">${[['table-x','中心 X',500],['table-y','中心 Y',0],['table-z','天板 Z',120],['table-yaw','Yaw °',0],['table-width','奥行 X',600],['table-depth','幅 Y',800]].map(([id,t,v])=>`<label>${t}<input id="${id}" type="number" value="${v}" step="${id==='table-yaw'?5:10}" aria-label="テーブル ${t}"></label>`).join('')}</div>
     <p class="sub-note">base_footprint基準・mm</p>

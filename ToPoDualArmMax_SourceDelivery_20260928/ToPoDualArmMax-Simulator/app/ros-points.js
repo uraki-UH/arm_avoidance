@@ -11,7 +11,7 @@ export class RosPointsPanel{
   <label class="ros-connection"><span>接続先</span><input id="ros-endpoint" value="http://127.0.0.1:8879" type="url" aria-label="ROSブリッジ接続先（送受信共通）" spellcheck="false"></label>
   <section id="ros-send-panel"><h3>ブラウザ → ROS：送信</h3>
   <fieldset><legend>点群トピック（複数選択可）</legend>
-  ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（LiDAR）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
+  ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（LiDAR）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox"> ${label}</label>`).join('')}</fieldset>
   <label><input id="ros-depth" type="checkbox" checked> 深度画像・CameraInfo・画素対応点群も送信</label>
   <div class="row-actions"><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
 
@@ -20,7 +20,7 @@ export class RosPointsPanel{
   this.object_capture=new ObjectCapturePanel({environment,rgbd});
   $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='取得待ち';};
   for(const id of ['ros-endpoint','ros-depth',...sources.map(source=>'ros-send-'+source)])$(id).onchange=()=>{this.generation++;};
-  $('ros-endpoint').addEventListener('change',()=>{this.last_sent_frames={};});
+  $('ros-endpoint').addEventListener('change',()=>{this.last_sent_frames={};this.robot_panel.set_connection_state('points',false);});
   $('ros-depth').addEventListener('change',()=>{delete this.last_sent_frames.rgbd;});
   // 取得開始時だけ送信候補を選択。送信開始と手動の選択解除は独立
   const select_source=source=>{const checkbox=$('ros-send-'+source);if(checkbox&&!checkbox.checked){checkbox.checked=true;this.generation++;}};
@@ -33,7 +33,7 @@ export class RosPointsPanel{
   $('object-capture-source').addEventListener('change',()=>{if(this.object_capture.is_running)select_source($('object-capture-source').value);});
   this.robot_panel=new RosRobotPanel({rgbd,toast});
  }
- update_button(){$('ros-start').textContent=this.is_running?'送信を停止':'連続送信';}
+ update_button(){$('ros-start').textContent=this.is_running?'送信を停止':'連続送信';if(!this.is_running)this.robot_panel.set_connection_state('points',false);}
  latest_frame(source){
   if(source==='mid360')return this.lidar.config.enabled?this.lidar.last:null;
   if(source==='rgbd')return this.rgbd.last_scene_frame??null;
@@ -86,7 +86,7 @@ export class RosPointsPanel{
    if(generation!==this.generation||!$('ros-send-'+source).checked)return null;
    const response=await fetch(new URL('/api/points',endpoint),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-Points':'1'},body,signal:AbortSignal.timeout(10000)});
    if(!response.ok)throw Error(await response.text());const result=await response.json();
-   if(generation===this.generation)this.last_sent_frames[source]=captured;
+   if(generation===this.generation){this.last_sent_frames[source]=captured;this.robot_panel.set_connection_state('points',this.is_running);}
    if(generation===this.generation)$('ros-status').textContent=`${result.topic}${result.depth_topics?'\n'+result.depth_topics.join('\n'):''}\n${meta.count.toLocaleString()} 点送信済み\nframe: ${meta.frame_id}`;
    return result;
   }catch(error){this.is_running=false;this.update_button();$('ros-status').textContent='送信エラー：'+error.message+'\npointcloud_bridge.py の起動と送信先を確認してください';return null;}

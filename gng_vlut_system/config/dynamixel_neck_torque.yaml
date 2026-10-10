@@ -15,3 +15,6 @@
     gravity_sin_ma: [0.0, 0.0]
     # ON報告後の重力補償立上げ時間 [sec]。減衰項・終了時OFFは対象外
     gravity_ramp_sec: 1.0
+    # 保持付き手動操作の電流換算。通常の重力補償・減衰モードでは未使用
+    has_verified_calibration: false
+    torque_nm_per_ma: [0.0, 0.0]

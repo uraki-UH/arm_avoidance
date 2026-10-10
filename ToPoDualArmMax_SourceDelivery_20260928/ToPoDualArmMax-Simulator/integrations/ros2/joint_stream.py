@@ -11,7 +11,7 @@ import tornado.web
 import tornado.websocket
 
 
-def start_joint_stream(node, exchange, host, port, origins):
+def start_joint_stream(node, exchange, host, port, origins, follow=None):
     from sensor_msgs.msg import JointState
     from rclpy.qos import qos_profile_sensor_data
     ready = threading.Event()
@@ -68,7 +68,11 @@ def start_joint_stream(node, exchange, host, port, origins):
                         raise ValueError('状態送信項目が不正です')
                     now = time.monotonic()
                     if now - self.last_publish >= 1 / self.hz * .9:
-                        exchange.publish(state, outputs=outputs)
+                        if follow is not None:
+                            follow.claim_simulator(self, state)
+                        result = exchange.publish(state, outputs=outputs)
+                        if follow is not None:
+                            follow.publish_simulator(state, result)
                         self.last_publish = now
                     self.write_message({'type': 'ack'})
                 elif data.get('type') == 'joints' and self.model is not None:
@@ -125,6 +129,8 @@ def start_joint_stream(node, exchange, host, port, origins):
                 self.is_writing = False
 
         def on_close(self):
+            if follow is not None:
+                follow.release_simulator(self)
             if self.timer:
                 self.timer.stop()
             if self.subscription is not None:

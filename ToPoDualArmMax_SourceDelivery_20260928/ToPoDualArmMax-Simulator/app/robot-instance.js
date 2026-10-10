@@ -5,7 +5,7 @@ export class RobotInstancePanel {
  constructor(panel){
   this.panel=panel;this.robot=null;
   const section=document.createElement('section');
-  section.innerHTML=`<h3>操作対象ロボット</h3><label>姿勢の入力元<select id="robot-pose-source"><option value="simulator">シミュレータ操作</option><option value="ros">ROS実測の直接表示</option><option value="leader">リーダー → 物理フォロワー</option></select></label><label><input id="robot-visible" type="checkbox" checked>ロボットを表示</label><label>不透明度 <input id="robot-opacity" type="range" min="0" max="1" step="0.05" value="1"><output id="robot-opacity-value">100%</output></label>`;
+  section.innerHTML=`<h3>操作対象ロボット</h3><label>姿勢の入力元<select id="robot-pose-source"><option value="simulator">シミュレータ操作</option><option value="ros">ROS入力 → s（描画）</option><option value="leader">ROS入力 → s（力学）</option></select></label><label><input id="robot-visible" type="checkbox" checked>ロボットを表示</label><label>不透明度 <input id="robot-opacity" type="range" min="0" max="1" step="0.05" value="1"><output id="robot-opacity-value">100%</output></label>`;
   $('robot-panel').prepend(section);
   $('robot-pose-source').onchange=()=>{const source=$('robot-pose-source').value,checkbox=$('ros-joints-receive');checkbox.checked=source!=='simulator';if(source==='leader')$('ros-joints-topic').value='/leader/joint_states';checkbox.dispatchEvent(new Event('change'));};
   $('robot-visible').onchange=() =>this.appearance();$('robot-opacity').oninput=()=>this.appearance();

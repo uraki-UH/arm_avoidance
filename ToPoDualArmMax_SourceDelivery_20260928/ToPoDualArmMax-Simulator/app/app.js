@@ -299,7 +299,7 @@ async function init(){
   initWorkspace();
   $('loading-text').textContent='照明とマテリアルを準備中';$('load-progress').style.width='95%';
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
-  $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');$('load-status').textContent='LOCAL · READY';
+  $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');
   ready=true;diagnostics.ready=true;toast('手先の矢印をドラッグして操作できます');
   window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,ros_results,color_camera_panel,get physics_panel(){return physics_panel;},diagnostics,keyframes,
    cancel_robot_motion:()=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;},
@@ -314,7 +314,7 @@ async function init(){
       const {runModelQA}=await import('./qa-models.js');await runModelQA(window.simulator);
     }else{const {runQA}=await import('./qa-tests.js');await runQA(window.simulator);}
   }
- }catch(e){console.error(e);$('loading-text').textContent='読み込み失敗：'+e.message;$('load-status').textContent='読み込みエラー';diagnostics.errors.push(String(e));}
+ }catch(e){console.error(e);$('loading-text').textContent='読み込み失敗：'+e.message;diagnostics.errors.push(String(e));}
 }
 function aimAtTable(){
  const saved=robot.getPose(),target=new THREE.Vector3(0,0,.06).applyMatrix4(workspace.root.matrixWorld),pan=robot.joints.neck_pan_joint;

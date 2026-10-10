@@ -1,23 +1,23 @@
-"""ID51・52専用の重力補償・減衰。終了時のゼロ電流・トルクOFF要求。"""
+"""首トルク制御の既存入口。共通手動操作launchへの設定転送。"""
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
-from launch.event_handlers import OnProcessExit
-from launch.events import Shutdown
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    config = Path(get_package_share_directory('gng_vlut_system')) / 'config/dynamixel_neck_torque.yaml'
-    node = Node(package='gng_vlut_system', executable='dynamixel_neck_torque.py',
-                output='both', parameters=[LaunchConfiguration('config_file'), {'use_sim_time': False}],
-                sigterm_timeout='5', sigkill_timeout='5')
+    share = Path(get_package_share_directory('gng_vlut_system'))
+    defaults = {'config_file': str(share / 'config/dynamixel_neck_torque.yaml'),
+                'control_mode': 'gravity', 'allow_hardware_output': '',
+                'mode_config_file': str(share / 'config/dynamixel_adaptive_hold.yaml'),
+                'interaction_source': '', 'driver_namespace': ''}
+    arguments = {name: LaunchConfiguration(name) for name in defaults}
+    arguments.update(target='neck', node_name='dynamixel_neck_torque')
     return LaunchDescription([
-        DeclareLaunchArgument('config_file', default_value=str(config)),
-        node,
-        RegisterEventHandler(OnProcessExit(target_action=node,
-            on_exit=[EmitEvent(event=Shutdown(reason='首トルク制御の終了'))])),
+        *[DeclareLaunchArgument(name, default_value=default) for name, default in defaults.items()],
+        IncludeLaunchDescription(PythonLaunchDescriptionSource(str(share / 'launch/dynamixel_hand_guiding.launch.py')),
+                                 launch_arguments=arguments.items()),
     ])

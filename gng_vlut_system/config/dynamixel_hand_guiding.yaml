@@ -1,6 +1,7 @@
 /**:
   ros__parameters:
-    # 右31〜37・左41〜47の14軸専用。首・グリッパーへの指令なし
+    # 両腕14軸の校正設定。リーダー使用時には対象名と校正値の変更が必要
+    calibration_target: follower
     driver_namespace: /dynamixel
     # 既定は計算プレビュー。校正確認前の実機有効化拒否
     allow_hardware_output: false

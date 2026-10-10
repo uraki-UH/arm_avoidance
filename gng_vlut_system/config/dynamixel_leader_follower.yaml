@@ -8,14 +8,7 @@
     driver_namespace: /dynamixel
     leader_driver_namespace: /dynamixel
     leader_topic: /leader/joint_states
-    # ID8・18の入力専用換算。原点確認前は無効
-    enable_leader_gripper_input: false
-    # モータの開閉端 [deg]。0°開は仮置き、閉じ切り角は暫定180°
-    # 右の閉じ方向は反時計回り、左は時計回り。150°の場合は閉じ端を±150°へ変更
-    leader_right_gripper_open_deg: 0.0
-    leader_right_gripper_closed_deg: 180.0
-    leader_left_gripper_open_deg: 0.0
-    leader_left_gripper_closed_deg: -180.0
+    # 校正済みの共通実測入力。配信元はViewer側のdynamixel_joint_state_input
     allow_hardware_output: false
     allow_leader_follow: true
     # 追従開始時からの角度差。開始時の姿勢差による急動作の防止

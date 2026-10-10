@@ -39,6 +39,17 @@ ROS Viewerは`robot_viewer_bridge_node`起動時の参照メッシュ更新時�
 - 公称仕様: https://www.livoxtech.com/mid-360/specs
 - ユーザーマニュアル: https://terra-1-g.djicdn.com/851d20f7b9f64838a34cd02351370894/Livox/Livox_Mid-360_User_Manual_EN.pdf
 
+## Hesai JT128
+
+- 形状: Hesai公式CADの側面コネクタ型。取得日2026-10-10。
+- 配布元: [Hesai JT128ダウンロード](https://www.hesaitech.com/product_downloads/jt128/)、[公式CAD ZIP](https://www.hesaitech.com/wp-content/uploads/2025/09/JT128-3D-Model.zip)。
+- 原本: `app/assets/jt128/jt128-side-connector.stp`。ZIP内STEPと同一、原本の改変なし。SHA-256は`model.json`。
+- 描画: 8部品・100,505三角形。OpenCascade三角形化（弦誤差設定0.06 mm・角度0.16 rad）後、部品別に表示用の簡略化。元CADの公称外形外ソリッド1個（幅約485 mm、`source_part_idx=4`）は表示対象外。細部は表示用の近似。
+- 座標: mm→m、Z軸−90°回転、Z方向−47.84 mm。マニュアルFigure 5の座標原点へ描画を合わせ、Y前方をX前方へ変換。点群走査の姿勢・原点の変更なし。
+- 材質: 黒い光学カバー、濃灰の筐体、銀色コネクタの外観用PBR。実機反射率の再現ではない。
+- 再生成: `python3 -m pip install -r tools/requirements-cad.txt`後に`python3 tools/convert_jt128.py`。CAD変換ライブラリは通常起動時に不要。
+- 権利: Copyright Hesai。メーカー配布データの権利条件を継承、独自の再配布許諾の付与なし。
+
 ## Ferrari 458 Italia
 
 - モデル作者: **vicent091036**。

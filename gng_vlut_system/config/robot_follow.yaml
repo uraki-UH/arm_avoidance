@@ -1,0 +1,62 @@
+# s: Simulator、r: 実機リーダー、f: 実機フォロワー
+roles:
+  r: /leader/joint_states
+  f: /follower/joint_states
+  s: /robot_follow/simulator_state
+# 入力失効時間 [s]。実機制御と同じ実時刻の監視
+max_state_age_sec: 0.3
+profiles:
+  manual:
+    label: sを手動操作
+    simulator_source: none
+    simulator_mode: manual
+    follower_source: none
+    follow_mode: relative
+  r_display:
+    label: r → s（描画）
+    simulator_source: r
+    simulator_mode: display
+    follower_source: none
+    follow_mode: absolute
+  f_display:
+    label: f → s（描画）
+    simulator_source: f
+    simulator_mode: display
+    follower_source: none
+    follow_mode: absolute
+  r_dynamics:
+    label: r → s（力学）
+    simulator_source: r
+    simulator_mode: dynamics
+    follower_source: none
+    follow_mode: relative
+  f_dynamics:
+    label: f → s（力学）
+    simulator_source: f
+    simulator_mode: dynamics
+    follower_source: none
+    follow_mode: relative
+  r_to_f:
+    label: r → f
+    simulator_source: none
+    simulator_mode: manual
+    follower_source: r
+    follow_mode: relative
+  s_to_f:
+    label: s → f
+    simulator_source: none
+    simulator_mode: manual
+    follower_source: s
+    follow_mode: relative
+  r_display_f:
+    label: r → s（描画）＋ r → f
+    simulator_source: r
+    simulator_mode: display
+    follower_source: r
+    follow_mode: relative
+  r_dynamics_f:
+    label: r → s（力学）→ f
+    simulator_source: r
+    simulator_mode: dynamics
+    follower_source: s
+    follow_mode: relative

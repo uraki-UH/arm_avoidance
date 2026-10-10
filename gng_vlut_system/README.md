@@ -125,6 +125,40 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py
 ```
 
+Long設定のViewer起動は、既存Dynamixel入力から`/leader/joint_states`と`/follower/joint_states`の変換・配信も担当します。
+入力設定は[config/dynamixel_joint_state_input.yaml](config/dynamixel_joint_state_input.yaml)、実機の追従設定は[config/dynamixel_leader_follower.yaml](config/dynamixel_leader_follower.yaml)。
+USBドライバと実機駆動は別起動です。角度配信だけなら追従制御launchは不要です。
+
+| 起動 | 担当 |
+| --- | --- |
+| `gng_viewer_bridge.launch.py` | GNG・ロボット表示、共通の関節実測トピック |
+| `dynamixel_joint_state_input.launch.py` | Viewerなしの場合の共通実測入力のみ |
+| `dynamixel_leader_follower.launch.py` | 共通リーダー実測の購読、実機監視・追従・停止操作 |
+| `dynamixel_handler`／読取り専用reader | USB通信 |
+
+既存入力配信の再利用時は`enable_dynamixel_joint_state_input:=false`。
+GNGとロボットTFを実機フォロワーの姿勢に合わせる場合は、表示元も明示します。
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=topo_dual_arm_max_long.yaml \
+  joint_control_backend:=external state_topic:=/follower/joint_states
+```
+
+s（Simulator）・r（実機リーダー）・f（実機フォロワー）の接続管理は、共通launchとブラウザで選択できます。
+
+```bash
+ros2 launch gng_vlut_system robot_follow.launch.py
+```
+
+既定モデルはLong、初期構成は手動操作、実機出力許可はOFFです。SimulatorサーバーとROS／MuJoCoブリッジは既存サービスを再利用し、未起動分だけ起動します。USBドライバの起動は含みません。
+ブラウザの「ROS2連携 → s・r・fの接続構成」で、描画追従・力学追従・実機への追従元を選択します。起動時の指定例は `profile:=r_display`。
+接続構成は[config/robot_follow.yaml](config/robot_follow.yaml)に集約。入力変換・経路管理・既存実機監視が共通launchの担当です。Viewerを含める場合は `enable_viewer:=true`。既存Viewer等が共通実測を配信中なら `enable_joint_state_input:=false` を指定し、同じ入力の重複起動を避けます。
+設定・停止条件・実機有効化は[共通追従構成](docs/dynamixel_sim_control.md#srfの共通追従構成)を参照してください。
+
+`state_topic`の実測表示では初期ゼロ姿勢・仮想制御の配信を無効化します。
+既定の仮想Viewer操作と、実測角度のトピック配信は独立した経路です。
+
 学習結果の保存先・Viewerの読込先は、このYAMLの`gng.data_directory`と
 `gng.experiment_id`に従います。左右別モデルの保存先は
 `gng_results/topo_dual_arm_max_long_independent/`です。

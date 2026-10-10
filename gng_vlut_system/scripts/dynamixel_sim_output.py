@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gazebo・実機リーダーからのDynamixel出力と実測停止ラッチ。"""
+"""Gazebo・実機・共通追従目標からのDynamixel出力と実測停止ラッチ。"""
 import json
 import math
 from pathlib import Path
@@ -11,7 +11,7 @@ import rclpy
 from rclpy.clock import Clock, ClockType
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from rclpy.signals import SignalHandlerOptions
 from control_msgs.msg import JointTrajectoryControllerState
 from dynamixel_handler_msgs.msg import DynamixelGoal, DynamixelStatus, DynamixelExtra
@@ -20,7 +20,7 @@ from std_msgs.msg import Bool, Empty, String
 from std_srvs.srv import SetBool, Trigger
 import yaml
 
-from joint_command_model import joint_command_model, dynamixel_mapping, gripper_input_mapping
+from joint_command_model import joint_command_model, dynamixel_mapping
 
 
 class dynamixel_sim_output(Node):
@@ -31,11 +31,10 @@ class dynamixel_sim_output(Node):
             'driver_namespace': '/dynamixel', 'sim_namespace': '/sim_ToPoDualArm',
             'allow_hardware_output': False, 'allow_sim_follow': False,
             'target_source': 'gazebo', 'leader_mapping_file': '',
+            'target_topic': '/robot_follow/follower_target', 'target_session_topic': '/robot_follow/config',
+            'allow_joint_state_follow': False,
             'leader_driver_namespace': '/dynamixel', 'leader_topic': '/leader/joint_states',
             'allow_leader_follow': False, 'enable_relative_follow': True,
-            'enable_leader_gripper_input': False,
-            'leader_right_gripper_open_deg': 0., 'leader_right_gripper_closed_deg': 180.,
-            'leader_left_gripper_open_deg': 0., 'leader_left_gripper_closed_deg': -180.,
             'enable_torque_off_on_exit': False,
             'publish_hz': 20., 'max_state_age_sec': .3, 'max_status_age_sec': 1.5,
             'max_command_age_sec': .3, 'max_heartbeat_age_sec': .4,
@@ -45,15 +44,11 @@ class dynamixel_sim_output(Node):
             'max_start_dev_th': math.radians(1.), 'max_stop_velocity_th': math.radians(.5),
             'min_stop_duration_sec': .3, 'jog_step': math.radians(1.), 'max_prepare_sec': 3.}
         self.config = {name: self.declare_parameter(name, value).value for name, value in defaults.items()}
-        if self.config['target_source'] not in ('gazebo', 'leader'):
-            raise ValueError('target_sourceはgazeboまたはleaderが必要です')
+        if self.config['target_source'] not in ('gazebo', 'leader', 'joint_state'):
+            raise ValueError('target_sourceはgazebo・leader・joint_stateが必要です')
         if self.get_parameter('use_sim_time').value:
             raise ValueError('実機監視にはuse_sim_time=falseが必要です')
         for name, default in defaults.items():
-            if name.endswith(('_gripper_open_deg', '_gripper_closed_deg')):
-                if not math.isfinite(self.config[name]):
-                    raise ValueError('有限のグリッパー端点角度が必要です: '+name)
-                continue
             if isinstance(default, float) and (not math.isfinite(self.config[name]) or
                     (self.config[name] < 0 if name == 'max_current_ma' else self.config[name] <= 0)):
                 raise ValueError('有限の正数が必要です: '+name)
@@ -72,35 +67,25 @@ class dynamixel_sim_output(Node):
             if (math.degrees(self.config['max_velocity'])/scale < 1.374 or
                     math.degrees(self.config['max_acceleration'])/scale < 21.4577):
                 raise ValueError('profile上限がXシリーズの最小非ゼロ値より小さいため起動不可')
+        if self.config['target_source'] == 'joint_state' and any('gripper' in name for name in self.names):
+            raise ValueError('グリッパーの実機追従は校正確認前の対象外です')
         self.ids = [self.mapping.entries[name][0] for name in self.names]
         self.motor_names = {str(motor_id): name for motor_id, name in zip(self.ids, self.names)}
         self.leader_measured, self.leader_velocity, self.leader_stamps = {}, {}, {}
         self.leader_anchor, self.follower_anchor = {}, {}
-        self.leader_pub = None
-        self.leader_input_names = list(self.names)
-        self.leader_gripper_mapping = {}
+        self.target_session_id = ''
+        self.target_role = 'none'
         if self.config['target_source'] == 'leader':
             leader_config = yaml.safe_load(Path(self.config['leader_mapping_file']).read_text())['/**']['ros__parameters']
             self.leader_mapping = dynamixel_mapping(self.model, leader_config)
             if any(name not in self.leader_mapping.entries for name in self.names):
                 raise ValueError('選択関節のリーダーID対応が不足しています')
-            if self.config['enable_leader_gripper_input']:
-                for side, label in [('R', 'right'), ('L', 'left')]:
-                    name = side+'_gripper_joint'
-                    if name in self.names:
-                        raise ValueError('新グリッパー校正は入力専用です。実機出力対象には追加できません')
-                    if name not in self.model.bounds or name not in self.leader_mapping.entries:
-                        raise ValueError('グリッパーのURDF・リーダーID対応が不足しています: '+name)
-                    self.leader_gripper_mapping[name] = gripper_input_mapping(
-                        *self.model.bounds[name][:2],
-                        self.config['leader_'+label+'_gripper_open_deg'],
-                        self.config['leader_'+label+'_gripper_closed_deg'])
-                    self.leader_input_names.append(name)
-            self.leader_ids = [self.leader_mapping.entries[name][0] for name in self.leader_input_names]
+            if any('gripper' in name for name in self.names):
+                raise ValueError('グリッパーの実機追従は校正確認前の対象外です')
+            self.leader_ids = [self.leader_mapping.entries[name][0] for name in self.names]
             if (self.config['driver_namespace'].rstrip('/') == self.config['leader_driver_namespace'].rstrip('/')
                     and set(self.ids) & set(self.leader_ids)):
                 raise ValueError('同一バス内のリーダー・フォロワーID重複です')
-            self.leader_motor_names = {str(motor_id): name for motor_id, name in zip(self.leader_ids, self.leader_input_names)}
         self.measured, self.velocity, self.stamps = {}, {}, {}
         self.motor_status, self.drive_modes = {}, {}
         self.motor_series = {}
@@ -134,10 +119,12 @@ class dynamixel_sim_output(Node):
         self.create_subscription(DynamixelStatus, driver+'/state/status', self.on_motor_status, 1)
         self.create_subscription(DynamixelExtra, driver+'/state/extra', self.on_extra, 1)
         self.create_subscription(DynamixelGoal, driver+'/state/goal', self.on_goal, 1)
-        if self.config['target_source'] == 'leader':
-            self.leader_pub = self.create_publisher(JointState, self.config['leader_topic'], qos_profile_sensor_data)
-            self.create_subscription(JointState, self.config['leader_driver_namespace'].rstrip('/')+'/fresh_joint_states',
-                                     self.on_leader, qos_profile_sensor_data)
+        if self.config['target_source'] == 'joint_state':
+            self.create_subscription(String, self.config['target_session_topic'], self.on_target_session,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            self.create_subscription(JointState, self.config['target_topic'], self.on_joint_target, qos_profile_sensor_data)
+        elif self.config['target_source'] == 'leader':
+            self.create_subscription(JointState, self.config['leader_topic'], self.on_leader, qos_profile_sensor_data)
         else:
             self.create_subscription(JointTrajectoryControllerState, sim+'/dual_arm_controller/controller_state', self.on_sim_target, qos_profile_sensor_data)
             self.create_subscription(String, sim+'/control/status', lambda msg: self.on_sim_status(msg, False), 1)
@@ -166,8 +153,8 @@ class dynamixel_sim_output(Node):
                    0 <= (now-self.leader_stamps[name])*1e-9 < self.config['max_command_age_sec'] for name in self.names)
 
     def on_leader(self, message):
-        """通信成功IDだけの実測入力。キャッシュ済みpresentからの代用なし。"""
-        if (message.header.frame_id != 'dynamixel_motor' or
+        """共通入力で校正済みのリーダー実測。ID換算・表示トピック配信なし。"""
+        if (message.header.frame_id != 'dynamixel_leader' or
                 not len(message.name) == len(message.position) == len(message.velocity) or
                 len(set(message.name)) != len(message.name)):
             self.leader_stamps.clear()
@@ -175,39 +162,55 @@ class dynamixel_sim_output(Node):
         stamp = message.header.stamp.sec*1_000_000_000+message.header.stamp.nanosec
         if not 0 <= (time.time_ns()-stamp)*1e-9 < self.config['max_command_age_sec']:
             return
-        has_sample = False
-        for motor_name, position, velocity in zip(message.name, message.position, message.velocity):
-            name = self.leader_motor_names.get(motor_name)
-            if name is None or stamp <= self.leader_stamps.get(name, -1):
+        for name, position, velocity in zip(message.name, message.position, message.velocity):
+            if name not in self.names or stamp <= self.leader_stamps.get(name, -1):
                 continue
             if not all(map(math.isfinite, (position, velocity))):
                 self.leader_stamps.pop(name, None)
                 continue
-            _, scale, offset = self.leader_mapping.entries[name]
-            try:
-                if name in self.leader_gripper_mapping:
-                    value, speed = self.leader_gripper_mapping[name].convert(position, velocity)
-                else:
-                    value, speed = (position+math.radians(offset))*scale, velocity*scale
-                if not all(map(math.isfinite, (value, speed))):
-                    raise ValueError('非有限のリーダー換算値')
-            except ValueError:
-                self.leader_stamps.pop(name, None)
-                continue
-            self.leader_measured[name], self.leader_velocity[name] = value, speed
-            self.leader_stamps[name] = stamp
-            has_sample = True
-        now = time.time_ns()
-        if has_sample and all(name in self.leader_stamps and
-                0 <= (now-self.leader_stamps[name])*1e-9 < self.config['max_command_age_sec']
-                for name in self.leader_input_names):
-            state = JointState(name=self.leader_input_names,
-                               position=[self.leader_measured[name] for name in self.leader_input_names],
-                               velocity=[self.leader_velocity[name] for name in self.leader_input_names])
-            # 最も古い構成関節の実測時刻。部分欠測の受信時刻による隠蔽なし
-            state.header.stamp.sec, state.header.stamp.nanosec = divmod(
-                min(self.leader_stamps[name] for name in self.leader_input_names), 1_000_000_000)
-            self.leader_pub.publish(state)
+            self.leader_measured[name], self.leader_velocity[name], self.leader_stamps[name] = position, velocity, stamp
+
+    def on_target_session(self, message):
+        """構成切替時の停止ラッチと旧世代目標の破棄。"""
+        try:
+            data = json.loads(message.data)
+            session = data['session_id']
+            profile = data['profiles'][data['profile']]
+            if not isinstance(session, str) or not session or profile['follower_source'] not in ('none', 'r', 's') or profile['follow_mode'] not in ('relative', 'absolute'):
+                raise ValueError('共通追従構成の形式不正')
+            if session == self.target_session_id:
+                return
+            if self.target_session_id or self.has_owned_output:
+                self.stop('接続構成の変更。停止解除・追従の明示再開が必要')
+            self.target_session_id, self.target_role = session, profile['follower_source']
+            self.config['enable_relative_follow'] = profile['follow_mode'] == 'relative'
+            self.leader_stamps.clear()
+            self.leader_anchor, self.follower_anchor = {}, {}
+        except (ValueError, KeyError, TypeError):
+            self.stop('共通追従構成の受信不正')
+            self.target_session_id, self.target_role = '', 'none'
+            self.leader_stamps.clear()
+
+    def on_joint_target(self, message):
+        """構成世代・単一配信元・実測時刻付きの共通目標。"""
+        if (not self.target_session_id or self.target_role == 'none' or
+                message.header.frame_id != 'robot_follow_target:'+self.target_session_id or
+                self.count_publishers(self.config['target_topic']) != 1 or
+                self.count_publishers(self.config['target_session_topic']) != 1):
+            self.leader_stamps.clear()
+            return
+        stamp = message.header.stamp.sec*1_000_000_000+message.header.stamp.nanosec
+        if (not 0 <= (time.time_ns()-stamp)*1e-9 < self.config['max_command_age_sec'] or
+                len(message.name) != len(message.position) or len(set(message.name)) != len(message.name)):
+            return
+        pose = dict(zip(message.name, message.position))
+        if any(name not in pose or not math.isfinite(pose[name]) for name in self.names):
+            self.leader_stamps.clear()
+            return
+        if any(stamp <= self.leader_stamps.get(name, -1) for name in self.names):
+            return
+        self.leader_measured = {name: pose[name] for name in self.names}
+        self.leader_stamps = dict.fromkeys(self.names, stamp)
 
     def leader_target(self):
         if not self.has_fresh_leader():
@@ -303,6 +306,12 @@ class dynamixel_sim_output(Node):
 
     def check_ready(self):
         now = time.monotonic()
+        if self.config['target_source'] == 'joint_state' and (not self.target_session_id or self.target_role == 'none'):
+            raise ValueError('実機フォロワーの入力元が未選択')
+        if self.config['target_source'] == 'joint_state':
+            driver = self.config['driver_namespace'].rstrip('/')
+            if any(self.count_publishers(driver+topic) > 1 for topic in ('/command/goal', '/command/status')):
+                raise ValueError('実機出力の配信元重複')
         if not self.has_fresh_state():
             raise ValueError('実測失効。fresh_joint_states対応ドライバと位置・速度の同時読取りが必要です')
         if now-self.heartbeat_sec > self.config['max_heartbeat_age_sec']:
@@ -445,8 +454,8 @@ class dynamixel_sim_output(Node):
         return response
 
     def on_follow(self, request, response):
-        is_leader = self.config.get('target_source', 'gazebo') == 'leader'
-        source = 'リーダー' if is_leader else 'Gazebo'
+        is_leader = self.config.get('target_source', 'gazebo') in ('leader', 'joint_state')
+        source = ('共通追従目標' if self.config['target_source'] == 'joint_state' else 'リーダー') if is_leader else 'Gazebo'
         try:
             if not request.data:
                 if self.mode != 'follow':
@@ -454,7 +463,7 @@ class dynamixel_sim_output(Node):
                 self.target, self.mode, self.detail = dict(self.measured), 'hold', source+'追従解除・現在姿勢保持'
             else:
                 self.check_ready()
-                permission = 'allow_leader_follow' if is_leader else 'allow_sim_follow'
+                permission = ('allow_joint_state_follow' if self.config['target_source'] == 'joint_state' else 'allow_leader_follow') if is_leader else 'allow_sim_follow'
                 if not self.config[permission] or self.mode != 'hold' or not self.is_stationary():
                     raise ValueError('追従許可・保持・実測静止が必要です')
                 if is_leader:
@@ -513,7 +522,7 @@ class dynamixel_sim_output(Node):
         if any(not self.motor_status[motor_id][0] for motor_id in self.ids):
             raise ValueError('実機トルクOFF')
         if self.mode == 'follow':
-            if self.config.get('target_source', 'gazebo') == 'leader':
+            if self.config.get('target_source', 'gazebo') in ('leader', 'joint_state'):
                 self.target = self.leader_target()
             else:
                 self.check_sim()
@@ -548,6 +557,9 @@ class dynamixel_sim_output(Node):
             'has_fresh_state': self.has_fresh_state(), 'positions': self.measured,
             'velocities': self.velocity, 'commanded': self.commanded,
             'has_owned_output': self.has_owned_output,
+            'target_source': self.config['target_source'], 'target_role': self.target_role, 'target_session_id': self.target_session_id,
+            **({'has_fresh_target': self.has_fresh_leader(), 'target_positions': self.leader_measured}
+               if self.config['target_source'] == 'joint_state' else {}),
             **({'leader_ids': self.leader_ids, 'has_fresh_leader': self.has_fresh_leader(),
                 'leader_positions': self.leader_measured, 'enable_relative_follow': self.config['enable_relative_follow']}
                if self.config.get('target_source', 'gazebo') == 'leader' else {})}, ensure_ascii=False)))

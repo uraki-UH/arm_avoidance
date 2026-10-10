@@ -181,6 +181,8 @@ def launch_setup(context, *args, **kwargs):
     yaml_enable_environment_self_filter = False
     yaml_enable_joint_state_publisher = True
     yaml_enable_dynamixel_current_pose = False
+    yaml_enable_dynamixel_joint_state_input = False
+    yaml_dynamixel_joint_state_input_config = "package://gng_vlut_system/config/dynamixel_joint_state_input.yaml"
     yaml_enable_environment_voxelization = False
     yaml_environment_voxelization = {}
     yaml_voxel_idx = {}
@@ -238,6 +240,8 @@ def launch_setup(context, *args, **kwargs):
                     root_ros_params.get('enable_dynamixel_current_pose'), False
                 )
                 yaml_dynamixel_mapping_file = root_ros_params.get('dynamixel_mapping_file', '')
+                yaml_enable_dynamixel_joint_state_input = safe_bool(root_ros_params.get('enable_dynamixel_joint_state_input'), False)
+                yaml_dynamixel_joint_state_input_config = root_ros_params.get('dynamixel_joint_state_input_config', yaml_dynamixel_joint_state_input_config)
                 yaml_enable_realsense_mount_tf = safe_bool(
                     root_ros_params.get('enable_realsense_mount_tf'), False
                 )
@@ -823,6 +827,16 @@ def launch_setup(context, *args, **kwargs):
                                                      if danger_source == 'environment_inflation' else 0.0),
                                 'publish_hz': float(environment.get('publish_hz', 30.0)),
                             }]))
+    enable_dynamixel_joint_state_input = safe_bool(
+        LaunchConfiguration('enable_dynamixel_joint_state_input').perform(context), yaml_enable_dynamixel_joint_state_input)
+    if enable_dynamixel_joint_state_input:
+        input_config = resolve_package_uri(LaunchConfiguration('dynamixel_joint_state_input_config').perform(context) or yaml_dynamixel_joint_state_input_config)
+        # 表示・シミュレーション・追従制御の共通実測配信。USBと実機指令の自動起動なし
+        actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, 'launch', 'dynamixel_joint_state_input.launch.py')),
+            launch_arguments={'params_file': params_file, 'config_file': input_config, 'urdf_path': urdf_path,
+                              'robot_name': robot_name, 'follower_mapping_file': resolve_package_uri(
+                                  LaunchConfiguration('dynamixel_mapping_file').perform(context) or yaml_dynamixel_mapping_file)}.items()))
     if enable_dynamixel_current_pose:
         mapping_file = LaunchConfiguration('dynamixel_mapping_file').perform(context).strip()
         mapping_file = resolve_package_uri(mapping_file or yaml_dynamixel_mapping_file)
@@ -873,6 +887,10 @@ def generate_launch_description():
         DeclareLaunchArgument("joint_control_backend", default_value="",
                               description="関節出力先。未指定時は機体YAML、設定なしはviewer"),
         DeclareLaunchArgument("dynamixel_mapping_file", default_value=""),
+        DeclareLaunchArgument('enable_dynamixel_joint_state_input', default_value='',
+                              description='リーダー・フォロワー実測トピックの共通起動。未指定時は機体YAML'),
+        DeclareLaunchArgument('dynamixel_joint_state_input_config', default_value='',
+                              description='共通実測入力設定の上書き'),
         DeclareLaunchArgument('enable_dynamixel_current_pose', default_value='',
                               description='Dynamixel実測姿勢の表示。未指定時は機体YAMLを使用'),
         DeclareLaunchArgument('enable_environment_voxelization', default_value='',

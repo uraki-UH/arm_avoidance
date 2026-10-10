@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""両腕14軸の重力補償付き手動操作。既定は実機出力なしの計算表示。"""
+"""リーダー・フォロワー両腕14軸の手動操作。既定は実機出力なし。"""
 import json
 import math
 from pathlib import Path
@@ -13,6 +13,7 @@ import yaml
 from dynamixel_neck_torque import neck_torque, main
 from gravity_compensation import gravity_model
 from joint_command_model import joint_command_model, dynamixel_mapping
+from hand_guiding_control import setup_guiding
 
 
 class hand_guiding(neck_torque):
@@ -35,6 +36,13 @@ class hand_guiding(neck_torque):
                     or not math.isfinite(v) or v < 0 for v in result)):
                 raise ValueError(name + ': 関節順の非負・有限14要素が必要です')
             return list(map(float, result))
+        self.arm_role = param('arm_role', 'follower')
+        if self.arm_role not in ('leader', 'follower'):
+            raise ValueError('arm_roleにはleaderまたはfollowerが必要です')
+        if self.arm_role == 'leader':
+            self.ids = tuple(range(1, 8)) + tuple(range(11, 18))
+            self.label = 'リーダー両腕1〜7・11〜17'
+        self.calibration_target = param('calibration_target', 'follower')
         self.driver = param('driver_namespace', '/dynamixel').rstrip('/')
         self.allow_hardware_output = param('allow_hardware_output', False)
         self.has_verified_calibration = param('has_verified_calibration', False)
@@ -57,12 +65,12 @@ class hand_guiding(neck_torque):
             raise ValueError('両腕ID・関節名・±1の角度換算が必要です')
         self.gravity = gravity_model(self.get_parameter('urdf_path').value, self.names)
         self.enable_gravity_compensation = True
+        self.guiding = setup_guiding(self)
         if self.allow_hardware_output and (not self.has_verified_calibration or
+                self.calibration_target != self.arm_role or
                 any(limit < 2.69 or factor <= 0 for limit, factor in zip(self.max_current, self.torque_nm_per_ma))):
-            raise ValueError('実機出力拒否: 校正確認・関節別の電流上限とトルク換算係数が必要です')
+            raise ValueError('実機出力拒否: 対象別の校正確認・関節別の電流上限とトルク換算係数が必要です')
         self.setup_io(self.allow_hardware_output)
-        self.report_pub = self.create_publisher(String, '~/status', 1)
-        self.report_sec = -math.inf
         self.get_logger().info('手動操作: ' + ('実機出力許可・状態確認待ち' if self.allow_hardware_output else 'プレビューのみ（トルク変更なし）'))
 
     def on_joints(self, message):
@@ -76,7 +84,7 @@ class hand_guiding(neck_torque):
                 self.joints.pop(int(name), None)
         super().on_joints(message)
 
-    def support_currents(self, ramp=1.):
+    def support_currents(self, ramp=1., hold=None):
         positions = {}
         for name, motor_id in zip(self.names, self.ids):
             _, scale, offset = self.mapping.entries[name]
@@ -94,11 +102,14 @@ class hand_guiding(neck_torque):
             currents = []
             for idx, (name, motor_id) in enumerate(zip(self.names, self.ids)):
                 _, scale, _ = self.mapping.entries[name]
-                # モータ座標での支持トルクと粘性抵抗。位置目標・積分項なし
+                # モータ座標での支持トルクと粘性抵抗
                 torque = ramp * torques[name] * scale - self.gains[idx] * self.joints[motor_id][1]
                 current = torque / self.torque_nm_per_ma[idx]
                 if self.allow_hardware_output and abs(current) > self.max_current[idx]:
                     raise ValueError(f'ID{motor_id}: 支持電流の上限超過。補償不足のまま継続なし')
+                if hold is not None:
+                    limit = self.max_current[idx]
+                    current += max(-limit - current, min(limit - current, ramp * hold[idx] / self.torque_nm_per_ma[idx]))
                 currents.append(math.copysign(math.floor(abs(current) / 2.69) * 2.69, current))
         return torques, currents
 
@@ -110,22 +121,29 @@ class hand_guiding(neck_torque):
 
     def control_currents(self, now):
         ramp = min(1., max(0., (now - self.stage_sec) / self.gravity_ramp_sec))
-        return self.support_currents(ramp)[1]
+        hold = None if self.guiding is None else self.guiding.update(now)
+        return self.support_currents(ramp, hold)[1]
 
-    def step(self):
-        if self.allow_hardware_output:
-            super().step()
-        now = time.monotonic()
+    def publish_control_report(self, now):
         if now - self.report_sec < .5:
             return
         self.report_sec = now
         report = {'state': self.state if self.allow_hardware_output else 'preview',
                   'has_fresh_state': self.has_fresh_state(), 'id_list': list(self.ids),
                   'allow_hardware_output': self.allow_hardware_output,
-                  'has_verified_calibration': self.has_verified_calibration}
+                  'has_verified_calibration': self.has_verified_calibration,
+                  'control_mode': 'gravity' if self.guiding is None else 'adaptive_hold'}
+        if self.guiding is not None:
+            report.update(self.guiding.report())
+            report['current_ma'] = self.report_current_ma if report['has_fresh_state'] and report['has_fresh_interaction'] else None
+            if self.report_error:
+                report['error'] = self.report_error
         if report['has_fresh_state']:
             try:
-                report['gravity_nm'], report['current_ma'] = self.support_currents()
+                torques, currents = self.support_currents()
+                report['gravity_nm'] = torques
+                if self.guiding is None:
+                    report['current_ma'] = currents
             except ValueError as error:
                 report['error'] = str(error)
         self.report_pub.publish(String(data=json.dumps(report, ensure_ascii=False, allow_nan=False)))

@@ -1,0 +1,23 @@
+# 表示・シミュレーション・実機追従で共用する実測入力。USBと実機出力は別起動。
+leader:
+  # 追従制御へ渡す位置・速度の同時実測
+  input_type: fresh
+  driver_namespace: /dynamixel
+  output_topic: /leader/joint_states
+  joint_names: [R_joint1, R_joint2, R_joint3, R_joint4, R_joint5, R_joint6, R_joint7,
+                L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7]
+  max_state_age_sec: 0.3
+  enable_mimic: false
+  # ID8・18の入力専用換算。原点確認前は無効
+  enable_gripper_input: false
+  # モータの開閉端 [deg]。0°開は仮置き、閉じ切り角は暫定180°
+  right_gripper_open_deg: 0.0
+  right_gripper_closed_deg: 180.0
+  left_gripper_open_deg: 0.0
+  left_gripper_closed_deg: -180.0
+follower:
+  # 既存の読取り専用readerとの接続。fresh指定時は位置・速度の同時実測
+  input_type: present
+  driver_namespace: /dynamixel
+  output_topic: /follower/joint_states
+  # 実測関節・固定腰・mimicはフォロワー関節対応表に準拠

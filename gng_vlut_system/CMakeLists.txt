@@ -289,7 +289,9 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
   scripts/joint_motion_state.py
   scripts/local_qp.py
   scripts/joint_command_model.py
+  scripts/robot_follow_model.py
   scripts/gravity_compensation.py
+  scripts/hand_guiding_control.py
   scripts/dual_arm_mode_model.py
   scripts/dual_arm_udp_output.py
   DESTINATION lib/${PROJECT_NAME}
@@ -304,6 +306,8 @@ install(PROGRAMS
   scripts/joint_motion_observer.py
   scripts/dynamixel_neck_torque.py
   scripts/dynamixel_hand_guiding.py
+  scripts/dynamixel_joint_state_input.py
+  scripts/robot_follow_manager.py
   scripts/dynamixel_sim_output.py
   scripts/dynamixel_sim_keyboard.py
   scripts/start_gazebo_physics.py

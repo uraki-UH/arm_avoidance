@@ -1,0 +1,42 @@
+{
+  "model": {
+    "model_type": "dc_equivalent",
+    "name": "synthetic_example_not_dynamixel",
+    "parameter_source": "synthetic_example",
+    "has_verified_calibration": false,
+    "parameters": {
+      "resistance_ohm": 2.0,
+      "inductance_h": 0.0,
+      "torque_nm_per_a": 0.1,
+      "back_emf_v_per_rad_sec": 0.1,
+      "max_current_a": 3.0,
+      "max_voltage_v": 24.0,
+      "gear_ratio": 10.0,
+      "gear_efficiency": 0.8,
+      "viscous_friction_nm_per_rad_sec": 0.0
+    }
+  },
+  "inputs": [
+    {
+      "command_mode": "voltage",
+      "command_value": 12.0,
+      "supply_voltage_v": 12.0,
+      "shaft_velocity_rad_sec": 0.0,
+      "dt_sec": 0.002
+    },
+    {
+      "command_mode": "voltage",
+      "command_value": 12.0,
+      "supply_voltage_v": 12.0,
+      "shaft_velocity_rad_sec": 10.0,
+      "dt_sec": 0.002
+    },
+    {
+      "command_mode": "torque",
+      "command_value": 1.0,
+      "supply_voltage_v": 12.0,
+      "shaft_velocity_rad_sec": 0.0,
+      "dt_sec": 0.002
+    }
+  ]
+}

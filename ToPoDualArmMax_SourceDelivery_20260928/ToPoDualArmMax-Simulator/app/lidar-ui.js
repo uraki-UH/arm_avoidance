@@ -2,6 +2,7 @@ import {CloudColorControls,displayPLY} from './pointcloud-colors.js';
 import {loadMeasuredScan,measuredMetadata} from './measured-scan.js';
 import * as THREE from 'three';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
+import {load_jt128_cad} from './jt128-model.js';
 import {lidar_preset,lidar_ray_rate,defaultLidarConfig,validateLidarConfig,lidarPLY,waistLidarMount,scanDirection,PETAL_SCAN,packedPositions} from './lidar-core.js';
 import {robot_snapshot} from './robot-ros-state.js';
 import {zipFiles} from './capture-zip.js';
@@ -108,7 +109,9 @@ export class LidarWorkspace{
    if(source)for(const child of source.children)this.cad_model.add(child.clone());
   }
   const is_jt128=this.config.sensor_type==='jt128';
-  this.model.visible=!is_jt128&&!source;this.cad_model.visible=!is_jt128;if(this.jt128_model)this.jt128_model.visible=is_jt128;this.modelReady=is_jt128?!!this.jt128_model:!!source||!!this.has_legacy_model;
+  // 取得ON/OFFと筐体表示の分離。選択中のJT128は常時表示
+  this.mount.visible=this.config.enabled||is_jt128;
+  this.model.visible=!is_jt128&&!source;this.cad_model.visible=!is_jt128;if(this.jt128_model)this.jt128_model.visible=is_jt128;this.modelReady=is_jt128?!!this.has_jt128_model:!!source||!!this.has_legacy_model;
   if(is_jt128){this.support.visible=false;this.mountPlate.visible=false;}
   if(!source)return;
   // 無効時はロボット本体、有効時は設定位置の複製のみ表示
@@ -116,7 +119,7 @@ export class LidarWorkspace{
   this.robot.links.chest_lidar_mount_link.visible=!is_jt128&&(!this.config.enabled||this.is_mount_preset());
   this.support.visible=false;this.mountPlate.visible=false;
  }
- async loadModel(){if(this.config.sensor_type==='jt128'){this.load_jt128_model();return;}if(this.robot.links.chest_lidar_link||this.has_legacy_model)return;if(this.modelPromise)return this.modelPromise;this.modelPromise=(async()=>{const geometry=await new STLLoader().loadAsync('./assets/mid360/mid-360.stl');const pos=geometry.attributes.position,colors=new Float32Array(pos.count*3),silver=new THREE.Color('#858f95'),dark=new THREE.Color('#151c20'),base=new THREE.Color('#454d53');for(let i=0;i<pos.count;i++)(pos.getY(i)>6?dark:pos.getY(i)<-17?base:silver).toArray(colors,i*3);geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));geometry.scale(.001,.001,.001);geometry.rotateX(Math.PI/2);geometry.computeVertexNormals();const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,metalness:.5,roughness:.28}));mesh.castShadow=mesh.receiveShadow=true;this.model.add(mesh);this.has_legacy_model=true;this.sync_robot_model();this.renderer.shadowMap.needsUpdate=true;this.publish();})().catch(e=>{this.modelPromise=null;throw e;});return this.modelPromise;}
+ async loadModel(){if(this.config.sensor_type==='jt128')return this.load_jt128_model();if(this.robot.links.chest_lidar_link||this.has_legacy_model)return;if(this.modelPromise)return this.modelPromise;this.modelPromise=(async()=>{const geometry=await new STLLoader().loadAsync('./assets/mid360/mid-360.stl');const pos=geometry.attributes.position,colors=new Float32Array(pos.count*3),silver=new THREE.Color('#858f95'),dark=new THREE.Color('#151c20'),base=new THREE.Color('#454d53');for(let i=0;i<pos.count;i++)(pos.getY(i)>6?dark:pos.getY(i)<-17?base:silver).toArray(colors,i*3);geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));geometry.scale(.001,.001,.001);geometry.rotateX(Math.PI/2);geometry.computeVertexNormals();const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,metalness:.5,roughness:.28}));mesh.castShadow=mesh.receiveShadow=true;this.model.add(mesh);this.has_legacy_model=true;this.sync_robot_model();this.renderer.shadowMap.needsUpdate=true;this.publish();})().catch(e=>{this.modelPromise=null;throw e;});return this.modelPromise;}
 
  clear_capture(){
   this.finish_capture(null);this.generation++;this.worker.terminate();this.createWorker();this.busy=false;this.pending=null;this.last=null;this.known.clear();this.sequence=0;this.scanTime=0;this.pending_pattern=null;
@@ -127,12 +130,12 @@ export class LidarWorkspace{
   this.live=enable_sensor&&is_live;if(enable_sensor)this.capture();
  }
  load_jt128_model(){
-  if(!this.jt128_model){
-   // 公称外形寸法に基づく簡易筐体。計測原点を中心とした仮配置
-   this.jt128_model=new THREE.Group();this.jt128_model.name='Hesai JT128 simplified housing';
-   const body=new THREE.Mesh(new THREE.CylinderGeometry(.03125,.03125,.07305,32),new THREE.MeshStandardMaterial({color:'#262c30',metalness:.4,roughness:.3}));body.rotation.x=Math.PI/2;body.castShadow=body.receiveShadow=true;this.jt128_model.add(body);this.mount.add(this.jt128_model);
-  }
-  this.jt128_model.visible=true;this.sync_robot_model();
+  if(this.jt128_model_promise)return this.jt128_model_promise;
+  this.jt128_model_promise=load_jt128_cad().then(model=>{
+   this.jt128_model=model;this.mount.add(model);this.has_jt128_model=true;
+   this.sync_robot_model();this.renderer.shadowMap.needsUpdate=true;this.publish();
+  }).catch(error=>{this.jt128_model_promise=null;throw error;});
+  return this.jt128_model_promise;
  }
  sync_sensor_ui(){
   const c=this.config,is_jt128=c.sensor_type==='jt128',sensor_name=is_jt128?'Hesai JT128':'Livox MID-360';$('lidar-sensor-type').value=c.sensor_type;
@@ -140,13 +143,13 @@ export class LidarWorkspace{
   const patterns=is_jt128?[['jt128','JT128 · 128チャンネル回転走査']]:[['measured','実測 · Livox公式サンプルの走査方向'],['petal','旧・花びらの数式近似'],['low-discrepancy','均等分布 · 旧方式']];
   const pattern_select=$('lidar-pattern');if(pattern_select.dataset.sensor_type!==c.sensor_type){pattern_select.replaceChildren(...patterns.map(([value,text])=>new Option(text,value)));pattern_select.dataset.sensor_type=c.sensor_type;}
   const duration_select=$('lidar-duration');if(duration_select.dataset.sensor_type!==c.sensor_type){duration_select.replaceChildren(...[.025,.1,.5,1].map(value=>new Option(`${value} s · ${Math.round(value*lidar_ray_rate(c)).toLocaleString()}スロット`,String(value))));duration_select.dataset.sensor_type=c.sensor_type;}
-  const model_source=$('lidar-model-source');model_source.href=is_jt128?'https://www.hesaitech.com/wp-content/uploads/2026/04/JT128_User_Manual_J01-en-260330.pdf':'assets/mid360/mid-360.stl';model_source.textContent=is_jt128?'JT128公式マニュアル（筐体は簡易モデル）':'公式CAD変換 STL（mm）';if(is_jt128)model_source.removeAttribute('download');else model_source.setAttribute('download','');
+  const model_source=$('lidar-model-source');model_source.href=is_jt128?'assets/jt128/jt128-side-connector.stp':'assets/mid360/mid-360.stl';model_source.textContent=is_jt128?'Hesai公式CAD（STEP・側面コネクタ型）':'公式CAD変換 STL（mm）';model_source.setAttribute('download','');
   $('lidar-range').max=is_jt128?'60':'100';$('lidar-frame').options[1].textContent=(is_jt128?'jt128':'mid360')+' [m]';$('lidar-pattern-preview').setAttribute('aria-label',sensor_name+'の走査方向');
  }
  configure(c){const config=validateLidarConfig(c);this.clear_capture();this.config=config;this.live=false;this.apply();if(this.config.enabled)return this.loadModel();}
- apply(){const c=this.config;this.sync_sensor_ui();if(c.sensor_type==='jt128')this.load_jt128_model();const parent=c.parent==='world'?this.scene:this.robot.links[c.parent];if(!parent)throw Error('親リンクがありません：'+c.parent);parent.add(this.mount);this.mount.position.fromArray(c.position);this.mount.rotation.set(...c.rpy,'ZYX');this.mount.visible=c.enabled;this.updateBracket(parent);$('lidar-pattern').value=c.scanPattern;this.drawPattern();$('lidar-enable').checked=c.enabled;$('lidar-once').disabled=!c.enabled;
+ apply(){const c=this.config;this.sync_sensor_ui();if(c.sensor_type==='jt128')this.load_jt128_model().catch(error=>this.toast('CAD読込エラー：'+error.message));const parent=c.parent==='world'?this.scene:this.robot.links[c.parent];if(!parent)throw Error('親リンクがありません：'+c.parent);parent.add(this.mount);this.mount.position.fromArray(c.position);this.mount.rotation.set(...c.rpy,'ZYX');this.updateBracket(parent);$('lidar-pattern').value=c.scanPattern;this.drawPattern();$('lidar-enable').checked=c.enabled;$('lidar-once').disabled=!c.enabled;
   this.sync_robot_model();
-  $('lidar-mount-note').textContent=c.sensor_type==='jt128'?'既定の胸部位置・傾斜0°。寸法準拠の簡易筐体、計測原点の仮配置。実機への取付変換は個別校正が必要です。':this.cad_source?'Long: STEP由来の45°取付。既定位置はURDFと一致。機械取付原点のため実機計測原点は未校正。任意配置では固定ブラケットを非表示。':'標準: 前77.69 mm・上105 mm、前下がり45°の簡易取付。';
+  $('lidar-mount-note').textContent=c.sensor_type==='jt128'?'Hesai公式CAD・側面コネクタ型。既定の胸部位置・傾斜0°。':this.cad_source?'Long: STEP由来の45°取付。既定位置はURDFと一致。機械取付原点のため実機計測原点は未校正。任意配置では固定ブラケットを非表示。':'標準: 前77.69 mm・上105 mm、前下がり45°の簡易取付。';
   if(!c.enabled){this.live=false;$('lidar-only').checked=false;this.cloud.visible=false;$('lidar-stats').textContent='無効 · 点群取得停止';}else $('lidar-stats').textContent=this.last?'設定変更済み · 次の取得で反映':'有効 · 取得待ち';
   $('lidar-hz').value=c.capture_hz;$('lidar-parent').value=c.parent;$('lidar-mode').value=c.mode;$('lidar-duration').value=String(c.duration);for(const [i,k]of['x','y','z','roll','pitch','yaw'].entries())if(document.activeElement!==$('lidar-'+k))$('lidar-'+k).value=(i<3?c.position[i]*1000:c.rpy[i-3]/rad).toFixed(2);$('lidar-range').value=c.maxRange;$('lidar-noise').value=c.noiseSigma*1000;$('lidar-seed').value=c.seed;this.renderer.shadowMap.needsUpdate=true;this.setCloud();this.publish();
  }

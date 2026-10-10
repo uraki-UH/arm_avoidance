@@ -1,7 +1,8 @@
+import {raycast_surface} from './lidar-raycast.js';
 import {jt128_direction,jt128_channels,jt128_scan} from './jt128-scan.js';
 import {measuredDirection} from './measured-scan.js';
 import * as THREE from './vendor/three/build/three.module.js';
-import {MeshBVH} from './vendor/three-mesh-bvh/index.module.js';
+import {MeshBVH,SAH} from './vendor/three-mesh-bvh/index.module.js';
 const rad=Math.PI/180;
 export const PETAL_SCAN=Object.freeze({model:'quasiperiodic-rosette-v1',azimuthHz:10,petalHz:10*Math.sqrt(50),azimuthWobbleRad:.42,elevationCenterDeg:22.5,elevationAmplitudeDeg:29.5,nominalRaysPerSecond:200000});
 export const waistLidarMount=()=>({parent:'torso_link',position:[.07769,0,.105],rpy:[0,45*rad,0]});
@@ -19,11 +20,42 @@ export function scanDirection(i,out=new THREE.Vector3(),pattern='petal',timeSeco
  const ce=Math.cos(e);
  return out.set(ce*Math.cos(a),ce*Math.sin(a),Math.sin(e));
 }
-export function buildGeometry(d){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(d.position),3));if(d.index)g.setIndex(new THREE.BufferAttribute(new Uint32Array(d.index),1));g.computeBoundingBox();g.boundsTree=new MeshBVH(g,{maxLeafSize:8});return g;}
+export function buildGeometry(d){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(d.position),3));if(d.index)g.setIndex(new THREE.BufferAttribute(new Uint32Array(d.index),1));g.computeBoundingBox();g.boundsTree=new MeshBVH(g,{maxLeafSize:8,strategy:SAH});return g;}
 export function packedPositions(a){const result=new Float32Array(a.count*3);for(let i=0;i<a.count;i++){result[3*i]=a.getX(i);result[3*i+1]=a.getY(i);result[3*i+2]=a.getZ(i);}return result;}
 export function prepareMeshes(descriptors,geometries){return descriptors.map(d=>{const matrix=new THREE.Matrix4().fromArray(d.matrix),geometry=geometries.get(d.geometry),inverse=matrix.clone().invert();return{...d,matrix,inverse,geometry,box:geometry.boundingBox.clone().applyMatrix4(matrix)};});}
-export function firstSurface(origin,direction,meshes,maxRange=100){const ray=new THREE.Ray(origin,direction),local=new THREE.Ray(),point=new THREE.Vector3();let best=null,distance=maxRange;
- for(const m of meshes){if(!ray.intersectsBox(m.box))continue;local.copy(ray).applyMatrix4(m.inverse);const hit=m.geometry.boundsTree.raycastFirst(local,THREE.DoubleSide,0,Infinity);if(!hit)continue;point.copy(hit.point).applyMatrix4(m.matrix);const d=point.distanceTo(origin);if(d<distance){distance=d;best={distance:d,id:m.id,reflectance:m.reflectance??.5};}}
+// フレーム内のメッシュ外枠索引。三角形BVHの前段で交差候補のみ抽出
+const mesh_queries=new WeakMap();
+function mesh_query(meshes){
+ let query=mesh_queries.get(meshes);if(query)return query;
+ const build=indices=>{
+  const box=new THREE.Box3();for(const idx of indices)box.union(meshes[idx].box);
+  if(indices.length<=4)return {box,indices};
+  const size=box.getSize(new THREE.Vector3()),axis=size.x>=size.y&&size.x>=size.z?'x':size.y>=size.z?'y':'z';
+  indices.sort((a,b)=>(meshes[a].box.min[axis]+meshes[a].box.max[axis])-(meshes[b].box.min[axis]+meshes[b].box.max[axis]));
+  const middle=Math.floor(indices.length/2);return {box,left:build(indices.slice(0,middle)),right:build(indices.slice(middle))};
+ };
+ query={root:meshes.length?build(meshes.map((_,idx)=>idx)):null,ray:new THREE.Ray(),local:new THREE.Ray(),point:new THREE.Vector3(),stack:[]};
+ mesh_queries.set(meshes,query);return query;
+}
+export function firstSurface(origin,direction,meshes,maxRange=100){
+ const query=mesh_query(meshes);if(!query.root)return null;
+ const {ray,local,point,stack}=query;ray.set(origin,direction);stack.length=0;stack.push(query.root);
+ let best=null,dist=maxRange,best_idx=Infinity;
+ while(stack.length){
+  const branch=stack.pop();if(!ray.intersectsBox(branch.box))continue;
+  if(!branch.indices){stack.push(branch.right,branch.left);continue;}
+  for(const idx of branch.indices){
+   const mesh=meshes[idx];if(!ray.intersectsBox(mesh.box))continue;
+   local.copy(ray).applyMatrix4(mesh.inverse);
+   // レイ方向に沿った距離換算。非一様スケール・せん断への対応
+   const e=mesh.inverse.elements,dx=direction.x,dy=direction.y,dz=direction.z;
+   const local_scale=Math.hypot(e[0]*dx+e[4]*dy+e[8]*dz,e[1]*dx+e[5]*dy+e[9]*dz,e[2]*dx+e[6]*dy+e[10]*dz);
+   if(!raycast_surface(mesh.geometry,local,dist*local_scale+1e-7,point))continue;
+   point.applyMatrix4(mesh.matrix);const value=point.distanceTo(origin);
+   // 同距離の表面は従来のメッシュ順を優先。最大距離境界も従来どおり
+   if(value<dist||(best&&value===dist&&idx<best_idx)){dist=value;best_idx=idx;best={distance:value,id:mesh.id,reflectance:mesh.reflectance??.5};}
+  }
+ }
  return best;
 }
 export function scan(c,pose,meshes,start=0,startTime=start/PETAL_SCAN.nominalRaysPerSecond){

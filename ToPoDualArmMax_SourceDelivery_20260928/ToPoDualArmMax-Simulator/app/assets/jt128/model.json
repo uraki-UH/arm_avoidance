@@ -1,0 +1,164 @@
+{
+  "source": "https://www.hesaitech.com/wp-content/uploads/2025/09/JT128-3D-Model.zip",
+  "source_sha256": "ba95712cb637f912fae8360fc90862f7718ef3fe8c613865e5cd779e030acef8",
+  "variant": "side_connector",
+  "unit": "mm",
+  "chord_tolerance_mm": 0.06,
+  "angular_tolerance_rad": 0.16,
+  "vertex_merge_dist_th_mm": 0.0001,
+  "lidar_origin_height_mm": 47.84,
+  "cad_to_sensor_rot_z_deg": -90,
+  "origin_source": "JT128 J01-en-260330 Figure 5・6",
+  "parts": [
+    {
+      "file": "top_disc.stl",
+      "name": "top_disc",
+      "source_part_idx": 0,
+      "color": "#21252a",
+      "metalness": 0.15,
+      "roughness": 0.3,
+      "num_source_triangles": 398,
+      "num_triangles": 398,
+      "bounds_mm": [
+        -9.3958740234375,
+        -9.39624309539795,
+        69.88029479980469,
+        9.396210670471191,
+        9.396393775939941,
+        69.88264465332031
+      ]
+    },
+    {
+      "file": "optical_cap.stl",
+      "name": "optical_cap",
+      "source_part_idx": 1,
+      "color": "#282c31",
+      "metalness": 0.1,
+      "roughness": 0.25,
+      "num_source_triangles": 11692,
+      "num_triangles": 4000,
+      "bounds_mm": [
+        -29.434093475341797,
+        -29.44259262084961,
+        48.32405471801758,
+        29.428030014038086,
+        29.42466926574707,
+        73.05199432373047
+      ]
+    },
+    {
+      "file": "cap_seal.stl",
+      "name": "cap_seal",
+      "source_part_idx": 2,
+      "color": "#202327",
+      "metalness": 0.1,
+      "roughness": 0.3,
+      "num_source_triangles": 488,
+      "num_triangles": 488,
+      "bounds_mm": [
+        -25.77510643005371,
+        -25.77510643005371,
+        56.376502990722656,
+        25.77510643005371,
+        25.77510643005371,
+        56.37671661376953
+      ]
+    },
+    {
+      "file": "optical_window.stl",
+      "name": "optical_window",
+      "source_part_idx": 3,
+      "color": "#25292e",
+      "metalness": 0.15,
+      "roughness": 0.28,
+      "num_source_triangles": 48486,
+      "num_triangles": 30692,
+      "bounds_mm": [
+        -31.25,
+        -31.25,
+        13.600000381469727,
+        31.212013244628906,
+        31.25,
+        49.89995574951172
+      ]
+    },
+    {
+      "file": "base_housing.stl",
+      "name": "base_housing",
+      "source_part_idx": 5,
+      "color": "#42464a",
+      "metalness": 0.55,
+      "roughness": 0.38,
+      "num_source_triangles": 336253,
+      "num_triangles": 30029,
+      "bounds_mm": [
+        -31.207807540893555,
+        -31.22093391418457,
+        -1.734723475976807e-15,
+        31.249984741210938,
+        31.299999237060547,
+        15.600000381469727
+      ]
+    },
+    {
+      "file": "connector_mount.stl",
+      "name": "connector_mount",
+      "source_part_idx": 6,
+      "color": "#4b4f53",
+      "metalness": 0.55,
+      "roughness": 0.35,
+      "num_source_triangles": 868,
+      "num_triangles": 868,
+      "bounds_mm": [
+        -5.0,
+        31.299999237060547,
+        2.8001644611358643,
+        5.0,
+        33.29999923706055,
+        14.199835777282715
+      ]
+    },
+    {
+      "file": "connector_seal.stl",
+      "name": "connector_seal",
+      "source_part_idx": 7,
+      "color": "#25282b",
+      "metalness": 0.1,
+      "roughness": 0.45,
+      "num_source_triangles": 12800,
+      "num_triangles": 800,
+      "bounds_mm": [
+        -4.974999904632568,
+        26.399999618530273,
+        3.5250000953674316,
+        4.974999904632568,
+        27.399999618530273,
+        13.475000381469727
+      ]
+    },
+    {
+      "file": "side_connector.stl",
+      "name": "side_connector",
+      "source_part_idx": 8,
+      "color": "#aeb3b7",
+      "metalness": 0.8,
+      "roughness": 0.27,
+      "num_source_triangles": 105960,
+      "num_triangles": 33230,
+      "bounds_mm": [
+        -6.5,
+        22.5,
+        2.800163984298706,
+        6.5,
+        38.79999923706055,
+        14.199835777282715
+      ]
+    }
+  ],
+  "excluded_parts": [
+    {
+      "source_part_idx": 4,
+      "reason": "公称外形外のソリッド。原本は改変せず保持"
+    }
+  ]
+}

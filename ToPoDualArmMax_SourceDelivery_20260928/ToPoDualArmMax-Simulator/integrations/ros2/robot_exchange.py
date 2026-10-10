@@ -65,17 +65,18 @@ def trajectory_payload(message):
 
 
 class RobotExchange:
-    def __init__(self, node, joints, tf_topic='/tf'):
+    def __init__(self, node, joints, tf_topic='/tf', publisher_factory=None):
         from geometry_msgs.msg import PoseStamped
         from tf2_msgs.msg import TFMessage
         from trajectory_msgs.msg import JointTrajectory
         from std_msgs.msg import String
         from rclpy.qos import QoSProfile, DurabilityPolicy
         self.node, self.joints = node, joints
-        self.tf = node.create_publisher(TFMessage, '/sim/tf', 10)
-        self.standard_tf = node.create_publisher(TFMessage, tf_topic, 10) if tf_topic != '/sim/tf' else None
-        self.base_pose = node.create_publisher(PoseStamped, '/sim/base_pose', 10)
-        self.description = node.create_publisher(String, '/sim/robot_description', QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        create_publisher = publisher_factory or node.create_publisher
+        self.tf = create_publisher(TFMessage, '/sim/tf', 10)
+        self.standard_tf = create_publisher(TFMessage, tf_topic, 10) if tf_topic != '/sim/tf' else None
+        self.base_pose = create_publisher(PoseStamped, '/sim/base_pose', 10)
+        self.description = create_publisher(String, '/sim/robot_description', QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.model = None
         self.commands = {}
         self.sequence = 0

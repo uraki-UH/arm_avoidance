@@ -1,0 +1,20 @@
+/**:
+  ros__parameters:
+    # 保持制御のプレビュー用仮値。実機への適用には対象別の校正・調整が必要
+    # 各軸の値はスカラ共通値、または対象軸順の配列
+    hold_gain_nm_per_rad: 0.5
+    max_hold_torque_nm: 0.2
+    # モータ座標の外力トルク[N m]。解除と保持のヒステリシス
+    min_release_effort_th: 0.15
+    max_hold_effort_th: 0.05
+    # 保持再開判定のモータ角速度[rad/s]と連続静止時間[sec]
+    max_hold_velocity_th: 0.02
+    min_hold_duration_sec: 0.3
+    # 保持の解除・復帰の移行時間[sec]
+    release_ramp_sec: 0.15
+    hold_ramp_sec: 0.5
+    # manual: 操作許可Bool、external_effort: 校正済みの外力トルクJointState
+    interaction_source: manual
+    manual_guiding_topic: ~/allow_guiding
+    external_effort_topic: ~/external_effort
+    max_interaction_age_sec: 0.3

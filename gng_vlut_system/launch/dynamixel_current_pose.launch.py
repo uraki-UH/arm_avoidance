@@ -61,6 +61,7 @@ def launch_setup(context):
             PythonLaunchDescriptionSource(str(share/'launch/gng_viewer_bridge.launch.py')),
             launch_arguments={
                 'params_file': params_file, 'joint_control_backend': 'external',
+                'enable_dynamixel_joint_state_input': 'false',
                 # 実測入力の到着前だけに使用する初期表示
                 'enable_joint_state_publisher': 'true',
             }.items()))

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {ObjectInteraction} from './object-interaction.js';
-import {physics_modes,robot_physics_modes} from './physics-ui.js';
+import {physics_modes} from './physics-ui.js';
 const $=id=>document.getElementById(id);
 
 export function install_object_actions(environment){
@@ -26,41 +26,26 @@ export function install_object_actions(environment){
  environment.object_interaction.hide_context_menu=hide_menu;
  const label=document.createElement('div'),button=document.createElement('button');button.textContent='この物体を削除';button.dataset.action='delete';
  const physics=document.createElement('section');physics.className='object-context-physics';
- physics.innerHTML=`<label><input type="checkbox" data-action="toggle-physics"><span data-role="physics-label">物理を有効にする</span></label><details><summary>詳細設定</summary><label>物理モード<select aria-label="右クリック対象の物理モード"><option value="" disabled>選択物体で異なる設定</option>${Object.entries(physics_modes).map(([mode,name])=>`<option value="${mode}">${name}</option>`).join('')}</select></label><button data-action="apply-physics">選択物体に適用</button><button data-action="open-physics">物理設定を開く</button></details><small>変更後は「物理を開始」で反映</small>`;
+ physics.innerHTML=`<label><input type="checkbox" data-action="toggle-physics"><span data-role="physics-label">物理を有効にする</span></label><details><summary>詳細設定</summary><label>物理モード<select aria-label="右クリック対象の物理モード"><option value="" disabled>選択物体で異なる設定</option>${Object.entries(physics_modes).map(([mode,name])=>`<option value="${mode}">${name}</option>`).join('')}</select></label><button data-action="apply-physics">選択物体に適用</button></details><button data-action="open-physics">物理設定を開く</button><small>変更後は「物理を開始」で反映</small>`;
  menu.append(label,physics,button);document.body.append(menu);
  const physics_select=physics.querySelector('select'),physics_apply=physics.querySelector('[data-action=apply-physics]');let physics_targets=[];
- const physics_toggle=physics.querySelector('[data-action=toggle-physics]'),saved_physics=new WeakMap();
+ const physics_toggle=physics.querySelector('[data-action=toggle-physics]');
  physics_toggle.onchange=()=>{
   const panel=environment.physics_panel;if(!panel)return;
-  if(target_robot){panel.set_robot_mode(target_robot,physics_toggle.checked?'dynamic':'kinematic');hide_menu();return;}
-  if(physics_targets.some(item=>!environment.items.includes(item)))return;
-  for(const item of physics_targets){
-   if(physics_toggle.checked){
-    if((item.physics?.mode||'none')!=='none')continue;
-    const previous=saved_physics.get(item);
-    panel.set_object_mode([item],previous?.mode||'dynamic');
-    if(previous?.constraint)item.physics.constraint=structuredClone(previous.constraint);
-   }else if((item.physics?.mode||'none')!=='none'){
-    saved_physics.set(item,structuredClone(item.physics));panel.set_object_mode([item],'none');
-   }
-  }
+  panel.set_physics_enabled(physics_targets,physics_toggle.checked);
   hide_menu();
  };
  physics.querySelector('details').addEventListener('toggle',()=>{if(menu.hidden)return;const rect=menu.getBoundingClientRect();menu.style.top=Math.max(0,Math.min(rect.top,innerHeight-menu.offsetHeight))+'px';});
- physics_select.onchange=()=>{physics_apply.disabled=!physics_select.value||!environment.physics_panel;};
+ physics_select.onchange=()=>{physics_apply.disabled=physics_select.disabled||!physics_select.value||!environment.physics_panel;};
  physics_apply.onclick=()=>{
-  if(target_robot){
-   if(environment.physics_panel?.set_robot_mode(target_robot,physics_select.value)){environment.toast('ロボットの物理モードを設定。「物理」で開始してください');hide_menu();}
-   else environment.toast('ロボットが変更されています。右クリックし直してください');
-   return;
-  }
+  if(target_robot)return;
   if(environment.physics_panel?.set_object_mode(physics_targets,physics_select.value)){
    environment.toast(`${physics_targets.length}個の物理モードを設定。「物理」で開始してください`);hide_menu();
   }else environment.toast('対象が変更されています。右クリックし直してください');
  };
  physics.querySelector('[data-action=open-physics]').onclick=()=>{
   if(target_robot&&environment.physics_panel?.robot()===target_robot){
-   document.querySelector('[data-panel=physics]').click();$('physics-robot-mode').focus();
+   environment.select(null);document.querySelector('[data-panel=physics]').click();$('physics-enabled').focus();
   }else if(target&&environment.items.includes(target)){environment.select(target.id);document.querySelector('[data-panel=physics]').click();}
   hide_menu();
  };
@@ -80,24 +65,24 @@ export function install_object_actions(environment){
   if(hit){for(let node=hit.object;node;node=node.parent){if(node===robot){target_robot=robot;break;}target=environment.items.find(item=>item.group===node);if(target)break;}}
   if(!target&&!target_robot){hide_menu();return;}
   if(target_robot){
-   environment.object_interaction.cancel(false);environment.select(null);physics_targets=[];
-   physics_select.innerHTML=Object.entries(robot_physics_modes).map(([mode,name])=>`<option value="${mode}">${name}</option>`).join('');
-   physics_select.value=$('physics-robot-mode').value;physics_apply.textContent='ロボットに適用';
+   environment.object_interaction.cancel(false);environment.select(null);physics_targets=[robot];
+   physics_select.replaceChildren();
    label.textContent=`ロボット全体：${robot.name||robot.modelId}`;button.hidden=true;menu.dataset.targetKind='robot';
    robot_box.box.setFromObject(robot);robot_box.visible=true;
   }else{
    if(!environment.selected_ids.has(target.id))environment.select(target.id);
    physics_targets=environment.items.filter(item=>environment.selected_ids.has(item.id));
-   const values=new Set(physics_targets.map(item=>item.physics?.mode||'none'));
+   const values=new Set(physics_targets.map(item=>environment.physics_panel.get_object_mode(item)));
    physics_select.innerHTML=`<option value="" disabled>選択物体で異なる設定</option>`+Object.entries(physics_modes).map(([mode,name])=>`<option value="${mode}">${name}</option>`).join('');
    physics_select.value=values.size===1?[...values][0]:'';physics_apply.textContent='選択物体に適用';
    const num=environment.selected_ids.size;label.textContent=num>1?`${num}個の物体を選択中`:target.group.name;button.textContent=num>1?`選択した${num}個を削除`:'この物体を削除';button.hidden=false;menu.dataset.targetKind='object';
   }
   physics.querySelector('details').open=false;
-  physics.querySelector('[data-role=physics-label]').textContent=target_robot?'関節動力学を有効にする':'物理を有効にする';
-  const enabled=target_robot?[$('physics-robot-mode').value==='dynamic']:physics_targets.map(item=>(item.physics?.mode||'none')!=='none');
+  physics.querySelector('details').hidden=!!target_robot;
+  const enabled=physics_targets.map(item=>environment.physics_panel.is_physics_enabled(item));
+  physics_select.disabled=!!target_robot||!enabled.every(Boolean);
   physics_toggle.checked=enabled.every(Boolean);physics_toggle.indeterminate=enabled.some(Boolean)&&!enabled.every(Boolean);physics_toggle.disabled=!environment.physics_panel;
-  physics_apply.disabled=!physics_select.value||!environment.physics_panel;menu.hidden=false;
+  physics_apply.disabled=physics_select.disabled||!physics_select.value||!environment.physics_panel;menu.hidden=false;
   menu.style.left=Math.max(0,Math.min(event.clientX,innerWidth-menu.offsetWidth))+'px';menu.style.top=Math.max(0,Math.min(event.clientY,innerHeight-menu.offsetHeight))+'px';
  });
  button.onclick=()=>{if(target&&environment.items.includes(target)){$('object-delete').click();}hide_menu();target=null;};
