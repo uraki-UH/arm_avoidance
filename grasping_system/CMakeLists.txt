@@ -26,8 +26,12 @@ install(DIRECTORY include/
   DESTINATION include
 )
 
-add_executable(test_rigid_grasp_vlut src/test_rigid_grasp_vlut.cpp)
-ament_target_dependencies(test_rigid_grasp_vlut geometry_msgs tf2 tf2_geometry_msgs voxel_idx Eigen3)
+# Git非管理のローカル検証コード。配置時だけの実行ファイル登録
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/test_rigid_grasp_vlut.cpp")
+  add_executable(test_rigid_grasp_vlut src/test_rigid_grasp_vlut.cpp)
+  ament_target_dependencies(test_rigid_grasp_vlut geometry_msgs tf2 tf2_geometry_msgs voxel_idx Eigen3)
+  install(TARGETS test_rigid_grasp_vlut DESTINATION lib/${PROJECT_NAME})
+endif()
 add_executable(gripper_volume_graph_node src/gripper_volume_graph_node.cpp)
 ament_target_dependencies(
   gripper_volume_graph_node
@@ -46,7 +50,6 @@ ament_target_dependencies(
   visualization_msgs Eigen3
 )
 install(TARGETS
-  test_rigid_grasp_vlut
   gripper_volume_graph_node
   grasp_voxel_matcher_node
   top_grasp_surface_estimator_node
@@ -58,7 +61,7 @@ install(DIRECTORY config docs launch
   OPTIONAL
 )
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   enable_testing()
   add_executable(test_grasp_candidate_publisher test/test_grasp_candidate_publisher.cpp)
   ament_target_dependencies(test_grasp_candidate_publisher

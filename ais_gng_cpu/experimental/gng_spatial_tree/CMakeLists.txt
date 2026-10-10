@@ -29,6 +29,7 @@ foreach(variant grid bsp3d)
   endif()
   target_link_libraries(gng_${variant} PRIVATE OpenSSL::SSL OpenSSL::Crypto ykpiv)
   target_link_options(gng_${variant} PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/gng_cpu.v")
+  if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   foreach(test_name gng_parameter_update_api_test gng_spatial_coverage_api_test
       gng_priority_input_api_test gng_neighbors_api_test gng_observation_api_test
       gng_training_event_api_test gng_map_delta_api_test gng_static_age_api_test)
@@ -40,8 +41,13 @@ foreach(variant grid bsp3d)
       add_test(NAME ${test_name}_${variant} COMMAND ${test_name}_${variant})
     endif()
   endforeach()
+  endif()
 endforeach()
 
+# Git非管理の検証コード未配置時の比較ライブラリのみ
+if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
+  return()
+endif()
 # 内部索引の全走査照合。共有ライブラリの非公開シンボルに依存しない直接リンク。
 add_executable(gng_bsp3d_nearest_test test/gng_spatial_nearest_test.cpp
   src/cpu/cugng.cpp src/utils/node.cpp src/utils/param.cpp
@@ -51,7 +57,9 @@ target_compile_definitions(gng_bsp3d_nearest_test PRIVATE GNG_USE_BSP3D=1 GNG_VE
 add_test(NAME gng_bsp3d_nearest_test COMMAND gng_bsp3d_nearest_test)
 
 # bsp3d同梱の動的索引検証。最適化を維持し、検証用assertのみ有効化。
-add_executable(bsp3d_index_test "${bsp3d_include_dir}/../examples/test_bsp3d.cpp")
-target_include_directories(bsp3d_index_test PRIVATE "${bsp3d_include_dir}")
-target_compile_options(bsp3d_index_test PRIVATE -UNDEBUG)
-add_test(NAME bsp3d_index_test COMMAND bsp3d_index_test)
+if(EXISTS "${bsp3d_include_dir}/../examples/test_bsp3d.cpp")
+  add_executable(bsp3d_index_test "${bsp3d_include_dir}/../examples/test_bsp3d.cpp")
+  target_include_directories(bsp3d_index_test PRIVATE "${bsp3d_include_dir}")
+  target_compile_options(bsp3d_index_test PRIVATE -UNDEBUG)
+  add_test(NAME bsp3d_index_test COMMAND bsp3d_index_test)
+endif()

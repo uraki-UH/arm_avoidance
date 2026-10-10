@@ -26,7 +26,8 @@ find_package(PNG REQUIRED)
 find_package(ZLIB REQUIRED)
 ament_auto_find_build_dependencies()
 
-if(BUILD_TESTING)
+# Git非管理のローカル検証コード。未配置時の通常ビルドのみ
+if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_grasp_attention test/test_grasp_attention.cpp)
@@ -134,7 +135,7 @@ target_include_directories(surface_model PUBLIC
 ament_target_dependencies(surface_model ais_gng_msgs rclcpp std_msgs visualization_msgs Eigen3 nlohmann_json)
 target_link_libraries(plane_cluster_incremental_node surface_model)
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   ament_add_gtest(
     test_plane_cluster_incremental
     test/test_plane_cluster_incremental.cpp
@@ -216,7 +217,7 @@ else()
     message(WARNING "PyTorch is not available in this Python environment. GNG backends will be skipped, but utility nodes can still build.")
 endif()
 
-if(BUILD_TESTING AND _torch_available)
+if(BUILD_TESTING AND _torch_available AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   ament_add_gtest(test_cluster_classification test/test_cluster_classification.cpp
     src/plugin/cluster_classification.cpp)
   target_include_directories(test_cluster_classification PRIVATE include)

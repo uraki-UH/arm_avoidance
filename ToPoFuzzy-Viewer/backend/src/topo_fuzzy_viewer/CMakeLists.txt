@@ -172,7 +172,8 @@ target_include_directories(viewer_edit_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/
 target_link_libraries(viewer_edit_node ${PCL_LIBRARIES} Threads::Threads)
 ament_target_dependencies(viewer_edit_node ${ROS2_DEPENDENCIES_EDIT})
 
-if(BUILD_TESTING)
+# Git非管理のローカル検証コード。未配置時の通常ビルドのみ
+if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_test(NAME test_vehicle_registration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_vehicle_registration.py)

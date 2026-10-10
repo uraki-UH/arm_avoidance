@@ -90,6 +90,8 @@ self_filter.enable_labelled_cloud: false
 - 対応入力: 単一PointCloud2トピック、先頭XYZ float32・ホストと同じbyte order。head／uniform／random／stratifiedに対応。複数センサは事前に座標・時刻を整合した単一点群へ統合。
 - 制限: 受信した自己セルとの幾何照合であり、意味認識・確定ラベルではありません。追加膨張なし。姿勢や取付校正の誤差による除去漏れ・近接物体の誤除去、過去に学習済みの自己ノードの即時削除は未解決。ロボットの停止指令ではありません。
 
+検証コード: ローカル保持・Git管理外、新規checkoutには未同梱。未配置時の通常ビルドは継続。
+
 検証用: `test_self_point_filter`（単体）、`test/check_self_point_filter_ros.py`（専用domain194・`--node-executable`／`--output`指定）、`benchmark_self_point_filter`（合成点群の前処理比較）。CPU版での検証、実機精度・GPU版の実動作は未検証。
 
 計測引数: `benchmark_self_point_filter off|filter|labels SEED SELF_PERCENT MAX_POINTS METRICS_JSON`。入力30.7万点、抽出上限の指定、前処理のみの測定。ROS通信・GNG本体・マスク生成は対象外。

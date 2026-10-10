@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 
 export function install_object_actions(environment){
  environment.object_interaction=new ObjectInteraction(environment);
- const panel=document.createElement('div');panel.innerHTML=`<div class="section-label">追加位置</div><label>座標系<select id="spawn-parent"><option value="table">テーブル基準</option><option value="world">world基準</option></select></label><div class="field-grid">${['x','y','z'].map(k=>`<label>${k.toUpperCase()} mm<input id="spawn-${k}" type="number" value="0" step="10"></label>`).join('')}</div><p class="sub-note">物体・車両の追加位置。追加後は下の位置欄で移動可能。Ctrl＋クリックで複数選択・解除。選択物体を右クリックして一括削除、またはDeleteキー。</p>`;
+ const panel=document.createElement('div');panel.innerHTML=`<div class="section-label">追加位置</div><label>座標系<select id="spawn-parent"><option value="table">テーブル基準</option><option value="world">world基準</option></select></label><div class="field-grid">${['x','y','z'].map(k=>`<label>${k.toUpperCase()} mm<input id="spawn-${k}" type="number" value="0" step="10"></label>`).join('')}</div><p class="sub-note">Ctrl＋クリック：複数選択　Delete：削除</p>`;
  $('object-add').parentElement.insertAdjacentElement('beforebegin',panel);
  const read_position=()=>{
   const position=['x','y','z'].map(k=>$('spawn-'+k).valueAsNumber/1000);

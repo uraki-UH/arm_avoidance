@@ -197,7 +197,8 @@ ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
 ament_export_dependencies(Boost OpenSSL)
 
-if(GNG_BUILD_BENCHMARKS)
+# Git非管理のローカル検証コード。未配置時の通常ビルドのみ
+if(GNG_BUILD_BENCHMARKS AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   enable_testing()
   add_executable(gng_fixed_frame_api_test test/gng_fixed_frame_api_test.cpp)
   target_link_libraries(gng_fixed_frame_api_test PRIVATE gng_cpu)

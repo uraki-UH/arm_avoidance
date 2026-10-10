@@ -21,6 +21,7 @@ foreach(variant pure sampled)
   endif()
   target_link_libraries(gng_bsp3d_${variant} PRIVATE OpenSSL::SSL OpenSSL::Crypto ykpiv)
   target_link_options(gng_bsp3d_${variant} PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/gng_cpu.v")
+  if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   foreach(test_name gng_parameter_update_api_test gng_spatial_coverage_api_test
       gng_priority_input_api_test gng_neighbors_api_test gng_observation_api_test
       gng_training_event_api_test gng_map_delta_api_test gng_static_age_api_test)
@@ -32,7 +33,12 @@ foreach(variant pure sampled)
       add_test(NAME ${test_name}_${variant} COMMAND ${test_name}_${variant})
     endif()
   endforeach()
+  endif()
 endforeach()
+# Git非管理の検証コード未配置時の比較ライブラリのみ
+if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
+  return()
+endif()
 add_executable(gng_bsp3d_nearest_test test/gng_spatial_nearest_test.cpp
   src/cpu/cugng.cpp src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
 target_include_directories(gng_bsp3d_nearest_test PRIVATE include "${bsp3d_include_dir}")

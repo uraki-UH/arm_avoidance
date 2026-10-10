@@ -32,3 +32,56 @@ ToPoDualArm/
 
 # CMakeインストール時の生成マニフェスト
 /symlink_install_manifest.txt
+
+# 自作のローカル検証コード・補助データ。追跡済み対象も別途Git indexから除外
+test/
+tests/
+test_fixtures/
+test_*.py
+*_test.py
+test_*.[ch]pp
+*_test.[ch]pp
+*.test.*
+benchmark*.py
+benchmark*.[ch]pp
+*_benchmark.[ch]pp
+/benchmarks/**/*.py
+/benchmarks/**/*.[ch]pp
+/benchmarks/**/*.h
+/benchmarks/**/*.sh
+/benchmarks/**/*.mjs
+/benchmarks/**/*.js
+/benchmarks/**/*.ts
+
+# ブラウザ順運動学の独立照合用コード
+/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/tools/qa_reference.py
+
+# 外部ライブラリ付属の検証コードの維持
+!**/vendor/**/test/
+!**/vendor/**/test/**
+!**/vendor/**/tests/
+!**/vendor/**/tests/**
+!**/vendor/**/test_fixtures/
+!**/vendor/**/test_fixtures/**
+!**/vendor/**/test_*.py
+!**/vendor/**/*_test.py
+!**/vendor/**/test_*.[ch]pp
+!**/vendor/**/*_test.[ch]pp
+!**/vendor/**/*.test.*
+!**/vendor/**/benchmark*.py
+!**/vendor/**/benchmark*.[ch]pp
+!**/vendor/**/*_benchmark.[ch]pp
+!**/third_party/**/test/
+!**/third_party/**/test/**
+!**/third_party/**/tests/
+!**/third_party/**/tests/**
+!**/third_party/**/test_fixtures/
+!**/third_party/**/test_fixtures/**
+!**/third_party/**/test_*.py
+!**/third_party/**/*_test.py
+!**/third_party/**/test_*.[ch]pp
+!**/third_party/**/*_test.[ch]pp
+!**/third_party/**/*.test.*
+!**/third_party/**/benchmark*.py
+!**/third_party/**/benchmark*.[ch]pp
+!**/third_party/**/*_benchmark.[ch]pp

@@ -18,7 +18,8 @@ if(enable_harmonic_runtime_only)
   install(DIRECTORY
     ../urdf/topo_dual_arm_max ../urdf/topo_dual_arm_max_long
     DESTINATION share/${PROJECT_NAME}/urdf)
-  if(BUILD_TESTING)
+  # Git非管理のローカル検証コード。未配置時の通常ビルドのみ
+  if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
     find_package(ament_cmake_pytest REQUIRED)
     ament_add_pytest_test(test_task_program test/test_task_program.py)
     ament_add_pytest_test(test_task_components test/test_task_components.py)
@@ -158,7 +159,7 @@ install(TARGETS bounded_gazebo_system LIBRARY DESTINATION lib)
 add_subdirectory(src)
 rclcpp_components_register_nodes(world_index_to_voxel_component "robot_sim::bridge::WorldIndexToVoxelNode")
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_gtest(test_viewer_status test/test_viewer_status.cpp)

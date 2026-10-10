@@ -61,14 +61,14 @@ export class camera_workspace {
           <label id="camera-baseline-field">左右間隔 [mm]<input id="camera-baseline" type="number" min="0.1" max="2000" step="any"></label>
         </div></details>
         <div class="row-actions"><button id="camera-settings-apply">設定を適用</button></div>
-        <p class="sub-note">レンズ欄で任意の解像度・校正値を指定。解像度変更時は画角を維持。適用後の次の撮影から反映。</p>
+
       </details>
       <details><summary>詳細JSON・読込</summary>
-        <p class="sub-note">全設定の保存・読込と、右カメラの回転・並進の個別指定。初期値は未実機校正。</p>
+
         <label class="field-label" for="camera-calibration">校正JSON</label><textarea id="camera-calibration" spellcheck="false"></textarea>
         <div class="row-actions"><button id="camera-apply">JSONを適用</button><button id="camera-load">JSON読込</button><input id="camera-file" type="file" accept=".json,application/json" hidden></div>
       </details>
-      <p class="sub-note">RGB-Dとは独立。幾何・レンズ投影のみ。露光・ノイズ・ROS画像配信は未対応。</p>`;
+      `;
     element('camera-mode').onchange = event => {
       const preset = camera_preset(event.target.value);
       for (const key of ['color_mode', 'rate_hz', 'cube_size', 'mount']) preset[key] = structuredClone(this.sensor.config[key]);

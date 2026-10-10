@@ -14,11 +14,11 @@ export class RosPointsPanel{
   ${[['rgbd','/sim/rgbd/points（RGB-D）'],['mid360','/sim/lidar/points（LiDAR）'],['object_full','/sim/object/full_points（完全表面）'],['object_visible','/sim/object/visible_points（遮蔽付き）']].map(([source,label])=>`<label style="display:block;margin:8px 0"><input id="ros-send-${source}" type="checkbox" ${source==='rgbd'?'checked':''}> ${label}</label>`).join('')}</fieldset>
   <label><input id="ros-depth" type="checkbox" checked> 深度画像・CameraInfo・画素対応点群も送信</label>
   <div class="row-actions"><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
-  <p class="sub-note">取得とHz設定はRGB-D・LiDARタブ、物体点群は環境タブ。取得開始時に対応トピックを自動選択。「連続送信」で送信開始。ここでは取得済みの点群を送信。連続送信は新規フレームのみ、通信待ちがある場合は最新分を使用。</p>
+
 </section>`;
   if(location.port==='8879')$('ros-endpoint').value=location.origin;
   this.object_capture=new ObjectCapturePanel({environment,rgbd});
-  $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='新しい取得結果を送信します。取得の開始・停止はセンサ側で操作してください';};
+  $('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();if(this.is_running)$('ros-status').textContent='取得待ち';};
   for(const id of ['ros-endpoint','ros-depth',...sources.map(source=>'ros-send-'+source)])$(id).onchange=()=>{this.generation++;};
   $('ros-endpoint').addEventListener('change',()=>{this.last_sent_frames={};});
   $('ros-depth').addEventListener('change',()=>{delete this.last_sent_frames.rgbd;});

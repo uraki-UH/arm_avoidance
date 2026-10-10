@@ -19,14 +19,19 @@ target_link_libraries(bsp3d_basic PRIVATE bsp3d)
 add_executable(bsp3d_gng examples/gng.cpp)
 target_link_libraries(bsp3d_gng PRIVATE bsp3d)
 
-# assertを有効にした回帰試験
-add_executable(bsp3d_test examples/test_bsp3d.cpp)
-target_link_libraries(bsp3d_test PRIVATE bsp3d)
-target_compile_options(bsp3d_test PRIVATE -UNDEBUG)
-enable_testing()
-add_test(NAME bsp3d_test COMMAND bsp3d_test)
+# Git非管理のローカル検証コード。assert有効の回帰試験
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/test_bsp3d.cpp")
+  add_executable(bsp3d_test examples/test_bsp3d.cpp)
+  target_link_libraries(bsp3d_test PRIVATE bsp3d)
+  target_compile_options(bsp3d_test PRIVATE -UNDEBUG)
+  enable_testing()
+  add_test(NAME bsp3d_test COMMAND bsp3d_test)
+endif()
 
 # 非有限値の入力検査を含む範囲検索の回帰。fast-mathの無効化。
-add_executable(bsp3d_aabb_test examples/test_aabb.cpp)
-target_link_libraries(bsp3d_aabb_test PRIVATE bsp3d)
-add_test(NAME bsp3d_aabb_test COMMAND bsp3d_aabb_test)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/test_aabb.cpp")
+  add_executable(bsp3d_aabb_test examples/test_aabb.cpp)
+  target_link_libraries(bsp3d_aabb_test PRIVATE bsp3d)
+  enable_testing()
+  add_test(NAME bsp3d_aabb_test COMMAND bsp3d_aabb_test)
+endif()

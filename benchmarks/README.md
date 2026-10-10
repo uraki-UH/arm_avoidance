@@ -6,7 +6,7 @@
 
 ## 保存先の区分
 
-- `benchmarks/<実験名>/`: 再現・集計スクリプト、設定スナップショット、計測用ヘッダー・スキーマ、保存済み集計、当時計測対象のSHA-256。Git管理対象。
+- `benchmarks/<実験名>/`: 設定スナップショット・スキーマ・保存済み集計・当時計測対象のSHA-256はGit管理対象。再現・集計スクリプトと計測コードはローカル保持・Git管理外。
 - `artifacts/<実験名>/`: 共有ライブラリ、CMake生成物、生ログ、フレーム単位のJSON、再集計結果。ローカル保管のみでGit管理対象外。
 - 詳しい条件・結果・限界: `gng_vlut_system/docs/designs/` と `releases/` の各記録。
 
@@ -52,4 +52,4 @@ python3 /ros2_ws/src/benchmarks/gng_bsp3d_profile_20260923/summarize.py
 python3 /ros2_ws/src/benchmarks/gng_spatial_profile_20260923/summarize.py
 ```
 
-生データのない新規checkoutでは上記の再集計は不可。Git内には集計値・計測条件・再現コードだけを保存し、全生データを同梱した配布ではない。
+新規checkoutには計測・再集計コードと生データの同梱なし。再実行には対応コード・生データの別途配置が必要。Git内の保存対象は集計値・計測条件・仕様文書。

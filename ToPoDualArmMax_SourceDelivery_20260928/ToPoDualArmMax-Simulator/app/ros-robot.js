@@ -25,7 +25,7 @@ export class RosRobotPanel{
   this.rgbd=rgbd;this.toast=toast;this.is_busy=false;this.last_ms=0;this.sequence=null;this.generation=0;this.active=null;this.model=null;
   const placement_panel=document.createElement('section');placement_panel.innerHTML=`<h2>ロボット配置</h2><p>world基準の配置。XYZはm、角度はdeg。</p><div class="field-grid">${['x','y','z','roll','pitch','yaw'].map(name=>`<label>${name}<input id="ros-base-${name}" type="number" value="0" step="0.1"></label>`).join('')}</div><button id="ros-base-apply" class="wide-button">配置を適用</button>`;
   $('robot-panel').append(placement_panel);
-  const panel=document.createElement('section');panel.id='ros-receive-panel';panel.innerHTML=`<h3>ROS → ブラウザ：受信</h3><label><input id="ros-command-enable" type="checkbox"> 関節軌道を受信して再生</label><p class="sub-note">表示モデルに対応する /sim/command/standard/joint_trajectory または /sim/command/long/joint_trajectory を受信。</p><button id="ros-command-stop" class="wide-button">軌道停止・受信OFF</button><pre id="ros-robot-status">受信OFF</pre><p class="sub-note">JointState受信は上の「姿勢・TFの送受信」で設定。TF・Poseによるベース位置の受信は未対応。</p><p class="sub-note">軌道は位置のみの線形補間、受信後の相対時刻で再生。実機への指令なし。</p>`;
+  const panel=document.createElement('section');panel.id='ros-receive-panel';panel.innerHTML=`<h3>ROS → ブラウザ：受信</h3><label><input id="ros-command-enable" type="checkbox"> 関節軌道を受信して再生</label><button id="ros-command-stop" class="wide-button">軌道停止・受信OFF</button><pre id="ros-robot-status">受信OFF</pre>`;
   $('ros-panel').append(panel);
   this.joint_stream=new RosJointStream(this);
   this.instance_panel=new RobotInstancePanel(this);

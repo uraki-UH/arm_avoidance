@@ -60,7 +60,9 @@ install(
 
 # ============================ dynamixel_handler ================================
 
-if(BUILD_BENCHMARK_DYNAMIXEL_COMMUNICATOR)
+# Git非管理のローカル検証コード。未配置時の通常ビルドのみ
+if(BUILD_BENCHMARK_DYNAMIXEL_COMMUNICATOR AND
+    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/benchmark_dynamixel_communicator.cpp")
   add_executable(
     benchmark_dynamixel_communicator
     tools/benchmark_dynamixel_communicator.cpp

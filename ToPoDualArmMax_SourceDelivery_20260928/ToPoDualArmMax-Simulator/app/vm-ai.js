@@ -28,13 +28,13 @@ export class VMAIWorkspace{
   this.client=crypto.randomUUID();this.generation=0;this.after=-1;this.inputHistory=new Map();this.running=false;this.busy=false;this.pollBusy=false;this.lastSend=0;this.lastPoll=0;this.sent=0;this.received=0;this.lastStatus=0;this.source='mid360';
   this.group=new THREE.Group();this.group.name='VM AiS-GNG-FVG results';scene.add(this.group);camera.layers.enable(3);
   $('ai-panel').innerHTML=`<div class="panel-heading"><div><span class="eyebrow">VMWARE · ROS 2</span><h2>AiS-GNG-FVG</h2></div><span class="chip">VM · ROS 2</span></div>
-  <p class="sub-note">Ubuntu VM上のAiS-GNGとFVGに、動くロボットのセンサ点群を入力します。計測・3D描画はこのブラウザ、学習・推論はVMで実行します。</p>
+
   <div class="row-actions"><button id="ai-start" class="primary">▶ VM処理を開始</button><button id="ai-demo">▶ ロボットを動かす</button></div>
   <button id="ai-demo-scene" class="body-reset">テーブル付きデモシーンを読み込む</button>
   <label class="field-label">入力センサ<select id="ai-source"><option value="mid360">MID-360 · 実測走査方向</option><option value="d435i">RealSense D435i · 全有効画素</option></select></label>
   <label class="field-label">入力上限 Hz<input id="ai-rate" type="number" value="5" min="1" max="10" step="1"></label>
   <div class="settings"><label>学習ノード・エッジ<input id="ai-graph" type="checkbox" checked></label><label>処理と同じフレームの点群<input id="ai-points" type="checkbox"></label><label>FVG追加候補（水色）<input id="ai-add" type="checkbox" checked></label><label>FVG削除候補（橙）<input id="ai-delete" type="checkbox" checked></label><label>FVG記憶候補（紫）<input id="ai-memory" type="checkbox" checked></label></div>
-  <pre id="ai-status" class="sensor-stats">VM接続を確認中…</pre><p class="sub-note">FVGは既存タスクと同じ0.4 mセルの候補表示です。ロボット制御やノードの追加・削除指令ではありません。点群送信は同時に1タブが担当します。</p>`;
+  <pre id="ai-status" class="sensor-stats">VM接続を確認中…</pre>`;
   this.badge=document.createElement('div');this.badge.id='ai-live-badge';this.badge.hidden=true;this.badge.setAttribute('aria-live','off');$('viewport').append(this.badge);
   $('ai-start').onclick=()=>this.toggle();$('ai-demo').onclick=()=>{motion.toggle();$('ai-demo').textContent=motion.active()?'■ 動きを止める':'▶ ロボットを動かす';};
   $('ai-demo-scene').onclick=()=>this.demoScene();$('ai-source').onchange=async()=>{this.source=$('ai-source').value;this.lastSensorId=this.source==='mid360'?this.lidar.last?.id:null;if(this.running&&this.source==='mid360')await this.lidar.configure({...this.lidar.config,enabled:true});};

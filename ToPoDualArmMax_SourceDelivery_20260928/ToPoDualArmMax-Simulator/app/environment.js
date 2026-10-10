@@ -29,12 +29,12 @@ export class WorkEnvironment {
     $('environment-panel').innerHTML=`<div class="panel-heading"><div><span class="eyebrow">WORKSPACE</span><h2>テーブルと物体</h2></div><span class="chip">m / mm</span></div>
     <label class="field-label">テーブルの種類<select id="table-type">${Object.entries(TABLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>
     <div class="field-grid">${[['table-x','中心 X',500],['table-y','中心 Y',0],['table-z','天板 Z',120],['table-yaw','Yaw °',0],['table-width','奥行 X',600],['table-depth','幅 Y',800]].map(([id,t,v])=>`<label>${t}<input id="${id}" type="number" value="${v}" step="${id==='table-yaw'?5:10}" aria-label="テーブル ${t}"></label>`).join('')}</div>
-    <p class="sub-note">位置は base_footprint 基準の mm。テーブルを動かすと、載せた物体も一緒に移動します。</p>
+    <p class="sub-note">base_footprint基準・mm</p>
     <div class="section-label">物体を追加 <span>複数配置・最大30個</span></div><div class="row-actions"><select id="object-type" aria-label="追加する物体">${Object.entries(OBJECTS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><button id="object-add">＋ 追加</button></div>
     <label class="field-label">配置済みの物体<select id="object-list" size="4" aria-label="配置済みの物体"></select></label>
     <div id="object-editor" hidden><div class="row-actions"><button id="object-edit">配置マーカー</button><button id="object-snap">天板へ置く</button></div><div class="field-grid">${[['object-x','天板 X',0],['object-y','天板 Y',0],['object-z','天板上 Z',0],['object-yaw','Yaw °',0],['object-scale','倍率',1]].map(([id,t,v])=>`<label>${t}<input id="${id}" type="number" value="${v}" step="${id==='object-scale'?.1:5}" aria-label="物体 ${t}"></label>`).join('')}<label>色<input id="object-color" type="color" value="#e69331" aria-label="物体の色"></label></div><div class="row-actions"><button id="object-copy">複製</button><button id="object-delete">選択物体を削除</button></div></div>
     <div class="row-actions space-top"><button id="scene-save">↓ シーン保存</button><button id="scene-load">↑ シーン読込</button></div><input id="scene-file" type="file" accept=".json" hidden>
-    <p class="sub-note">物体の位置・寸法を使って深度を描画します。接触・落下はMuJoCoパネルで有効化できます。</p>`;
+    `;
     $('table-type').onchange=()=>{this.state.type=$('table-type').value;this.buildTable();};
     for(const [key,id] of Object.entries({x:'table-x',y:'table-y',z:'table-z',yaw:'table-yaw',width:'table-width',depth:'table-depth'}))$(id).onchange=()=>{const n=+$(id).value;if(!Number.isFinite(n))return;this.state[key]=key==='yaw'?n*rad:key==='width'||key==='depth'?THREE.MathUtils.clamp(n/1000,.15,2):key==='z'?THREE.MathUtils.clamp(n/1000,-.08,1.5):THREE.MathUtils.clamp(n/1000,-3,3);this.buildTable();};
     $('object-add').onclick=()=>this.add($('object-type').value);$('object-list').onchange=()=>this.select(+$('object-list').value);

@@ -97,7 +97,8 @@ install(
 ament_export_include_directories(include)
 ament_export_libraries(gng_wasm_core)
 
-if(BUILD_TESTING)
+# Git非管理のローカル検証コード。未配置時の通常ビルドのみ
+if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   add_executable(
     gng_wasm_core_cpu_kernel_test
     test/gng_wasm_core_cpu_kernel_test.cpp

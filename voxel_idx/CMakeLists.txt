@@ -23,7 +23,8 @@ install(DIRECTORY include/
 
 ament_export_include_directories(include)
 
-if(BUILD_TESTING)
+# Git非管理のローカル検証コード。未配置時の通常ビルドのみ
+if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_point_cloud_store test/test_point_cloud_store.cpp)
   target_link_libraries(test_point_cloud_store point_cloud_store)
