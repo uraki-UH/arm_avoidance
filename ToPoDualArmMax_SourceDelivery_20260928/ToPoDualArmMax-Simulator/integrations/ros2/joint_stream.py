@@ -9,6 +9,7 @@ import tornado.httpserver
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
+from robot_exchange import robot_base_frame
 
 
 def start_joint_stream(node, exchange, host, port, origins, follow=None):
@@ -83,7 +84,7 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
                     if now - self.last_publish >= 1 / self.hz * .9:
                         message = JointState()
                         message.header.stamp = node.get_clock().now().to_msg()
-                        message.header.frame_id = 'base_footprint'
+                        message.header.frame_id = robot_base_frame(self.model)
                         message.name = list(pose)
                         message.position = list(map(float, pose.values()))
                         exchange.joints.publish(message)

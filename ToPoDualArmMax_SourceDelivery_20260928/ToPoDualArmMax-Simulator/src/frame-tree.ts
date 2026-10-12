@@ -58,8 +58,8 @@ export class frame_tree {
                 if (transform && (transform.is_static || this.now_ms - transform.received_ms <= 2000)) {
                     const parent = this.resolve_cached(transform.parent, seen);
                     if (parent) matrix = parent.clone().multiply(transform.matrix);
-                } else if (!transform && frame === 'base_footprint' && this.fixed_frame === 'world') {
-                    const base = robot.links.base_footprint;
+                } else if (!transform && ['base_footprint', 'base_link'].includes(frame) && this.fixed_frame === 'world') {
+                    const base = robot.links[frame];
                     if (base) { base.updateWorldMatrix(true, false); matrix = base.matrixWorld.clone(); }
                 }
             }

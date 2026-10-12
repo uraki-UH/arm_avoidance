@@ -58,7 +58,7 @@ def parse_input(raw):
     n=meta.get('count')
     if not isinstance(n,int) or not 1<=n<=1000000 or len(raw)-offset!=n*12:
         raise ValueError('Point count/length mismatch')
-    if meta.get('frame_id')!='base_footprint' or meta.get('sensor') not in ('mid360','d435i'):
+    if meta.get('frame_id') not in ('base_footprint','base_link') or meta.get('sensor') not in ('mid360','d435i'):
         raise ValueError('World-frame sensor input required')
     owner=meta.get('client','')
     if not isinstance(owner,str) or not 16<=len(owner)<=80:
@@ -100,7 +100,7 @@ def handler(store,node,publisher,joints):
                         return self.respond(409,b'Another browser is publishing; this tab can view the result','text/plain')
                     stamp=time.time_ns()
                     message=PointCloud2()
-                    message.header.frame_id='base_footprint'
+                    message.header.frame_id=meta['frame_id']
                     message.header.stamp.sec=stamp//1000000000
                     message.header.stamp.nanosec=stamp%1000000000
                     message.height=1;message.width=meta['count']

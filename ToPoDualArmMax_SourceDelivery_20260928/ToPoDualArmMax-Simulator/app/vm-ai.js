@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {decodeFrame,encode_input} from './vm-packet.js';
-import {points_in_base,transform_points,robot_frames} from './robot-ros-state.js';
+import {points_in_base,transform_points,robot_frames,robot_base_frame} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 
 // 既存公開APIの互換名。座標変換とTPC1形式は共通実装へ委譲
@@ -66,7 +66,7 @@ export class VMAIWorkspace{
    if(generation!==this.generation||!f||!f.xyz.length)return;
    this.lastSensorId=f.id;
    const points=points_in_base(f.xyz,this.source==='mid360'?f.pose:f.depthWorld,f.robot_state);
-   const meta={client:this.client,frame_id:robot_frames.base,sensor:this.source,sensor_frame:f.id,count:points.length/3,robot_pose:f.robotPose,robot_model:this.robot.modelId};
+   const meta={client:this.client,frame_id:robot_base_frame(this.robot),sensor:this.source,sensor_frame:f.id,count:points.length/3,robot_pose:f.robotPose,robot_model:this.robot.modelId};
    const start=performance.now(),r=await fetch('/api/input',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-VM':'1'},body:encode_input(meta,points)});
    if(!r.ok)throw Error(r.status===409?'別タブが点群を送信中です。このタブでは結果を表示します。':await r.text());
    const result=await r.json();if(generation!==this.generation)return;this.sent++;this.waiting={stamp:result.stamp_ns,start};this.inputHistory.set(result.stamp_ns,{start,points:meta.count,robotPose:f.robotPose,sensor:meta.sensor,sensorFrame:f.id,base_to_world:f.robot_state.base_to_world});
@@ -77,7 +77,7 @@ export class VMAIWorkspace{
  }
  async poll(){
   if(!this.vm||this.vm.stale)return;const generation=this.generation;this.pollBusy=true;
-  try{const r=await fetch('/api/frame?after='+this.after);if(r.status===204)return;if(!r.ok)throw Error('VMフレーム取得失敗');const f=decodeFrame(await r.arrayBuffer());if(f.meta.frame_id!=='base_footprint')throw Error('異なる座標系の結果です');
+  try{const r=await fetch('/api/frame?after='+this.after);if(r.status===204)return;if(!r.ok)throw Error('VMフレーム取得失敗');const f=decodeFrame(await r.arrayBuffer());if(f.meta.frame_id!==robot_base_frame(this.robot))throw Error('異なる座標系の結果です');
    if(generation!==this.generation)return;this.after=f.meta.sequence;if(this.onlyOwnFrames&&!this.inputHistory.has(f.meta.stamp_ns))return;this.frame=f;this.received++;this.lastReceived=performance.now();this.matched=this.inputHistory.get(f.meta.stamp_ns)||null;this.latency=this.matched?performance.now()-this.matched.start:null;if(this.waiting?.stamp===f.meta.stamp_ns)this.waiting=null;this.draw(f);
   }catch(e){if(generation===this.generation)this.error=e.message;}finally{if(generation===this.generation){this.pollBusy=false;this.publish();}}
  }
@@ -86,7 +86,7 @@ export class VMAIWorkspace{
   dispose(this.group);
   this.group.matrixAutoUpdate=false;
   if(this.matched?.base_to_world)this.group.matrix.fromArray(this.matched.base_to_world);
-  else{this.robot.links[robot_frames.base].updateWorldMatrix(true,false);this.group.matrix.copy(this.robot.links[robot_frames.base].matrixWorld);}
+  else{this.robot.links[robot_base_frame(this.robot)].updateWorldMatrix(true,false);this.group.matrix.copy(this.robot.links[robot_base_frame(this.robot)].matrixWorld);}
   this.group.updateMatrixWorld(true);
   if($('ai-points').checked)this.group.add(new THREE.Points(geometry(f.points),new THREE.PointsMaterial({color:0x507caa,size:1.5,sizeAttenuation:false,toneMapped:false})));
   if($('ai-graph').checked){

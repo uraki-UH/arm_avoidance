@@ -73,7 +73,7 @@ export class RosPointsPanel{
     if(source==='rgbd'&&$('ros-depth').checked)depth_frame=frame;
     color_frame=frame;attach_camera(robot_state,frame.depthWorld);points=points_in_base(frame.xyz,frame.depthWorld,robot_state);
    }
-   const meta={robot_state,source,frame_id:robot_frames.base,count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:is_object?item.id:null,object_to_world:is_object?object_pose:null};
+   const meta={robot_state,source,frame_id:robot_state.base_frame,count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:is_object?item.id:null,object_to_world:is_object?object_pose:null};
    if(lidar_frame){meta.captured_at_ms=robot_state.captured_at_ms;meta.lidar={sensor_type:lidar_frame.config.sensor_type||'mid360',frame_id:robot_frames.lidar,scan_start_sec:lidar_frame.scanStart,duration_sec:lidar_frame.config.duration,num_slots:lidar_frame.config.beams,scan_pattern:lidar_frame.config.scanPattern};}
    let color_data;
    if(color_frame){

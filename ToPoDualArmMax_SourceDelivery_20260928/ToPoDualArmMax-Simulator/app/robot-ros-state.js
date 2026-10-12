@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 export const robot_frames=Object.freeze({world:'world',base:'base_footprint',camera:'sim_camera_depth_optical_frame',lidar:'sim_mid360_frame'});
 export {pose_sources} from './robot.js';
+export const robot_base_frame=robot=>robot.links.base_footprint?'base_footprint':'base_link';
 const joint_topologies=new WeakMap();
 
 // HTTPブリッジに対応するWebSocket接続先。既定HTTPポートと明示ポートの共通規則
@@ -37,7 +38,7 @@ export function transform_record(parent,child,matrix){
 }
 export function robot_snapshot(robot){
  robot.updateWorldMatrix(true,true);
- const base=robot.links[robot_frames.base].matrixWorld.clone(),transforms=[transform_record(robot_frames.world,robot_frames.base,base)];
+ const base_frame=robot_base_frame(robot),base=robot.links[base_frame].matrixWorld.clone(),transforms=[transform_record(robot_frames.world,base_frame,base)];
  if(!joint_topologies.has(robot)){
   const topology=[];
   for(const element of robot.urdf.children){
@@ -50,15 +51,15 @@ export function robot_snapshot(robot){
  for(const {parent,child,parent_link,child_link} of joint_topologies.get(robot)){
   transforms.push(transform_record(parent,child,parent_link.matrixWorld.clone().invert().multiply(child_link.matrixWorld)));
  }
- return {robot_model:robot.modelId,robot_pose:robot.getPose(),captured_at_ms:Date.now(),base_to_world:base.toArray(),transforms};
+ return {base_frame,robot_model:robot.modelId,robot_pose:robot.getPose(),captured_at_ms:Date.now(),base_to_world:base.toArray(),transforms};
 }
 export function attach_camera(state,depth_world){
  const matrix=new THREE.Matrix4().fromArray(state.base_to_world).invert().multiply(new THREE.Matrix4().fromArray(depth_world));
- state.transforms.push(transform_record(robot_frames.base,robot_frames.camera,matrix));
+ state.transforms.push(transform_record(state.base_frame??robot_frames.base,robot_frames.camera,matrix));
 }
 export function attach_lidar(state,lidar_world){
  const matrix=new THREE.Matrix4().fromArray(state.base_to_world).invert().multiply(new THREE.Matrix4().fromArray(lidar_world));
- state.transforms.push(transform_record(robot_frames.base,robot_frames.lidar,matrix));
+ state.transforms.push(transform_record(state.base_frame??robot_frames.base,robot_frames.lidar,matrix));
 }
 export function points_to_base(points,state){
  return transform_points(points,new THREE.Matrix4().fromArray(state.base_to_world).invert(),points);

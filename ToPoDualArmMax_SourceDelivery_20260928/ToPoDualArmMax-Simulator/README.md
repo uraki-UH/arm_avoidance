@@ -244,3 +244,9 @@ node --test tests/server.test.mjs
 ## 第三者素材・ライセンス
 
 独自実装と提供URDF/STL等の扱いは [LICENSE.md](LICENSE.md)、第三者ライブラリ・素材は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に整理しています。全ファイルを一律のOSSライセンスとして扱ってはいません。素材別の確認済み条件と未確認点も一覧に記載しています。
+
+### Longの基準フレーム
+
+LongモデルのURDFルートは`base_link`。ROS用とブラウザー用で位置・回転ゼロの`base_footprint`固定リンクを除去し、TF・点群・関節配信の基準を統一。標準モデルのルートは従来の`base_footprint`。Longの既存LiDAR配置設定にある旧親フレームは読込み時に`base_link`へ移行。
+
+ブラウザーは再読み込みで反映。既存ROSノードはURDFや設定を起動時に保持するため、配信への反映には対象ノードの再起動が必要。既存ブリッジを継続利用する場合も、新しい基準フレームを受理する版への再起動が必要。旧TFのキャッシュが残る表示クライアントは再接続または再起動で更新。

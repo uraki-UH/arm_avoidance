@@ -129,10 +129,10 @@
       vlut_danger_dist: 0.025
       publish_hz: 30.0
 
-      # 外部TF運用時の固定較正TFの停止。外部TFの子はURDFルートのbase_footprint。
+      # 外部TF運用時の固定較正TFの停止。外部TFの子はURDFルートのbase_link。
       enable_static_tf: false
       static_tf_parent_frame: "world"
-      static_tf_child_frame: "base_footprint"
+      static_tf_child_frame: "base_link"
       static_tf_x: 0.0
       static_tf_y: 0.0
       static_tf_z: 0.0
@@ -147,8 +147,7 @@
       apply_self_collision_exclusion_pairs: true
       # 全身メッシュの内部充填ボクセル解像度 [m]。プリミティブは元形状での判定。
       voxel_size: 0.001
-      environment_ignore_links:
-        - "base_footprint"
+      environment_ignore_links: []
       #(隣接リンク同士は自動で衝突判定をしないように設定)
       self_collision_exclusion_pairs:
         - "L_finger_left|L_finger_right"

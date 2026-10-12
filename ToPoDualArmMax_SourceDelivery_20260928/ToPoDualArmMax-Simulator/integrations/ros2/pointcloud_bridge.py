@@ -8,7 +8,7 @@ import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
-from robot_exchange import validate_state, RobotExchange
+from robot_exchange import validate_state, RobotExchange, robot_base_frame
 from native_points import ensure_native, validate_payload
 
 root = Path(__file__).resolve().parents[2] / 'app'
@@ -38,7 +38,7 @@ def parse_packet(raw):
     offset = 8 + (size + 3) // 4 * 4
     if type(count) is not int or not 0 <= count <= 2073600:
         raise ValueError('点数・データ長が不正です')
-    if meta.get('source') not in topics or meta.get('frame_id') != 'base_footprint':
+    if meta.get('source') not in topics or meta.get('frame_id') not in ('base_footprint', 'base_link'):
         raise ValueError('点群種別・座標系が不正です')
     depth = meta.get('depth_image')
     num_pixels = 0
@@ -73,9 +73,11 @@ def parse_packet(raw):
             raise ValueError('対象物体の姿勢が不正です')
     if meta.get('robot_state') is not None:
         validate_state(meta['robot_state'])
+        if meta['frame_id'] != robot_base_frame(meta['robot_state']['robot_model']):
+            raise ValueError('モデルと点群の基準座標系が一致しません')
     if meta['source'] == 'mid360':
         state = meta.get('robot_state')
-        if state is None or not any(t['child'] == 'sim_mid360_frame' and t['parent'] == 'base_footprint' for t in state['transforms']):
+        if state is None or not any(t['child'] == 'sim_mid360_frame' and t['parent'] == robot_base_frame(state['robot_model']) for t in state['transforms']):
             raise ValueError('MID-360の取得時TFが必要です')
     return meta, data
 

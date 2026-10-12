@@ -11,7 +11,6 @@
   <material name="orange"> <color rgba="0.95 0.55 0.10 1.0"/></material>
   <material name="blue">   <color rgba="0.10 0.30 0.85 1.0"/></material>
 
-  <link name="base_footprint"/>
   <link name="base_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -28,11 +27,6 @@
       <inertia ixx="0.013683" iyy="0.0137122" izz="0.00255217" ixy="0" ixz="0" iyz="0"/>
     </inertial>
   </link>
-  <joint name="base_footprint_to_base" type="fixed">
-    <parent link="base_footprint"/>
-    <child link="base_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
   <link name="waist_cover_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>

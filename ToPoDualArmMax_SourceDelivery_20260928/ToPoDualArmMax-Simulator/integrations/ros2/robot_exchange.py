@@ -8,6 +8,10 @@ import xml.etree.ElementTree as element_tree
 sensor_frames = ('sim_camera_depth_optical_frame', 'sim_mid360_frame')
 
 
+def robot_base_frame(model):
+    return 'base_link' if model == 'long' else 'base_footprint'
+
+
 def finite_values(values, size):
     return isinstance(values, list) and len(values) == size and all(type(v) in (int, float) and math.isfinite(v) for v in values)
 
@@ -37,8 +41,9 @@ def validate_state(state):
         if abs(sum(v*v for v in transform['rotation']) - 1) > 1e-5:
             raise ValueError('TFの回転が不正です')
         parents[child] = parent
-    if parents.get('base_footprint') != 'world':
-        raise ValueError('worldからbase_footprintへのTFが必要です')
+    base_frame = robot_base_frame(state['robot_model'])
+    if parents.get(base_frame) != 'world':
+        raise ValueError(f'worldから{base_frame}へのTFが必要です')
     for child in parents:
         seen = set()
         while child != 'world':
@@ -98,11 +103,13 @@ class RobotExchange:
     def validate(self, state):
         validate_state(state)
         model = state['robot_model']
-        expected = dict(self.parents[model], base_footprint='world')
+        base_frame = robot_base_frame(model)
+        expected = dict(self.parents[model])
+        expected[base_frame] = 'world'
         actual = {t['child']: t['parent'] for t in state['transforms']}
         for frame in sensor_frames:
             if frame in actual:
-                expected[frame] = 'base_footprint'
+                expected[frame] = base_frame
         if actual != expected or set(state['robot_pose']) != self.joint_names[model]:
             raise ValueError('URDFと状態の構成が一致しません')
 
@@ -145,18 +152,19 @@ class RobotExchange:
         if not isinstance(outputs, list) or any(value not in ('base', 'tf', 'joints') for value in outputs):
             raise ValueError('状態送信項目が不正です')
         self.validate(state)
+        base_frame = robot_base_frame(state['robot_model'])
         stamp = stamp or self.node.get_clock().now().to_msg()
         transforms = []
         for value in state['transforms']:
             # 取得時センサTFの配信元は点群経路のみ
             if value['child'] in sensor_frames:
                 continue
-            if 'tf' not in outputs and not (value['child'] == 'base_footprint' and 'base' in outputs):
+            if 'tf' not in outputs and not (value['child'] == base_frame and 'base' in outputs):
                 continue
             msg = self.transform_message(value, stamp)
             if 'tf' in outputs:
                 transforms.append(msg)
-            if value['child'] == 'base_footprint' and 'base' in outputs:
+            if value['child'] == base_frame and 'base' in outputs:
                 base = PoseStamped()
                 base.header = msg.header
                 base.pose.position.x, base.pose.position.y, base.pose.position.z = map(float, value['translation'])
@@ -165,7 +173,7 @@ class RobotExchange:
         if 'tf' in outputs:
             self.publish_transforms(transforms)
         joints = JointState()
-        joints.header.stamp, joints.header.frame_id = stamp, 'base_footprint'
+        joints.header.stamp, joints.header.frame_id = stamp, base_frame
         joints.name = list(state['robot_pose'])
         joints.position = list(map(float, state['robot_pose'].values()))
         for field in ('velocity', 'effort'):
