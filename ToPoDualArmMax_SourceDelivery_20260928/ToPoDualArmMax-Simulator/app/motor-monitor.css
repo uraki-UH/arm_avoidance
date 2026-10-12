@@ -1,6 +1,6 @@
-/* 関節一覧と読取り専用表示。指標タブ・関節別表示形式の共通配色 */
+/* 関節角調整とモータ値表示。指標タブ・関節別表示形式の共通配色 */
 .motor-monitor{border:1px solid var(--line);border-radius:8px;padding:12px;margin:16px 0;font-size:13px;min-width:0;scroll-margin-top:110px}
-.motor-monitor button{background:var(--panel);color:var(--text)}
+.motor-monitor button{background:var(--panel);color:var(--text);transition:none}
 .motor-monitor button:hover{background:#f1f5ed;border-color:#79bb35}
 .motor-heading{display:flex;align-items:center;gap:10px;white-space:nowrap;margin-bottom:10px}
 .motor-heading h3{font-size:16px;margin:0;flex:none}
@@ -24,8 +24,15 @@
 .motor-values{display:flex;flex-direction:column;align-items:flex-end;gap:3px;min-width:0}
 .motor-values output{font-size:12px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;text-align:right}
 .motor-monitor .sim{color:#568622}.motor-monitor .hardware{color:#218398}
-.motor-monitor input[type=range]:disabled{opacity:1;cursor:default;pointer-events:none;width:100%;margin:7px 0 0}
-#physics-panel .motor-monitor input[type=range]{border:0;background:transparent;padding:0;height:16px}
+.motor-monitor input[type=range]{width:100%;margin:7px 0 0;border:0;background:transparent;padding:0;height:16px}
+.motor-monitor input[type=range]:disabled{opacity:1;cursor:default;pointer-events:none}
+/* 欠測時の空バー。ゼロ値や中立位置としてのつまみ表示なし */
+.motor-monitor input.is-missing{appearance:none}
+.motor-monitor input.is-missing::-webkit-slider-runnable-track{height:3px;background:var(--line);border-radius:2px}
+.motor-monitor input.is-missing::-webkit-slider-thumb{appearance:none;opacity:0;width:0;height:0}
+.motor-monitor input.is-missing::-moz-range-track{height:3px;background:var(--line);border-radius:2px}
+.motor-monitor input.is-missing::-moz-range-thumb{opacity:0;width:0;height:0;border:0}
+.motor-monitor input.is-missing::-moz-range-progress{background:transparent}
 .motor-gauges .sim input{accent-color:#79bb35}.motor-gauges .hardware input{accent-color:#39aeca}
 .motor-plot{display:block;width:100%;height:150px;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;background:#101713}
 .motor-legend{font-size:11px;display:flex;gap:10px;margin:0;margin-left:auto}

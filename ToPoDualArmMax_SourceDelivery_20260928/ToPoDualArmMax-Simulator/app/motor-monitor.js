@@ -68,8 +68,8 @@ export class motor_monitor{
  constructor(simulator){
   this.simulator=simulator;this.model=null;this.socket=null;this.samples={};this.profiles={};this.rows=new Map();this.metric='position_rad';this.visibility={};
   this.section=document.createElement('section');this.section.className='motor-monitor';this.section.id='motor-monitor';
-  this.section.innerHTML=`<div class="motor-heading"><h3>モータ</h3><span data-field="metric_note" class="motor-hint" hidden tabindex="0"></span><div class="motor-legend"><span class="sim">シミュレーション</span><span class="hardware">実機</span></div></div><div class="motor-tabs" role="tablist" aria-label="表示指標"></div><details class="motor-visibility"><summary>関節表示</summary><button data-field="show_all">すべて表示</button><div class="motor-joint-checks"></div></details><div class="motor-joint-list" role="tabpanel" id="motor-joint-list"></div><p data-field="empty" class="motor-note" hidden>「関節表示」から選択</p><details><summary>設定</summary><label><input data-field="enable_hardware" type="checkbox">実機値を受信</label><label>角度・角速度用JointState<input data-field="state_topic" type="text" placeholder="未設定：DynamixelPresentの姿勢を使用"></label><label>トルク用JointState［N·m］<input data-field="torque_topic" type="text" placeholder="未設定"></label><label>電流形式<select data-field="current_type"><option value="dynamixel_present">DynamixelPresent</option><option value="joint_state">JointState.effort［A］</option></select></label><label>電流トピック<input data-field="current_topic" type="text" value="/dynamixel/state/present"></label><label>換算設定対象<select data-field="joint"></select></label><label>実機名／ID<input data-field="ros_name" type="text"></label><label>出力軸換算［N·m/A］<input data-field="coefficient" type="number" step="0.01" placeholder="未設定"></label><p class="motor-note">係数未設定は換算なし。ID対応と係数は関節別。</p><button data-field="load" class="motor-load">設定JSON読込</button><input data-field="file" type="file" accept="application/json,.json" hidden><button data-field="clear">履歴クリア</button><p data-field="status" class="motor-note">実機監視OFF</p><p class="motor-note">表示専用。グラフ：60秒・最大10 Hz、破線：推定値。</p></details>`;
-  document.getElementById('physics-panel').append(this.section);
+  this.section.innerHTML=`<div class="motor-heading"><h3>モータ</h3><span data-field="metric_note" class="motor-hint" hidden tabindex="0"></span><div class="motor-legend"><span class="sim">シミュレーション</span><span class="hardware">実機</span></div></div><div class="motor-tabs" role="tablist" aria-label="表示指標"></div><details class="motor-visibility"><summary>関節表示</summary><button data-field="show_all">すべて表示</button><div class="motor-joint-checks"></div></details><div class="motor-joint-list" role="tabpanel" id="motor-joint-list"></div><p data-field="empty" class="motor-note" hidden>「関節表示」から選択</p><details><summary>設定</summary><label><input data-field="enable_hardware" type="checkbox">実機値を受信</label><label>角度・角速度用JointState<input data-field="state_topic" type="text" placeholder="未設定：DynamixelPresentの姿勢を使用"></label><label>トルク用JointState［N·m］<input data-field="torque_topic" type="text" placeholder="未設定"></label><label>電流形式<select data-field="current_type"><option value="dynamixel_present">DynamixelPresent</option><option value="joint_state">JointState.effort［A］</option></select></label><label>電流トピック<input data-field="current_topic" type="text" value="/dynamixel/state/present"></label><label>換算設定対象<select data-field="joint"></select></label><label>実機名／ID<input data-field="ros_name" type="text"></label><label>出力軸換算［N·m/A］<input data-field="coefficient" type="number" step="0.01" placeholder="未設定"></label><p class="motor-note">係数未設定は換算なし。ID対応と係数は関節別。</p><button data-field="load" class="motor-load">設定JSON読込</button><input data-field="file" type="file" accept="application/json,.json" hidden><button data-field="clear">履歴クリア</button><p data-field="status" class="motor-note">実機監視OFF</p><p class="motor-note">角度以外は表示専用。グラフ：60秒・最大10 Hz、破線：推定値。</p></details>`;
+  document.getElementById('joint-controls').append(this.section);
   this.elements=Object.fromEntries([...this.section.querySelectorAll('[data-field]')].map(element=>[element.dataset.field,element]));
   this.tabs=new Map();
   for(const [metric,description] of Object.entries(metrics)){
@@ -90,6 +90,8 @@ export class motor_monitor{
   };
   document.getElementById('ros-endpoint').addEventListener('change',()=>this.disconnect('接続先変更。受信ONで再接続'));
   document.addEventListener('visibilitychange',()=>{if(document.hidden)this.disconnect('ページ非表示のため受信OFF');});
+  const release_angle_inputs=()=>{for(const row of this.rows.values())row.is_angle_dragging=false;};
+  for(const event of ['pointerup','pointercancel','blur'])window.addEventListener(event,release_angle_inputs);
   this.timer=setInterval(()=>this.tick(),100);window.addEventListener('pagehide',()=>{this.disconnect();clearInterval(this.timer);},{once:true});this.tick();
  }
  profile(name=this.elements.joint.value){return this.profiles[name]??{ros_name:name,output_torque_nm_per_a:null,has_verified_calibration:false};}
@@ -153,7 +155,7 @@ export class motor_monitor{
   if(physics.socket&&physics.enable_dynamics&&physics.robot_model===robot&&motion&&motion!==this.last_motion){this.last_motion=motion;this.sim_received_ms=now_ms;}
   const has_sim=!!(physics.socket&&physics.enable_dynamics&&physics.robot_model===robot&&motion&&now_ms-this.sim_received_ms<=max_sample_age_ms);
   const sample=unit=>{const value=this.samples[unit];return value&&now_ms-value.received_ms<=max_sample_age_ms?value:null;};
-  const inputs=Object.fromEntries(input_units.map(unit=>[unit,sample(unit)])),can_render=!document.hidden&&!document.getElementById('physics-panel').hidden;
+  const inputs=Object.fromEntries(input_units.map(unit=>[unit,sample(unit)])),can_render=!document.hidden&&!document.getElementById('robot-panel').hidden;
   for(const row of this.rows.values()){
    if(!row.is_visible)continue;
    const name=row.joint.name,coefficient=this.profile(name).output_torque_nm_per_a;
@@ -177,8 +179,12 @@ export class motor_monitor{
    card.querySelector('strong').textContent=joint.name;card.querySelector('.motor-view-tabs').setAttribute('aria-label',joint.name+'の表示形式');
    const checkbox=document.createElement('input');checkbox.type='checkbox';const label=document.createElement('label');label.append(checkbox,document.createTextNode(joint.name));this.section.querySelector('.motor-joint-checks').append(label);
    const max_effort=Number(robot.urdf.querySelector(`joint[name="${joint.name}"] > limit`)?.getAttribute('effort'));
-   const row={joint,card,checkbox,is_visible:true,views:{},jerk:{sim:new jerk_estimator(),hardware:new jerk_estimator()},display_limits:{position_rad:Math.max(180,Number.isFinite(joint.lower)?Math.abs(joint.lower*180/Math.PI):0,Number.isFinite(joint.upper)?Math.abs(joint.upper*180/Math.PI):0),velocity_rad_sec:Math.max(1,Math.abs(joint.velocity*180/Math.PI)),torque_nm:Math.max(1,max_effort||0),current_a:1,jerk_rad_sec3:1},fields:{}};
+   const row={joint,card,checkbox,is_visible:true,is_angle_dragging:false,views:{},jerk:{sim:new jerk_estimator(),hardware:new jerk_estimator()},display_limits:{position_rad:Math.max(180,Number.isFinite(joint.lower)?Math.abs(joint.lower*180/Math.PI):0,Number.isFinite(joint.upper)?Math.abs(joint.upper*180/Math.PI):0),velocity_rad_sec:Math.max(1,Math.abs(joint.velocity*180/Math.PI)),torque_nm:Math.max(1,max_effort||0),current_a:1,jerk_rad_sec3:1},fields:{}};
    for(const source of ['sim','hardware']){const gauge_box=card.querySelector('.motor-gauges .'+source);row.fields[source]={output:card.querySelector('output.'+source),gauge_box,gauge:gauge_box.querySelector('input')};}
+   const angle_input=row.fields.sim.gauge;
+   angle_input.oninput=()=>{if(this.can_edit_angle(row))this.simulator.set_manual_joint(joint.name,angle_input.valueAsNumber*Math.PI/180);};
+   angle_input.onpointerdown=()=>{row.is_angle_dragging=this.can_edit_angle(row);};
+   for(const event of ['pointerup','pointercancel','blur'])angle_input.addEventListener(event,()=>{row.is_angle_dragging=false;});
    checkbox.onchange=()=>{this.set_visible(row,checkbox.checked);this.tick();};
    for(const button of card.querySelectorAll('[data-view]'))button.onclick=()=>{row.views[this.metric]=button.dataset.view;this.apply_view(row);this.tick();};
    this.rows.set(joint.name,row);this.section.querySelector('.motor-joint-list').append(card);this.set_visible(row,this.visibility[this.model]?.[joint.name]!==false);
@@ -206,6 +212,7 @@ export class motor_monitor{
   if(is_graph&&!row.canvas){row.canvas=document.createElement('canvas');row.canvas.className='motor-plot';row.card.append(row.canvas);}
   if(row.canvas){row.canvas.hidden=!is_graph;row.canvas.setAttribute('aria-label',row.joint.name+' '+metrics[this.metric].label+'の時系列グラフ');}
  }
+ can_edit_angle(row){return this.metric==='position_rad'&&this.simulator.diagnostics.ready&&this.simulator.robot.pose_source==='simulator'&&this.simulator.robot.joints[row.joint.name]===row.joint&&typeof this.simulator.set_manual_joint==='function';}
  render_row(row,has_sim,inputs){
   const metric=this.metric,description=metrics[metric],max_value=row.display_limits[metric],profile=this.profile(row.joint.name);
   for(const source of ['sim','hardware']){
@@ -214,11 +221,16 @@ export class motor_monitor{
    const is_estimated_value=is_estimated(values,metric),label=source==='sim'?'シミュレーション':'実機';
    set_text(fields.output,`${value===null?'—':value.toFixed(3)} ${description.unit}${is_estimated_value?'（推定）':''}`);
    fields.output.setAttribute('aria-label',row.joint.name+' '+label+' '+description.label+' '+fields.output.textContent);
-   fields.gauge.hidden=value===null;fields.gauge.min=-max_value;fields.gauge.max=max_value;fields.gauge.value=value??0;fields.gauge.setAttribute('aria-label',row.joint.name+' '+label+' '+description.label+'の読取り専用ゲージ');
+   const can_edit=source==='sim'&&this.can_edit_angle(row),is_missing=value===null&&!can_edit;fields.gauge.disabled=!can_edit;fields.gauge.hidden=false;fields.gauge.classList.toggle('is-missing',is_missing);
+   fields.gauge.min=can_edit&&Number.isFinite(row.joint.lower)?row.joint.lower*description.scale:-max_value;fields.gauge.max=can_edit&&Number.isFinite(row.joint.upper)?row.joint.upper*description.scale:max_value;fields.gauge.step=can_edit?'0.1':'any';
+   const physics=this.simulator.physics_panel,goal=can_edit&&physics.socket&&physics.enable_dynamics&&physics.robot_model===this.simulator.robot?finite_or_null(physics.targets?.[row.joint.name]):null;
+   if(!can_edit||!row.is_angle_dragging)fields.gauge.value=can_edit?(goal??row.joint.q)*description.scale:value??0;
+   fields.gauge.setAttribute('aria-valuetext',is_missing?'未受信・未計算':fields.gauge.value+' '+description.unit);
+   fields.gauge.setAttribute('aria-label',row.joint.name+' '+label+' '+description.label+(can_edit?'の調整':'の読取り専用ゲージ'));
    let note=value===null?'未受信・未計算・失効':metric==='jerk_rad_sec3'?'角速度の差分推定':is_estimated_value?'換算・推定'+(profile.has_verified_calibration?'':'（未校正）'):source==='sim'?(has_sim?'MuJoCo計算値':'ブラウザ表示角'):'ROS配信値';
    const source_sample=inputs[metric==='jerk_rad_sec3'?'velocity_rad_sec':metric]??(is_estimated_value?inputs[metric==='torque_nm'?'current_a':'torque_nm']:null);
    if(source==='hardware'&&source_sample&&!source_sample.has_source_stamp)note+='・取得時刻なし';
-   fields.output.title=label+'・'+note;fields.gauge.title=fields.output.title;
+   fields.output.title=label+'・'+note;fields.gauge.title=can_edit?'シミュレータ目標角［deg］。現在角は右上の数値。':fields.output.title;
   }
  }
  draw_plot(row,now_ms){
@@ -245,8 +257,7 @@ export class motor_monitor{
  }
 }
 
-// 本体初期化後の監視追加。本体の描画ループ・制御経路への割込みなし
+// 関節操作とモータ表示の共通スタイル
 if(typeof document!=='undefined'){
  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=new URL('./motor-monitor.css',import.meta.url);document.head.append(stylesheet);
- const began_ms=performance.now(),boot=()=>{if(window.simulator?.diagnostics.ready){window.simulator.motor_monitor=new motor_monitor(window.simulator);}else if(performance.now()-began_ms<60000)setTimeout(boot,100);};boot();
 }

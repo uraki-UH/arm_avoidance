@@ -404,7 +404,13 @@ def main():
     parser = argparse.ArgumentParser(description="AIによる指示書候補生成・品質とコストの比較")
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--allow-cloud-evaluation", action="store_true",
+                        help="共有可能な送信内容・宛先・用途が明示許可された外部AI比較")
     args = parser.parse_args()
+    # ペイロード読込み・モデル起動前の外部比較ガード
+    if not args.allow_cloud_evaluation:
+        print("外部AI比較は既定で無効です。共有可能な送信内容・宛先・用途の明示許可が必要です。", file=sys.stderr)
+        return 2
     try:
         report = optimize(args.manifest.resolve(), args.output.resolve())
         return 0 if report["status"] == "completed" else 1

@@ -10,7 +10,7 @@ export class ObjectInteraction {
  constructor(environment){
   this.environment=environment;this.canvas=environment.renderer.domElement;
   this.has_priority_pick=environment.has_priority_pick??(()=>false);
-  this.ray=new THREE.Raycaster();this.hover=null;this.hover_robot=null;this.press=null;this.empty_press=null;this.pending=null;this.mode='direct';
+  this.ray=new THREE.Raycaster();this.hover=null;this.hover_robot=null;this.press=null;this.empty_press=null;this.pending=null;this.mode='direct';this.drag_item=null;
   this.hover_box=new THREE.Box3Helper(new THREE.Box3(),0xffce45);
   this.preview_box=new THREE.Box3Helper(new THREE.Box3(),0x35d5bc);
   for(const helper of [this.hover_box,this.preview_box]){helper.visible=false;helper.material.depthTest=false;helper.renderOrder=1000;environment.overlay.add(helper);}
@@ -21,7 +21,7 @@ export class ObjectInteraction {
   };
   const panel=this.panel=document.createElement('section');panel.id='object-interaction';
   panel.className='object-interaction-toolbar';
-  panel.innerHTML=`<div class="object-interaction-row"><select data-role="mode" aria-label="物体操作モード" title="物体をドラッグして配置">${Object.entries(labels).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><button data-role="rotate" title="Yaw +15°（T／Shift+Tで逆回転。ドラッグ中はホイール、Shift併用で5°）" aria-label="Yawを15度回転">↻</button><button data-role="apply" title="配置を確定（Enter）">確定</button><button data-role="cancel" title="配置プレビューを取り消す（Esc）" aria-label="配置を取り消す">×</button></div><output data-role="status" role="status" aria-live="polite" hidden></output>`;
+  panel.innerHTML=`<div class="object-interaction-row"><select data-role="mode" aria-label="物体操作モード" title="物体をダブルクリックしてからドラッグで配置">${Object.entries(labels).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><button data-role="rotate" title="Yaw +15°（T／Shift+Tで逆回転。ドラッグ中はホイール、Shift併用で5°）" aria-label="Yawを15度回転">↻</button><button data-role="apply" title="配置を確定（Enter）">確定</button><button data-role="cancel" title="配置プレビューを取り消す（Esc）" aria-label="配置を取り消す">×</button></div><output data-role="status" role="status" aria-live="polite" hidden></output>`;
   document.getElementById('viewport').append(panel);
   this.status=panel.querySelector('[data-role=status]');this.apply_button=panel.querySelector('[data-role=apply]');this.apply_button.disabled=true;
   panel.querySelector('[data-role=mode]').onchange=event=>{this.mode=event.target.value;this.refresh();};
@@ -31,6 +31,7 @@ export class ObjectInteraction {
   this.canvas.addEventListener('wheel',event=>this.wheel(event),{capture:true,passive:false});
   this.canvas.addEventListener('pointermove',event=>this.pointer_move(event),true);
   this.canvas.addEventListener('pointerdown',event=>this.pointer_down(event),true);
+  this.canvas.addEventListener('dblclick',event=>this.double_click(event),true);
   this.canvas.addEventListener('pointerup',event=>this.pointer_up(event),true);
   this.canvas.addEventListener('pointercancel',()=>this.cancel(),true);
   this.canvas.addEventListener('lostpointercapture',()=>{if(this.press)this.cancel();});
@@ -59,6 +60,15 @@ export class ObjectInteraction {
  }
  clear_hover(){this.hover=null;this.hover_robot=null;this.hover_box.visible=false;}
  clear_selection(){this.cancel();this.environment.select(null);this.hide_context_menu?.();}
+ double_click(event){
+  const env=this.environment;
+  if(event.button!==0||event.ctrlKey||event.metaKey||env.editing||this.has_priority_pick(event.clientX,event.clientY))return;
+  if([env.gizmo,window.simulator?.gizmo].some(gizmo=>gizmo?.enabled&&(gizmo.dragging||gizmo.axis)))return;
+  const item=this.pick(event);if(!item)return;
+  event.preventDefault();event.stopImmediatePropagation();this.cancel(false);
+  env.select(item.id);this.drag_item=item;this.canvas.style.cursor='grab';
+  env.toast('配置操作を有効にしました。ドラッグで配置先を指定し、確定またはEscで終了');
+ }
  pointer_down(event){
   const env=this.environment;
   this.empty_press=null;
@@ -66,10 +76,12 @@ export class ObjectInteraction {
   // 可視ROS候補へのクリック優先。背後の環境物体による入力の遮断なし。
   if(!event.ctrlKey&&!event.metaKey&&this.has_priority_pick(event.clientX,event.clientY))return;
   const item=this.pick(event);
-  if(!item){this.empty_press={x:event.clientX,y:event.clientY,id:event.pointerId,has_moved:false};return;}
+  if(!item){this.drag_item=null;this.empty_press={x:event.clientX,y:event.clientY,id:event.pointerId,has_moved:false};return;}
   if(env.editing)return;
+  if(event.ctrlKey||event.metaKey){event.preventDefault();event.stopImmediatePropagation();this.cancel(false);env.select(item.id,true);return;}
+  // ダブルクリックで許可した対象だけの配置開始。通常ドラッグは視点操作
+  if(this.drag_item!==item&&this.pending?.item!==item){this.cancel(false);env.select(item.id);return;}
   event.preventDefault();event.stopImmediatePropagation();this.cancel(false);
-  if(event.ctrlKey||event.metaKey){env.select(item.id,true);return;}
   this.has_orbit=env.orbit.enabled;env.orbit.enabled=false;
   env.select(item.id);this.press={item,x:event.clientX,y:event.clientY,id:event.pointerId};
   this.canvas.setPointerCapture(event.pointerId);this.canvas.style.cursor='grabbing';
@@ -91,7 +103,7 @@ export class ObjectInteraction {
   this.hover_box.material.color.set(this.hover_robot?0x38bdf8:0xffce45);
   if(this.hover_robot)this.hover_box.box.setFromObject(this.hover_robot);
   else if(this.hover)this.hover_box.box.setFromObject(this.hover.group,true);
-  this.canvas.style.cursor=this.hover?'grab':this.hover_robot?'pointer':'';
+  this.canvas.style.cursor=this.hover?(this.drag_item===this.hover?'grab':'pointer'):this.hover_robot?'pointer':'';
  }
  release(){
   const press=this.press;this.press=null;this.empty_press=null;
@@ -147,7 +159,7 @@ export class ObjectInteraction {
   this.rotate(-Math.sign(event.deltaY)*(event.shiftKey?5:15));
  }
  rotate(deg){
-  if(!this.pending){if(!this.environment.selected||this.environment.selected_ids.size>1)return;this.begin(this.environment.selected);}
+  if(!this.pending){if(!this.environment.selected||this.environment.selected_ids.size>1||this.drag_item!==this.environment.selected)return;this.begin(this.environment.selected);this.drag_item=null;}
   const ghost=this.pending.ghost;
   const bottom=new THREE.Box3().setFromObject(ghost,true).min.z;
   ghost.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),THREE.MathUtils.degToRad(deg)));
@@ -155,7 +167,7 @@ export class ObjectInteraction {
  }
  reason(){
   const pending=this.pending,env=this.environment;
-  if(!pending)return '物体を選択してドラッグしてください';
+  if(!pending)return '物体をダブルクリックしてからドラッグしてください';
   if(!env.items.includes(pending.item)||!visible(pending.item.group))return '元の物体が削除または非表示になりました';
   pending.item.group.updateWorldMatrix(true,true);
   if(pending.has_source_changed||!is_same_transform(pending.source,pending.item.group.matrixWorld))return '元の配置が変更されています。取消して再選択してください';
@@ -201,5 +213,5 @@ export class ObjectInteraction {
   if(this.pending){this.pending.ghost.removeFromParent();for(const material of this.pending.materials)material.dispose();this.pending=null;}
   this.preview_box.visible=false;
  }
- cancel(has_message=true){this.release();this.dispose_preview();this.clear_hover();this.apply_button.disabled=true;this.set_status('','cancelled');}
+ cancel(has_message=true){this.drag_item=null;this.release();this.dispose_preview();this.clear_hover();this.apply_button.disabled=true;this.set_status('','cancelled');}
 }

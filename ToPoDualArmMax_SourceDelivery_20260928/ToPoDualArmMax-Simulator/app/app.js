@@ -1,5 +1,6 @@
 import {create_ros_results} from './generated/ros-results.js';
 import {PhysicsPanel} from './physics-ui.js';
+import {motor_monitor} from './motor-monitor.js';
 import {RosPointsPanel} from './ros-points.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -135,23 +136,21 @@ function updateDemoMotion(now){
  for(const j of robot.actuated)p[j.name]=demoMotion.from[j.name]+((p[j.name]??0)-demoMotion.from[j.name])*u;
  robot.setPose(p);syncTargets();return true;
 }
-function setManual(name,value){stopPlayback();robot.setJoint(name,value);robot.updateMatrixWorld(true);syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;}
-function buildJointControls(){
- const container=$('joint-controls');
- container.replaceChildren();$('body-controls').replaceChildren();for(const name of Object.keys(jointInputs))delete jointInputs[name];
- for(const [label,names] of [['左アーム',robot.chain('L').map(j=>j.name)],['右アーム',robot.chain('R').map(j=>j.name)]]){
-  const heading=document.createElement('div');heading.className='joint-group';heading.textContent=label;container.append(heading);
-  for(const name of names){const j=robot.joints[name],row=document.createElement('label');row.className='joint-row';const text=document.createElement('span');text.textContent=name.replace('_joint',' · ');const input=document.createElement('input');input.type='range';input.min=Number.isFinite(j.lower)?j.lower*DEG:-180;input.max=Number.isFinite(j.upper)?j.upper*DEG:180;input.step=.1;input.setAttribute('aria-label',name);const output=document.createElement('output');input.addEventListener('input',()=>setManual(name,+input.value*RAD));row.append(text,input,output);container.append(row);jointInputs[name]={input,output};}
- }
+function set_manual_joint(name,value){
+ if(!ready||switchingModel||robot.pose_source!=='simulator'||!robot.actuated.some(joint=>joint.name===name)||!Number.isFinite(value))return false;
+ stopPlayback();robot.setJoint(name,value);robot.updateMatrixWorld(true);syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;return true;
+}
+function build_body_controls(){
+ $('body-controls').replaceChildren();for(const name of Object.keys(jointInputs))delete jointInputs[name];
  for(const [name,id,label] of [['neck_pan_joint','neck-yaw','首 Yaw'],['neck_tilt_joint','neck-pitch','首 Pitch'],['waist_joint','waist-yaw','腰 Yaw']]){
   const j=robot.joints[name],row=document.createElement('div');row.className='body-joint-row';
   const title=document.createElement('label');title.textContent=label;title.htmlFor=id+'-range';
   const input=document.createElement('input');input.id=id+'-range';input.type='range';input.min=Number.isFinite(j.lower)?j.lower*DEG:-180;input.max=Number.isFinite(j.upper)?j.upper*DEG:180;input.step=.5;input.setAttribute('aria-label',label+' スライダー');
   const number=document.createElement('input');number.id=id+'-input';number.type='number';number.min=input.min;number.max=input.max;number.step=.5;number.setAttribute('aria-label',label+' 角度');
   const unit=document.createElement('span');unit.className='body-joint-number';unit.append(number,document.createTextNode('°'));
-  input.addEventListener('input',()=>setManual(name,+input.value*RAD));
-  number.addEventListener('input',()=>{const q=number.valueAsNumber;if(Number.isFinite(q))setManual(name,THREE.MathUtils.clamp(q,+input.min,+input.max)*RAD);});
-  number.addEventListener('change',()=>{const q=Number(number.value);if(Number.isFinite(q)){const degrees=THREE.MathUtils.clamp(q,+input.min,+input.max);number.value=degrees.toFixed(1);setManual(name,degrees*RAD);}else syncControls();});
+  input.addEventListener('input',()=>set_manual_joint(name,+input.value*RAD));
+  number.addEventListener('input',()=>{const q=number.valueAsNumber;if(Number.isFinite(q))set_manual_joint(name,THREE.MathUtils.clamp(q,+input.min,+input.max)*RAD);});
+  number.addEventListener('change',()=>{const q=Number(number.value);if(Number.isFinite(q)){const degrees=THREE.MathUtils.clamp(q,+input.min,+input.max);number.value=degrees.toFixed(1);set_manual_joint(name,degrees*RAD);}else syncControls();});
   row.append(title,input,unit);$('body-controls').append(row);jointInputs[name]={input,number};
  }
 }
@@ -184,13 +183,13 @@ function bindUI(){
  for(const id of ['target-x','target-y','target-z'])$(id).addEventListener('change',()=>{stopPlayback();const p=['target-x','target-y','target-z'].map(n=>+$(n).value/1000);if(p.every(Number.isFinite)&&p.every(v=>Math.abs(v)<=5)){targets[activeSide].position.fromArray(p);targetDirty[activeSide]=true;activeTarget=true;solveFrames=0;}else{toast('目標位置は ±5000 mm 内の数値で入力してください。');syncTargetInputs();}});
  for(const id of ['target-roll','target-pitch','target-yaw'])$(id).addEventListener('change',()=>{stopPlayback();const e=['target-roll','target-pitch','target-yaw'].map(n=>+$(n).value*RAD);if(e.every(Number.isFinite)){targets[activeSide].quaternion.setFromEuler(new THREE.Euler(...e,'ZYX'));$('hold-orientation').checked=true;targetDirty[activeSide]=true;activeTarget=true;solveFrames=0;}});
  for(const id of ['target-x','target-y','target-z','target-roll','target-pitch','target-yaw'])$(id).addEventListener('input',()=>{if(Number.isFinite($(id).valueAsNumber))$(id).dispatchEvent(new Event('change'));});
- $('grip').oninput=()=>setManual(`${activeSide}_gripper_joint`,+$('grip').value/100*robot.joints[`${activeSide}_gripper_joint`].upper);
+ $('grip').oninput=()=>set_manual_joint(`${activeSide}_gripper_joint`,+$('grip').value/100*robot.joints[`${activeSide}_gripper_joint`].upper);
  document.querySelectorAll('[data-pose]').forEach(b=>b.onclick=()=>{animatePose(presetPose(b.dataset.pose));toast(b.textContent+'へ移動');});
  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));$('fit-view').onclick=()=>setView('perspective');
  $('photo').onclick=()=>setPhoto(!photoMode);$('screenshot').onclick=()=>{const prev=photoMode;setPhoto(true);draw();renderer.domElement.toBlob(b=>{if(b)download(model.exportName+'.png',b,'image/png');setPhoto(prev);},'image/png');};
  $('show-grid').onchange=e=>grid.visible=e.target.checked;$('show-trails').onchange=e=>{for(const t of Object.values(trails)){t.line.visible=e.target.checked;if(!e.target.checked){t.points=[];t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry();}}};
  $('show-markers').onchange=e=>{markersVisible=e.target.checked;updateMarkerVisibility();};
- $('studio').onchange=e=>{const dark=e.target.value==='dark';document.body.classList.toggle('dark-studio',dark);scene.background.set(dark?'#1e1e1e':'#edf0ed');scene.fog.color.copy(scene.background);floor.material.color.set(dark?'#292929':'#e0e3e0');scene.environmentIntensity=dark?.6:.65;renderer.shadowMap.needsUpdate=true;};
+ $('studio').onclick=()=>{const is_dark=!document.body.classList.contains('dark-studio');document.body.classList.toggle('dark-studio',is_dark);$('studio').textContent=is_dark?'ダーク':'ライト';$('studio').setAttribute('aria-pressed',String(is_dark));$('studio').setAttribute('aria-label',is_dark?'背景をライトに切り替え':'背景をダークに切り替え');scene.background.set(is_dark?'#1e1e1e':'#edf0ed');scene.fog.color.copy(scene.background);floor.material.color.set(is_dark?'#292929':'#e0e3e0');scene.environmentIntensity=is_dark?.6:.65;renderer.shadowMap.needsUpdate=true;};
  $('enable-shadows').onclick=()=>{const enable_shadows=!renderer.shadowMap.enabled;renderer.shadowMap.enabled=enable_shadows;renderer.shadowMap.needsUpdate=enable_shadows;
   // 影の有無に対応するシェーダーの再選択。更新は切り替え時のみ
   const shadow_materials=new Set();scene.traverse(object=>{if(object.material)for(const material of Array.isArray(object.material)?object.material:[object.material])shadow_materials.add(material);});for(const material of shadow_materials)material.needsUpdate=true;
@@ -273,7 +272,7 @@ async function switchModel(id){
  try{
   const next=await loadRobotModel(ROBOT_MODELS[id]);scene.remove(robot);scene.add(next);robot=next;model=ROBOT_MODELS[id];
   robot.setPose(modelStates.get(id)?.pose||homePose());
-  keyframes.splice(0,keyframes.length,...(modelStates.get(id)?.keyframes||[]));renderKeyframes();buildJointControls();
+  keyframes.splice(0,keyframes.length,...(modelStates.get(id)?.keyframes||[]));renderKeyframes();build_body_controls();
   lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);
   for(const t of Object.values(trails)){t.points=[];t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry();}
   syncTargets();syncControls();setSide(activeSide);updateCloudLayers();renderer.shadowMap.needsUpdate=true;
@@ -281,7 +280,7 @@ async function switchModel(id){
   toast(model.label+'版に切り替えました');
  }catch(e){
   scene.remove(robot);robot=previousRobot;model=previous;scene.add(robot);robot.setPose(modelStates.get(model.id).pose);
-  keyframes.splice(0,keyframes.length,...modelStates.get(model.id).keyframes);renderKeyframes();buildJointControls();
+  keyframes.splice(0,keyframes.length,...modelStates.get(model.id).keyframes);renderKeyframes();build_body_controls();
   lidar.resetForRobot(robot);rgbd?.resetForRobot(robot);ai?.resetForRobot(robot);color_camera_panel?.reset_for_robot(robot);syncTargets();syncControls();
   toast('モデル切替失敗：'+e.message);diagnostics.errors.push(String(e));
  }finally{
@@ -289,13 +288,14 @@ async function switchModel(id){
   lidar.live=wasLive.lidar; if(rgbd)rgbd.live=wasLive.rgbd;if(ai)ai.running=wasLive.ai;
   if(rgbd)$('sensor-live').textContent=rgbd.live?'■ RGB-D停止':'▶ RGB-D開始';if(ai)$('ai-start').textContent=ai.running?'■ 入力を停止':'▶ VM処理を開始';
   $('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');updateModelUI();updateUI();lidar.publish();ai?.publish();
+  window.simulator?.motor_monitor?.tick();
   if(restoreTabFocus)document.querySelector(`[data-model=${model.id}]`).focus({preventScroll:true});
  }
 }
 async function init(){
  try {
   updateModelUI();robot=await loadRobotModel(model);scene.add(robot);robot.setPose(homePose());
-  buildJointControls();bindUI();syncTargets();setSide('L');syncControls();
+  build_body_controls();bindUI();syncTargets();setSide('L');syncControls();
   initWorkspace();
   $('loading-text').textContent='照明とマテリアルを準備中';$('load-progress').style.width='95%';
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
@@ -304,11 +304,12 @@ async function init(){
   window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,ros_results,color_camera_panel,get physics_panel(){return physics_panel;},diagnostics,keyframes,
    cancel_robot_motion:()=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;},
    apply_ros_pose:pose=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;robot.set_received_pose(pose);syncTargets();renderer.shadowMap.needsUpdate=true;},
-   set_robot_placement:values=>{stopPlayback();activeTarget=false;robot.position.fromArray(values);robot.quaternion.setFromEuler(new THREE.Euler(...values.slice(3).map(v=>v*RAD),'ZYX'));robot.updateMatrixWorld(true);syncTargets();renderer.shadowMap.needsUpdate=true;},setSide,setMode,solveIK,homePose,presetPose,animatePose,syncTargets,validatePose,switchModel,
+   set_robot_placement:values=>{stopPlayback();activeTarget=false;robot.position.fromArray(values);robot.quaternion.setFromEuler(new THREE.Euler(...values.slice(3).map(v=>v*RAD),'ZYX'));robot.updateMatrixWorld(true);syncTargets();renderer.shadowMap.needsUpdate=true;},set_manual_joint,setSide,setMode,solveIK,homePose,presetPose,animatePose,syncTargets,validatePose,switchModel,
    getState:()=>({ready,model:model.id,modelTitle:model.title,source:model.urdf,switchingModel,activeSide,mode,workspace:workspace?.getState(),rgbd:rgbd?.lastSummary,dragging:gizmo.dragging,playing:!!playing,quality:$('quality').value,holdOrientation:$('hold-orientation').checked,appearance:{greenBaseHex:'#'+materials.green.color.getHexString(),toneMapping:'Neutral, chroma preserved',logo:'branding/FuzzRoBo-logo.png'},joints:robot.getPose(),tcp:Object.fromEntries(['L','R'].map(s=>{const p=robot.tcp(s);return[s,{position:p.position.toArray(),quaternion:p.quaternion.toArray(),target:targets[s].position.toArray(),errorMm:p.position.distanceTo(targets[s].position)*1000,errorDeg:orientationError(targets[s].quaternion,p.quaternion).length()*DEG}]})),diagnostics:{...diagnostics},triangles:robot.triangles}),
    setTarget:(side,xyz,rpy)=>{setSide(side);targets[side].position.fromArray(xyz);if(rpy){targets[side].quaternion.setFromEuler(new THREE.Euler(...rpy,'ZYX'));$('hold-orientation').checked=true;}targetDirty[side]=true;activeTarget=true;solveFrames=0;syncTargetInputs();},
    reset:()=>{stopPlayback();robot.setPose(homePose());syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;}
   };
+  window.simulator.motor_monitor=new motor_monitor(window.simulator);
   if(new URLSearchParams(location.search).has('qa')) {
     if(new URLSearchParams(location.search).get('qa')==='models'){
       const {runModelQA}=await import('./qa-models.js');await runModelQA(window.simulator);
