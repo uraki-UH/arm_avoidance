@@ -49,13 +49,13 @@ def generate_launch_description():
         default_value='cpu',
         description='backend to launch: cpu or gpu'
     )
-    declar_input_topic = DeclareLaunchArgument(
-        'input_topic',
+    declar_input = DeclareLaunchArgument(
+        'input',
         default_value='',
         description='入力PointCloud2トピックの上書き'
     )
-    declar_base_frame_id = DeclareLaunchArgument(
-        'base_frame_id', default_value='',
+    declar_base_tf = DeclareLaunchArgument(
+        'base_tf', default_value='',
         description='点群・GNGの変換先座標系。空文字はセンサ別YAML設定'
     )
     declar_enable_grasp_attention = DeclareLaunchArgument(
@@ -70,7 +70,7 @@ def generate_launch_description():
         'source_point_cloud_topic',
         default_value='auto',
         description=(
-            '保存用元PointCloud2トピック。autoはinput_topicを使用し、'
+            '保存用元PointCloud2トピック。autoはinputを使用し、'
             '空文字は元点群保存を無効化'
         )
     )
@@ -175,12 +175,12 @@ def generate_launch_description():
             if enable_grasp_attention and backend != 'cpu':
                 raise RuntimeError('enable_grasp_attention is supported only by the CPU backend')
             launch_parameter_overrides['enable_grasp_attention'] = enable_grasp_attention
-        input_topic = LaunchConfiguration('input_topic').perform(context)
+        input_topic = LaunchConfiguration('input').perform(context).strip()
         if input_topic:
             launch_parameter_overrides['input.topic_names'] = [input_topic]
-        base_frame_id = LaunchConfiguration('base_frame_id').perform(context).strip()
-        if base_frame_id:
-            launch_parameter_overrides['input.base_frame_id'] = base_frame_id
+        base_tf = LaunchConfiguration('base_tf').perform(context).strip()
+        if base_tf:
+            launch_parameter_overrides['input.base_frame_id'] = base_tf
             launch_parameter_overrides['input.local_coordinates'] = False
         source_point_cloud_topic = LaunchConfiguration(
             'source_point_cloud_topic').perform(context)
@@ -313,8 +313,8 @@ def generate_launch_description():
     return LaunchDescription([
         declar_lidar,
         declar_backend,
-        declar_input_topic,
-        declar_base_frame_id,
+        declar_input,
+        declar_base_tf,
         declar_enable_grasp_attention,
         declar_self_mask_topic,
         declar_source_point_cloud_topic,

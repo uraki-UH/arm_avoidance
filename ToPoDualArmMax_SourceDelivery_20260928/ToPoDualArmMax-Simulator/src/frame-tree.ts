@@ -8,6 +8,7 @@ export class frame_tree {
     private root_frame = 'world';
     private transforms = new Map<string, cached_transform>();
     private unresolved = new Set<string>();
+    private display_frames = new Set<string>();
     private cache = new Map<string, THREE.Matrix4 | null>();
     private now_ms = 0;
     constructor(private robot: () => frame_robot) {}
@@ -20,7 +21,15 @@ export class frame_tree {
         this.unresolved.clear();
     }
     get unresolved_frames(): ReadonlySet<string> { return new Set(this.unresolved); }
-    clear() { this.transforms.clear(); this.cache.clear(); this.unresolved.clear(); }
+    get available_frames(): string[] {
+        const frames = new Set(['world', this.fixed_frame, ...this.display_frames]);
+        // 表示対象のフレームとTFルートのみ候補化。変換経路の途中リンクは対象外。
+        for (const transform of this.transforms.values()) {
+            if (!this.transforms.has(transform.parent)) frames.add(transform.parent);
+        }
+        return [...frames].sort();
+    }
+    clear() { this.transforms.clear(); this.cache.clear(); this.unresolved.clear(); this.display_frames.clear(); }
     update(items: TransformData[], is_static: boolean) {
         const pending = new Map<string, cached_transform>();
         const received_ms = performance.now();
@@ -36,9 +45,12 @@ export class frame_tree {
         for (const [frame, transform] of pending) this.transforms.set(frame, transform);
         this.cache.clear();
     }
-    begin_frame(now_ms: number) { this.now_ms = now_ms; this.cache.clear(); this.unresolved.clear(); }
+    begin_frame(now_ms: number) { this.now_ms = now_ms; this.cache.clear(); this.unresolved.clear(); this.display_frames.clear(); }
     // 合成結果の内部再利用と、呼出し側の行列変更からの隔離
-    resolve(frame: string): THREE.Matrix4 | null { return this.resolve_cached(frame, new Set())?.clone() ?? null; }
+    resolve(frame: string): THREE.Matrix4 | null {
+        if (frame) this.display_frames.add(frame);
+        return this.resolve_cached(frame, new Set())?.clone() ?? null;
+    }
     private resolve_cached(frame: string, seen: Set<string>): THREE.Matrix4 | null {
         if (!frame || seen.has(frame)) return null;
         if (this.cache.has(frame)) return this.cache.get(frame)!;

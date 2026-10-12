@@ -8,8 +8,12 @@
 .viewer-dialog-layer { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
 .viewer-dialog-layer > * { pointer-events: auto; }
 .viewer-connection { margin-bottom: 4px; font-size: 12px; }
-.viewer-connection summary { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; list-style: none; }
-.viewer-connection summary::before { content: '▸'; }
-.viewer-connection[open] summary::before { content: '▾'; }
-.viewer-connection summary span { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
+.viewer-connection > summary { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; list-style: none; }
+.viewer-connection > summary::before { content: '▸'; }
+.viewer-connection[open] > summary::before { content: '▾'; }
+.viewer-connection > summary span { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
 .viewer-connection-fields { display: grid; gap: 6px; padding: 4px 0 8px; }
+
+/* 閉じた座標設定内の操作をレイアウトとポインター対象から除外 */
+.viewer-frame-settings:not([open]) > :not(summary) { display: none; }
+.viewer-frame-settings > summary { cursor: pointer; min-height: 28px; }

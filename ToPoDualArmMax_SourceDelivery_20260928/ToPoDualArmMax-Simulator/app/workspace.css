@@ -59,3 +59,17 @@ aside{padding-inline:12px}
 .object-context-physics>label{display:flex;align-items:center;gap:8px}.object-context-physics details{margin:0;padding:6px 0 0}.object-context-physics details summary{color:#65367b}.object-context-physics details[open]{display:grid;gap:6px}
 
 .object-context-physics details:not([open])>:not(summary){display:none}.object-context-menu{max-height:calc(100vh - 16px);overflow-y:auto}
+
+/* シーン内の物理対象一覧。狭いパネルでも対象名と状態を分離 */
+.physics-scene h3{font-size:14px;margin:12px 0 6px;color:var(--text)}
+.physics-scene .sub-note{font-size:11px;margin:6px 0 10px}
+#physics-scene-list{list-style:none;padding:0;margin:0 0 16px;max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;scrollbar-width:thin}
+.physics-scene-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding:8px;border-bottom:1px solid var(--line)}
+.physics-scene-row:last-child{border-bottom:0}
+.physics-scene-row.is-selected{background:#edf7e2}
+.physics-scene-name{font-size:12px;text-align:left;overflow-wrap:anywhere;min-width:0;align-self:center}
+button.physics-scene-name{padding:2px 0;background:transparent;color:var(--text);border:0;border-radius:2px}
+button.physics-scene-name:hover{color:#568622}
+.physics-scene-description{grid-column:1/-1;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.physics-scene-toggle{grid-column:2;grid-row:1;font-size:11px;white-space:nowrap;padding:4px 6px;background:var(--panel);color:var(--text)}
+.physics-scene-toggle[aria-pressed=true]{background:#edf7e2;border-color:#79bb35;color:#345714}

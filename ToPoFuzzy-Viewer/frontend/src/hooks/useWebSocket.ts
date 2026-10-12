@@ -1239,14 +1239,14 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                             ) {
                                 voxelStreamSnapshotsRef.current.delete(tag);
                                 pendingVoxelUpdatesRef.current.delete(tag);
-                                socket.send(JSON.stringify({ type: 'request.state' }));
+                                socket.send(JSON.stringify({ type: 'request.state', topic: tag }));
                                 return;
                             }
                             const labels = Array.isArray(p.labels) ? p.labels : [];
                             if (snapshot.hasLabels && labels.length !== p.added.length) {
                                 voxelStreamSnapshotsRef.current.delete(tag);
                                 pendingVoxelUpdatesRef.current.delete(tag);
-                                socket.send(JSON.stringify({ type: 'request.state' }));
+                                socket.send(JSON.stringify({ type: 'request.state', topic: tag }));
                                 return;
                             }
                             for (const voxelId of p.removed) {
@@ -1459,7 +1459,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                     } else {
                         // ボクセル差分などの再開に必要な完全状態の再要求。
                         const socket = wsRef.current;
-                        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'request.state' }));
+                        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'request.state', topic: source_id }));
                     }
                 }
                 return result;

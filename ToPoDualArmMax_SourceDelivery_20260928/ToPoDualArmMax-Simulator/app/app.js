@@ -1,6 +1,7 @@
 import {create_ros_results} from './generated/ros-results.js';
 import {PhysicsPanel} from './physics-ui.js';
 import {motor_monitor} from './motor-monitor.js';
+import './sidebar-resize.js';
 import {RosPointsPanel} from './ros-points.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -18,6 +19,7 @@ import {RGBDWorkspace} from './rgbd-ui.js';
 import {camera_workspace} from './camera-ui.js';
 import {VMAIWorkspace} from './vm-ai.js';
 import {ROBOT_MODELS,initialModel} from './models.js';
+const pose_presets=await (await fetch(new URL('./robot-poses.json',import.meta.url))).json();
 let physics_panel, ros_results;
 let workspace, rgbd, lidar, ai, ros_points, demoMotion=null;
 let color_camera_panel;
@@ -115,8 +117,8 @@ function setMode(next){mode=next;gizmo.setMode(next);$('translate-mode').classLi
 function syncTargets(sides=['L','R']){for(const side of sides){const tcp=robot.tcp(side);targets[side].position.copy(tcp.position);targets[side].quaternion.copy(tcp.quaternion);targetDirty[side]=false;ikGoals[side]=null;}activeTarget=false;solveFrames=0;syncTargetInputs();}
 function syncTargetInputs(){if(!robot)return;const t=targets[activeSide],e=new THREE.Euler().setFromQuaternion(t.quaternion,'ZYX');for(const [id,value] of Object.entries({'target-x':t.position.x*1000,'target-y':t.position.y*1000,'target-z':t.position.z*1000,'target-roll':e.x*DEG,'target-pitch':e.y*DEG,'target-yaw':e.z*DEG})){if(document.activeElement!==$(id))$(id).value=value.toFixed(1);}}
 function syncControls(){if(!robot)return;$('grip').value=robot.joints[`${activeSide}_gripper_joint`].q/robot.joints[`${activeSide}_gripper_joint`].upper*100;$('grip-value').textContent=Math.round(+$('grip').value)+'%';for(const [name,entry] of Object.entries(jointInputs)){const q=robot.joints[name].q;entry.input.value=q*DEG;if(entry.output)entry.output.textContent=(q*DEG).toFixed(1)+'°';if(entry.number&&document.activeElement!==entry.number)entry.number.value=(q*DEG).toFixed(1);}}
-function homePose(){const p=Object.fromEntries(robot.actuated.map(j=>[j.name,0]));p.L_joint2=-Math.PI/2;p.R_joint2=Math.PI/2;return p;}
-function presetPose(name){const p=homePose();if(name==='ready'){Object.assign(p,{L_joint1:-.18,R_joint1:.18,L_joint2:-1.35,R_joint2:1.35,L_joint4:-1.15,R_joint4:1.15,L_joint6:.4,R_joint6:-.4,L_gripper_joint:.32,R_gripper_joint:.32});}if(name==='spread'){Object.assign(p,{L_joint2:-.65,R_joint2:.65,L_joint4:-.65,R_joint4:.65,L_joint6:.35,R_joint6:-.35});}return p;}
+function homePose(){const p=Object.fromEntries(robot.actuated.map(j=>[j.name,0]));Object.assign(p,Object.fromEntries(Object.entries(pose_presets.home).map(([name,deg])=>[name,deg*RAD])));return p;}
+function presetPose(name){const p=homePose();if(name==='ready'){Object.assign(p,{L_joint1:-.18,R_joint1:.18,L_joint2:-1.35,R_joint2:1.35,L_joint4:-1.15,R_joint4:1.15,L_joint6:.4,R_joint6:-.4,L_gripper_joint:.32,R_gripper_joint:.32});}if(name==='spread'){Object.assign(p,{L_joint2:-.65,R_joint2:.65,L_joint4:-.65,R_joint4:.65,L_joint6:.35,R_joint6:-.35});}if(name==='forward'){Object.assign(p,Object.fromEntries(Object.entries(pose_presets.forward).map(([name,deg])=>[name,deg*RAD])));}return p;}
 let motion_req=0,motion_requires_physics=false;
 async function run_motion(begin){
  if(robot.pose_source!=='simulator'&&robot.pose_source){toast('ROS入力中です。シミュレータ操作へ切り替えてください');return;}
@@ -125,7 +127,7 @@ async function run_motion(begin){
  catch(error){if(req===motion_req)toast('動作を開始できません：'+error.message);}
 }
 function motion_time(now){return motion_requires_physics?(scene.userData.physics_time_sec??0)*1000:now;}
-function animatePose(pose,duration=.7){run_motion(()=>{playing={type:'single',from:robot.getPose(),to:pose,start:motion_time(performance.now()),duration:poseDuration(robot.getPose(),pose,duration)};activeTarget=false;targetDirty.L=targetDirty.R=false;});}
+function animatePose(pose,duration=.7){run_motion(()=>{activeTarget=false;targetDirty.L=targetDirty.R=false;if(physics_panel.set_goal_pose(pose)){syncTargets();return;}playing={type:'single',from:robot.getPose(),to:pose,start:motion_time(performance.now()),duration:poseDuration(robot.getPose(),pose,duration)};});}
 function poseDuration(a,b,requested){return Math.max(requested,...robot.actuated.map(j=>1.5*Math.abs((b[j.name]??a[j.name])-a[j.name])/Math.max(.01,j.velocity)));}
 function stopPlayback(){motion_req++;motion_requires_physics=false;ros_points?.robot_panel&&(ros_points.robot_panel.active=null);playing=null;demoMotion=null;if($('ai-demo'))$('ai-demo').textContent='▶ ロボットを動かす';$('play').textContent='▶ 再生';}
 function toggleDemoMotion(){if(demoMotion){stopPlayback();syncTargets();return;}run_motion(()=>{demoMotion={start:motion_time(performance.now()),from:robot.getPose()};$('ai-demo').textContent='■ 動きを止める';activeTarget=false;targetDirty.L=targetDirty.R=false;});}
@@ -138,7 +140,7 @@ function updateDemoMotion(now){
 }
 function set_manual_joint(name,value){
  if(!ready||switchingModel||robot.pose_source!=='simulator'||!robot.actuated.some(joint=>joint.name===name)||!Number.isFinite(value))return false;
- stopPlayback();robot.setJoint(name,value);robot.updateMatrixWorld(true);syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;return true;
+ stopPlayback();const joint=robot.joints[name],goal_value=THREE.MathUtils.clamp(value,joint.lower,joint.upper);if(!physics_panel.set_goal_pose({...physics_panel.targets,[name]:goal_value})){robot.setJoint(name,goal_value);robot.updateMatrixWorld(true);}syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;return true;
 }
 function build_body_controls(){
  $('body-controls').replaceChildren();for(const name of Object.keys(jointInputs))delete jointInputs[name];
@@ -310,6 +312,8 @@ async function init(){
    reset:()=>{stopPlayback();robot.setPose(homePose());syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;}
   };
   window.simulator.motor_monitor=new motor_monitor(window.simulator);
+  const joint_topic=new URLSearchParams(location.search).get('joint_topic');
+  if(joint_topic){document.title='CLI実測 · '+document.title;ros_points.robot_panel.tick();ros_points.robot_panel.joint_stream.receive_topic(joint_topic,new URLSearchParams(location.search).get('bridge'),new URLSearchParams(location.search).get('state_source')==='simulation');$('physics-status').textContent='外部MuJoCoの実測をROS受信表示';}
   if(new URLSearchParams(location.search).has('qa')) {
     if(new URLSearchParams(location.search).get('qa')==='models'){
       const {runModelQA}=await import('./qa-models.js');await runModelQA(window.simulator);

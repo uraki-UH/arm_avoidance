@@ -1,0 +1,12 @@
+/* 操作パネルとシーンの境界。小画面では縦積み配置 */
+@media(min-width:701px){
+ main>aside{width:var(--sidebar-width,365px);min-width:var(--sidebar-width,365px);flex:0 0 var(--sidebar-width,365px)}
+ main{grid-template-columns:minmax(0,1fr) 8px var(--sidebar-width,365px)}
+ .sidebar-resize{width:8px;flex:0 0 8px;cursor:col-resize;touch-action:none;background:var(--panel);position:relative}
+ .sidebar-resize::after{content:'';position:absolute;left:3px;top:0;bottom:0;width:2px;background:var(--line)}
+ .sidebar-resize:hover::after,.sidebar-resize:focus-visible::after{background:var(--green)}
+ .sidebar-resize:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+}
+.is-sidebar-resizing{cursor:col-resize;user-select:none}
+.is-sidebar-resizing *{cursor:col-resize!important}
+@media(max-width:700px){.sidebar-resize{display:none}}

@@ -20,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from launch_config import (
     resolve_package_path, read_vlut_voxel_size, parameter_file_data, root_parameters,
     namespaced_frame, namespaced_topic, roi_filter_parameters, world_index_parameters,
-    environment_danger_inflation, node_parameter_source,
+    environment_danger_inflation, node_parameter_source, static_tf_arguments,
+    is_enabled, mobile_gng_actions, mobile_gng_launch_defaults,
 )
 
 
@@ -313,6 +314,11 @@ def launch_setup(context, *args, **kwargs):
     else:
         robot_name = yaml_robot_name
 
+    # 機体設定に応じた移動状態GNGの同時起動。明示引数による単独ロボット表示
+    enable_mobile_gng_arg = LaunchConfiguration('enable_mobile_gng').perform(context).strip()
+    enable_mobile_gng = is_enabled(enable_mobile_gng_arg) if enable_mobile_gng_arg else is_enabled(
+        root_ros_params.get('enable_mobile_gng', bool(root_ros_params.get('mobile_gng'))))
+
     if not data_dir or data_dir == "gng_results":
         data_dir = yaml_data_dir
     if not exp_id or exp_id == "topoarm":
@@ -344,6 +350,11 @@ def launch_setup(context, *args, **kwargs):
             f"Robot description file does not exist: {urdf_path}. "
             "Pass urdf_path explicitly or install the matching description package."
         )
+
+    mobile_actions = mobile_gng_actions(context, pkg_share, params_file, root_ros_params,
+        robot_name=robot_name, urdf_path=urdf_path, parameter_source=parameter_source) if enable_mobile_gng else []
+    if enable_mobile_gng and is_enabled(LaunchConfiguration('enable_build_only').perform(context)):
+        return mobile_actions
 
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
@@ -587,11 +598,10 @@ def launch_setup(context, *args, **kwargs):
             }]))
 
     if not has_learning_data:
-        actions.insert(0, LogInfo(msg=(
-            "GNG・VLUTデータ不足のためGNG配信を省略し、ロボット本体を表示します。"
-            "学習後にこのlaunchを再起動してください。不足ファイル: "
-            + ", ".join(missing_result_files)
-        )))
+        message = "ロボット姿勢GNG・VLUTデータ不足のため、姿勢GNG配信を省略します。"
+        message += ("移動状態GNGとロボット本体を表示します。" if enable_mobile_gng else
+                    "ロボット本体を表示します。学習後にこのlaunchを再起動してください。")
+        actions.insert(0, LogInfo(msg=message + "不足ファイル: " + ", ".join(missing_result_files)))
 
     if enable_joint_state_publisher:
         actions.insert(
@@ -716,6 +726,11 @@ def launch_setup(context, *args, **kwargs):
         if not enable_self_recognition_viz or not yaml_enable_environment_self_filter:
             raise ValueError('Viewerの環境ROIには自己認識と自己除去の有効化が必要です')
         environment = dict(yaml_environment_voxelization)
+        input_kind = environment.get('input_kind', 'pointcloud')
+        if input_kind not in ('pointcloud', 'voxel'):
+            raise ValueError('environment_voxelization.input_kindはpointcloudまたはvoxelが必要です')
+        if input_kind == 'voxel' and enable_shared_roi_gng:
+            raise ValueError('共有GNGの入力には点群が必要です')
         if mid360_topic:
             environment['input_topic'] = mid360_topic
             environment['source_frame_id'] = ''
@@ -791,7 +806,7 @@ def launch_setup(context, *args, **kwargs):
                     ComposableNode(package='ais_gng', plugin='fuzzrobo::AiSGNGComponent',
                                    name='ais_gng_node', namespace=robot_name, parameters=[gng_params]),
                 ]))
-        else:
+        elif input_kind == 'pointcloud':
             actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
                                 name='viewer_environment_voxelization', namespace=robot_name,
                                 parameters=[roi_params], output='screen'))
@@ -805,6 +820,12 @@ def launch_setup(context, *args, **kwargs):
                                 'danger_inflation': environment_danger_inflation(environment),
                                 'publish_hz': float(environment.get('publish_hz', 30.0)),
                             }]))
+    # ロボット基台の固定配置。環境入力・ボクセル生成の有効状態とは独立。
+    if safe_bool(yaml_environment_voxelization.get('enable_static_tf'), False):
+        actions.append(Node(package='tf2_ros', executable='static_transform_publisher',
+                            name='robot_base_static_tf', namespace=robot_name, output='screen',
+                            arguments=static_tf_arguments(yaml_environment_voxelization, robot_name,
+                                yaml_environment_voxelization.get('base_frame', 'base_link'))))
     enable_dynamixel_joint_state_input = safe_bool(
         LaunchConfiguration('enable_dynamixel_joint_state_input').perform(context), yaml_enable_dynamixel_joint_state_input)
     if enable_dynamixel_joint_state_input:
@@ -840,12 +861,15 @@ def launch_setup(context, *args, **kwargs):
             PythonLaunchDescriptionSource(os.path.join(pkg_share, 'launch', 'realsense_mount_tf.launch.py')),
             launch_arguments={'mount_config': mount_config}.items(),
         ))
-    return actions
+    return actions + mobile_actions
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
         DeclareLaunchArgument("enable_independent_arms", default_value=""),
+        DeclareLaunchArgument('enable_mobile_gng', default_value='',
+                              description='移動状態GNGの同時起動。未指定時は機体YAMLのmobile_gng設定から選択'),
+        *[DeclareLaunchArgument(name, default_value=value) for name, value in mobile_gng_launch_defaults().items()],
         DeclareLaunchArgument("state_topic", default_value="",
                               description="外部実測JointStateの購読先。未指定時は従来のViewer入力"),
         DeclareLaunchArgument("enable_robot_state_publisher", default_value="true",

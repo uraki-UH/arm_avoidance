@@ -18,7 +18,7 @@ def quaternion(value):
 
 
 class PhysicsScene:
-    def __init__(self, bodies, robot=None, avoidance=None):
+    def __init__(self, bodies, robot=None, avoidance=None, ros_node=None):
         import mujoco
         self.mujoco = mujoco
         if not isinstance(bodies, list) or not 0 <= len(bodies) <= 512:
@@ -65,10 +65,20 @@ class PhysicsScene:
                     raise ValueError('衝突形状の寸法が不正です')
                 et.SubElement(body, 'geom', type='box', pos=text(vector(geom['position'], 3)), quat=text(quaternion(geom['quaternion'])), size=text(size), mass=str(mass/len(geoms)), friction='.8 .005 .0001', contype='1', conaffinity='1')
         self.robot = None
+        learned_models = None
         if robot is not None:
+            fixed_joint_names = ()
+            if avoidance and avoidance.get('mode') == 'gng':
+                from gng_inputs import load_models, workspace
+                learned_models = load_models(avoidance.get('params_file') or str(
+                    workspace / 'gng_vlut_system/config/topo_dual_arm_max_long.yaml'))
+                models = learned_models[1]
+                active_names = {name for model in models.values() for name in model['joint_names']}
+                # 学習の固定関節条件とMuJoCo拘束の一致。既存の関節固定機能の使用。
+                fixed_joint_names = {name for model in models.values() for name in model['fixed_joints']} - active_names
             base = et.SubElement(world, 'body', name='robot_base', pos=text(vector(robot['position'], 3)),
                                  quat=text(quaternion(robot['quaternion'])))
-            self.robot = PhysicsRobot(root, base, robot, mujoco)
+            self.robot = PhysicsRobot(root, base, robot, mujoco, fixed_joint_names)
         self.model = mujoco.MjModel.from_xml_string(et.tostring(root, encoding='unicode'))
         self.data = mujoco.MjData(self.model)
         if self.robot:
@@ -77,10 +87,16 @@ class PhysicsScene:
         mujoco.mj_forward(self.model, self.data)
         self.avoidance = None
         if avoidance and avoidance.get('mode', 'none') != 'none':
-            if avoidance.get('mode') != 'oscbf' or not self.robot:
-                raise ValueError('OSCBFには関節動力学ロボットが必要です')
-            from oscbf_avoidance import create_filter
-            self.avoidance = create_filter(self, avoidance)
+            if not self.robot:
+                raise ValueError('回避には関節動力学ロボットが必要です')
+            if avoidance.get('mode') == 'oscbf':
+                from oscbf_avoidance import create_filter
+                self.avoidance = create_filter(self, avoidance)
+            elif avoidance.get('mode') == 'gng':
+                from gng_avoidance import gng_filter
+                self.avoidance = gng_filter(self, avoidance, ros_node, robot, learned_models)
+            else:
+                raise ValueError('未登録の回避方式です')
 
     def move(self, poses):
         if not isinstance(poses, list) or len(poses) > 512:

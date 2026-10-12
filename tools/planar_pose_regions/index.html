@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>平面アームの姿勢領域</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#172c40;background:#f3f6fa;font-size:15px}
+*{box-sizing:border-box}body{margin:0}main{max-width:1440px;margin:auto;padding:22px}
+header{display:flex;align-items:baseline;gap:12px;margin-bottom:16px}h1{font-size:23px;margin:0}header span,.muted{color:#667b8e;font-size:13px}
+.controls,.card{background:white;border:1px solid #dce4ec;border-radius:12px;padding:16px}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label.field{display:flex;flex-direction:column;gap:6px;font-size:13px}select,input[type=number]{font:inherit;padding:8px 10px;border:1px solid #c6d2dd;border-radius:7px;background:white;color:inherit}
+input[type=number]{width:110px}button{font:inherit;border:0;border-radius:7px;padding:9px 14px;cursor:pointer;background:#e9eff5;color:#183750}
+button.build{background:#2465b8;color:white}button.play{background:#187455;color:white}button:disabled{opacity:.4;cursor:default}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #66a9ed;outline-offset:2px}
+.status{min-height:25px;font-size:13px;color:#4c667d;margin:12px 2px;overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:minmax(320px,1.03fr) minmax(390px,1fr);gap:16px}.card h2{font-size:16px;margin:0 0 10px}
+.arm_header{display:flex;justify-content:space-between;align-items:center}.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:#526d83;margin:4px 0 10px}
+.legend span:before{content:"";display:inline-block;width:9px;height:9px;background:var(--color);margin-right:5px;border-radius:2px}
+canvas{display:block;width:100%;background:#fbfcfe;border:1px solid #e2e9ef;border-radius:8px}#arm_canvas{height:420px;touch-action:none}
+.maps{display:grid;grid-template-columns:1fr 1fr;gap:12px}.map_title{font-weight:600;margin-bottom:6px;font-size:14px}.map_canvas{height:260px;cursor:crosshair;touch-action:none}
+.map_stats{font-size:12px;line-height:1.8;color:#4e667a;margin-top:7px}
+.selection{border-top:1px solid #e4ebf1;margin-top:14px;padding-top:12px}.selection_header{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.selection_header strong{margin-right:auto}
+#selection_stats,#edge_stats{font-size:13px;line-height:1.9;color:#476076;margin:8px 0}
+.playback_controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.playback_controls select{min-width:120px;max-width:180px}
+.joints{display:grid;gap:10px;margin-top:14px}.joint{display:grid;grid-template-columns:70px 1fr 70px;gap:8px;align-items:center;font-size:13px}.joint input{width:100%;accent-color:#247d94}.joint output{text-align:right;font-variant-numeric:tabular-nums}
+#current_stats{font-size:12px;color:#647c90;margin-top:10px}.hint{margin:10px 0 0;color:#64788a;font-size:12px}
+details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}details p{line-height:1.7;max-width:1050px}
+.links_toggle{font-size:12px;display:flex;gap:5px;align-items:center;white-space:nowrap}
+.view_controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px}
+.view_controls select{font-size:12px;padding:6px 8px}.view_tabs{display:flex;gap:4px;margin-bottom:12px}
+.view_tabs button{font-size:13px;padding:7px 12px}.view_tabs button[aria-pressed=true]{background:#d5e5f1;color:#123f60}
+#graph_canvas{height:360px;cursor:pointer;touch-action:none}#graph_stats,#workspace_stats{font-size:12px;color:#527086;line-height:1.7;margin-top:8px}
+#constraint_params table{width:100%;border-collapse:collapse;font-size:12px}#constraint_params th,#constraint_params td{padding:5px 8px;text-align:right;border-bottom:1px solid #e4ebf1}#constraint_params th:first-child,#constraint_params td:first-child{text-align:left}
+#neighbor_candidates table{width:100%;border-collapse:collapse;font-size:12px}#neighbor_candidates th,#neighbor_candidates td{padding:5px 6px;text-align:right;border-bottom:1px solid #e4ebf1}#neighbor_candidates th:first-child,#neighbor_candidates td:first-child{text-align:left}.candidate_button{padding:3px 6px;font-size:12px;color:#2465b8;background:transparent}#neighbor_candidates tr[data-is_selected=true]{background:#e3f0ee}#candidate_summary{font-size:12px;line-height:1.7;color:#527086;margin:8px 0}
+[hidden]{display:none!important}
+@media(max-width:950px){.layout{grid-template-columns:1fr}.map_canvas{height:300px}#arm_canvas{height:380px}}
+@media(max-width:520px){main{padding:12px}.controls,.card{padding:12px}header{flex-wrap:wrap}h1{font-size:20px}.maps{grid-template-columns:1fr}.map_canvas{height:270px}#arm_canvas{height:320px}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>平面アームの姿勢領域</h1><span>全3・4・5関節 / 独立検証</span></header>
+<section class="controls" aria-label="構築設定">
+<label class="field">軸数<select id="num_joints"><option value="3">3軸</option><option value="4">4軸</option><option value="5">5軸</option></select></label>
+<label class="field">末端形状<select id="tool_shape"><option value="link">通常リンク</option><option value="round">円形ツール（回転で占有不変）</option></select></label>
+<label class="field">分割方式<select id="split_method"><option value="envelope">全候補包絡</option><option value="local_sweep">局所掃引モデル</option></select></label>
+<label class="field">可動域<select id="joint_range"><option value="90">全関節 ±90°</option><option value="150">基部 ±90° / 他 ±150°</option><option value="180">基部 ±90° / 他 ±180°</option></select></label>
+<label class="field">表示横軸<select id="axis_x"></select></label>
+<label class="field">表示縦軸<select id="axis_y"></select></label>
+<label class="field">セル幅<select id="resolution"><option value="0.025">2.5 cm</option><option value="0.04" selected>4 cm</option><option value="0.06">6 cm</option></select></label>
+<label class="field">ノード上限<select id="max_num_nodes"><option value="64">64</option><option value="144">144</option><option value="256" selected>256</option><option value="400">400</option></select></label>
+<label class="field">包絡追加の目安 [セル]<input id="max_cell_change_th" type="number" min="0" max="15000" value="60" step="5"></label>
+<button id="build" class="build">構築</button>
+</section>
+<div id="status" class="status" role="status" aria-live="polite">初期構築中</div>
+<div class="layout">
+<section class="card">
+<div class="arm_header"><h2>作業空間</h2><span class="muted">XY [m]</span></div>
+<div class="view_controls"><label>姿勢群 <select id="pose_scope"><option value="selected">選択ノード</option><option value="neighbors" selected>選択＋隣接ノード</option><option value="all">全ノードの代表姿勢</option></select></label><label class="links_toggle"><input id="enable_occupancy" type="checkbox" checked>占有包絡</label><label class="links_toggle"><input id="enable_path_occupancy" type="checkbox">軌道占有</label></div>
+<div class="legend"><span id="common_label" style="--color:#cbd5df">共通占有</span><span id="selected_pose_label" style="--color:#cb7a20">選択側だけ</span><span id="neighbor_pose_label" style="--color:#198c90">隣接側だけ</span><span style="--color:#9952b2">接続軌道</span><span style="--color:#203d52">現在姿勢</span></div>
+<canvas id="arm_canvas" aria-label="選択ノードの姿勢群、隣接ノードの姿勢群、関節補間による接続軌道"></canvas>
+<div id="workspace_stats"></div>
+<div id="current_stats"></div>
+<div id="joint_controls" class="joints"></div>
+<p class="hint">全関節を調整可能。表示軸の選択は橙色の占有包絡に影響なし</p>
+</section>
+<section class="card">
+<div class="arm_header"><h2>姿勢グラフ</h2><span class="muted">ノード選択で作業空間と連動</span></div>
+<div class="view_tabs" aria-label="グラフ表示"><button id="graph_tab" aria-pressed="true">接続グラフ</button><button id="partition_tab" aria-pressed="false">領域比較</button></div>
+<div id="graph_panel">
+<div class="view_controls"><select id="graph_kind" aria-label="グラフの構築方式"><option value="adaptive">占有適応</option><option value="uniform">角度等間隔</option></select><select id="graph_scope" aria-label="接続グラフの表示範囲"><option value="local">選択周辺（2辺以内）</option><option value="all">全体</option></select></div>
+<canvas id="graph_canvas" aria-label="姿勢ノードと双方向の接続辺"></canvas>
+<div id="graph_stats"></div>
+<p class="hint">橙：選択 / 緑：移動先 / 青：その他の隣接 / 灰：2辺先。クリック：ノード・辺の選択</p>
+</div>
+<div id="partition_panel" hidden>
+<div class="arm_header"><h2>関節空間の2軸表示</h2><label class="links_toggle"><input id="enable_graph_lines" type="checkbox" checked>接続線</label></div>
+<div class="view_controls"><select id="projection_mode" aria-label="領域図の表示方式"><option value="all">全領域の投影</option><option value="slice">現在姿勢を通る断面</option></select><span>橙包絡は常に全関節領域</span></div>
+<div class="maps">
+<div><div class="map_title">角度等間隔</div><canvas id="uniform_canvas" class="map_canvas" aria-label="角度等間隔の姿勢領域。クリックで選択"></canvas><div id="uniform_stats" class="map_stats"></div></div>
+<div><div class="map_title">占有適応</div><canvas id="adaptive_canvas" class="map_canvas" aria-label="占有変化に応じた姿勢領域。クリックで選択"></canvas><div id="adaptive_stats" class="map_stats"></div></div>
+</div>
+<p class="hint">投影：領域の外接枠 / 断面：連動制約の多角形 / 点：代表姿勢</p>
+</div>
+<div class="selection">
+<div class="selection_header"><strong id="selection_title">領域未選択</strong><button id="save" disabled>JSON保存</button></div>
+<div id="selection_stats"></div>
+<details><summary>領域パラメータ（連動一次制約）</summary><div id="constraint_params"></div></details>
+<div class="view_controls" style="margin-top:12px"><label>移動方式 <select id="path_method"><option value="boundary">境界経由（局所移動）</option><option value="representative">代表姿勢間</option></select></label><label>優先 <select id="neighbor_priority"><option value="balanced">バランス</option><option value="sweep">掃引量</option><option value="motion">関節移動</option></select></label></div>
+<div class="playback_controls">
+<button id="play_region" class="play" disabled>領域内を再生</button>
+<select id="neighbor" aria-label="移動先の隣接領域"></select>
+<button id="play_edge" class="play" disabled>辺を再生</button>
+</div>
+<div id="edge_stats"></div>
+<div id="candidate_summary"></div>
+<details><summary>隣接候補（パレート比較）</summary><div id="neighbor_candidates"></div></details>
+</div>
+</section>
+</div>
+<details>
+<summary>評価方法・対象範囲</summary>
+<p>対象：全3～5関節、設定した可動域。±150°・±180°も選択可能。占有適応の制約：min_dev ≤ A(q−q0) ≤ max_dev。関節角・累積角の一次制約と元の可動域の共通部分がノード領域。二次制約は未実装。</p>
+<p>占有：全許容姿勢の保守的包絡。灰：共通 / 橙：選択側だけ / 緑：隣接側だけ。64方向の支持半平面に、相対関節角による到達距離・連動支持の上界を反映。リンク別の凸包化による過大近似あり。共通率：共通セル / 和集合セル。包絡と代表姿勢を別表示。セル中心基準であり、衝突安全保証ではない。</p>
+<p>分割：全候補包絡、または局所掃引モデルによる候補絞り込み。モデル係数：リンク回転・下流並進の閉形式。上位2方向を包絡で比較し、一次端点誤差が大きい場合は最広角の方向も追加。境界候補の順位付け：各リンク24輪郭点の法線とヤコビアン。採用後の包絡・領域被覆は従来方式と共通。基底Aの自由探索・二次制約は対象外。</p>
+<p>折りたたみ：隣接リンクの到達距離80%の境界による近位2関節の初期層別。全関節の直積分割なし。通常分割には相対関節角の上位1候補も追加。分割優先度には代表姿勢の占有セル数・姿勢サイズを反映。固定ノード予算では他の領域が粗くなる場合あり。</p>
+<p>同一設定・同一姿勢の占有登録は比較2方式で共有。構築時間は描画待ちを含む合計であり、共有キャッシュを使う各方式の独立性能比較ではない。再生中は現在姿勢のみ評価し、フレームごとの履歴蓄積はなし。</p>
+<p>局所移動：現在姿勢→共有境界→隣接領域への進入。進入距離の上界：セル幅の半分。代表姿勢間の方式も選択可能。候補比較：開始姿勢からの追加掃引セル数／最大関節累積移動角。非劣候補から優先度に従って選択。軌道評価は有限サンプルであり、連続衝突保証・目標までの経路計画は対象外。軌道占有は別表示。</p>
+<p>円形ツールでは最終関節を円中心の回転として設定。占有が同一でも角度・ツール方向は保持。本デモは独自の領域分割試作であり、既存GNG学習の変更、自己衝突・障害物検査、連続領域の安全保証、実機制御は対象外。</p>
+<p>接続：全関節制約の共通部分が共有面になるノード同士。通過姿勢も連動制約内。選択周辺：2辺以内の実部分グラフ。全体図：距離尺度を持たない表示用配置。2軸投影：外接枠。断面：他関節固定の正確な多角形。橙包絡・接続グラフ：常に全関節領域。</p>
+</details>
+</main>
+<script src="./planar_pose.js"></script>
+<script>
+"use strict";
+(() => {
+  const engine = globalThis.planar_pose;
+  const element = (id) => document.getElementById(id);
+  const state = {
+    result: null, config: null, angles_deg: [20, -40, 35, -25, 20],
+    graph_name: "adaptive", cell_idx: 0, sweep: null, is_dirty: false, is_building: false,
+    build_version: 0, playback: null, frame_id: null, last_pose: null, last_pose_key: "",
+    scene: null, graph_layouts: {}, graph_hits: { nodes: [], edges: [] },
+    neighbor_comparison: null, comparison_timer: null, has_manual_neighbor_choice: false,
+  };
+
+  function set_status(message) { element("status").textContent = message; }
+  function selected_graph() { return state.result?.[state.graph_name]; }
+  function selected_cell() { return selected_graph()?.cells[state.cell_idx]; }
+  function format_angle(value) { return value.toFixed(1) + "°"; }
+  function joint_limits() {
+    const num_joints = Number(element("num_joints").value);
+    const range = Number(element("joint_range").value);
+    return { min_angles_deg: Array.from({ length: num_joints }, (_, idx) => idx === 0 ? -90 : -range),
+      max_angles_deg: Array.from({ length: num_joints }, (_, idx) => idx === 0 ? 90 : range) };
+  }
+  function read_config() {
+    return engine.create_config({
+      num_joints: Number(element("num_joints").value),
+      axis_x: Number(element("axis_x").value), axis_y: Number(element("axis_y").value),
+      resolution: Number(element("resolution").value),
+      max_num_nodes: Number(element("max_num_nodes").value),
+      max_cell_change_th: Number(element("max_cell_change_th").value),
+      split_method: element("split_method").value,
+      has_round_tool: element("tool_shape").value === "round",
+      base_angles_deg: state.angles_deg,
+      ...joint_limits(),
+    });
+  }
+
+  function refresh_axes() {
+    const num_joints = Number(element("num_joints").value);
+    for (const id of ["axis_x", "axis_y"]) {
+      const select = element(id);
+      select.replaceChildren();
+      for (let idx = 0; idx < num_joints; idx += 1) select.add(new Option("関節" + (idx + 1), String(idx)));
+    }
+    element("axis_x").value = "0";
+    element("axis_y").value = String(num_joints - 1);
+    refresh_joint_controls();
+  }
+
+  function refresh_joint_controls() {
+    const container = element("joint_controls");
+    container.replaceChildren();
+    const num_joints = Number(element("num_joints").value);
+    const limits = joint_limits();
+    for (let idx = 0; idx < num_joints; idx += 1) {
+      const row = document.createElement("label");
+      row.className = "joint";
+      const name = document.createElement("span");
+      name.textContent = "関節" + (idx + 1);
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(limits.min_angles_deg[idx]);
+      input.max = String(limits.max_angles_deg[idx]);
+      input.step = "0.1";
+      input.value = String(state.angles_deg[idx]);
+      input.id = "joint_" + idx;
+      const output = document.createElement("output");
+      output.id = "joint_value_" + idx;
+      output.textContent = format_angle(state.angles_deg[idx]);
+      input.addEventListener("input", () => {
+        stop_playback();
+        state.angles_deg[idx] = Number(input.value);
+        if (!state.result || state.is_building || state.is_dirty) mark_dirty();
+        else {
+          const node_idx = selected_graph().cells.findIndex((cell) => engine.contains_pose(cell, state.angles_deg.slice(0, state.config.num_joints)));
+          if (node_idx !== -1 && node_idx !== state.cell_idx) choose_cell(state.graph_name, node_idx, true);
+          else schedule_neighbors();
+        }
+        update_joint_values();
+        render();
+      });
+      row.append(name, input, output);
+      container.append(row);
+    }
+  }
+
+  function update_joint_values() {
+    for (let idx = 0; idx < Number(element("num_joints").value); idx += 1) {
+      element("joint_" + idx).value = String(state.angles_deg[idx]);
+      element("joint_value_" + idx).textContent = format_angle(state.angles_deg[idx]);
+    }
+  }
+
+  function update_buttons() {
+    const has_graph = Boolean(state.result) && !state.is_dirty && !state.is_building;
+    element("build").textContent = state.is_building ? "再構築" : "構築";
+    element("save").disabled = !has_graph;
+    element("play_region").disabled = !has_graph;
+    element("play_edge").disabled = !has_graph || !state.sweep;
+    element("neighbor").disabled = !has_graph;
+    element("graph_kind").disabled = !has_graph;
+    element("play_region").textContent = state.playback?.kind === "region" ? "再生停止" : "領域内を再生";
+    element("play_edge").textContent = state.playback?.kind === "edge" ? "再生停止" : "辺を再生";
+  }
+
+  function mark_dirty() {
+    stop_playback();
+    clearTimeout(state.comparison_timer);
+    state.build_version += 1;
+    state.is_building = false;
+    state.is_dirty = true;
+    state.sweep = null;
+    element("edge_stats").textContent = "";
+    set_status("設定変更あり：構築ボタンで更新。グラフは前回設定の表示");
+    update_buttons();
+  }
+
+  async function build() {
+    stop_playback();
+    const version = ++state.build_version;
+    try {
+      const config = read_config();
+      state.is_building = true;
+      state.is_dirty = true;
+      state.sweep = null;
+      update_buttons();
+      set_status("構築中");
+      const result = await engine.build_comparison(config, {
+        can_continue: () => version === state.build_version,
+        on_progress: (stage, num_nodes) => set_status(stage + "：構築中 / " + num_nodes + "ノード"),
+      });
+      if (version !== state.build_version) return;
+      state.result = result;
+      state.config = config;
+      state.graph_layouts = {
+        uniform: graph_layout(result.uniform), adaptive: graph_layout(result.adaptive),
+      };
+      state.is_dirty = false;
+      state.is_building = false;
+      state.cell_idx = 0;
+      state.scene = null;
+      for (const graph_name of ["uniform", "adaptive"]) {
+        const stats = engine.graph_stats(result[graph_name]);
+        element(graph_name + "_stats").textContent =
+          "ノード " + stats.num_nodes + " / 辺 " + stats.num_edges +
+          "\n包絡追加：平均 " + stats.mean_change_cells.toFixed(1) + " / 最大 " + stats.max_change_cells + "セル";
+        element(graph_name + "_stats").style.whiteSpace = "pre-line";
+      }
+      set_status("全" + config.num_joints + "関節 / 構築 " + result.stats.elapsed_ms.toFixed(1) + " ms / 固有姿勢登録 " +
+        result.stats.num_registered_poses + "回 / 姿勢占有計算 " + result.stats.num_pose_rasterizations + "回 / 包絡計算 " +
+        result.stats.num_registered_envelopes + "回 / 再利用 " + result.stats.num_cache_hits + "回" +
+        (result.stats.is_budget_limited ? " / ノード上限到達：包絡追加の目安は一部未達" : " / 包絡追加の目安達成"));
+      const graph = selected_graph();
+      const idx = graph.cells.findIndex((cell) => engine.contains_pose(cell, state.angles_deg.slice(0, config.num_joints)));
+      choose_cell(state.graph_name, Math.max(0, idx));
+    } catch (error) {
+      if (version !== state.build_version) return;
+      state.is_building = false;
+      set_status("構築失敗：" + error.message);
+      update_buttons();
+    }
+  }
+
+  function choose_cell(graph_name, cell_idx, is_current_pose_preserved = false) {
+    if (state.is_dirty || state.is_building || !state.result) return;
+    stop_playback();
+    state.graph_name = graph_name;
+    element("graph_kind").value = graph_name;
+    state.cell_idx = cell_idx;
+    state.has_manual_neighbor_choice = false;
+    const graph = selected_graph();
+    const cell = selected_cell();
+    if (!is_current_pose_preserved) state.angles_deg = [...cell.representative.angles_deg];
+    element("selection_title").textContent = (graph_name === "adaptive" ? "占有適応" : "角度等間隔") + " / 領域 " + cell.id;
+    const is_coupled = cell.coordinate_kind === "link_orientation";
+    const min_values = is_coupled ? cell.min_orientations_deg : cell.min_angles_deg;
+    const max_values = is_coupled ? cell.max_orientations_deg : cell.max_angles_deg;
+    const coordinate_name = is_coupled ? "リンク向き" : "関節";
+    element("selection_stats").textContent =
+      min_values.map((value, idx) => coordinate_name + (idx + 1) + "：" + format_angle(value) + "～" + format_angle(max_values[idx])).join(" / ") +
+      "\n全関節包絡 " + cell.occupied_ids.length + "セル / 包絡追加 " + cell.change_cells +
+      "セル / 表示サンプル和集合 " + cell.sampled_occupied_ids.length + "セル";
+    element("selection_stats").style.whiteSpace = "pre-line";
+    const table = document.createElement("table");
+    const heading = document.createElement("tr");
+    for (const text of ["連動式", "基準 [deg]", "差の下限 [deg]", "差の上限 [deg]"]) {
+      const item = document.createElement("th"); item.textContent = text; heading.append(item);
+    }
+    table.append(heading);
+    cell.region.coordinate_constraints.forEach((constraint) => {
+      const row = document.createElement("tr");
+      const formula = constraint.coefficients.map((value, idx) => value ? "q" + (idx + 1) : null).filter(Boolean).join("＋");
+      const reference = constraint.coefficients.reduce((total, value, idx) => total + value * cell.center_angles_deg[idx], 0);
+      for (const text of [formula, reference.toFixed(1), constraint.min_dev_deg.toFixed(1), constraint.max_dev_deg.toFixed(1)]) {
+        const item = document.createElement("td"); item.textContent = text; row.append(item);
+      }
+      table.append(row);
+    });
+    element("constraint_params").replaceChildren(table);
+    refresh_neighbors();
+    update_joint_values();
+    update_buttons();
+    render();
+  }
+
+  /* スライダー連続入力後の比較更新。描画フレームからの軌道評価の分離 */
+  function schedule_neighbors() {
+    clearTimeout(state.comparison_timer);
+    state.comparison_timer = setTimeout(() => refresh_neighbors(true), 75);
+  }
+
+  function refresh_neighbors(is_choice_preserved = false) {
+    clearTimeout(state.comparison_timer);
+    if (!state.result || state.is_dirty || state.is_building) return;
+    const select = element("neighbor");
+    const previous = select.value;
+    const has_manual_choice = state.has_manual_neighbor_choice;
+    const graph = selected_graph();
+    const angles = state.angles_deg.slice(0, state.config.num_joints);
+    if (!engine.contains_pose(selected_cell(), angles)) {
+      const idx = graph.cells.findIndex((cell) => engine.contains_pose(cell, angles));
+      if (idx === -1) return;
+      choose_cell(state.graph_name, idx, true);
+      if (is_choice_preserved && has_manual_choice && [...select.options].some((option) => option.value === previous)) {
+        state.has_manual_neighbor_choice = true; select.value = previous; refresh_sweep();
+      }
+      return;
+    }
+    state.neighbor_comparison = engine.evaluate_neighbors(state.result, graph, state.cell_idx, angles, element("path_method").value);
+    const candidates = state.neighbor_comparison.candidates;
+    select.replaceChildren();
+    for (const candidate of [...candidates].sort((a, b) => Number(b.is_pareto) - Number(a.is_pareto) || a.target_idx - b.target_idx)) {
+      select.add(new Option("N" + candidate.target_idx + (candidate.is_pareto ? " · 候補" : ""), String(candidate.edge_idx)));
+    }
+    const best = engine.select_neighbor(candidates, element("neighbor_priority").value);
+    if (best) select.value = is_choice_preserved && has_manual_choice && candidates.some((candidate) => String(candidate.edge_idx) === previous) ? previous : String(best.edge_idx);
+    refresh_sweep();
+  }
+
+  function render_candidates() {
+    const comparison = state.neighbor_comparison;
+    const candidates = comparison?.candidates ?? [];
+    const table = document.createElement("table");
+    const heading = document.createElement("tr");
+    for (const text of ["移動先", "追加 [セル]", "関節移動 [deg]", "パレート"]) {
+      const item = document.createElement("th"); item.textContent = text; heading.append(item);
+    }
+    table.append(heading);
+    for (const candidate of [...candidates].sort((a, b) => a.target_idx - b.target_idx)) {
+      const row = document.createElement("tr");
+      row.dataset.target_node = String(candidate.target_idx);
+      row.dataset.is_pareto = String(candidate.is_pareto);
+      row.dataset.is_selected = String(candidate.sweep === state.sweep);
+      const name = document.createElement("td");
+      const button = document.createElement("button");
+      button.className = "candidate_button"; button.textContent = "N" + candidate.target_idx;
+      button.addEventListener("click", () => { stop_playback(); state.has_manual_neighbor_choice = true; element("neighbor").value = String(candidate.edge_idx); refresh_neighbors(true); });
+      name.append(button); row.append(name);
+      for (const text of [String(candidate.added_cells), candidate.max_joint_travel_deg.toFixed(1), candidate.is_pareto ? "○" : "—"]) {
+        const item = document.createElement("td"); item.textContent = text; row.append(item);
+      }
+      table.append(row);
+    }
+    element("neighbor_candidates").replaceChildren(table);
+    element("candidate_summary").textContent = candidates.length ? "候補 " + candidates.filter((candidate) => candidate.is_pareto).map((candidate) => "N" + candidate.target_idx).join(" / ") +
+      " · 評価 " + comparison.elapsed_ms.toFixed(1) + " ms · 現在の開始姿勢基準" : "隣接候補なし";
+  }
+
+  function refresh_sweep() {
+    if (!state.result || state.is_dirty) return;
+    state.sweep = state.neighbor_comparison?.candidates.find((candidate) => candidate.edge_idx === Number(element("neighbor").value))?.sweep ?? null;
+    render_candidates();
+    refresh_scene();
+    restore_edge_stats();
+    update_buttons();
+    render();
+  }
+
+  function restore_edge_stats() {
+    if (!state.sweep) { element("edge_stats").textContent = "隣接領域なし"; return; }
+    element("edge_stats").textContent = "追加掃引 " + state.sweep.added_cells + "セル / 関節移動 " +
+      state.sweep.max_joint_travel_deg.toFixed(1) + "° / 軌道サンプル " + state.sweep.samples.length + "姿勢";
+  }
+
+  /* 占有・順運動学の再計算を伴わない表示用参照 */
+  function refresh_scene() {
+    const graph = selected_graph();
+    const cell = selected_cell();
+    const edge = state.sweep?.edge;
+    const target_idx = edge ? (edge.first_idx === state.cell_idx ? edge.second_idx : edge.first_idx) : null;
+    const target = target_idx === null ? null : graph.cells[target_idx];
+    state.scene = {
+      cell, target, occupancy: target ? engine.compare_occupancy(cell.occupied_ids, target.occupied_ids) : null,
+      representative_occupancy: target ? engine.compare_occupancy(cell.representative.ids, target.representative.ids) : null,
+      neighborhood: engine.graph_neighborhood(graph, state.cell_idx),
+    };
+  }
+
+  /* 代表角度の順位による全体配置。関節角度の距離尺度とは別扱い */
+  function graph_layout(graph) {
+    const projections = graph.cells.map((cell) => engine.project_cell(state.config, cell));
+    const x_values = [...new Set(projections.map((cell) => cell.center_x))].sort((first, second) => first - second);
+    const y_values = [...new Set(projections.map((cell) => cell.center_y))].sort((first, second) => first - second);
+    const x_ranks = new Map(x_values.map((value, idx) => [value, idx]));
+    const y_ranks = new Map(y_values.map((value, idx) => [value, idx]));
+    const position = (rank, num_values) => num_values === 1 ? 0.5 : 0.1 + rank / (num_values - 1) * 0.8;
+    const positions = projections.map((cell) => [
+      position(x_ranks.get(cell.center_x), x_values.length), position(y_ranks.get(cell.center_y), y_values.length),
+    ]);
+    const groups = new Map();
+    projections.forEach((cell, idx) => {
+      const key = cell.center_x + "," + cell.center_y;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(idx);
+    });
+    for (const group of groups.values()) {
+      if (group.length === 1) continue;
+      group.forEach((idx, rank) => {
+        const angle = rank / group.length * Math.PI * 2;
+        positions[idx][0] += 0.025 * Math.cos(angle);
+        positions[idx][1] += 0.025 * Math.sin(angle);
+      });
+    }
+    return positions;
+  }
+
+  function switch_graph(graph_name) {
+    if (!state.result || state.is_dirty || state.is_building) return;
+    const idx = state.result[graph_name].cells.findIndex((cell) => engine.contains_pose(cell, state.angles_deg.slice(0, state.config.num_joints)));
+    choose_cell(graph_name, Math.max(0, idx));
+  }
+
+  function stop_playback() {
+    if (state.frame_id !== null) cancelAnimationFrame(state.frame_id);
+    state.frame_id = null;
+    state.playback = null;
+    restore_edge_stats();
+    update_buttons();
+    if (state.result) render();
+  }
+
+  function start_playback(kind) {
+    if (state.playback?.kind === kind) { stop_playback(); refresh_neighbors(true); return; }
+    stop_playback();
+    if (!state.result || state.is_dirty || state.is_building) return;
+    refresh_neighbors(true);
+    let coordinates;
+    if (kind === "region") {
+      const cell = selected_cell();
+      const start = [...state.angles_deg];
+      coordinates = [start, ...cell.sample_poses.map((pose) => pose.angles_deg), start];
+      element("edge_stats").textContent = "領域内の全関節を補間再生中。橙包絡は少数サンプルではなく全許容姿勢の外側近似";
+    } else {
+      if (!state.sweep) refresh_sweep();
+      if (!state.sweep) return;
+      const [start, port, target] = state.sweep.coordinates;
+      coordinates = [start, port, target, port, start];
+    }
+    state.playback = { kind, coordinates, start_ms: performance.now(), last_ms: 0 };
+    update_buttons();
+    function frame(now_ms) {
+      const playback = state.playback;
+      if (!playback) return;
+      if (now_ms - playback.last_ms >= 33) {
+        playback.last_ms = now_ms;
+        const elapsed_ms = Math.max(0, now_ms - playback.start_ms);
+        const position = (elapsed_ms / 1500) % (playback.coordinates.length - 1);
+        const idx = Math.floor(position);
+        const fraction = position - idx;
+        const first = playback.coordinates[idx];
+        const second = playback.coordinates[idx + 1];
+        state.angles_deg = engine.interpolate_angles(first, second, fraction);
+        update_joint_values();
+        render();
+      }
+      state.frame_id = requestAnimationFrame(frame);
+    }
+    state.frame_id = requestAnimationFrame(frame);
+  }
+
+  function canvas_context(id) {
+    const canvas = element(id);
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    const pixel_width = Math.round(width * scale);
+    const pixel_height = Math.round(height * scale);
+    if (canvas.width !== pixel_width || canvas.height !== pixel_height) {
+      canvas.width = pixel_width;
+      canvas.height = pixel_height;
+    }
+    const context = canvas.getContext("2d");
+    context.setTransform(scale, 0, 0, scale, 0, 0);
+    context.clearRect(0, 0, width, height);
+    return { context, width, height };
+  }
+
+  function draw_arm() {
+    let config;
+    try { config = state.is_dirty && !state.is_building ? read_config() : state.config ?? read_config(); }
+    catch { config = state.config; }
+    if (!config) return;
+    const { context, width, height } = canvas_context("arm_canvas");
+    const world_span = 2 * config.world_half_size;
+    const scale = (Math.min(width, height) - 42) / world_span;
+    const world_to_canvas = ([x, y]) => [width / 2 + x * scale, height / 2 - y * scale];
+    context.lineWidth = 1;
+    context.strokeStyle = "#e8eef3";
+    for (let value = -1; value <= 1.001; value += 0.25) {
+      const first = world_to_canvas([value, -1.3]);
+      const second = world_to_canvas([value, 1.3]);
+      const third = world_to_canvas([-1.3, value]);
+      const fourth = world_to_canvas([1.3, value]);
+      context.beginPath(); context.moveTo(...first); context.lineTo(...second);
+      context.moveTo(...third); context.lineTo(...fourth); context.stroke();
+    }
+    context.font = "11px system-ui";
+    context.fillStyle = "#8093a3";
+    for (const value of [-1, 0, 1]) {
+      const [x, y] = world_to_canvas([value, -1.3]);
+      context.fillText(String(value), x - 4, y + 13);
+      const [left_x, left_y] = world_to_canvas([-1.3, value]);
+      context.fillText(String(value), left_x - 18, left_y + 4);
+    }
+    function paint_ids(ids, color) {
+      context.fillStyle = color;
+      const size = config.resolution * scale;
+      for (const id of ids) {
+        const x_idx = id % config.grid_width;
+        const y_idx = Math.floor(id / config.grid_width);
+        const [x, y] = world_to_canvas([x_idx * config.resolution - config.world_half_size,
+          (y_idx + 1) * config.resolution - config.world_half_size]);
+        context.fillRect(x + 0.5, y + 0.5, Math.max(0.5, size - 1), Math.max(0.5, size - 1));
+      }
+    }
+    const scene = state.result && !state.is_dirty ? state.scene : null;
+    const pose_scope = element("pose_scope").value;
+    const has_neighbor_poses = Boolean(scene?.target) && pose_scope !== "selected";
+    if (scene && element("enable_occupancy").checked) {
+      if (has_neighbor_poses) {
+        paint_ids(scene.occupancy.common, "#d8e0e7");
+        paint_ids(scene.occupancy.first_only, "#f4dbab");
+        paint_ids(scene.occupancy.second_only, "#c4e5df");
+      } else paint_ids(scene.cell.occupied_ids, "#f4dbab");
+      if (state.sweep && element("enable_path_occupancy").checked && state.playback?.kind !== "region") paint_ids(state.sweep.occupied_ids, "#d9c3e8");
+    }
+    const key = JSON.stringify([config.num_joints, config.has_round_tool, config.resolution, state.angles_deg]);
+    if (key !== state.last_pose_key) {
+      state.last_pose = engine.rasterize_pose(config, state.angles_deg);
+      state.last_pose_key = key;
+    }
+    const pose = state.last_pose;
+    if (element("enable_occupancy").checked && !has_neighbor_poses) paint_ids(pose.ids, "#64bfd0");
+    function stroke_poses(poses, color, line_width) {
+      context.strokeStyle = color;
+      context.lineWidth = line_width;
+      context.lineCap = "round";
+      context.beginPath();
+      for (const sample of poses) {
+        context.moveTo(...world_to_canvas(sample.points[0]));
+        for (let idx = 1; idx < sample.points.length; idx += 1) context.lineTo(...world_to_canvas(sample.points[idx]));
+        const tip = sample.points[sample.points.length - 1];
+        const direction = [tip[0] + 0.09 * Math.cos(sample.tool_angle), tip[1] + 0.09 * Math.sin(sample.tool_angle)];
+        context.moveTo(...world_to_canvas(tip)); context.lineTo(...world_to_canvas(direction));
+        if (config.has_round_tool) {
+          const [x, y] = world_to_canvas(tip);
+          const radius = config.radii[config.num_joints - 1] * scale;
+          context.moveTo(x + radius, y); context.arc(x, y, radius, 0, Math.PI * 2);
+        }
+      }
+      context.stroke();
+    }
+    let num_context_poses = 0;
+    let num_path_poses = 0;
+    if (scene) {
+      if (pose_scope === "all") {
+        const context_poses = selected_graph().cells.filter((cell) => cell.id !== scene.cell.id && cell.id !== scene.target?.id).map((cell) => cell.representative);
+        num_context_poses = context_poses.length;
+        stroke_poses(context_poses, "#8296a32b", 1);
+      }
+      stroke_poses(scene.cell.sample_poses, "#cb7a2073", 1.8);
+      stroke_poses([scene.cell.representative], "#cb7a20", 2.4);
+      if (has_neighbor_poses) {
+        stroke_poses(scene.target.sample_poses, "#198c9066", 1.8);
+        stroke_poses([scene.target.representative], "#198c90", 2.4);
+      }
+      if (state.sweep && state.playback?.kind !== "region") {
+        const samples = state.sweep.samples;
+        const num_displayed = Math.min(16, samples.length);
+        const path_poses = [];
+        for (let idx = 0; idx < num_displayed; idx += 1) path_poses.push(samples[Math.round(idx * (samples.length - 1) / Math.max(1, num_displayed - 1))]);
+        num_path_poses = path_poses.length;
+        stroke_poses(path_poses, "#9952b242", 1.1);
+        context.strokeStyle = "#9952b2"; context.lineWidth = 2;
+        context.beginPath();
+        samples.forEach((sample, idx) => {
+          const tip = world_to_canvas(sample.points[sample.points.length - 1]);
+          if (idx === 0) context.moveTo(...tip);
+          else context.lineTo(...tip);
+        });
+        context.stroke();
+      }
+    }
+    context.lineCap = "round";
+    for (let idx = 0; idx < config.num_joints; idx += 1) {
+      const first = world_to_canvas(pose.points[idx]);
+      const second = world_to_canvas(pose.points[idx + 1]);
+      context.strokeStyle = "#28566e";
+      context.lineWidth = config.radii[idx] * 2 * scale;
+      context.beginPath(); context.moveTo(...first); context.lineTo(...second); context.stroke();
+      if (config.lengths[idx] === 0) {
+        context.fillStyle = "#28566e";
+        context.beginPath(); context.arc(...first, config.radii[idx] * scale, 0, Math.PI * 2); context.fill();
+      }
+      context.fillStyle = "#fff";
+      context.strokeStyle = "#24465b";
+      context.lineWidth = 2;
+      context.beginPath(); context.arc(...first, 4, 0, Math.PI * 2); context.fill(); context.stroke();
+      context.fillStyle = "#233c50";
+      context.fillText(String(idx + 1), first[0] + 7, first[1] - 6);
+    }
+    const end = pose.points[pose.points.length - 1];
+    const arrow_end = [end[0] + 0.12 * Math.cos(pose.tool_angle), end[1] + 0.12 * Math.sin(pose.tool_angle)];
+    context.strokeStyle = "#c8632b"; context.lineWidth = 2;
+    context.beginPath(); context.moveTo(...world_to_canvas(end)); context.lineTo(...world_to_canvas(arrow_end)); context.stroke();
+    const [end_x, end_y] = world_to_canvas(arrow_end);
+    context.fillStyle = "#c8632b"; context.beginPath(); context.arc(end_x, end_y, 3, 0, Math.PI * 2); context.fill();
+    if (scene) {
+      function paint_tag(cell, color, offset_x, offset_y) {
+        const tip = cell.representative.points[config.num_joints];
+        const [x, y] = world_to_canvas(tip);
+        const text = "N" + cell.id;
+        context.font = "bold 12px system-ui";
+        const text_width = context.measureText(text).width;
+        context.fillStyle = "#ffffffeb"; context.fillRect(x + offset_x - 3, y + offset_y - 12, text_width + 6, 17);
+        context.fillStyle = color; context.fillText(text, x + offset_x, y + offset_y);
+      }
+      paint_tag(scene.cell, "#ac5e08", 10, 20);
+      if (has_neighbor_poses) paint_tag(scene.target, "#087d81", -44, -13);
+    }
+    const num_selected_poses = scene?.cell.sample_poses.length ?? 0;
+    const num_neighbor_poses = has_neighbor_poses ? scene.target.sample_poses.length : 0;
+    element("common_label").hidden = !has_neighbor_poses;
+    element("selected_pose_label").textContent = scene ? "N" + scene.cell.id + (has_neighbor_poses ? "だけ" : "全占有") : "選択側だけ";
+    element("neighbor_pose_label").textContent = has_neighbor_poses ? "N" + scene.target.id + "だけ" : "隣接側だけ";
+    element("neighbor_pose_label").hidden = !has_neighbor_poses;
+    element("workspace_stats").textContent = scene ?
+      "選択 N" + scene.cell.id + " / 移動先 " + (scene.target ? "N" + scene.target.id : "なし") +
+      " / 姿勢表示 " + (num_selected_poses + num_neighbor_poses + num_context_poses) +
+      " / 軌道表示 " + num_path_poses + "姿勢" + (scene.target ?
+        " / 包絡共通 " + common_percent(scene.occupancy) + " / 代表共通 " + common_percent(scene.representative_occupancy) : "") : "";
+    const canvas = element("arm_canvas");
+    canvas.dataset.num_region_poses = String(scene ? scene.cell.sample_poses.length : 0);
+    canvas.dataset.num_neighbor_poses = String(has_neighbor_poses ? scene.target.sample_poses.length : 0);
+    canvas.dataset.num_context_poses = String(num_context_poses);
+    canvas.dataset.num_path_poses = String(num_path_poses);
+    canvas.dataset.envelope_size = String(scene?.cell.occupied_ids.length ?? 0);
+    canvas.dataset.region_num_joints = String(scene?.cell.center_angles_deg.length ?? 0);
+    canvas.dataset.region_type = scene?.cell.region.type ?? "";
+    canvas.dataset.first_joint_span_deg = String(scene ? scene.cell.max_angles_deg[0] - scene.cell.min_angles_deg[0] : 0);
+    canvas.dataset.common_cells = String(scene?.occupancy?.common.length ?? 0);
+    canvas.dataset.source_only_cells = String(scene?.occupancy?.first_only.length ?? 0);
+    canvas.dataset.target_only_cells = String(scene?.occupancy?.second_only.length ?? 0);
+    canvas.dataset.path_method = element("path_method").value;
+    const is_inside_region = scene && engine.contains_pose(scene.cell, state.angles_deg.slice(0, config.num_joints));
+    canvas.dataset.is_inside_region = String(Boolean(is_inside_region));
+    canvas.dataset.num_uncovered_current_cells = String(is_inside_region ? engine.subtract_ids(pose.ids, scene.cell.occupied_ids).length : 0);
+    element("current_stats").textContent = "現在占有 " + pose.ids.length + "セル / 手先 (" +
+      end[0].toFixed(3) + ", " + end[1].toFixed(3) + ") m / ツール方向 " +
+      (pose.tool_angle * 180 / Math.PI).toFixed(1) + "°";
+  }
+
+  function map_geometry(width, height) {
+    return { left: 32, top: 14, plot_width: width - 44, plot_height: height - 49 };
+  }
+
+  function common_percent(occupancy) {
+    const total = occupancy.common.length + occupancy.first_only.length + occupancy.second_only.length;
+    return (100 * occupancy.common.length / Math.max(1, total)).toFixed(1) + "%";
+  }
+
+  function visible_map_cells(graph) {
+    const is_slice = element("projection_mode").value === "slice";
+    return graph.cells.filter((cell) => !is_slice || engine.matches_slice(state.config, cell, state.angles_deg.slice(0, state.config.num_joints)));
+  }
+
+  function draw_map(graph_name) {
+    const canvas = element(graph_name + "_canvas");
+    if (canvas.clientWidth === 0) return;
+    const { context, width, height } = canvas_context(graph_name + "_canvas");
+    const graph = state.result?.[graph_name];
+    if (!graph) return;
+    const cells = visible_map_cells(graph);
+    const visible_ids = new Set(cells.map((cell) => cell.id));
+    const projections = new Map(cells.map((cell) => [cell.id, engine.project_cell(state.config, cell)]));
+    const { left, top, plot_width, plot_height } = map_geometry(width, height);
+    const config = state.config;
+    const min_x = config.min_angles_deg[config.axis_x], max_x = config.max_angles_deg[config.axis_x];
+    const min_y = config.min_angles_deg[config.axis_y], max_y = config.max_angles_deg[config.axis_y];
+    const point = (x, y) => [left + (x - min_x) / (max_x - min_x) * plot_width,
+      top + (max_y - y) / (max_y - min_y) * plot_height];
+    const is_slice = element("projection_mode").value === "slice";
+    function cell_path(cell) {
+      const projection = projections.get(cell.id);
+      const polygon = is_slice ? engine.slice_polygon(state.config, cell, state.angles_deg) : [
+        [projection.min_x, projection.min_y], [projection.max_x, projection.min_y],
+        [projection.max_x, projection.max_y], [projection.min_x, projection.max_y],
+      ];
+      context.beginPath();
+      polygon.forEach((value, idx) => { if (idx === 0) context.moveTo(...point(...value)); else context.lineTo(...point(...value)); });
+      context.closePath();
+    }
+    for (const cell of cells) {
+      const fraction = Math.min(1, cell.change_cells / Math.max(1, state.config.max_cell_change_th * 2));
+      context.fillStyle = "hsl(194 42% " + (96 - fraction * 44) + "% / " + (is_slice ? "0.7" : "0.12") + ")";
+      cell_path(cell);
+      context.fill();
+      context.strokeStyle = "#9bb4c380"; context.lineWidth = 0.5;
+      context.stroke();
+    }
+    function draw_edge(edge, color, line_width) {
+      const first = projections.get(edge.first_idx);
+      const second = projections.get(edge.second_idx);
+      if (!first || !second) return;
+      const port = state.sweep?.edge === edge ? state.sweep.coordinates[1] : edge.port_angles_deg;
+      context.strokeStyle = color; context.lineWidth = line_width;
+      context.beginPath(); context.moveTo(...point(first.center_x, first.center_y));
+      context.lineTo(...point(port[state.config.axis_x], port[state.config.axis_y]));
+      context.lineTo(...point(second.center_x, second.center_y)); context.stroke();
+    }
+    if (element("enable_graph_lines").checked) for (const edge of graph.edges) draw_edge(edge, "#355c7740", 0.7);
+    context.fillStyle = "#204e6880";
+    for (const cell of cells) {
+      const projection = projections.get(cell.id);
+      context.beginPath(); context.arc(...point(projection.center_x, projection.center_y), 1.6, 0, Math.PI * 2); context.fill();
+    }
+    function highlight(cell, color) {
+      if (!cell || !visible_ids.has(cell.id)) return;
+      context.strokeStyle = color; context.lineWidth = 2.4;
+      cell_path(cell);
+      context.stroke();
+    }
+    if (graph_name === state.graph_name) {
+      highlight(selected_cell(), "#cc7920");
+      highlight(state.scene?.target, "#198c90");
+      if (state.sweep && state.playback?.kind !== "region") draw_edge(state.sweep.edge, "#b24564", 2);
+    }
+    const [cursor_x, cursor_y] = point(state.angles_deg[state.config.axis_x], state.angles_deg[state.config.axis_y]);
+    context.strokeStyle = "#dc6e20"; context.lineWidth = 1.6;
+    context.beginPath(); context.moveTo(cursor_x - 5, cursor_y); context.lineTo(cursor_x + 5, cursor_y);
+    context.moveTo(cursor_x, cursor_y - 5); context.lineTo(cursor_x, cursor_y + 5); context.stroke();
+    context.fillStyle = "#667e90"; context.font = "10px system-ui";
+    for (const angle of [min_x, (min_x + max_x) / 2, max_x]) context.fillText(String(angle), point(angle, min_y)[0] - 7, top + plot_height + 13);
+    for (const angle of [min_y, (min_y + max_y) / 2, max_y]) context.fillText(String(angle), 5, point(min_x, angle)[1] + 3);
+    context.font = "11px system-ui";
+    context.fillText("関節" + (state.config.axis_x + 1) + " [deg]", left + plot_width / 2 - 30, height - 5);
+    context.save(); context.translate(10, top + plot_height / 2 + 28); context.rotate(-Math.PI / 2);
+    context.fillText("関節" + (state.config.axis_y + 1) + " [deg]", 0, 0); context.restore();
+    canvas.dataset.num_visible_regions = String(cells.length);
+    canvas.dataset.projection_mode = element("projection_mode").value;
+    if (state.is_dirty || state.is_building) {
+      context.fillStyle = "#ffffff9c"; context.fillRect(left, top, plot_width, plot_height);
+    }
+  }
+
+  function draw_graph() {
+    const canvas = element("graph_canvas");
+    if (canvas.clientWidth === 0) return;
+    const { context, width, height } = canvas_context("graph_canvas");
+    const graph = selected_graph();
+    const scene = state.scene;
+    if (!graph || !scene) { state.graph_hits = { nodes: [], edges: [] }; return; }
+    const is_local = element("graph_scope").value === "local";
+    const node_ids = is_local ? scene.neighborhood.node_ids : graph.cells.map((cell) => cell.id);
+    const edge_ids = is_local ? scene.neighborhood.edge_ids : graph.edges.map((_, idx) => idx);
+    const positions = new Map();
+    if (is_local) {
+      positions.set(state.cell_idx, [width / 2, height / 2]);
+      const outer_radius = Math.min(width, height) / 2 - 30;
+      for (const hop of [1, 2]) {
+        const level = node_ids.filter((idx) => scene.neighborhood.hops[idx] === hop).sort((first, second) => first - second);
+        const radius = outer_radius * (hop === 1 ? 0.53 : 1);
+        level.forEach((idx, rank) => {
+          const angle = -Math.PI / 2 + rank / level.length * 2 * Math.PI;
+          positions.set(idx, [width / 2 + radius * Math.cos(angle), height / 2 + radius * Math.sin(angle)]);
+        });
+      }
+    } else {
+      for (const idx of node_ids) {
+        const position = state.graph_layouts[state.graph_name][idx];
+        positions.set(idx, [position[0] * width, (1 - position[1]) * height]);
+      }
+    }
+    const hits = { nodes: [], edges: [] };
+    context.lineCap = "round";
+    for (const edge_idx of edge_ids) {
+      const edge = graph.edges[edge_idx];
+      const first = positions.get(edge.first_idx);
+      const second = positions.get(edge.second_idx);
+      const is_selected = state.sweep?.edge === edge;
+      const is_incident = edge.first_idx === state.cell_idx || edge.second_idx === state.cell_idx;
+      context.strokeStyle = is_selected ? "#9952b2" : is_incident ? "#4d93b5" : "#becdd8";
+      context.lineWidth = is_selected ? 3 : is_incident ? 1.8 : 0.9;
+      context.beginPath(); context.moveTo(...first); context.lineTo(...second); context.stroke();
+      hits.edges.push({ edge_idx, first, second });
+    }
+    for (const idx of node_ids) {
+      const [x, y] = positions.get(idx);
+      const is_selected = idx === state.cell_idx;
+      const is_target = idx === scene.target?.id;
+      const is_neighbor = scene.neighborhood.hops[idx] === 1;
+      const radius = is_selected ? 10 : is_target ? 8 : is_local ? 6 : 3;
+      const color = is_selected ? "#cb7a20" : is_target ? "#198c90" : is_neighbor ? "#428caf" : "#8ba0b0";
+      context.fillStyle = color; context.strokeStyle = "#fff"; context.lineWidth = 1.5;
+      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill(); context.stroke();
+      if (is_selected || is_target || is_local && (node_ids.length <= 26 || is_neighbor)) {
+        const text = "N" + idx;
+        context.font = is_selected || is_target ? "bold 12px system-ui" : "11px system-ui";
+        const text_width = context.measureText(text).width;
+        context.fillStyle = "#ffffffdd"; context.fillRect(x - text_width / 2 - 2, y - radius - 17, text_width + 4, 14);
+        context.fillStyle = "#24495e"; context.fillText(text, x - text_width / 2, y - radius - 6);
+      }
+      hits.nodes.push({ node_idx: idx, x, y, radius });
+    }
+    state.graph_hits = hits;
+    canvas.dataset.selected_node = String(state.cell_idx);
+    canvas.dataset.target_node = String(scene.target?.id ?? "");
+    canvas.dataset.node_ids = node_ids.join(",");
+    canvas.dataset.edge_ids = edge_ids.join(",");
+    canvas.dataset.num_nodes_visible = String(node_ids.length);
+    canvas.dataset.num_edges_visible = String(edge_ids.length);
+    element("graph_stats").textContent = "表示 " + node_ids.length + "ノード・" + edge_ids.length +
+      "辺 / 全体 " + graph.cells.length + "ノード・" + graph.edges.length + "辺 / " +
+      (is_local ? "選択から2辺以内" : "角度順の配置・距離尺度なし");
+    if (state.is_dirty || state.is_building) {
+      context.fillStyle = "#ffffffa3"; context.fillRect(0, 0, width, height);
+    }
+  }
+
+  function render() { draw_arm(); draw_graph(); draw_map("uniform"); draw_map("adaptive"); }
+
+  element("graph_canvas").addEventListener("pointerdown", (event) => {
+    if (!state.result || state.is_dirty || state.is_building) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const nodes = state.graph_hits.nodes;
+    const node = nodes.find((hit) => Math.hypot(x - hit.x, y - hit.y) <= Math.max(9, hit.radius));
+    if (node) { choose_cell(state.graph_name, node.node_idx); return; }
+    let selected_edge = null;
+    let min_dist = 6;
+    for (const hit of state.graph_hits.edges) {
+      const delta_x = hit.second[0] - hit.first[0];
+      const delta_y = hit.second[1] - hit.first[1];
+      const length_squared = delta_x * delta_x + delta_y * delta_y;
+      if (length_squared === 0) continue;
+      const fraction = Math.max(0, Math.min(1, ((x - hit.first[0]) * delta_x + (y - hit.first[1]) * delta_y) / length_squared));
+      const dist = Math.hypot(x - hit.first[0] - fraction * delta_x, y - hit.first[1] - fraction * delta_y);
+      if (dist < min_dist) { min_dist = dist; selected_edge = hit.edge_idx; }
+    }
+    if (selected_edge === null) return;
+    stop_playback();
+    const edge = selected_graph().edges[selected_edge];
+    if (state.cell_idx !== edge.first_idx && state.cell_idx !== edge.second_idx) choose_cell(state.graph_name, edge.first_idx);
+    element("neighbor").value = String(selected_edge);
+    state.has_manual_neighbor_choice = true;
+    refresh_neighbors(true);
+  });
+
+  function show_panel(name) {
+    const is_graph = name === "graph";
+    element("graph_panel").hidden = !is_graph;
+    element("partition_panel").hidden = is_graph;
+    element("graph_tab").setAttribute("aria-pressed", String(is_graph));
+    element("partition_tab").setAttribute("aria-pressed", String(!is_graph));
+    render();
+  }
+  element("graph_tab").addEventListener("click", () => show_panel("graph"));
+  element("partition_tab").addEventListener("click", () => show_panel("partition"));
+  element("graph_kind").addEventListener("change", () => switch_graph(element("graph_kind").value));
+  for (const id of ["graph_scope", "pose_scope", "enable_occupancy", "enable_path_occupancy"]) element(id).addEventListener("change", render);
+
+  for (const graph_name of ["uniform", "adaptive"]) {
+    element(graph_name + "_canvas").addEventListener("pointerdown", (event) => {
+      if (!state.result || state.is_dirty || state.is_building) return;
+      const canvas = event.currentTarget;
+      const bounds = canvas.getBoundingClientRect();
+      const { left, top, plot_width, plot_height } = map_geometry(canvas.clientWidth, canvas.clientHeight);
+      const config = state.config;
+      const x = config.min_angles_deg[config.axis_x] + (event.clientX - bounds.left - left) / plot_width *
+        (config.max_angles_deg[config.axis_x] - config.min_angles_deg[config.axis_x]);
+      const y = config.max_angles_deg[config.axis_y] - (event.clientY - bounds.top - top) / plot_height *
+        (config.max_angles_deg[config.axis_y] - config.min_angles_deg[config.axis_y]);
+      const is_slice = element("projection_mode").value === "slice";
+      const candidates = visible_map_cells(state.result[graph_name]).map((cell) => {
+        const projection = engine.project_cell(state.config, cell);
+        if (x < projection.min_x || x > projection.max_x || y < projection.min_y || y > projection.max_y) return null;
+        const pose = engine.projected_pose(state.config, cell, x, y, is_slice ? state.angles_deg : null);
+        return pose ? { cell, pose } : null;
+      }).filter(Boolean);
+      candidates.sort((first, second) => {
+        function hidden_angle_cost(cell) {
+          return cell.center_angles_deg.reduce((total, value, axis) =>
+            axis === state.config.axis_x || axis === state.config.axis_y ? total : total + (value - state.angles_deg[axis]) ** 2, 0);
+        }
+        return hidden_angle_cost(first.cell) - hidden_angle_cost(second.cell);
+      });
+      if (candidates.length) {
+        state.angles_deg = candidates[0].pose;
+        choose_cell(graph_name, candidates[0].cell.id, true);
+      }
+    });
+  }
+  element("num_joints").addEventListener("change", () => {
+    state.angles_deg = [20, -40, 35, -25, 20]; refresh_axes(); mark_dirty(); render();
+  });
+  element("joint_range").addEventListener("change", () => {
+    stop_playback();
+    const limits = joint_limits();
+    state.angles_deg = state.angles_deg.map((value, idx) => idx < limits.min_angles_deg.length ?
+      Math.max(limits.min_angles_deg[idx], Math.min(limits.max_angles_deg[idx], value)) : value);
+    refresh_joint_controls(); mark_dirty(); render();
+  });
+  for (const id of ["tool_shape", "resolution", "max_num_nodes", "max_cell_change_th", "split_method"]) {
+    element(id).addEventListener("change", () => { mark_dirty(); render(); });
+  }
+  for (const id of ["axis_x", "axis_y"]) {
+    element(id).addEventListener("change", () => {
+      if (element("axis_x").value === element("axis_y").value) {
+        const other = id === "axis_x" ? "axis_y" : "axis_x";
+        element(other).value = String((Number(element(id).value) + 1) % Number(element("num_joints").value));
+      }
+      if (state.result && !state.is_dirty && !state.is_building) {
+        state.config.axis_x = Number(element("axis_x").value);
+        state.config.axis_y = Number(element("axis_y").value);
+        state.graph_layouts = { uniform: graph_layout(state.result.uniform), adaptive: graph_layout(state.result.adaptive) };
+      }
+      render();
+    });
+  }
+  element("projection_mode").addEventListener("change", render);
+  element("build").addEventListener("click", build);
+  element("neighbor").addEventListener("change", () => { stop_playback(); state.has_manual_neighbor_choice = true; refresh_neighbors(true); });
+  for (const id of ["path_method", "neighbor_priority"]) element(id).addEventListener("change", () => { stop_playback(); state.has_manual_neighbor_choice = false; refresh_neighbors(); });
+  element("play_region").addEventListener("click", () => start_playback("region"));
+  element("play_edge").addEventListener("click", () => start_playback("edge"));
+  element("enable_graph_lines").addEventListener("change", render);
+  element("save").addEventListener("click", () => {
+    if (!state.result || state.is_dirty) return;
+    const data = engine.export_graph(state.result, state.graph_name);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "planar_" + state.config.num_joints + "axis_" + state.graph_name + ".json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stop_playback(); });
+  window.addEventListener("pagehide", () => { state.build_version += 1; clearTimeout(state.comparison_timer); stop_playback(); });
+  new ResizeObserver(render).observe(document.querySelector(".layout"));
+  refresh_axes();
+  build();
+})();
+</script>
+</body>
+</html>

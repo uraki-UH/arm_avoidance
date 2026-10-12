@@ -62,6 +62,9 @@ public:
     providers_.push_back(provider);
   }
 
+  // 運動連鎖を持たない状態空間の、実サンプルによる初期ノード配置。
+  void initialize_from_samples(const std::vector<T_angle> &samples);
+
   void gngTrain(const std::vector<T_angle> &angle_samples,
                 const std::vector<T_coord> &coord_samples, int mode = 0);
 

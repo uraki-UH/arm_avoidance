@@ -17,6 +17,18 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
     from rclpy.qos import qos_profile_sensor_data
     ready = threading.Event()
     context = {}
+    cleanup_futures = set()
+    cleanup_lock = threading.Lock()
+
+    def track_cleanup(future):
+        with cleanup_lock:
+            cleanup_futures.add(future)
+        def finished(result):
+            if result.exception() is not None:
+                node.get_logger().error('物理セッション終了失敗: '+str(result.exception()))
+            with cleanup_lock:
+                cleanup_futures.discard(result)
+        future.add_done_callback(finished)
 
     class Handler(tornado.websocket.WebSocketHandler):
         def check_origin(self, origin):
@@ -103,17 +115,24 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
             if not pose or any(not math.isfinite(v) for v in pose.values()):
                 return
             stamp_sec = None
-            if self.enable_fresh_input:
-                try:
-                    stamp_sec = message.header.stamp.sec+message.header.stamp.nanosec*1e-9
-                except AttributeError:
+            try:
+                stamp_sec = message.header.stamp.sec+message.header.stamp.nanosec*1e-9
+            except AttributeError:
+                if self.enable_fresh_input:
                     return
+            motion = {}
+            for field in ('velocity', 'effort'):
+                values = getattr(message, field, ())
+                # JointStateと同じ関節順の実測値。欠測・不正長・非有限値のゼロ補完なし。
+                motion[field] = ({name: float(value) for name, value in zip(message.name, values) if name in pose}
+                                 if len(values) == len(message.name) and all(math.isfinite(value) for value in values) else {})
             with self.data_lock:
                 # 物理フォロワー用の実時刻と進行確認。再送キャッシュによる鮮度更新なし
                 if self.enable_fresh_input and (not 0 <= time.time()-stamp_sec < self.max_state_age_sec or stamp_sec <= self.last_stamp_sec):
                     return
                 self.last_stamp_sec = stamp_sec
-                self.latest = {'type': 'joints', 'pose': pose, 'received': time.monotonic(), 'stamp_sec': stamp_sec}
+                self.latest = {'type': 'joints', 'pose': pose, 'motion': motion,
+                               'received': time.monotonic(), 'stamp_sec': stamp_sec}
 
         async def flush_latest(self):
             with self.data_lock:
@@ -146,7 +165,7 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
         try:
             from physics_stream import physics_handler
             from motor_stream import motor_handler
-            server = tornado.httpserver.HTTPServer(tornado.web.Application([(r'/joints', Handler), (r'/physics', physics_handler(origins, context['clients'])), (r'/motors', motor_handler(node, exchange, origins, context['clients']))], websocket_max_message_size=1048576))
+            server = tornado.httpserver.HTTPServer(tornado.web.Application([(r'/joints', Handler), (r'/physics', physics_handler(origins, context['clients'], node, track_cleanup)), (r'/motors', motor_handler(node, exchange, origins, context['clients']))], websocket_max_message_size=1048576))
             server.listen(port, address=host)
             context['server'] = server
         except Exception as error:
@@ -173,4 +192,9 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
             context['loop'].stop()
         context['loop'].add_callback(close)
         thread.join(timeout=3)
+        # ROSノード破棄前の、所有launch・物理workerによる資源解放の完了待ち。
+        with cleanup_lock:
+            pending = list(cleanup_futures)
+        for future in pending:
+            future.result(timeout=20)
     return stop

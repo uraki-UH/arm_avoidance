@@ -17,24 +17,23 @@ export function mount_viewer(container: HTMLElement, options: scene_options) {
     shadow.append(style, panel);
     const scene = new graph_scene(options);
     let api: ReturnType<typeof useWebSocket> | undefined;
-    function FrameStatus({ on_select_frame }: { on_select_frame: (frame: string) => void }) {
-        const [unresolved, set_unresolved] = useState<string[]>([]);
+    function FrameSelector({ fixed_frame, on_select_frame }: { fixed_frame: string; on_select_frame: (frame: string) => void }) {
+        const [frames, set_frames] = useState<string[]>(() => scene.frames.available_frames);
         useEffect(() => {
             const timer = window.setInterval(() => {
-                const frames = [...scene.frames.unresolved_frames].sort();
-                set_unresolved(previous => previous.join('\n') === frames.join('\n') ? previous : frames);
+                const available = scene.frames.available_frames;
+                set_frames(previous => previous.join('\n') === available.join('\n') ? previous : available);
             }, 500);
             return () => window.clearInterval(timer);
         }, []);
-        if (unresolved.length === 0) return null;
-        return <div className="space-y-1 py-1">
-            <p role="status" className="text-xs text-amber-300 break-words">表示待ち（TF未解決）: {unresolved.join(', ')}</p>
-            <div className="flex flex-wrap gap-1">{unresolved.map(frame => <button key={frame} className="btn-secondary px-2 py-1 text-xs"
-                onClick={() => on_select_frame(frame)}>{frame} を基準に表示</button>)}</div>
+        return <div role="group" aria-label="表示基準フレーム" className="flex max-h-32 flex-wrap gap-1 overflow-y-auto py-1">
+            {frames.map(frame => <button key={frame} type="button" aria-pressed={fixed_frame.trim() === frame}
+                className="btn-secondary px-2 py-1 text-xs break-all aria-pressed:ring-1 aria-pressed:ring-cyan-400"
+                onClick={() => on_select_frame(frame)}>{frame}</button>)}
         </div>;
     }
     function viewer_panel() {
-        const [endpoint, set_endpoint] = useState('ws://127.0.0.1:9001/observe');
+        const [endpoint, set_endpoint] = useState(() => new URLSearchParams(location.search).get('observe') || 'ws://127.0.0.1:9001/observe');
         const [fixed_frame, set_fixed_frame] = useState('world');
         const [error, set_error] = useState('');
         const host = useMemo<viewer_host>(() => {
@@ -58,14 +57,17 @@ export function mount_viewer(container: HTMLElement, options: scene_options) {
                                 set_error('');
                             } catch (error) { set_error(String(error)); }
                         }} /></label>
-                    <label>シーン原点に対応するROSフレーム<input className="input-field" value={fixed_frame}
-                        onChange={event => { set_fixed_frame(event.target.value); scene.frames.fixed_frame = event.target.value.trim(); }} /></label>
+                    <details className="viewer-frame-settings">
+                        <summary>シーン原点に対応するROSフレーム</summary>
+                        <label>フレーム名<input className="input-field" value={fixed_frame}
+                            onChange={event => { set_fixed_frame(event.target.value); scene.frames.fixed_frame = event.target.value.trim(); }} /></label>
+                        <FrameSelector fixed_frame={fixed_frame} on_select_frame={frame => {
+                            set_fixed_frame(frame); scene.frames.fixed_frame = frame; scene.request_focus();
+                        }} />
+                    </details>
                 </div>
             </details>
             {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
-            <FrameStatus on_select_frame={frame => {
-                set_fixed_frame(frame); scene.frames.fixed_frame = frame; scene.request_focus();
-            }} />
             <ViewerApp host={host} />
         </section>;
     }

@@ -1,0 +1,6 @@
+# 生点群と自己除去前ROIの再生用。画像・除去後結果・制御指令・関節状態は既定で対象外
+/camera/camera/depth/color/points
+/livox/lidar
+/tf
+/tf_static
+/topo_dual_arm_max_long/roi_voxels

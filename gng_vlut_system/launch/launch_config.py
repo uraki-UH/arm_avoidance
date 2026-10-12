@@ -93,6 +93,58 @@ def is_enabled(value):
     raise ValueError(f"真偽値の設定が不正です: {value}")
 
 
+def mobile_gng_launch_defaults():
+    """移動状態GNGの起動引数。表示・学習専用モードの共通設定。"""
+    return {
+        'model_path': '', 'artifacts_path': '',
+        'enable_build_only': 'false', 'enable_rebuild': 'false',
+        'origin_x': '0.0', 'origin_y': '0.0', 'origin_yaw_deg': '0.0',
+        'min_display_yaw_deg': '', 'max_display_yaw_deg': '',
+        'min_display_speed': '', 'max_display_speed': '',
+        'min_display_angular_speed': '', 'max_display_angular_speed': '',
+    }
+
+
+def mobile_gng_actions(context, package_share, params_file, params, *,
+                       robot_name='', urdf_path='', parameter_source=None):
+    """状態GNGノード・保存先・終了連動の共通構築。ロボット表示の再帰起動なし。"""
+    from launch.actions import EmitEvent, RegisterEventHandler
+    from launch.event_handlers import OnProcessExit
+    from launch.events import Shutdown
+    from launch.substitutions import LaunchConfiguration
+    from launch_ros.actions import Node
+
+    def value(name):
+        return LaunchConfiguration(name).perform(context)
+
+    robot_name = robot_name or params.get('robot_name', '')
+    if not robot_name or not isinstance(params.get('mobile_gng'), dict):
+        raise ValueError('移動状態GNGにはrobot_nameとmobile_gngの設定が必要です')
+    source = Path(params_file).resolve().parent.parent
+    root = source if (source / 'package.xml').is_file() else Path(package_share)
+    gng = params.get('gng', {})
+    model_path = value('model_path') or str(root / gng.get('data_directory', 'gng_results') /
+        gng.get('experiment_id', robot_name) / 'state_gng.json')
+    artifacts_path = value('artifacts_path') or str(source.parent / 'log' / 'artifacts' /
+        (robot_name + '_state_gng'))
+    overrides = {
+        'model_path': model_path, 'artifacts_path': artifacts_path,
+        'enable_build_only': is_enabled(value('enable_build_only')),
+        'enable_rebuild': is_enabled(value('enable_rebuild')),
+        **{name: float(value(name)) for name in ('origin_x', 'origin_y', 'origin_yaw_deg')},
+    }
+    for name in mobile_gng_launch_defaults():
+        if name.startswith(('min_display_', 'max_display_')) and value(name):
+            overrides[name] = float(value(name))
+    if urdf_path:
+        overrides['urdf_path'] = urdf_path
+    learner = Node(package='gng_vlut_system', executable='mobile_gng_node.py',
+        namespace=robot_name, name='mobile_gng', output='screen',
+        parameters=[parameter_source if parameter_source is not None else params_file, overrides])
+    return [learner, RegisterEventHandler(OnProcessExit(target_action=learner,
+        on_exit=[EmitEvent(event=Shutdown(reason='移動状態GNGの終了'))]))]
+
+
 def namespaced_frame(robot_name, frame_id):
     frame = str(frame_id).strip().lstrip("/") or "base_link"
     return frame if "/" in frame or not robot_name else f"{robot_name}/{frame}"
@@ -103,6 +155,24 @@ def namespaced_topic(robot_name, topic):
     if topic.startswith("/"):
         return topic
     return f"/{robot_name}/{topic}" if robot_name else f"/{topic}"
+
+
+def static_tf_arguments(config, robot_name, base_frame):
+    """固定基台TFの共通設定。位置[m]・姿勢[rad]・名前空間の検証。"""
+    parent = config_value(config, "static_tf_parent_frame", "world")
+    child = namespaced_frame(robot_name, config_value(config, "static_tf_child_frame", base_frame))
+    for frame in (parent, child):
+        if not isinstance(frame, str) or not frame or frame.startswith("/") or any(c.isspace() for c in frame):
+            raise ValueError("固定基台TFには先頭スラッシュ・空白なしのframe名が必要です")
+    if parent == child:
+        raise ValueError("固定基台TFの親子には異なるframe名が必要です")
+    arguments = []
+    for name in ("x", "y", "z", "roll", "pitch", "yaw"):
+        value = config_value(config, "static_tf_" + name, 0.0)
+        if type(value) not in (int, float) or not math.isfinite(value):
+            raise ValueError("static_tf_" + name + "には有限の数値が必要です")
+        arguments.extend(("--" + name, str(float(value))))
+    return arguments + ["--frame-id", parent, "--child-frame-id", child]
 
 
 def world_index_modes(config):

@@ -47,10 +47,10 @@ def select_motion(flags: motion_flags) -> motion_kind:
 
 @dataclass(frozen=True)
 class motion_input:
-    """動作部品への姿勢スナップショットと制御刻み幅。"""
+    """動作部品への姿勢スナップショット。刻み幅なしは経由姿勢の要求。"""
     positions: np.ndarray
     home: np.ndarray
-    step: float
+    step: float | None
 
 
 @dataclass(frozen=True)

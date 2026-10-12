@@ -259,6 +259,7 @@ if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
   ament_add_pytest_test(test_joint_command_model test/test_joint_command_model.py)
   ament_add_pytest_test(test_follower_display_mapping test/test_follower_display_mapping.py)
   ament_add_pytest_test(test_mobile_state_graph test/test_mobile_state_graph.py)
+  ament_add_pytest_test(test_mobile_gng test/test_mobile_gng.py)
   ament_add_gtest(test_joint_state_utils test/test_joint_state_utils.cpp)
   target_include_directories(test_joint_state_utils PRIVATE src)
   ament_target_dependencies(test_joint_state_utils Eigen3 sensor_msgs)
@@ -317,6 +318,7 @@ endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
   scripts/object_class_recognition.py
+  scripts/mobile_gng.py
   scripts/mobile_state_graph.py
   scripts/task_program.py
   scripts/task_components.py
@@ -335,6 +337,8 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 
 install(PROGRAMS
   scripts/object_class_recognition_node.py
+  scripts/mobile_gng_preview.py
+  scripts/mobile_gng_node.py
   scripts/mobile_state_graph_node.py
   scripts/task_executor.py
   scripts/robot_graph_bridge.py

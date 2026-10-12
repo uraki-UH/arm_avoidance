@@ -2,6 +2,8 @@
 
 現行Gazeboの駆動検証は[Harmonicの標準effort制御](dual_arm_simulation.md#gazebo-harmonicの標準effort制御)を参照。本ページの既存点群回避launchはClassic依存が残るため、新しいHarmonic入口への接続は未完了。
 
+ブラウザのLongロボットで実bagを使用する場合は[MID-360 bagによるGNG-VLUT回避](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md#mid-360-bagによるgng-vlut回避)を使用。MuJoCo実測から自己ボクセル・VLUT状態を更新する独立構成で、下記Gazebo launchの起動は不要。
+
 固定基台のマニピュレータ向け構成。機体ごとのlaunch複製は不要。URDF・学習済みGNG/VLUT・計画関節を機体YAMLで選択。関節名のL/R接頭辞や片腕7関節への依存なし。
 
 ```text

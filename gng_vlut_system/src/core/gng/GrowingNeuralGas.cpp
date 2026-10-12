@@ -152,6 +152,22 @@ template <typename T_angle, typename T_coord>
 GrowingNeuralGas<T_angle, T_coord>::~GrowingNeuralGas() {}
 
 template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::initialize_from_samples(
+    const std::vector<T_angle> &samples) {
+  if (!active_indices_.empty() || samples.size() < 2 ||
+      samples.size() > addable_node_indicies.size()) {
+    throw std::invalid_argument("初期サンプル数または既存学習ノードの競合");
+  }
+  for (const auto &sample : samples) {
+    if (sample.size() != angle_dimension || !sample.allFinite()) {
+      throw std::invalid_argument("初期サンプルの次元または非有限値");
+    }
+  }
+  for (const auto &sample : samples) add_node(sample);
+}
+
+
+template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::setCoordLayerCount(int layer_count) {
   coord_nearest_indexes_.clear();
   coord_layer_count_ = std::max(1, layer_count);
@@ -1866,6 +1882,9 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
     n_trial_angle = 0;
     task_error_ema_initialized_ = false;
     task_error_ema_ = 0.0f;
+
+    // 運動連鎖なしの状態学習では、実サンプルによる明示的な初期配置。
+    if (!kinematic_chain_) return;
 
     // 初期ノードの再追加
     for (int i = 0; i < params_.start_node_num; ++i) {

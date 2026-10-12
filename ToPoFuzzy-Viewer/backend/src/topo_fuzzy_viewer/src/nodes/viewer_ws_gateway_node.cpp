@@ -456,7 +456,13 @@ private:
             }
         }
         std::string type = in.value("type", ""), method = in.value("method", ""), id = in.value("id", ""), tag = in.value("tag", "");
-        if (type == "request.state") { sendCurrentState(ws); return; }
+        if (type == "request.state") {
+            if (in.contains("topic") && (!in["topic"].is_string() ||
+                in["topic"].get<std::string>().empty() || in["topic"].get<std::string>().front() != '/')) {
+                ws->end(1007, "Invalid state topic"); return;
+            }
+            sendCurrentState(ws, in.value("topic", "")); return;
+        }
         if (type == "stream.marker_array.ready") {
             std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
             topologicalMapClientStates_[ws].enable_marker_ack = true;
@@ -906,12 +912,13 @@ private:
         }
     }
 
-    void flush_pending_render_streams() {
+    void flush_pending_render_streams(WebSocket* only_ws = nullptr, const std::string& only_topic = "") {
         std::scoped_lock lock(pendingTopologicalMapMutex_, connectionMutex_);
-        topologicalMapFlushScheduled_ = false;
-        const auto send_latest = [this](const std::string& topic, std::string_view data,
+        if (!only_ws) topologicalMapFlushScheduled_ = false;
+        const auto send_latest = [this, only_ws](const std::string& topic, std::string_view data,
                                        std::uint64_t version, bool is_marker) {
             for (auto* ws : connections_) {
+                if (only_ws && ws != only_ws) continue;
                 auto& client = topologicalMapClientStates_[ws];
                 const bool enable_ack = !is_marker || client.enable_marker_ack;
                 if (enable_ack && client.awaiting_topics.count(topic)) continue;
@@ -924,6 +931,19 @@ private:
                 if (enable_ack) client.awaiting_topics.insert(topic);
             }
         };
+        // 選択時の再取得は対象パケットだけ参照。他レイヤー・他画面への再送なし。
+        if (!only_topic.empty()) {
+            const auto graph = pendingTopologicalMapPackets_.find(only_topic);
+            if (graph != pendingTopologicalMapPackets_.end() && graph->second.data) {
+                const auto& packet = graph->second;
+                send_latest(only_topic, std::string_view(reinterpret_cast<const char*>(packet.data->data()),
+                    packet.data->size()), packet.version, false);
+            }
+            const auto marker = pending_marker_packets_.find(only_topic);
+            if (marker != pending_marker_packets_.end() && marker->second.data)
+                send_latest(only_topic, *marker->second.data, marker->second.version, true);
+            return;
+        }
         // Graphを先に処理し、大きいMarker送信による待機を抑制。
         for (const auto& [topic, packet] : pendingTopologicalMapPackets_) {
             if (packet.data) send_latest(topic, std::string_view(
@@ -1131,36 +1151,52 @@ private:
         }
     }
 
-    void sendCurrentState(WebSocket* ws) {
+    void sendCurrentState(WebSocket* ws, const std::string& topic = "") {
         {
             std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
             auto& client = topologicalMapClientStates_[ws];
-            // 明示的な状態要求時の再送。反映待ちのMarkerは追加送信なし。
-            for (const auto& [topic, packet] : pending_marker_packets_) {
-                (void)packet;
+            // 反映待ちパケットの重複送信防止。選択時は対象Graph・Markerだけ再取得。
+            if (!topic.empty()) {
                 if (!client.awaiting_topics.count(topic)) client.sent_versions.erase(topic);
+            } else {
+                for (const auto& [tag, packet] : pending_marker_packets_) {
+                    (void)packet;
+                    if (!client.awaiting_topics.count(tag)) client.sent_versions.erase(tag);
+                }
             }
         }
-        ws->send(json({{"type", "stream.capabilities"}, {"marker_array_applied", true}}).dump(), uWS::OpCode::TEXT);
-        loop_->defer([this]() { flush_pending_render_streams(); });
+        if (topic.empty()) {
+            ws->send(json({{"type", "stream.capabilities"}, {"marker_array_applied", true}}).dump(), uWS::OpCode::TEXT);
+            loop_->defer([this]() { flush_pending_render_streams(); });
+        } else {
+            flush_pending_render_streams(ws, topic);
+        }
         std::lock_guard<std::mutex> l1(graphMutex_);
         std::lock_guard<std::mutex> l2(nodeFeatureMutex_);
         std::lock_guard<std::mutex> l3(clusterFeatureMutex_);
         std::lock_guard<std::mutex> l4(robotMutex_);
         std::lock_guard<std::mutex> l6(tfMutex_);
         std::lock_guard<std::mutex> l7(voxelMutex_);
-        for (auto& p : lastGraphPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
-        for (auto& p : lastNodeFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
-        for (auto& p : lastClusterFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
-        for (auto& p : lastRobotDescriptions_) ws->send(p.second, uWS::OpCode::TEXT);
-        for (auto& [tag, state] : voxelStreamStates_) {
+        const auto send_selected = [&topic](const auto& items, const auto& send) {
+            if (topic.empty()) {
+                for (const auto& [tag, value] : items) send(tag, value);
+            } else {
+                const auto found = items.find(topic);
+                if (found != items.end()) send(found->first, found->second);
+            }
+        };
+        send_selected(lastGraphPayloads_, [ws](const auto&, const auto& value) { ws->send(value, uWS::OpCode::TEXT); });
+        send_selected(lastNodeFeaturePayloads_, [ws](const auto&, const auto& value) { ws->send(value.dump(), uWS::OpCode::TEXT); });
+        send_selected(lastClusterFeaturePayloads_, [ws](const auto&, const auto& value) { ws->send(value.dump(), uWS::OpCode::TEXT); });
+        send_selected(lastRobotDescriptions_, [ws](const auto&, const auto& value) { ws->send(value, uWS::OpCode::TEXT); });
+        send_selected(voxelStreamStates_, [ws](const auto& tag, const auto& state) {
             if (state.latest) {
                 ws->send(
                     converter::to_json(state.latest, tag, state.sequence).dump(),
                     uWS::OpCode::TEXT);
             }
-        }
-        if (!lastStaticTfPayload_.empty()) ws->send(lastStaticTfPayload_, uWS::OpCode::TEXT);
+        });
+        if (topic.empty() && !lastStaticTfPayload_.empty()) ws->send(lastStaticTfPayload_, uWS::OpCode::TEXT);
     }
 
     void runServerLoop(int port) {

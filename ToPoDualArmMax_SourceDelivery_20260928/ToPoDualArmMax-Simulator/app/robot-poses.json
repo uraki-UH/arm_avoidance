@@ -1,0 +1,9 @@
+{
+  "home": {"L_joint2": -90, "R_joint2": 90},
+  "forward": {
+    "L_joint1": -70, "R_joint1": 70,
+    "L_joint2": -80, "R_joint2": 80,
+    "L_joint4": -40, "R_joint4": 40
+  },
+  "zero": {}
+}

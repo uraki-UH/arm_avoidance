@@ -100,8 +100,6 @@ export function SourceSelector({
             } else {
                 await subscribeSource(source.id);
             }
-
-            await refreshSources();
         } catch (err) {
             setError(err instanceof Error ? err.message : '入力の選択変更に失敗しました。');
         } finally {

@@ -184,6 +184,30 @@ def build_collision_pairs(spheres, centers, radii, is_arm, parents, link_groups)
             np.asarray(inter_arm_pairs, dtype=int).reshape(-1, 2))
 
 
+def calculate_link_transforms(positions, operations):
+    """単一姿勢・姿勢列のリンク変換。同じ接続順による一括計算。"""
+    positions = np.asarray(positions)
+    batch_shape = positions.shape[:-1]
+    transforms = np.empty((*batch_shape, len(operations)+1, 4, 4))
+    identity = np.eye(4)
+    transforms[..., 0, :, :] = identity
+    for parent, child, kind, fixed, axis, idx, multiplier, offset, cross, square in operations:
+        if idx < 0:
+            transforms[..., child, :, :] = transforms[..., parent, :, :]@fixed
+            continue
+        value = positions[..., idx]*multiplier+offset
+        motion = np.empty((*batch_shape, 4, 4))
+        motion[...] = identity
+        if kind in ('revolute', 'continuous'):
+            if batch_shape:
+                value = value[..., None, None]
+            motion[..., :3, :3] += np.sin(value)*cross+(1-np.cos(value))*square
+        elif kind == 'prismatic':
+            motion[..., :3, 3] = axis*value[..., None]
+        transforms[..., child, :, :] = transforms[..., parent, :, :]@fixed@motion
+    return transforms
+
+
 class robot_geometry:
     """外接球列による保守的なリンク形状。隣接・初期重複球を除いた自己干渉監視。"""
 
@@ -199,6 +223,22 @@ class robot_geometry:
         link_indices = self.link_indices
         self.sphere_links = np.array([link_indices[name] for name, _, _ in self.spheres])
         self.sphere_points = np.array([point for _, point, _ in self.spheres])
+        # 外接球用の固定リンク折畳み。可動関節・mimicは従来の接続順を維持。
+        self.center_operations = []
+        center_links = np.zeros(len(link_indices), dtype=int)
+        offsets = np.repeat(np.eye(4)[None], len(link_indices), axis=0)
+        for parent, child, kind, fixed, axis, idx, multiplier, offset, cross, square in self.operations:
+            folded = offsets[parent]@fixed
+            if idx < 0:
+                center_links[child] = center_links[parent]
+                offsets[child] = folded
+            else:
+                center_links[child] = len(self.center_operations)+1
+                self.center_operations.append((center_links[parent], center_links[child], kind, folded,
+                                               axis, idx, multiplier, offset, cross, square))
+        selected = offsets[self.sphere_links]
+        self.center_points = np.einsum('nij,nj->ni', selected[:, :3, :3], self.sphere_points)+selected[:, :3, 3]
+        self.center_links = center_links[self.sphere_links]
         self.radii = np.array([entry[2] for entry in self.spheres])
         self.is_arm = np.array([name.startswith(('L_', 'R_')) and 'shoulder' not in name
                                 for name, _, _ in self.spheres])
@@ -217,24 +257,12 @@ class robot_geometry:
             ('box', np.array([.70, 0, .20]), np.eye(3), np.array([.175, .4, .2])))
 
     def link_transforms(self, positions):
-        transforms = np.empty((len(self.operations)+1, 4, 4))
-        transforms[0] = np.eye(4)
-        for parent, child, kind, fixed, axis, idx, multiplier, offset, cross, square in self.operations:
-            if idx < 0:
-                transforms[child] = transforms[parent]@fixed
-                continue
-            value = positions[idx]*multiplier+offset
-            motion = np.eye(4)
-            if kind in ('revolute', 'continuous'):
-                motion[:3, :3] += np.sin(value)*cross+(1-np.cos(value))*square
-            elif kind == 'prismatic':
-                motion[:3, 3] = axis*value
-            transforms[child] = transforms[parent]@fixed@motion
-        return transforms
+        return calculate_link_transforms(positions, self.operations)
 
     def centers(self, positions):
-        selected = self.link_transforms(positions)[self.sphere_links]
-        return np.einsum('nij,nj->ni', selected[:, :3, :3], self.sphere_points)+selected[:, :3, 3]
+        """単一姿勢・姿勢列の外接球中心座標。"""
+        selected = calculate_link_transforms(positions, self.center_operations)[..., self.center_links, :, :]
+        return np.einsum('...nij,nj->...ni', selected[..., :3, :3], self.center_points)+selected[..., :3, 3]
 
     def clearance(self, positions, hand, elbow, radius):
         centers = self.centers(positions)

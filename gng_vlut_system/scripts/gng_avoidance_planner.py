@@ -51,6 +51,10 @@ def has_stable_return_clearance(state, has_clear_return):
 
 
 class gng_path_search:
+    def has_safe_endpoint(self, node_id):
+        """実行系に対応するGNG経由姿勢の判定。"""
+        return has_safe_node_neighbors(self.labels, self.adjacency, node_id)
+
     def has_safe_target_neighbors(self, positions):
         """復帰先の最寄りGNG姿勢と一次隣接の安全確認。"""
         angles = getattr(self, 'angles', {})
@@ -62,7 +66,7 @@ class gng_path_search:
             node_id = self.angle_node_ids[int(idx)]
         else:
             node_id = min(angles, key=lambda idx: float(np.linalg.norm(angles[idx]-target)))
-        return has_safe_node_neighbors(self.labels, self.adjacency, node_id)
+        return self.has_safe_endpoint(node_id)
 
     def has_safe_measured_neighbors(self):
         """Python計画の実測最寄り姿勢と一次隣接の安全確認。"""
@@ -75,7 +79,7 @@ class gng_path_search:
         elif self.angles:
             self.current_node_id = min(self.angles, key=lambda idx: float(np.linalg.norm(self.angles[idx]-current)))
         if self.current_node_id is not None:
-            self.has_safe_neighbors = has_safe_node_neighbors(self.labels, self.adjacency, self.current_node_id)
+            self.has_safe_neighbors = self.has_safe_endpoint(self.current_node_id)
         return self.has_safe_neighbors
 
     def pose(self, node_id):
@@ -123,18 +127,28 @@ class gng_path_search:
         distances = self.cloud_tree.query(centers[is_arm])[0]
         return float(np.min(distances-self.geometry.radii[is_arm]-self.cell_radius)), centers
 
+    def bridge_clearance(self, first, min_gap):
+        """実行系に対応する区間検査の距離下限。"""
+        return max(min_gap, self.config['min_clearance_th'])
+
     def can_bridge(self, first, second, min_gap):
-        # 実行監視の停止距離と経路検査下限の整合
-        min_gap = max(min_gap, self.config['min_clearance_th'])
+        min_gap = self.bridge_clearance(first, min_gap)
         count = max(2, int(np.ceil(np.max(np.abs(second-first))/self.config['max_bridge_step'])))
-        for ratio in np.linspace(0, 1, count+1)[1:]:
-            gap, centers = self.cloud_clearance(first+(second-first)*ratio)
-            if gap < min_gap:
-                return False
-            if not self.has_planning_clearance(centers):
-                if not self.geometry.has_inter_arm_clearance(centers, self.config.get('min_internal_clearance_th', .005)):
-                    self.has_inter_arm_rejection = True
-                return False
+        ratios = np.linspace(0, 1, count+1)[1:]
+        is_arm = self.geometry.is_arm
+        # 早期棄却を維持した小分けの一括座標変換・最近傍照合。検査姿勢の間隔は従来通り。
+        for start in range(0, count, 8):
+            poses = first+(second-first)*ratios[start:start+8, None]
+            batch = self.geometry.centers(poses)
+            distances = self.cloud_tree.query(batch[:, is_arm].reshape(-1, 3))[0].reshape(len(batch), -1)
+            gaps = np.min(distances-self.geometry.radii[is_arm]-self.cell_radius, axis=1)
+            for gap, centers in zip(gaps, batch):
+                if gap < min_gap:
+                    return False
+                if not self.has_planning_clearance(centers):
+                    if not self.geometry.has_inter_arm_clearance(centers, self.config.get('min_internal_clearance_th', .005)):
+                        self.has_inter_arm_rejection = True
+                    return False
         return True
 
     def has_planning_clearance(self, centers):
@@ -162,10 +176,11 @@ class gng_path_search:
         self.has_timed_out = False
         deadline = time.monotonic()+self.config['max_plan_sec']
         safe_ids = [idx for idx in self.angles if self.labels.get(idx) == 1]
-        safe_ids.sort(key=lambda idx: float(np.max(np.abs(self.pose(idx)-self.positions))))
+        safe_ids = heapq.nsmallest(self.config['max_entry_candidates'], safe_ids,
+                                  key=lambda idx: float(np.max(np.abs(self.pose(idx)-self.positions))))
         queue, costs, previous = [], {}, {}
         min_gap = max(self.config['min_cloud_clearance_th'], min(current_gap-0.005, self.config['target_clearance']))
-        for idx in safe_ids[:self.config['max_entry_candidates']]:
+        for idx in safe_ids:
             if time.monotonic() > deadline:
                 self.has_timed_out = True
                 return []
@@ -185,7 +200,7 @@ class gng_path_search:
             if cost != costs[idx]:
                 continue
             pose = self.pose(idx)
-            if (has_safe_node_neighbors(self.labels, self.adjacency, idx)
+            if (self.has_safe_endpoint(idx)
                     and self.cloud_clearance(pose)[0] >= self.config['target_clearance']):
                 path = []
                 while idx is not None:
@@ -211,6 +226,10 @@ class gng_path_search:
 class gng_avoidance_policy(gng_path_search):
     motion_components = None
 
+    def create_path_search(self):
+        """非同期探索用の独立した計画状態。"""
+        return gng_path_search()
+
     def execute_motion(self, action, home, step):
         """計画器の依存注入と、部品専用の姿勢コピーによる呼出し。"""
         if self.motion_components is None:
@@ -233,7 +252,7 @@ class gng_avoidance_policy(gng_path_search):
         """退避経路の探索・再検査・次目標生成。"""
         has_safe_neighbors = self.motion_flags.has_safe_neighbors
         if self.path and (any(self.labels.get(idx) != 1 for idx in self.path)
-                          or not has_safe_node_neighbors(self.labels, self.adjacency, self.path[-1])):
+                          or not self.has_safe_endpoint(self.path[-1])):
             self.path = []
         if not self.path:
             if len(self.coordination_source_indices):
@@ -245,7 +264,7 @@ class gng_avoidance_policy(gng_path_search):
                 if now_sec < self.next_plan_sec:
                     return (*self.refine_target(step), False)
                 self.next_plan_sec = now_sec+1.0
-                snapshot = gng_path_search()
+                snapshot = self.create_path_search()
                 for name in ('geometry', 'config', 'cloud_tree', 'cell_radius', 'arm_indices', 'active_angle_indices'):
                     setattr(snapshot, name, getattr(self, name))
                 # 計画中の環境形状差替えを隔離。不変のURDF配列は共有
@@ -266,20 +285,25 @@ class gng_avoidance_policy(gng_path_search):
                 return (*self.refine_target(step), False)
             self.num_plans += 1
             if (any(self.labels.get(idx) != 1 for idx in self.path)
-                    or not has_safe_node_neighbors(self.labels, self.adjacency, self.path[-1])):
+                    or not self.has_safe_endpoint(self.path[-1])):
                 self.path = []
                 return self.positions.copy(), True, False
             if not self.can_bridge(self.positions, self.pose(self.path[0]), self.config['min_cloud_clearance_th']):
                 self.path = []
                 return (*self.refine_target(step), False)
         target = self.pose(self.path[0])
-        if np.max(np.abs(target-self.positions)) < .05:
+        if step is None:
+            # 経由姿勢は到達まで保持。終点のVLUT再検査情報も経路内に保持。
+            while len(self.path) > 1 and np.max(np.abs(target-self.positions)) <= self.max_home_error_th:
+                self.path.pop(0)
+                target = self.pose(self.path[0])
+        elif np.max(np.abs(target-self.positions)) < .05:
             self.path.pop(0)
         return target, True, True
 
 
     def refine_target(self, step):
-        if not self.config['enable_local_refinement']:
+        if step is None or not self.config['enable_local_refinement']:
             return self.positions.copy(), False
         if getattr(self, 'qp', None) is not None:
             # 出力直前のQPで近傍表面からの退避方向を決定。
@@ -304,6 +328,10 @@ class gng_avoidance_policy(gng_path_search):
         self.num_local_steps += int(np.max(np.abs(best-self.positions)) > 1e-5)
         return best, bool(np.isfinite(best_cost))
 
+    def select_waypoint(self):
+        """制御刻み幅で切断しない経由姿勢。時間補間・速度制限は実行系の管轄。"""
+        return self.select_target(None, None, None)
+
     def select_target(self, _hand, _elbow, step):
         # 障害物の真値位置は計画に不使用。自己除去後の観測点とVLUT状態のみの利用
         if getattr(self, 'is_stop_latched', False):
@@ -314,7 +342,7 @@ class gng_avoidance_policy(gng_path_search):
             result = self.execute_motion(select_motion(self.motion_flags), self.positions, step)
             return result.target, result.has_candidate
         self.cloud_gap, _ = self.cloud_clearance(self.positions)
-        if self.cloud_gap < self.config['min_cloud_clearance_th']:
+        if step is not None and self.cloud_gap < self.config['min_cloud_clearance_th']:
             has_stable_return_clearance(self, False)
             self.motion_flags = motion_flags(has_valid_input=False)
             self.clear_plan()
@@ -359,7 +387,7 @@ class gng_avoidance_policy(gng_path_search):
         return self.constrain_motion(result, step, has_safe_neighbors, can_return)
 
     def constrain_motion(self, result: motion_result, step, has_safe_neighbors, can_return):
-        """生成部品によらない対象関節・速度・衝突の共通制約。"""
+        """対象関節と経路の共通検査。刻み幅指定時だけの目標変位制限。"""
         if not result.has_candidate:
             return result.target, False
         target = np.asarray(result.target, dtype=float)
@@ -373,8 +401,10 @@ class gng_avoidance_policy(gng_path_search):
         if np.array_equal(target, self.positions):
             return target, True
         delta = target-self.positions
-        target = self.positions+delta*min(1.0, step/max(float(np.max(np.abs(delta))), 1e-9))
-        if ((has_safe_neighbors and not can_return and self.cloud_clearance(target)[0] < min(self.cloud_gap, self.config['target_clearance'])-.0002)
+        if step is not None:
+            target = self.positions+delta*min(1.0, step/max(float(np.max(np.abs(delta))), 1e-9))
+        if ((step is not None and has_safe_neighbors and not can_return
+             and self.cloud_clearance(target)[0] < min(self.cloud_gap, self.config['target_clearance'])-.0002)
                 or not self.can_bridge(self.positions, target, self.config['min_cloud_clearance_th'])):
             self.path = []
             return self.refine_target(step)

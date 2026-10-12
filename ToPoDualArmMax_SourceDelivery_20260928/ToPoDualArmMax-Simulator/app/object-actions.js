@@ -45,7 +45,7 @@ export function install_object_actions(environment){
  };
  physics.querySelector('[data-action=open-physics]').onclick=()=>{
   if(target_robot&&environment.physics_panel?.robot()===target_robot){
-   environment.select(null);document.querySelector('[data-panel=physics]').click();$('physics-enabled').focus();
+   environment.select(null);document.querySelector('[data-panel=physics]').click();$('physics-start').focus();
   }else if(target&&environment.items.includes(target)){environment.select(target.id);document.querySelector('[data-panel=physics]').click();}
   hide_menu();
  };

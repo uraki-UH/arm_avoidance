@@ -33,7 +33,7 @@ def origin(element, mujoco):
 
 
 class PhysicsRobot:
-    def __init__(self, root, base, config, mujoco):
+    def __init__(self, root, base, config, mujoco, fixed_joint_names=()):
         import numpy as np
         self.mujoco = mujoco
         model_name = config.get('model')
@@ -49,10 +49,11 @@ class PhysicsRobot:
         locks = config.get('locked_joints', [])
         if not isinstance(locks, list) or any(x not in self.independent for x in locks):
             raise ValueError('固定対象の関節名が不正です')
-        self.locks = tuple(locks)
+        self.locks = tuple(dict.fromkeys([*locks, *(name for name in sorted(fixed_joint_names) if name in self.independent)]))
         self.initial = MappingProxyType(self.validate(config.get('pose', {})))
         self._targets = dict(self.initial)
         self._commands = dict(self.initial)
+        self.position_gain, self.velocity_gain = 40., 3.
         asset = et.SubElement(root, 'asset')
         equality = et.SubElement(root, 'equality')
         actuator = et.SubElement(root, 'actuator')
@@ -114,7 +115,10 @@ class PhysicsRobot:
             else:
                 effort = float(joint.find('limit').get('effort'))
                 self.max_effort[name] = effort
-                et.SubElement(actuator, 'general', name=name, joint=name, gainprm='40', biastype='affine', biasprm='0 -40 -3', forcelimited='true', forcerange=f'{-effort} {effort}')
+                et.SubElement(actuator, 'general', name=name, joint=name,
+                              gainprm=text([self.position_gain]), biastype='affine',
+                              biasprm=text([0, -self.position_gain, -self.velocity_gain]),
+                              forcelimited='true', forcerange=f'{-effort} {effort}')
 
     @property
     def targets(self) -> Mapping[str, float]:
@@ -169,9 +173,14 @@ class PhysicsRobot:
         for name, idx, dof, max_velocity in self.control_entries:
             max_step = max_velocity * timestep
             delta = self._targets[name]-self._commands[name]
-            self._commands[name] += min(max(delta, -max_step), max_step)
-            # トルク制限内のPDと重力・コリオリ補償。目標速度の制限と実速度は別
-            self.data.ctrl[idx] = self._commands[name]+self.data.qfrc_bias[dof]/40
+            step = min(max(delta, -max_step), max_step)
+            self._commands[name] += step
+            position = self.data.qpos[self.model.jnt_qposadr[self.ids[name]]]
+            velocity = step/timestep+self.position_gain/self.velocity_gain*(self._commands[name]-position)
+            velocity = min(max(velocity, -max_velocity), max_velocity)
+            # URDF速度上限内の位置・速度PDと重力・コリオリ補償。駆動力上限はURDFのeffort。
+            self.data.ctrl[idx] = position+(
+                self.velocity_gain*velocity+self.data.qfrc_bias[dof])/self.position_gain
 
     def state(self):
         return {name: float(self.data.qpos[idx]) for name, idx in self.state_entries}

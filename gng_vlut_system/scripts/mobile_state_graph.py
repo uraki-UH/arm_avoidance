@@ -199,6 +199,7 @@ def load_or_build(path, config, model, enable_rebuild=False):
         with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as stream:
             temporary = Path(stream.name)
             json.dump(graph, stream, allow_nan=False, separators=(',', ':'))
+        os.chmod(temporary, 0o644)
         os.replace(temporary, path)
     finally:
         if temporary is not None and temporary.exists():

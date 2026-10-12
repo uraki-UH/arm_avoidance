@@ -28,6 +28,7 @@ from launch_config import (
     roi_filter_parameters,
     world_index_parameters,
     environment_danger_inflation,
+    static_tf_arguments,
 )
 
 def _as_launch_value(value):
@@ -236,13 +237,7 @@ def _shared_world_index_actions(
                     package="tf2_ros",
                     executable="static_transform_publisher",
                     name=f"shared_world_index_static_tf_{consumer_idx}",
-                    arguments=[
-                        str(consumer["static_tf_x"]), str(consumer["static_tf_y"]),
-                        str(consumer["static_tf_z"]), str(consumer["static_tf_yaw"]),
-                        str(consumer["static_tf_pitch"]), str(consumer["static_tf_roll"]),
-                        consumer["static_tf_parent_frame"],
-                        consumer["static_tf_child_frame"],
-                    ],
+                    arguments=static_tf_arguments(consumer, consumer["name"], consumer["static_tf_child_frame"]),
                 )
             )
         actions.append(
@@ -358,24 +353,12 @@ def _launch_setup(context, *_args, **_kwargs):
     actions = []
 
     if _is_enabled(_value(environment, "enable_static_tf", False)):
-        static_parent_frame = _value(environment, "static_tf_parent_frame", "world")
-        static_child_frame = _namespaced_frame(
-            robot_name, _value(environment, "static_tf_child_frame", base_frame))
         actions.append(
             Node(
                 package="tf2_ros",
                 executable="static_transform_publisher",
                 name="environment_to_vlut_static_tf",
-                arguments=[
-                    _as_launch_value(_value(environment, "static_tf_x", 0.0)),
-                    _as_launch_value(_value(environment, "static_tf_y", 0.0)),
-                    _as_launch_value(_value(environment, "static_tf_z", 0.0)),
-                    _as_launch_value(_value(environment, "static_tf_yaw", 0.0)),
-                    _as_launch_value(_value(environment, "static_tf_pitch", 0.0)),
-                    _as_launch_value(_value(environment, "static_tf_roll", 0.0)),
-                    _as_launch_value(static_parent_frame),
-                    static_child_frame,
-                ],
+                arguments=static_tf_arguments(environment, robot_name, base_frame),
             )
         )
 

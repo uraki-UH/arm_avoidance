@@ -25,21 +25,22 @@ cb
 ## 入力トピックの指定
 
 ```bash
-ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input_topic:=/lidar_points
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input:=/livox/lidar
 ```
 
-`input_topic`の明示指定は、センサ別YAMLの`input.topic_names`より優先。
+`input`の明示指定は、センサ別YAMLの`input.topic_names`より優先。
 省略時はYAMLのトピック配列をそのまま使用。保存用元点群の`source_point_cloud_topic:=auto`も同じ指定に追従。
 [パラメータ適用順の修正と起動検証](../gng_vlut_system/docs/releases/2026-09-23_gng_input_topic_override.md)。
 
-点群のトピックと座標系は別設定。`input_topic`だけの変更では、YAMLの`input.base_frame_id`も維持。
-変換先を変更する場合は`base_frame_id`を指定。この明示指定は`input.local_coordinates: false`も適用。
+launch引数は`input_topic`から`input`、`base_frame_id`から`base_tf`へ改名。YAMLのキー名は変更なし。
+点群のトピックと座標系は別設定。`input`だけの変更では、YAMLの`input.base_frame_id`も維持。
+変換先を変更する場合は`base_tf`を指定。この明示指定は`input.local_coordinates: false`も適用。省略時はYAML設定を維持。
 ブラウザシミュレータの`/sim/lidar/points`は、MID-360の点を`base_footprint`座標で配信。
 Viewerとシミュレータの共通基準は`world`。AT128用の学習パラメータで`world`座標へ変換する起動例:
 
 ```bash
 ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml \
-  input_topic:=/sim/lidar/points base_frame_id:=world
+  input:=/sim/lidar/points base_tf:=world
 ```
 
 入力と出力の座標系が同じ場合はTF不要。異なる場合は、両座標系を接続するTFが必要。
@@ -47,7 +48,7 @@ TF取得失敗時は、その入力組の学習・出力を抑止。変換前の
 `input.enable_strict_transform: true`では点群取得時刻、既定の`false`では通常は最新のTFを使用。
 CPUの観測支持機能、または自己点除外が有効な場合は、`false`でも点群取得時刻のTFを使用。
 シミュレータの`world → base_footprint`のTF配信が必要。Viewerの表示基準は`world`。
-`base_frame_id:=base_footprint`はロボット基準での処理を意図する場合の指定であり、Viewerの基準変更ではない。
+`base_tf:=base_footprint`はロボット基準での処理を意図する場合の指定であり、Viewerの基準変更ではない。
 
 getBase2LidarFrameのTF取得失敗メッセージ`Could not transform ...`はDEBUGログ。通常起動での警告行の割込みなし。ノード直接起動時の`--ros-args --log-level ais_gng_node:=debug`で診断可能。[表示変更・検証](../gng_vlut_system/docs/releases/2026-09-30_gng_tf_log.md)。
 
@@ -227,7 +228,7 @@ ais_gng_node:
 起動コマンドは通常どおりとする。
 
 ```bash
-ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml input_topic:=/semantic_points
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml input:=/semantic_points
 ```
 
 - `NONPLANE_COMPONENT_NONE` (`4294967295`): 平面所属node、または最小node数未満の成分

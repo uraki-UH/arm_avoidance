@@ -28,7 +28,7 @@
 <div class="solver-status"><div><i id="ik-dot"></i><span id="ik-state">待機中</span></div><span id="ik-error">— mm</span></div>
 <div class="actual-position" id="actual-position">TCP —</div>
 <div class="section-label">グリッパー <output id="grip-value">0%</output></div><div class="grip-row"><span>閉</span><input id="grip" type="range" min="0" max="100" value="0" aria-label="グリッパー開度"><span>開</span></div>
-<div class="section-label">ポーズ <span>両腕</span></div><div class="preset-row"><button data-pose="home">ホーム</button><button data-pose="ready">作業姿勢</button><button data-pose="spread">展開</button></div>
+<div class="section-label">ポーズ <span>両腕</span></div><div class="preset-row"><button data-pose="home">ホーム</button><button data-pose="ready">作業姿勢</button><button data-pose="spread">展開</button><button data-pose="forward">前方・肘曲げ</button></div>
 <details id="body-panel" open><summary>首・腰の操作 <span>3軸</span></summary><div id="body-controls"></div><button id="reset-body" class="body-reset">首・腰を 0° に戻す</button></details>
 <div id="joint-controls"></div>
 <details><summary>シーンと描画 <span>PBR</span></summary><div class="settings"><label>描画品質<select id="quality"><option value="standard" selected>標準</option><option value="high">高精細</option></select></label><label><span>グリッド</span><input id="show-grid" type="checkbox"></label><label><span>手先の軌跡</span><input id="show-trails" type="checkbox"></label><label><span>マーカーを表示</span><input id="show-markers" type="checkbox" checked></label><label>露出<input id="exposure" type="range" min="0.5" max="1.8" value="0.9" step="0.01"></label></div></details>

@@ -107,6 +107,14 @@ class gng_inputs:
         self.stamps[name] = stamp
         return True
 
+    def update_graph(self, name, **fields):
+        """受信単位のグラフ差替えと固定ノードIDの整合照合。"""
+        graph = dict(self.graphs.get(name, {}), **fields)
+        if 'ids' in fields or 'angles' in fields:
+            graph['has_matching_ids'] = ('ids' in graph and 'angles' in graph
+                                         and set(graph['ids']) == set(graph['angles']))
+        self.graphs[name] = graph
+
     def on_graph(self, name, message):
         ids, edges = tuple(node.id for node in message.nodes), tuple(message.edges)
         if (message.header.frame_id != self.graph_frame or len(ids) != self.models[name]['num_nodes']
@@ -123,7 +131,7 @@ class gng_inputs:
         for first, second in zip(edges[::2], edges[1::2]):
             adjacency[ids[first]].append(ids[second])
             adjacency[ids[second]].append(ids[first])
-        self.graphs[name] = dict(old, ids=ids, adjacency=adjacency, hash=topology)
+        self.update_graph(name, ids=ids, adjacency=adjacency, hash=topology)
 
     def on_features(self, name, message):
         old = self.graphs.get(name, {})
@@ -134,8 +142,8 @@ class gng_inputs:
         if (len(angles) != self.models[name]['num_nodes'] or len(angles) != len(message.features)
                 or any(value.shape != (num,) or not np.all(np.isfinite(value)) for value in angles.values())):
             raise ValueError('GNG関節角配列の不一致: '+name)
-        self.graphs[name] = dict(old, angles=angles, angle_node_ids=tuple(angles),
-                                 angle_tree=cKDTree(np.array(list(angles.values()))))
+        self.update_graph(name, angles=angles, angle_node_ids=tuple(angles),
+                          angle_tree=cKDTree(np.array(list(angles.values()))))
 
     def on_states(self, name, message):
         old = self.graphs.get(name, {})
@@ -146,7 +154,7 @@ class gng_inputs:
                 or any(value not in (1, 2, 3) for value in message.labels)):
             raise ValueError('VLUT状態とGNGトポロジーの不一致: '+name)
         if self.accept_stamp(name, message):
-            self.graphs[name] = dict(old, labels=dict(zip(message.node_ids, message.labels)), received=time.monotonic())
+            self.update_graph(name, labels=dict(zip(message.node_ids, message.labels)), received=time.monotonic())
 
     def on_voxels(self, name, message):
         from rclpy.time import Time
@@ -164,9 +172,6 @@ class gng_inputs:
                                                Time.from_msg(message.header.stamp)).transform
             transform[:3, :3] = Rotation.from_quat([tf.rotation.x, tf.rotation.y, tf.rotation.z, tf.rotation.w]).as_matrix()
             transform[:3, 3] = [tf.translation.x, tf.translation.y, tf.translation.z]
-        if not len(message.data):
-            self.cloud = None
-            return
         points = voxel_centers(message, transform)
         self.cloud = (cKDTree(points), message.voxel_size*np.sqrt(3)/2, time.monotonic())
 
@@ -180,8 +185,7 @@ class gng_inputs:
                 missing.append('自己除去後の環境ボクセル')
             for name in self.models:
                 graph = self.graphs.get(name, {})
-                if ('angles' not in graph or 'labels' not in graph
-                        or set(graph.get('ids', ())) != set(graph.get('angles', {}))
+                if ('labels' not in graph or not graph.get('has_matching_ids', False)
                         or now-graph.get('received', 0) > self.max_age_sec):
                     missing.append(name+' GNG/VLUT')
             return (None, '入力待機: '+', '.join(missing)) if missing else ((self.cloud, dict(self.graphs)), '')

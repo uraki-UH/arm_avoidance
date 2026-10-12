@@ -5,23 +5,39 @@ const state_outputs=Object.freeze(['joints','base','tf']);
 // 点群取得・描画周期から独立した関節通信。受信姿勢は最新一件のみ保持
 export class RosJointStream {
  constructor(panel){
-  this.panel=panel;this.socket=null;this.latest=null;this.is_ready=false;this.state_hz=100;this.next_snapshot_ms=0;
+  this.panel=panel;this.socket=null;this.latest=null;this.is_ready=false;this.state_hz=100;this.next_snapshot_ms=0;this.motion_sample=null;this.is_simulation_input=false;
   const controls=document.createElement('section');
   controls.innerHTML=`<h3>ロボット状態の送受信</h3><label>Hz <input id="ros-joints-hz" type="number" min="1" max="200" value="100"></label><label class="field-label">受信 JointState トピック<input id="ros-joints-topic" value="/joint_states"></label><label><input id="ros-state-all" type="checkbox"> ロボット状態をROSへ送信（関節角・配置・TF）</label><label><input id="ros-joints-receive" type="checkbox"> ROSの現在関節角を追従表示</label><pre id="ros-joints-status">通信OFF</pre>`;
   $('ros-receive-panel').before(controls);
   for(const id of ['ros-state-all','ros-joints-hz','ros-joints-topic','ros-joints-receive'])$(id).addEventListener('change',()=>{
+   if(id==='ros-joints-topic')this.is_simulation_input=false;
    if(id==='ros-state-all'&&$(id).checked&&!this.enable_duplex)$('ros-joints-receive').checked=false;
    if(id==='ros-joints-receive'&&$(id).checked){if(!this.enable_duplex)$('ros-state-all').checked=false;panel.active=null;$('ros-command-enable').checked=false;}
    this.connect();
   });
+  $('ros-endpoint').addEventListener('change',()=>{this.is_simulation_input=false;});
  }
  close(){
-  const socket=this.socket;this.socket=null;if(socket)socket.terminate();this.latest=null;this.is_ready=false;this.next_snapshot_ms=0;
+  const socket=this.socket;this.socket=null;if(socket)socket.terminate();this.latest=null;this.motion_sample=null;this.is_ready=false;this.next_snapshot_ms=0;
   this.panel.set_connection_state('joints',false);
  }
  // 関節角・配置・TFの一括送信。同一スナップショットと共通ROS時刻
  outputs(){return $('ros-state-all').checked?state_outputs:[];}
  stop(){if(this.panel.rgbd.robot.pose_source===pose_sources.leader)window.simulator?.physics_panel?.hold_leader();this.close();$('ros-state-all').checked=false;$('ros-joints-receive').checked=false;$('ros-joints-status').textContent='通信OFF';}
+ // CLIなどの外部シミュレーション実測への表示接続。送信・ブラウザ内の力学はOFF。
+ receive_topic(topic,endpoint,is_simulation_input=false){
+  if(this.follow_config)throw Error('共通接続構成を解除してから、外部シミュレーションへ接続してください');
+  this.panel.stop();window.simulator?.physics_panel?.stop();
+  if(endpoint){$('ros-endpoint').value=endpoint;$('ros-endpoint').dispatchEvent(new Event('change'));}
+  this.is_simulation_input=is_simulation_input;
+  $('robot-pose-source').value=pose_sources.ros;$('ros-joints-topic').value=topic;
+  $('ros-state-all').checked=false;$('ros-joints-receive').checked=true;this.connect();
+ }
+ // モデル・入力元・受信鮮度を一致させた、表示ロボットの実測サンプル。
+ get_motion_sample(now_ms=performance.now()){
+  const sample=this.motion_sample;
+  return this.is_ready&&$('ros-joints-receive').checked&&this.panel.rgbd.robot.pose_source===pose_sources.ros&&sample?.model===this.panel.rgbd.robot.modelId&&now_ms-sample.received_ms<=1000?sample:null;
+ }
  connect(){
   this.close();
   this.panel.instance_panel.set_source($('ros-joints-receive').checked?($('robot-pose-source').value===pose_sources.leader?pose_sources.leader:pose_sources.ros):pose_sources.simulator);
@@ -53,6 +69,10 @@ export class RosJointStream {
      // 直接表示のグリッパーだけの開閉端飽和。その他の可動域外関節は前回表示の保持
      if(!is_leader)$('ros-joints-status').textContent=invalid_names.length?`可動域外・表示更新なし: ${invalid_names.join(', ')} / 他の関節は受信継続`:`接続済み · 上限 ${hz} Hz`;
      this.latest=Object.keys(pose).length?pose:null;
+     if(this.latest){
+      const motion=Object.fromEntries(['velocity','effort'].map(field=>[field,Object.fromEntries(Object.keys(pose).filter(name=>typeof data.motion?.[field]?.[name]==='number'&&Number.isFinite(data.motion[field][name])).map(name=>[name,data.motion[field][name]]))]));
+      this.motion_sample={model,pose,motion,is_simulation_input:this.is_simulation_input,received_ms:performance.now(),stamp_sec:data.stamp_sec};
+     }
      this.latest_stamp_sec=data.stamp_sec;
      if(is_leader){const physics=window.simulator?.physics_panel;if(physics?.set_leader_target(data.pose))physics.leader_stamp_sec=data.stamp_sec;this.latest=null;}
     }

@@ -243,6 +243,9 @@ nearest_node_index::nearest_node_index(int num_dims) {
   case 3:
     impl_ = std::make_unique<impl::fixed_impl<3>>();
     break;
+  case 6:
+    impl_ = std::make_unique<impl::fixed_impl<6>>();
+    break;
   case 7:
     impl_ = std::make_unique<impl::fixed_impl<7>>();
     break;

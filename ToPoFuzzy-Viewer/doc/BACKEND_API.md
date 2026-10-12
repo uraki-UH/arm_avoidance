@@ -127,6 +127,10 @@ ROSメッセージ形式の変更なし。[ラベル値と設定移管](../commo
 - `sources.setActive` (`{ sourceId, active, removeLayer? }`)
   - `active=false, removeLayer=true` stops the subscription and emits stream deletion events for the corresponding scene layer.
 
+Topics選択後の完全状態取得は`{"type":"request.state","topic":"/対象トピック"}`で対象を限定。
+ボクセル差分欠落時も同じ方式。選択変更時の一覧はサーバー通知を利用し、追加の`sources.list`呼出しなし。
+`topic`省略時は従来の全状態取得。詳細は[トピック限定の状態再取得](../common/ws_protocol_v2.md#トピック限定の状態再取得)を参照。
+
 配信元の停止時は旧Scene Layersと送信待ちを削除し、Streamsの選択を維持。
 可視化設定は削除せず、同じブラウザセッション内の同名トピック復帰時に再適用。
 点群の表示ON/OFF・透明度・手動変換も保持し、旧点群バッファだけを破棄。

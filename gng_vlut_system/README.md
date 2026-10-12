@@ -112,6 +112,41 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
   ```
   Docker内でGUIが不要なら `gui:=false` にできます。
 
+### FuzzBotの移動状態GNG
+
+FuzzBotの初期位置・前方を原点とする状態 `(x, y, 相対yaw, v, omega)` を学習し、位置・前方向・速度をViewerへ配信します。設定は[config/fuzzbot.yaml](config/fuzzbot.yaml)の `mobile_gng` と `motion_graph`。既定は6万状態・1,000ノード・20万反復、1軌跡は最大16区間×0.5秒です。平坦床・差動二輪・横滑りなしの運動モデルで、車輪速度と加減速制限を適用します。
+
+```bash
+# 初回学習・保存済みモデルの読込・FuzzBot本体の同時表示
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=fuzzbot.yaml
+
+# 設定変更後の再学習専用
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=fuzzbot.yaml \
+  enable_rebuild:=true enable_build_only:=true
+
+# 相対yaw −15～15°の状態表示
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=fuzzbot.yaml \
+  min_display_yaw_deg:=-15.0 max_display_yaw_deg:=15.0
+```
+
+ViewerまたはSimulatorの「ROS Scene Layers」で `/fuzzbot/state_gng/map` を選択し、対象レイヤーの `Normals` を有効にします。このトピックのnormalは `(cos yaw, sin yaw, 0)` の車体前方で、環境表面の法線とは異なる属性です。速度は同じ向きにvを掛けたモデル値で、GNG状態領域のcluster velocityへ配信します。`state_gng/data` は5次元状態・単位・学習属性、`state_gng/node_features` は代表姿勢です。
+
+`gng_viewer_bridge.launch.py`は機体YAMLの`mobile_gng`設定に応じて状態GNGを同時起動します。`enable_mobile_gng:=false`で本体表示のみ。双腕設定では既定OFF。
+
+モデルは `gng_results/fuzzbot/state_gng.json`。`model_path` で変更可能です。yawはcos・sinへ埋め込み、学習の距離は位置・向き・速度・角速度の各scaleで換算します。学習中心に近い重複なしの実サンプルを代表状態として保存します。GNG学習は共通C++エンジンと6次元の厳密近傍索引を使用します。
+
+`origin_x`、`origin_y`、`origin_yaw_deg` は表示原点の配置のみで、学習済み状態を変更しません。yaw選択は相対角で、`min_display_yaw_deg` が `max_display_yaw_deg` より大きい場合は±180°をまたぐ区間です。`min_display_speed`／`max_display_speed`、`min_display_angular_speed`／`max_display_angular_speed` で状態を選択可能。これらの表示範囲・原点は `/fuzzbot/mobile_gng` のROSパラメータでも変更可能です。選択後の辺は表示ノード配列へ参照を付け替えます。
+
+ROSなしの確認用HTMLは次のコマンドで生成できます。
+
+```bash
+ros2 run gng_vlut_system mobile_gng_preview.py \
+  /ros2_ws/src/gng_vlut_system/gng_results/fuzzbot/state_gng.json \
+  /ros2_ws/src/log/artifacts/fuzzbot_state_gng/preview.html
+```
+
+学習済み辺は状態空間のGNG近傍で、走行可能な制御入力を保証する辺ではありません。車体・掃引占有のVLUT、環境衝突判定、odomへの自動追従、経路探索と実機走行は未接続です。既存の `mobile_state_graph.launch.py` が生成する運動制約付き遷移グラフは別データとして保持します。
+
 ### 双腕学習・Viewerの既定モデル
 
 モデル指定を省略した場合は`topo_dual_arm_max_long`を使用します。

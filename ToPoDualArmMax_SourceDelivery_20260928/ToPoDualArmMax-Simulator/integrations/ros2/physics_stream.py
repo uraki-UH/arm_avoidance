@@ -51,7 +51,11 @@ class physics_session:
                     not math.isfinite(stamp) or not 0 <= time.time()-stamp < self.max_leader_age_sec or
                     (self.leader_stamp_sec is not None and stamp < self.leader_stamp_sec)):
                 return
-        self.scene.robot.set_targets(value['joints'])
+        avoidance = self.scene.avoidance
+        if avoidance is not None and hasattr(avoidance, 'set_targets'):
+            avoidance.set_targets(value['joints'])
+        else:
+            self.scene.robot.set_targets(value['joints'])
         if self.enable_leader_follow:
             self.leader_stamp_sec = stamp
 
@@ -95,7 +99,7 @@ class physics_session:
         return self.closed_future
 
 
-def physics_handler(origins, clients):
+def physics_handler(origins, clients, node=None, on_release=None):
     class Handler(tornado.websocket.WebSocketHandler):
         def check_origin(self, origin):
             return origin in origins
@@ -119,7 +123,8 @@ def physics_handler(origins, clients):
             try:
                 value = json.loads(raw)
                 if value['type'] == 'start' and self.session is None:
-                    session = self.session = physics_session(PhysicsScene)
+                    scene_factory = lambda bodies, robot, avoidance: PhysicsScene(bodies, robot, avoidance, ros_node=node)
+                    session = self.session = physics_session(scene_factory)
                     has_started = await asyncio.wrap_future(session.executor.submit(session.start, value))
                     if not has_started or self.session is not session:
                         return
@@ -155,7 +160,9 @@ def physics_handler(origins, clients):
                 self.timer.stop()
             self.is_ready = False
             if self.session is not None:
-                self.session.close()
+                future = self.session.close()
+                if on_release is not None:
+                    on_release(future)
                 self.session = None
             clients.discard(self)
     return Handler

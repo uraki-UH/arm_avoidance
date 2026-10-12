@@ -43,3 +43,20 @@
       yaw_step_deg: 15.0 # 向き代表点の間引き幅[deg]
       speed_step: 0.1 # 速度代表点の間引き幅[m/s]
       angular_speed_step: 0.3 # 角速度代表点の間引き幅[rad/s]
+
+    # 原点・前方を基準とした移動状態GNG。近傍辺の走行可否・衝突判定は対象外。
+    mobile_gng:
+      max_nodes: 1000
+      num_samples: 60000
+      max_iter: 200000
+      insert_interval: 100
+      max_edge_age: 100
+      max_rollout_steps: 16
+      seed: 42
+      learn_rate_winner: 0.08
+      learn_rate_neighbor: 0.008
+      # 学習距離の単位換算。位置[m]、yawのcos・sin、速度[m/s]、角速度[rad/s]。
+      position_scale: 0.5
+      yaw_scale: 1.0
+      speed_scale: 0.4
+      angular_speed_scale: 1.2

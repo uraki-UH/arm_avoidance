@@ -12,6 +12,8 @@ bash scripts/open_dual_arm_nvidia.sh long
 
 サーバー・ROS/物理ブリッジの起動確認後にGPU用ブラウザを開きます。未起動のサービスはDocker内で背景起動し、既存サービスは再利用します。ブラウザ終了後もバックエンドは継続します。新規起動時に表示する `docker compose exec gng_cpu kill -INT <PID>` で、その起動が管理するサービスだけを停止できます。ログはコンテナ内の `/tmp/topo-simulator-<UID>-8877-8879.log`。
 
+ROS環境は共通の`start_ros.sh`で読込み。ROS本体に加え、Dockerでは`/ros2_ws/install/local_setup.bash`から独自メッセージ・GNGノードを使用します。`pointcloud_bridge.py`の単体起動も同じ環境入口を経由します。
+
 Docker内で操作中ならアプリのルートで `bash start_ros.sh`。Node.js 22以上とROS Humble環境が必要です。
 アプリは `http://127.0.0.1:8877/?model=long`、ROS送信先は `http://127.0.0.1:8879`。
 ブラウザのMID-360有効化・連続取得開始と「ROS2連携 → 連続送信」は手動です。
@@ -191,7 +193,7 @@ Humble実受信で848×480全画素の対応・無効値・共通時刻・既存
 
 ### MuJoCoと点群
 
-回避オプションのOSCBFは[専用フォルダの導入・検証手順](oscbf_avoidance/README.md)を参照。既定は回避なし。
+回避は「なし／GNG-VLUT／OSCBF」から選択。GNG-VLUTは下記のMID-360 bag接続、OSCBFは[専用フォルダの導入・検証手順](oscbf_avoidance/README.md)を参照。既定は回避なし。
 
 一括起動後、「環境 → MuJoCo」で使用します。Python依存は `mujoco==3.3.7`、Dockerfileにも追加済みです。
 未導入の場合はコンテナ内で `python3 -m pip install mujoco==3.3.7`。更新後は `bash start_ros.sh --restart` とブラウザ再読み込みです。
@@ -207,7 +209,7 @@ Humble実受信で848×480全画素の対応・無効値・共通時刻・既存
 - 「物理を開始」で現在配置から生成。「停止」で配置を保持。配置編集・削除・モデル切替・基台移動・ページ非表示で停止し、変更後は再開始。
 - 「落下する箱を追加」でテーブル上35 cmに箱を追加して開始。物理なしの物体もLiDAR・RGB-Dの対象。
 
-駆動はPD（P=40、D=3）と重力・コリオリ補償、URDFのeffortで合計モータトルクを制限。velocityは目標の変化速度に適用し、外力による実速度の上限保証はありません。
+駆動はPD（P=40、D=3）と重力・コリオリ補償、URDFのeffortで合計モータトルクを制限。velocityは目標の変化速度と、位置誤差補正を含むPD目標速度に適用。物理計算の実速度には瞬間的な上振れがあり、実速度の上限保証はありません。
 関節ダンピング0.1、armature 0.001を付加。実機の摩擦・減速機・ドライバを同定したモデルではありません。拘束反力・接触力はモータトルクとは別です。
 ロボットの接触はURDF衝突メッシュの凸包および箱・球・円柱、環境物体は箱近似。環境の慣性は形状・質量から生成。摩擦は共通値 `0.8 0.005 0.0001`、床はworld Z=-0.14 m。
 
@@ -218,6 +220,47 @@ Humble実受信で848×480全画素の対応・無効値・共通時刻・既存
 2026-10-07：標準・LongのURDF運動学一致、関節追従、トルク上限、連動、固定・ヒンジ・スライド、落下・接触を含む8テスト成功。
 Longブラウザで首0.4 rad・左肩0.3 radへの追従と左肩固定（約0.2992 rad）を確認。既存サーバーの `/api/status` は404でしたが、物理通信・姿勢反映は成功。
 従来の環境物体検証では箱の天板上高さ0.35 m→約0 m、LiDAR対象点の平均world Z 0.550→0.200 m、保存・再読込を確認。
+
+### MID-360 bagによるGNG-VLUT回避
+
+- 対象: Long、`gng_vlut_system/config/topo_dual_arm_max_long.yaml`の独立左右腕モデル。学習済みGNG/VLUT・独自ROSメッセージが必要。
+- 操作: Longで開き、姿勢入力元を「シミュレータ操作」に設定。「物理」タブの「関節固定・自己接触・回避」で「GNG-VLUT（MID-360 bag）」を選択し、「物理を開始」。必要なROSノードは自動起動、停止・切断時に終了。
+- 目標: 物理停止中に関節スライダー・手先ドラッグで任意の腕姿勢を作り、物理を開始すると、その姿勢を回避後の復帰目標に使用。GNG動作中の関節スライダー・ポーズ指定も目標値として保持し、描画姿勢はMuJoCo実測を維持。
+- 姿勢例: ポーズ欄の「前方・肘曲げ」。Longの手先は基台基準で約`(0.409, ±0.203, 0.444) m`、肘は40°。首・腰・グリッパーの目標は学習条件の0。物理開始前の基準姿勢指定と、GNG動作中の復帰目標更新に対応。
+- 入力: `/livox/lidar`、`/topo_dual_arm_max_long/roi_voxels`、記録自己マスク`/topo_dual_arm_max_long/self_voxel`。bagのGNG状態・関節姿勢・自己除去済みROIは回避入力に使用しない。
+- 計算: 記録自己マスクで記録ロボットの残像を除去したROIから、MuJoCo実測姿勢の自己形状をさらに除去。占有・危険ボクセルからVLUT判定を更新し、左右GNGの経由姿勢をMuJoCoへ入力し、既存の補間で継続追従。計画更新は約10 Hz、モータ制御は500 Hz。URDFの指令速度・トルク上限での位置・速度PD。全身形状による検査を維持し、片腕ずつ計画。
+- 再検査: 実行中の経由姿勢を最新VLUT状態で確認。後続経路は計画workerで再検査。復帰先の最寄りノードと、実行区間の点群・全身形状も検査。
+- 表示: 計画状態とMuJoCoの腕の実速度を分けて表示。復帰候補があっても実速度が小さい場合は「復帰待ち・姿勢保持」。安全な開始姿勢にいる場合は、回避入力があっても常時の腕動作は不要。入力不足は該当トピック名を表示。
+- 出力: `/sim_topo_dual_arm_max_long/`以下の`joint_states`、`self_voxel`、`roi_voxels`、`self_filter_roi_voxels`、`occupied_voxels`、`danger_voxels`、左右`Tmap_*`・`gng_node_states_stamped`。関節フィードバックは実測の位置・速度・トルク、上限50 Hz。ROS送信チェックボックスとは独立。
+- 座標: 記録ROIの`topo_dual_arm_max_long/base_link`と仮想基台を重ねる構成。取付角45度はROI生成時に適用済みで、再適用なし。ROIの観測範囲・欠損は記録どおり。MID-360点群は受信鮮度確認に使用し、再ボクセル化なし。
+- 時刻: 新着ROIだけを現在のROS時刻へ更新。bag巻戻しに対応。起動時の入力待機は時間制限なし。入力欠測・空ROIは姿勢保持し、観測更新を継続。観測点への近接・重なり自体では停止せず退避を探索。新しい有効観測で経路を再検査。異常な関節状態・モデル不一致は停止。
+- 制約: 学習時の首・腰・グリッパー固定条件を既存のMuJoCo関節拘束へ反映。GNG対象の腕関節は固定不可。同じ機体の回避セッションは1つ。実機指令の出力なし。
+
+既存bagが上記3入力を再生中なら追加の再生は不要。限定再生する場合は、ROSコンテナ内で`bash /ros2_ws/src/scripts/play_arm_avoidance_bag.sh --loop`。GUI入力欄はROI・点群トピックの変更用。
+
+### CLIでのMuJoCo・GNG-VLUT実行
+
+ワークスペースのルートで `bash scripts/run_dual_arm_simulation.sh --duration 30`。ホストからは起動済みのDockerサービス `gng_cpu`、コンテナ内からは同じROS環境入口を使用。ブラウザ・UIビルドは不要。既定はLong・GNG-VLUT・「前方・肘曲げ」、入力は既存のMID-360点群・記録ROI・記録自己マスク。
+
+```bash
+# 既存ROS入力で実行し、JSONLを保存
+bash scripts/run_dual_arm_simulation.sh --duration 30 \
+  --output log/artifacts/dual_arm_cli/run.jsonl
+
+# 独立ドメインでbagを再生し、Viewer受信用ブリッジも起動
+bash scripts/run_dual_arm_simulation.sh --domain-id 197 --duration 0 \
+  --viewer-bridge-port 8889 --viewer-observe-port 9002 --bag /rosbag/対象bag
+```
+
+Viewer: アプリサーバー8877を起動後、CLIの開始JSONにある`viewer_url`を開く。元のロボットをCLI実測JointStateへ追従表示し、ブラウザ内の物理計算・ROS状態送信はOFF。`state_source=simulation`付きのURLではモータ欄も同じJointStateの角速度・アクチュエータトルクをシミュレーション系列へ表示。欠測・失効は未表示、電流は換算係数なしでは未算出。同じ機体・同じROSドメインでのGNG回避セッションの重複は禁止。`--viewer-observe-port`指定時は同じROSドメインのTopics・点群・Tmap表示サーバーを所有起動し、URLへ接続先を設定。
+
+設定: `--model long|standard`、`--avoidance gng|none|oscbf`、`--pose forward|home|zero`。姿勢プリセットは`app/robot-poses.json`の角度[deg]をブラウザと共用。`--pose-file`で初期姿勢、`--goal-file`で復帰目標をJSON辞書`{"L_joint7":0.15}`[rad]として部分指定。GNG・OSCBFは各方式の依存・モデルが必要。入力変更は`--points-topic`／`--roi-topic`／`--recorded-self-topic`。`--bag`指定時は必要3入力と記録TFを所有再生し、既存publisherがある場合は重複再生を拒否。記録TFは座標と親子関係を保持し、現在時刻で配信。
+
+TF: MuJoCo実配置から`world → sim_<robot_name>/<URDFルート>`を配信。記録側は既存の基台TFを保持し、world未接続のルートだけを接続。記録基台と仮想基台は重畳配置、既存world配置が異なる場合は停止。静的TFは全件を保持し、後から接続したViewerにも配信。
+
+出力: `start`・`state`・`summary`のJSONL。関節角[rad]・速度[rad/s]・トルク[N m]・回避状態・最大腕関節変化[deg]。`--report-sec`は出力周期のみ。既存出力ファイルへの上書きなし。終了コードは0=正常、2=起動・実行エラー、3=GNG入力未成立または`--min-motion-deg`未達。静止が正常な場面では移動量の下限指定は不要。
+
+終了: 有限時間またはSIGINT/SIGTERMで、CLI所有のbag・GNG launch・受信用ブリッジを停止。`--duration 0`はCtrl+Cまで継続。既存のbag・ノードは停止しない。ブラウザを閉じるだけではCLIを停止しない。
 
 ### s・r・fの接続選択
 
@@ -292,13 +335,13 @@ header stampは0、positionsのみ、time_from_startは正の厳密増加、最�
 「軌道停止・受信OFF」、Escape、タブ非表示、モデル切替で停止。通常の手動関節操作も現在の軌道再生を停止します。
 通信エラーでは軌道受信・姿勢定期送信を停止します。再開はチェックを入れ直してください。
 
-実機への指令はありません。自己点群除去・回避経路生成・GNG/VLUTへの自動接続は別処理です。
+実機への指令はありません。GNG/VLUTによる自己除去・回避は、上記の物理タブのGNG-VLUTオプションで使用します。
 移動配置を使った従来VM・AIタブとの統合は未検証です。この座標整合の検証対象は独立ROS2連携タブです。
 回帰試験：ROS環境で `python3 -m unittest discover -s integrations/ros2 -p test_robot_exchange.py`。
 
 2026-10-01までの検証は標準モデル・ROS Humble。3種の点群の実受信、848×480全画素の深度・XYZ対応と共通時刻、移動配置（XYZ=(0.3,-0.2,0.1) m、yaw=25 deg）での点群・TF整合を確認。ROS軌道→ブラウザ首Yaw 0.1 rad→ROS関節状態の往復、未知関節・過速度・範囲外の拒否、停止操作を確認し、Python回帰15件が成功しています。
 
-LongのRGB-D実送信・軌道往復、持続送信レート、大規模車両メッシュの性能、実RealSense購読アプリとの互換性、GNG/VLUTとの統合運転、実機動作は未検証です。
+LongのRGB-D実送信・軌道往復、持続送信レート、大規模車両メッシュの性能、実RealSense購読アプリとの互換性、RGB-DとGNG/VLUTの統合運転、実機動作は未検証です。
 
 ## 含めたもの / 別途必要なもの
 

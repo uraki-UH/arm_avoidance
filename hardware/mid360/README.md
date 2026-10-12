@@ -247,6 +247,8 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=topo_dual_a
 
 明示したlaunch引数 `environment_input_topic`・`enable_environment_voxelization` はYAMLより優先。実機では `use_sim_time:=false`（既定）を使用。
 
+固定基台TF: 機体YAMLの`environment_voxelization.enable_static_tf: true`が既定。Longは`world → topo_dual_arm_max_long/base_link`、標準は`world → topo_dual_arm_max/base_footprint → base_link`。環境処理OFFでも配信。配置は`static_tf_x/y/z`[m]・`static_tf_roll/pitch/yaw`[rad]で指定。外部TFやbagに同じ基台の配置TFがある場合は`enable_static_tf: false`で二重配信を回避。
+
 前提: longのURDF・左右GNG/VLUTデータ、実姿勢の関節情報（waist_jointを含む）、`topo_dual_arm_max_long/base_link → … → mid360_link` のTF。既にrobot_state_publisherが稼働中なら `enable_robot_state_publisher:=false` を追加して二重配信を回避。固定センサの場合は校正先の親frameを変更。
 
 ```bash

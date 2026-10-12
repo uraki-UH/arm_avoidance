@@ -4,6 +4,7 @@ import json
 import math
 import os
 import struct
+import sys
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -166,7 +167,16 @@ def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory
     return Handler
 
 
+def ensure_ros_environment():
+    """ブリッジの起動経路に依存しない、共通ROS環境の初期化。"""
+    # 一括起動・単体起動で共通の環境読込み。ROS import前の同一PIDによる再実行。
+    if os.environ.get('TOPO_ROS_SETUP_READY') != '1':
+        script = Path(__file__).resolve().parents[2] / 'start_ros.sh'
+        os.execv('/bin/bash', ['bash', str(script), '--bridge', *sys.argv[1:]])
+
+
 def main():
+    ensure_ros_environment()
     import rclpy
     from rclpy.node import Node
     from sensor_msgs.msg import PointCloud2, JointState
