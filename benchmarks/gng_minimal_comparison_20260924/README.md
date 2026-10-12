@@ -37,7 +37,7 @@
 
 ## 再現
 
-上記実装READMEの手順で4ライブラリを`artifacts/gng_minimal_comparison_20260924/`へ配置。既存コンテナ・依存関係・bagが必要。
+上記実装READMEの手順で4ライブラリを`log/artifacts/gng_minimal_comparison_20260924/`へ配置。既存コンテナ・依存関係・bagが必要。
 
 ```bash
 docker exec gng_cpu_container bash -lc \
@@ -48,9 +48,9 @@ docker exec gng_cpu_container bash -lc \
 
 - `run_benchmarks.sh`: 18試行。個別計測は120秒の上限付き。
 - `summarize.py`: 900フレームの試行間グラフ一致・検索回数・設定受理の確認。保存済みコピー元JSONがある場合、tree_rawの50フレーム一致も確認。
-- `summary.json`: 保存済み集計。再集計の出力は`artifacts/`であり自動上書きなし。
+- `summary.json`: 保存済み集計。再集計の出力は`log/artifacts/`であり自動上書きなし。
 - `verification.json`: ソース不変性・Release・テスト・後片付けの確認結果。
 - `sha256.json`: ソース・設定・スクリプト・ライブラリのハッシュ。
-- 生JSON・グラフ・ログ・共有ライブラリ・実行前後の状態はGit管理外の`artifacts/gng_minimal_comparison_20260924/`。
+- 生JSON・グラフ・ログ・共有ライブラリ・実行前後の状態はGit管理外の`log/artifacts/gng_minimal_comparison_20260924/`。
 
 計測・ビルド・CTestは全終了。既存プロセスへの停止・再起動操作なし。一時ビルド`/tmp/gng_minimal_comparison_build`は削除済み。

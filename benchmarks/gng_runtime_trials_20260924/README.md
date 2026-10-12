@@ -87,7 +87,7 @@ python3 /ros2_ws/src/benchmarks/gng_runtime_trials_20260924/summarize_pinned.py
 
 `build_trials.sh`は前回ソースのゼロ初期化不具合の再現も含む。各実装のCMake設定・CTest・ビルドログを方式別ディレクトリへ保存。
 
-生データ・共有ライブラリ・ログはGit管理外の`artifacts/gng_runtime_trials_20260924/`。このディレクトリの`summary.json`等は保存済み集計であり、再集計の出力による自動上書きなし。
+生データ・共有ライブラリ・ログはGit管理外の`log/artifacts/gng_runtime_trials_20260924/`。このディレクトリの`summary.json`等は保存済み集計であり、再集計の出力による自動上書きなし。
 
 [verification.json](verification.json)に学習量・ソース不変性・ビルド・後片付けの照合結果、`sha256.json`に最終ソース・設定・保存ライブラリのハッシュを保存。
 

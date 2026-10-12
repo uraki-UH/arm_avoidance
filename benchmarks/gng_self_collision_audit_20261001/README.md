@@ -4,7 +4,7 @@
 
 ## 実測
 
-対象: `artifacts/gng_coverage_repair_20261001/max/model/gng.bin` の追加ID 10000〜10063、64姿勢。保存14関節角を変更せず、左7関節・右7関節へ適用。腰・首・グリッパーは0。関節限界内、暗黙の関節角clampなし。比較条件はURDFの衝突形状だけ。
+対象: `log/artifacts/gng_coverage_repair_20261001/max/model/gng.bin` の追加ID 10000〜10063、64姿勢。保存14関節角を変更せず、左7関節・右7関節へ適用。腰・首・グリッパーは0。関節限界内、暗黙の関節角clampなし。比較条件はURDFの衝突形状だけ。
 
 | 条件 | 検査姿勢数 | 通常strict FCLで衝突の姿勢数 | ゼロ姿勢で非接触の胴体・腕ペアとの接触姿勢数 |
 | --- | ---: | ---: | ---: |
@@ -24,9 +24,9 @@
 
 ## 衝突姿勢の図
 
-[ノード10062・視点A](../../artifacts/gng_self_collision_audit_20261001/node10062_mesh_view_a.png)・[視点B](../../artifacts/gng_self_collision_audit_20261001/node10062_mesh_view_b.png)。青: 左肩カバー、橙: 右指。元の全三角形を保持。関節角は保存GNGと監査CSVで一致、独立XML FKのTCPと保存TCPの最大差1.15e-8 m。図は位置関係の補助であり、交差の判定根拠は上記FCL結果。
+[ノード10062・視点A](../../log/artifacts/gng_self_collision_audit_20261001/node10062_mesh_view_a.png)・[視点B](../../log/artifacts/gng_self_collision_audit_20261001/node10062_mesh_view_b.png)。青: 左肩カバー、橙: 右指。元の全三角形を保持。関節角は保存GNGと監査CSVで一致、独立XML FKのTCPと保存TCPの最大差1.15e-8 m。図は位置関係の補助であり、交差の判定根拠は上記FCL結果。
 
-[描画コード](render_collision_pair.py)、[関節角・全リンク変換・入力ハッシュ](../../artifacts/gng_self_collision_audit_20261001/node10062_mesh_geometry.json)。描画コマンド `timeout 120 python3 benchmarks/gng_self_collision_audit_20261001/render_collision_pair.py`、実測51.48秒、終了0。
+[描画コード](render_collision_pair.py)、[関節角・全リンク変換・入力ハッシュ](../../log/artifacts/gng_self_collision_audit_20261001/node10062_mesh_geometry.json)。描画コマンド `timeout 120 python3 benchmarks/gng_self_collision_audit_20261001/render_collision_pair.py`、実測51.48秒、終了0。
 
 ## 原因と関連する実装上の問題
 
@@ -43,11 +43,11 @@
 ## 再現と記録
 
 - [監査コード](audit.cpp)、[ビルド](build.py)、[診断用URDF生成](prepare_diagnostic.py)。入力モデルへの書込みなし、既存出力先への上書き拒否。
-- [衝突試験の全argv・ログ・終了状態](../../artifacts/gng_self_collision_audit_20261001/pilot_batch/report.json)。2条件各1回、終了0、所有プロセスグループの残留なし。開始見積り30秒に対して実測88.95秒。各条件のメッシュ初期化に約39〜43秒、64姿勢の検査部分は約3秒。
-- [元URDFの全ペア集計](../../artifacts/gng_self_collision_audit_20261001/pilot_batch/001_max_original_urdf/result/audit_metrics.json)、[外装追加後の全ペア集計・反例の14関節角](../../artifacts/gng_self_collision_audit_20261001/pilot_batch/001_max_body_visual_collision/result/audit_metrics.json)。各resultにnode_audit.csv、body_pair_summary.csv、first_collision_samples.csv。
-- [反例の腕側メッシュ照合](../../artifacts/gng_self_collision_audit_20261001/example_arm_mesh_compare.json)。R_link7・R_finger_rightとも三角形配列の完全一致、頂点距離差0 m。
-- [形状比較](../../artifacts/gng_self_collision_audit_20261001/mesh_compare.json)、[形状比較の起動コマンド・終了状態](../../artifacts/gng_self_collision_audit_20261001/mesh_compare_commands.json)。初回の全リンク詳細比較は120秒timeout、胴体詳細比較＋全リンク寸法表へ範囲を絞った試験は正常終了。
-- [入力ハッシュ](../../artifacts/gng_self_collision_audit_20261001/input_hashes.json)、[診断用URDF生成記録](../../artifacts/gng_self_collision_audit_20261001/diagnostic_urdf_manifest.json)。longの診断用コピーも生成済み、longのFCL姿勢試験は未実施。
+- [衝突試験の全argv・ログ・終了状態](../../log/artifacts/gng_self_collision_audit_20261001/pilot_batch/report.json)。2条件各1回、終了0、所有プロセスグループの残留なし。開始見積り30秒に対して実測88.95秒。各条件のメッシュ初期化に約39〜43秒、64姿勢の検査部分は約3秒。
+- [元URDFの全ペア集計](../../log/artifacts/gng_self_collision_audit_20261001/pilot_batch/001_max_original_urdf/result/audit_metrics.json)、[外装追加後の全ペア集計・反例の14関節角](../../log/artifacts/gng_self_collision_audit_20261001/pilot_batch/001_max_body_visual_collision/result/audit_metrics.json)。各resultにnode_audit.csv、body_pair_summary.csv、first_collision_samples.csv。
+- [反例の腕側メッシュ照合](../../log/artifacts/gng_self_collision_audit_20261001/example_arm_mesh_compare.json)。R_link7・R_finger_rightとも三角形配列の完全一致、頂点距離差0 m。
+- [形状比較](../../log/artifacts/gng_self_collision_audit_20261001/mesh_compare.json)、[形状比較の起動コマンド・終了状態](../../log/artifacts/gng_self_collision_audit_20261001/mesh_compare_commands.json)。初回の全リンク詳細比較は120秒timeout、胴体詳細比較＋全リンク寸法表へ範囲を絞った試験は正常終了。
+- [入力ハッシュ](../../log/artifacts/gng_self_collision_audit_20261001/input_hashes.json)、[診断用URDF生成記録](../../log/artifacts/gng_self_collision_audit_20261001/diagnostic_urdf_manifest.json)。longの診断用コピーも生成済み、longのFCL姿勢試験は未実施。
 
 実行コマンド（既存Docker内、常駐ROSの起動なし）。再実行は別のoutput先を指定。
 
@@ -57,10 +57,10 @@ docker exec gng_cpu_container python3 \
   --output /tmp/gng_self_collision_audit_20261001/audit
 
 docker exec gng_cpu_container python3 \
-  /ros2_ws/src/artifacts/gng_self_collision_audit_20261001/run_batch.py \
-  /ros2_ws/src/artifacts/gng_self_collision_audit_20261001/pilot_cases.json \
-  --output /ros2_ws/src/artifacts/gng_self_collision_audit_20261001/pilot_batch \
+  /ros2_ws/src/log/artifacts/gng_self_collision_audit_20261001/run_batch.py \
+  /ros2_ws/src/log/artifacts/gng_self_collision_audit_20261001/pilot_cases.json \
+  --output /ros2_ws/src/log/artifacts/gng_self_collision_audit_20261001/pilot_batch \
   --repeats 1 --timeout-sec 120 --max-total-sec 250 --estimate-sec 15
 ```
 
-終了確認: [runtime_final.json](../../artifacts/gng_self_collision_audit_20261001/runtime_final.json)で所有試験プロセス残留0件、開始時の21プロセスと3コンテナの維持。元モデル6ファイルと正式URDF2ファイルのSHA256一致。[比較・未変更確認](../../artifacts/gng_self_collision_audit_20261001/verification.json)。全試験・描画プロセス終了済み。
+終了確認: [runtime_final.json](../../log/artifacts/gng_self_collision_audit_20261001/runtime_final.json)で所有試験プロセス残留0件、開始時の21プロセスと3コンテナの維持。元モデル6ファイルと正式URDF2ファイルのSHA256一致。[比較・未変更確認](../../log/artifacts/gng_self_collision_audit_20261001/verification.json)。全試験・描画プロセス終了済み。

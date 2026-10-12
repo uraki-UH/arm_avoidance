@@ -7,10 +7,13 @@
 ## 保存先の区分
 
 - `benchmarks/<実験名>/`: 設定スナップショット・スキーマ・保存済み集計・当時計測対象のSHA-256はGit管理対象。再現・集計スクリプトと計測コードはローカル保持・Git管理外。
-- `artifacts/<実験名>/`: 共有ライブラリ、CMake生成物、生ログ、フレーム単位のJSON、再集計結果。ローカル保管のみでGit管理対象外。
+- `log/artifacts/<実験名>/`: 共有ライブラリ、CMake生成物、生ログ、フレーム単位のJSON、再集計結果。ローカル保管のみでGit管理対象外。
+- `docker/runtime/harmonic_launcher/`: 常駐ランチャーのソケット・ロック。検証結果とは独立した実行用ディレクトリ。
 - 詳しい条件・結果・限界: `gng_vlut_system/docs/designs/` と `releases/` の各記録。
 
-`artifacts/COLCON_IGNORE`・`benchmarks/COLCON_IGNORE`をGit管理し、保存した比較用パッケージと計測用`setup.py`を通常のcolcon探索から除外。`.gitignore`だけではROSパッケージ探索の除外にはならない。
+`log/artifacts/COLCON_IGNORE`・`benchmarks/COLCON_IGNORE`をGit管理し、保存した比較用パッケージと計測用`setup.py`を通常のcolcon探索から除外。`.gitignore`だけではROSパッケージ探索の除外にはならない。
+ワークスペース直下の`artifacts/`は使用しない。保存済みのソースsnapshotや退避コピーも実験単位のまま`log/artifacts/`へ保持。
+移動前の絶対パスを含むCMakeキャッシュは再利用せず、再ビルド時は新しい出力先で再構成。
 
 生成物のGit管理除外による実ファイルの削除なし。SHA-256資料内のパスは計測当時の記録であり、移動前の `artifacts/` 表記を維持。
 
@@ -43,9 +46,9 @@
 
 既存スクリプトはコンテナ内の `/ros2_ws/src`、ROS Humble、当時計測に使った `/rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3` を前提。ライブラリのビルド方法は[独立版README](../ais_gng_cpu/experimental/gng_spatial_tree/README.md)を参照。
 
-比較スクリプトは `artifacts/<実験名>/` のライブラリを使用。新しい環境では再ビルドした対応ライブラリの配置が必要。旧AABB・汎用2近傍などの過去版は現行ソースと異なるため、現行版のビルドだけで過去の比較条件を再現した扱いにはしない。旧AABB向け `gng_spatial_profile_20260923/instrument.py` も対応する旧版ソースが必要。
+比較スクリプトは `log/artifacts/<実験名>/` のライブラリを使用。新しい環境では再ビルドした対応ライブラリの配置が必要。旧AABB・汎用2近傍などの過去版は現行ソースと異なるため、現行版のビルドだけで過去の比較条件を再現した扱いにはしない。旧AABB向け `gng_spatial_profile_20260923/instrument.py` も対応する旧版ソースが必要。
 
-プロファイルの `summarize.py` は同名の `artifacts/<実験名>/` にある生データを入力とし、比較元の `artifacts/gng_bsp3d_20260923/` または `artifacts/gng_spatial_tree_20260923/` のフレームJSONも必要。再集計の出力は `artifacts/<実験名>/summary.json`。保存済みの `benchmarks/<実験名>/summary.json`への自動反映なし。
+プロファイルの `summarize.py` は同名の `log/artifacts/<実験名>/` にある生データを入力とし、比較元の `log/artifacts/gng_bsp3d_20260923/` または `log/artifacts/gng_spatial_tree_20260923/` のフレームJSONも必要。再集計の出力は `log/artifacts/<実験名>/summary.json`。保存済みの `benchmarks/<実験名>/summary.json`への自動反映なし。
 
 ```bash
 python3 /ros2_ws/src/benchmarks/gng_bsp3d_profile_20260923/summarize.py

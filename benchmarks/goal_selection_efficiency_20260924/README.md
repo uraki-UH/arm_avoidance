@@ -124,8 +124,8 @@ timeout -s INT -k 5 90 ctest --test-dir /ros2_ws/build/gng_vlut_system -R test_g
 timeout -s INT -k 5 120 python3 /ros2_ws/src/benchmarks/goal_selection_efficiency_20260924/ros_smoke.py
 ```
 
-`run.py`の各比較にも240秒の上限。`ros_smoke.py`は専用ノードのコマンド・PID・終了状態を`ros_command.json`・`ros_smoke.json`へ保存し、例外時も停止。入力座標・保存bin・ROS依存・ワークスペースGTestライブラリが必要。保存物がないcheckoutでは同条件の再計測は不可。`summary.json`は保存済み集計で、再集計先は`artifacts/goal_selection_efficiency_20260924/summary.json`。
+`run.py`の各比較にも240秒の上限。`ros_smoke.py`は専用ノードのコマンド・PID・終了状態を`ros_command.json`・`ros_smoke.json`へ保存し、例外時も停止。入力座標・保存bin・ROS依存・ワークスペースGTestライブラリが必要。保存物がないcheckoutでは同条件の再計測は不可。`summary.json`は保存済み集計で、再集計先は`log/artifacts/goal_selection_efficiency_20260924/summary.json`。
 
-生ログ・比較バイナリ指紋・ビルドログはGit管理外の`artifacts/goal_selection_efficiency_20260924/`。コード指紋は`sha256.json`、入力指紋は`fixtures.json`。
+生ログ・比較バイナリ指紋・ビルドログはGit管理外の`log/artifacts/goal_selection_efficiency_20260924/`。コード指紋は`sha256.json`、入力指紋は`fixtures.json`。
 
 終了確認: 検証プロセス・隔離ROSノードは全終了。専用`/tmp/goal_selection_efficiency_20260924`を削除。既存ROS・bag13プロセスはPID・PPID・コマンド一致、3コンテナのIDと起動状態を維持。根拠は`verification.json`と、artifacts内の前後スナップショット・`runtime_diff.json`。

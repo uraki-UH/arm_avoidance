@@ -65,10 +65,10 @@ ROS・通常install・FVGのlocal_setupをsource後、workspaceの`src`で実行
 ```bash
 export SHARED_COST_VARIANT=common_final ROS_DOMAIN_ID=182 ROS_LOCALHOST_ONLY=1
 python3 benchmarks/shared_voxel_cost_20260926/prepare.py
-cmake -S benchmarks/shared_voxel_cost_20260926 -B artifacts/shared_voxel_cost_20260926/common_final/build \
-  -DGENERATED_SRC=/ros2_ws/src/artifacts/shared_voxel_cost_20260926/common_final/generated \
+cmake -S benchmarks/shared_voxel_cost_20260926 -B log/artifacts/shared_voxel_cost_20260926/common_final/build \
+  -DGENERATED_SRC=/ros2_ws/src/log/artifacts/shared_voxel_cost_20260926/common_final/generated \
   -Dvoxel_idx_DIR=/ros2_ws/install/voxel_idx/share/voxel_idx/cmake
-cmake --build artifacts/shared_voxel_cost_20260926/common_final/build -j2
+cmake --build log/artifacts/shared_voxel_cost_20260926/common_final/build -j2
 timeout -s INT -k20 300 python3 benchmarks/shared_voxel_cost_20260926/run.py --frames 40 --trials 2
 timeout -s INT -k20 120 python3 benchmarks/shared_voxel_cost_20260926/run.py --installed --frames 40 --trials 2
 timeout -s INT -k20 90 python3 benchmarks/shared_voxel_cost_20260926/run.py --installed --moving --frames 40 --trials 2
@@ -79,4 +79,4 @@ python3 benchmarks/shared_voxel_cost_20260926/summarize.py
 `ros2 launch fuzzy_voxel_grid shared_world_voxel.launch.py ...`。全引数はログのSTART行。
 全試験グループと子を終了、既存bag・Viewer・3コンテナのPID／IDを維持。
 正本：[今回集計](summary_common_final.json)。生ログ・CSV・ソースhashは
-`artifacts/shared_voxel_cost_20260926/common_final/`、変更前は`optimized/before_common_installed.json`。
+`log/artifacts/shared_voxel_cost_20260926/common_final/`、変更前は`optimized/before_common_installed.json`。

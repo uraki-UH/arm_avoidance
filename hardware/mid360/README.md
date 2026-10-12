@@ -28,13 +28,13 @@ docker run --rm --network none mid360:local python3 /opt/mid360/test_config.py
 ホストPCの`uraki_ws`ルートで実行。イメージのビルドと[mid360.yaml](mid360.yaml)の`host_ip`・`lidar_ip`設定が前提。MID-360直結、ネットマスク`/24`を対象。
 
 ```bash
-python3 integrations/mid360/start.py
+python3 hardware/mid360/start.py
 ```
 
 動作: YAML読込み → 物理リンクのある有線LANを選択 → PCの固定IPv4設定 → `docker compose up mid360`。LAN名の手入力は通常不要。IP設定時のみ`sudo`認証が必要、Dockerは通常ユーザーで実行。ホストにPython 3・PyYAML・NetworkManager・iproute2・Docker Composeが必要。`No module named yaml`の場合は`sudo apt install python3-yaml`。
 
 - 有線LANが1個だけ接続中: 自動選択。複数候補・未接続の場合は変更前に停止。
-- 複数LANからの明示選択: `python3 integrations/mid360/start.py --interface <DEVICE名>`。
+- 複数LANからの明示選択: `python3 hardware/mid360/start.py --interface <DEVICE名>`。
 - 既存の別IPv4・グローバルIPv6・デフォルト経路・別LANとのサブネット競合: 自動変更せず停止。
 - 固定IPが設定済み: 既存設定を使用。未設定時は専用プロファイル`mid360-direct`の新規作成・有効化。既存の同名プロファイルが不整合なら上書きせず停止。
 - 終了: Ctrl+Cでドライバ停止。PCのIP設定・専用プロファイルは維持。IP解除は`sudo nmcli connection down mid360-direct`。PC再起動後も同じスクリプトで起動可能。
@@ -42,7 +42,7 @@ python3 integrations/mid360/start.py
 変更前の確認だけなら:
 
 ```bash
-python3 integrations/mid360/start.py --check
+python3 hardware/mid360/start.py --check
 ```
 
 制限: LANの選択はリンク状態に基づくもので、LiDARの個体認証・SN取得・センサ側IP変更・相手機器のIP重複検出は対象外。接続先は下記手順で事前確認。通常の`docker compose up mid360`だけではホストのIP変更なし。Dockerへのホストネットワーク管理権限の追加なし。
@@ -174,7 +174,7 @@ docker compose up mid360
 
 設定の反映: `mid360.yaml`は読み取り専用マウント、編集後の停止・再起動で反映。Dockerfile・launch・entrypoint変更時は`build mid360`後に再起動。起動ログの確認は`docker compose logs --tail=80 mid360`。
 
-旧形式の`docker compose -f integrations/mid360/compose.yaml …`も利用可能。ただしルートComposeとは別プロジェクト扱いのため、旧形式で起動中の場合は旧形式で停止してから切替え。同時起動不可。
+旧形式の`docker compose -f hardware/mid360/compose.yaml …`も利用可能。ただしルートComposeとは別プロジェクト扱いのため、旧形式で起動中の場合は旧形式で停止してから切替え。同時起動不可。
 
 | 出力 | 型 | frame |
 | --- | --- | --- |
@@ -261,7 +261,7 @@ ros2 topic hz /topo_dual_arm_max_long/self_filter_roi_voxels
 ホスト自動設定: 選択・競合回避・プロファイル再利用・確認専用モード・設定失敗時の起動中止をモックテストで検証。実PCの`start.py --check`でLAN選択・YAML読込みを確認。固定IP変更と実機ドライバ起動を通した検証は未実施。
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 integrations/mid360/test_start.py
+PYTHONDONTWRITEBYTECODE=1 python3 hardware/mid360/test_start.py
 ```
 
 導入確認: 2026-10-09、Linux amd64・ROS 2 Humbleで専用イメージのReleaseビルド成功。ネットワークなしの一時コンテナでROSパッケージ・実行ファイルの検出、共有ライブラリ読込み、設定テスト5件、launch引数表示を確認。IP未設定の事前チェックは終了コード1と対象キー名を表示。検証コンテナは終了・削除済み、実機ドライバの起動なし。
@@ -275,7 +275,7 @@ docker run --rm --network none mid360:local ros2 launch /opt/mid360/mid360.launc
 取付TFの検証（GNGコンテナ、他の処理と異なるROS Domainで実施）:
 
 ```bash
-docker compose exec gng_cpu bash -lc 'source /opt/ros/humble/setup.bash; ROS_DOMAIN_ID=97 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3 /ros2_ws/src/integrations/mid360/test_mount_tf.py --urdf /ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf'
+docker compose exec gng_cpu bash -lc 'source /opt/ros/humble/setup.bash; ROS_DOMAIN_ID=97 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3 /ros2_ws/src/hardware/mid360/test_mount_tf.py --urdf /ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf'
 ```
 
 確認済み: 機体YAMLのyaw=90°、腰角0°・90°でbase_linkからの位置・計測+X軸・水平な機体の重力方向。検証用TFノードは終了時に停止。ROS Domain 97は検証専用とし、他用途で使用中なら変更。

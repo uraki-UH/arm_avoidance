@@ -1,5 +1,7 @@
 # GNGの学習量を維持した実装比較
 
+現在の空間索引依存は[`gng_vlut_system/third_party/spatialtree`](../../../gng_vlut_system/third_party/spatialtree/README.md)の固定版。ルートの`bsp3d/`は不要。実験名・ライブラリ名は互換用に維持。過去の計測値・ハッシュは依存統一前の実装に対応。
+
 前回の`gng_minimal_comparison`からの独立コピー。`COLCON_IGNORE`付きで本番ライブラリ・ROS launchへの組込みなし。
 
 学習回数・入力上限・入力範囲・ボクセル幅・ノード上限・探索精度・ノード／エッジの更新条件を維持した高速化実験。`tree_raw`、`grid_raw`、`tree_voxel`、`grid_voxel`の4ライブラリは前回と同じ構成。
@@ -35,7 +37,7 @@ ctest --test-dir /tmp/gng_runtime_trials_build/optimized --output-on-failure
 
 既存ビルド先ではキャッシュを更新するため`-DGNG_RADIX_VOXELS=ON`を明示。元の加算順を保つ比較版は別のビルド先と`-DGNG_RADIX_VOXELS=OFF`を指定。コンパイラ最適化なし等の比較設定は[再現スクリプト](../../../benchmarks/gng_runtime_trials_20260924/build_trials.sh)を参照。通常のROS実行用ではなく、比較用の時間刻み固定ビルド。
 
-ライブラリ名は前回互換の`libgng_minimal_<variant>.so`。実験ごとに`artifacts/gng_runtime_trials_20260924/<method>/`へ保存し、本番インストール先へのコピーなし。
+ライブラリ名は前回互換の`libgng_minimal_<variant>.so`。実験ごとに`log/artifacts/gng_runtime_trials_20260924/<method>/`へ保存し、本番インストール先へのコピーなし。
 
 ## 検証範囲と出力
 

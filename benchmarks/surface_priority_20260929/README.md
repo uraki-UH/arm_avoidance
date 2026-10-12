@@ -1,7 +1,7 @@
 # 曲面パッチ履歴・優先順の固定入力比較
 
 履歴追加前のsnapshotと追加後のON/OFFを、同じGNGノード・平面所属の入力列で比較。
-生成物と数値の正本は `artifacts/surface_priority_20260929/`。
+生成物と数値の正本は `log/artifacts/surface_priority_20260929/`。
 
 - `before/` は作業開始時の未改変ソース。`after` はビルド時点のworkspaceソース。
   正式比較時の新実装ソースは `after_snapshot/` にも保存。
@@ -35,13 +35,13 @@ timeout 120 python3 -B benchmarks/surface_priority_20260929/prepare.py
 timeout 600 bash benchmarks/surface_priority_20260929/build.sh before
 timeout 600 bash benchmarks/surface_priority_20260929/build.sh after
 timeout 600 python3 -B skills/run-benchmark-batch/scripts/run_batch.py \
-  artifacts/surface_priority_20260929/cases.json \
-  --output artifacts/surface_priority_20260929/batch_final --repeats 3 \
+  log/artifacts/surface_priority_20260929/cases.json \
+  --output log/artifacts/surface_priority_20260929/batch_final --repeats 3 \
   --timeout-sec 90 --max-total-sec 580 --estimate-sec 2
 python3 -B benchmarks/surface_priority_20260929/compare.py \
-  artifacts/surface_priority_20260929/batch_final
+  log/artifacts/surface_priority_20260929/batch_final
 python3 -B benchmarks/surface_priority_20260929/summarize.py \
-  artifacts/surface_priority_20260929/batch_final
+  log/artifacts/surface_priority_20260929/batch_final
 '
 ```
 
@@ -67,9 +67,9 @@ set -eo pipefail
 source /opt/ros/humble/setup.bash
 source /ros2_ws/install/setup.bash
 timeout 180 /ros2_ws/build/ais_gng/test_surface_model --gtest_color=no \
-  --gtest_output=xml:/ros2_ws/src/artifacts/surface_priority_20260929/unit_97.xml
+  --gtest_output=xml:/ros2_ws/src/log/artifacts/surface_priority_20260929/unit_97.xml
 timeout 180 /ros2_ws/build/ais_gng/test_plane_cluster_incremental --gtest_color=no \
-  --gtest_output=xml:/ros2_ws/src/artifacts/surface_priority_20260929/plane_verified.xml
+  --gtest_output=xml:/ros2_ws/src/log/artifacts/surface_priority_20260929/plane_verified.xml
 '
 ```
 

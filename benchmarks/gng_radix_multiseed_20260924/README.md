@@ -23,7 +23,7 @@ bash /ros2_ws/src/benchmarks/gng_radix_multiseed_20260924/run.sh
 python3 /ros2_ws/src/benchmarks/gng_radix_multiseed_20260924/summarize.py
 ```
 
-生ログ・フレームJSON・NPZ・共有ライブラリは`artifacts/gng_radix_multiseed_20260924/`。ビルドは`/tmp/gng_radix_multiseed_build/`。比較用コピーは`ais_gng_cpu/experimental/gng_radix_trials/`。追加のシード指定・代表点切替APIはこのコピーに限定。
+生ログ・フレームJSON・NPZ・共有ライブラリは`log/artifacts/gng_radix_multiseed_20260924/`。ビルドは`/tmp/gng_radix_multiseed_build/`。比較用コピーは`ais_gng_cpu/experimental/gng_radix_trials/`。追加のシード指定・代表点切替APIはこのコピーに限定。
 
 ## 結果と判断
 

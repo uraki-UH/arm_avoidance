@@ -21,7 +21,7 @@
 
 - 比較元: `base_revision.txt`のコミット。旧ライブラリと目標選択ヘッダをGitから保存コピー。通常ソースに旧依存を復活させる操作なし。
 - コンテナ: `gng_cpu_container`、GCC 11.4、Release相当`-O3 -DNDEBUG`、double。CPU 0固定、前後を交互に3試行。既存ROS・bagと同居し、CPU周波数や競合負荷の固定なし。
-- `points.txt`: 保存したGNGノード18,729点。出典は`artifacts/gng_radix_production_20260924/boost/voxel_0.5_1_frame_299.npz`。2026-09-15の静的マップ10,801点とは別の入力。
+- `points.txt`: 保存したGNGノード18,729点。出典は`log/artifacts/gng_radix_production_20260924/boost/voxel_0.5_1_frame_299.npz`。2026-09-15の静的マップ10,801点とは別の入力。
 - `planar.txt`: 合成の薄い平面20,000点、原点重複500点、seed 20260924。正確な入力ファイルのSHA-256は`summary.json`。
 - 単体索引: 1試行12反復、先頭2反復を除いた平均値の3試行中央値。構築は1回分、AABB・8近傍はそれぞれ1024問い合わせの合計。目標選択で8近傍探索は不使用。
 - `before`: 旧8分木。`bsp32`は既定の葉32・bboxなし。`bsp16`・`bsp8`は葉の容量のみ変更。`bsp32_bbox`は点群の実境界箱による追加枝刈り。
@@ -104,7 +104,7 @@
 
 ## 再現手順
 
-コンテナ内で実行。標準の`gng_vlut_system`がビルド済みで、ROS依存と同じGTestライブラリが必要。`prepare.py`は固定Gitコミットから比較元と試作ソースを生成し、ローカルの入力点ファイルは生成しない。生ログ・入力座標はGit管理外の`artifacts/bsp3d_migration_20260924/`。入力がないcheckoutでは同条件での再計測は不可。
+コンテナ内で実行。標準の`gng_vlut_system`がビルド済みで、ROS依存と同じGTestライブラリが必要。`prepare.py`は固定Gitコミットから比較元と試作ソースを生成し、ローカルの入力点ファイルは生成しない。生ログ・入力座標はGit管理外の`log/artifacts/bsp3d_migration_20260924/`。入力がないcheckoutでは同条件での再計測は不可。
 
 ```bash
 source /ros2_ws/install/setup.bash

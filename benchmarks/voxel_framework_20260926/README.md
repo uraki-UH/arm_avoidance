@@ -55,14 +55,14 @@ PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 600 python3 benchmarks/voxel_fram
 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 600 python3 benchmarks/voxel_framework_20260926/verify.py measure
 PYTHONDONTWRITEBYTECODE=1 python3 benchmarks/voxel_framework_20260926/verify.py summarize
 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 360 python3 benchmarks/voxel_framework_20260926/verify.py matrix
-ROS_DOMAIN_ID=179 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 240 python3 benchmarks/common_sampling_20260925/smoke.py --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 --frames 16 --trials 1 --validation --output-dir /ros2_ws/src/artifacts/voxel_framework_20260926/ros
+ROS_DOMAIN_ID=179 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 240 python3 benchmarks/common_sampling_20260925/smoke.py --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 --frames 16 --trials 1 --validation --output-dir /ros2_ws/src/log/artifacts/voxel_framework_20260926/ros
 ```
 
 初回は`verify.py prepare`で生成。`before/source.tar.gz`がない場合は上記基準commitの`git archive`でcore・ais_gng/includeを保存。
 既存コピーを上書きしないため、prepareの再実行は拒否。生成ソースの変更はseed／dtのみで、初期保存物は保持。
-保存先`artifacts/voxel_framework_20260926/`はGit対象外。`summary.json`、条件別JSON・ログ、`matrix.log`を参照。
+保存先`log/artifacts/voxel_framework_20260926/`はGit対象外。`summary.json`、条件別JSON・ログ、`matrix.log`を参照。
 `final_build.log`は通常配布先のビルド・回帰とFVG全ON、`fvg_build.log`はFVG OFF、`ros_validation.log`はROS確認。
 `verify.py`は子プロセスの起動コマンドと正常終了を記録。全比較・ビルド・テストの実行セッション終了。
-ROS試験の直接起動は`/ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu --ros-args -r __ns:=/common_sampling_after_mixed_0_validation --params-file /ros2_ws/src/artifacts/voxel_framework_20260926/ros/after_mixed_0_validation.yaml`。
+ROS試験の直接起動は`/ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu --ros-args -r __ns:=/common_sampling_after_mixed_0_validation --params-file /ros2_ws/src/log/artifacts/voxel_framework_20260926/ros/after_mixed_0_validation.yaml`。
 試験ノードPID343140は終了コード0。スクリプトのfinallyで所有グループだけを停止し、試験observerも破棄。
 既存bag・Viewerと3コンテナは停止・再起動なし。新しいROSデーモン・常駐試験プロセスの残存なし。

@@ -54,10 +54,10 @@ source /opt/ros/humble/setup.bash
 source /ros2_ws/install/setup.bash
 cd /ros2_ws/src
 PYTHONDONTWRITEBYTECODE=1 timeout 240 python3 benchmarks/tracking_attention_20260926/verify.py prepare --tag adjacent_20260928_
-PYTHONDONTWRITEBYTECODE=1 python3 benchmarks/tracking_attention_20260926/verify.py suite --tag adjacent_20260928_ --cases off builtin_nearest builtin_adjacent --ratio .5 --input-voxel-size .5 --frames 80 --warmup-frames 20 --output artifacts/tracking_attention_20260926/adjacent_cases_05.json
-PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py artifacts/tracking_attention_20260926/adjacent_cases_05.json --output artifacts/tracking_attention_20260926/adjacent_batch_05 --repeats 3 --timeout-sec 90 --max-total-sec 500 --estimate-sec 8
-PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/tracking_attention_20260926/adjacent_cases.json --output artifacts/tracking_attention_20260926/adjacent_ros --repeats 2 --timeout-sec 120 --max-total-sec 480 --estimate-sec 35
-ROS_DOMAIN_ID=183 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 15 120 taskset -c 4 python3 benchmarks/tracking_attention_20260926/verify.py ros --tracking-mode adjacent_nonplane --cell-size .5 --ratio .5 --max-points 200000 --seed 28 --validation --output artifacts/tracking_attention_20260926/adjacent_validation.json
+PYTHONDONTWRITEBYTECODE=1 python3 benchmarks/tracking_attention_20260926/verify.py suite --tag adjacent_20260928_ --cases off builtin_nearest builtin_adjacent --ratio .5 --input-voxel-size .5 --frames 80 --warmup-frames 20 --output log/artifacts/tracking_attention_20260926/adjacent_cases_05.json
+PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py log/artifacts/tracking_attention_20260926/adjacent_cases_05.json --output log/artifacts/tracking_attention_20260926/adjacent_batch_05 --repeats 3 --timeout-sec 90 --max-total-sec 500 --estimate-sec 8
+PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/tracking_attention_20260926/adjacent_cases.json --output log/artifacts/tracking_attention_20260926/adjacent_ros --repeats 2 --timeout-sec 120 --max-total-sec 480 --estimate-sec 35
+ROS_DOMAIN_ID=183 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 15 120 taskset -c 4 python3 benchmarks/tracking_attention_20260926/verify.py ros --tracking-mode adjacent_nonplane --cell-size .5 --ratio .5 --max-points 200000 --seed 28 --validation --output log/artifacts/tracking_attention_20260926/adjacent_validation.json
 ```
 
 0.1 m比較はsuiteの入力幅を`.1`、出力接尾辞を`01`、runner予測を2秒へ変更。他の条件は同じ。
@@ -65,7 +65,7 @@ manifest・runner出力は新しいパス限定。生ログ・結果・子ノー
 通常ビルド：`cd /ros2_ws && timeout 360 colcon build --packages-select gng_cpu ais_gng --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release --event-handlers console_direct+`。
 回帰：`ctest --test-dir /ros2_ws/build/gng_cpu --output-on-failure`。
 ROS回帰：`ctest --test-dir /ros2_ws/build/ais_gng -R 'test_grasp_attention|test_boundary_attention|test_spatial_sampling|test_nonplane_component_extractor|test_plane_cluster_incremental' --output-on-failure`。
-製品検証は`artifacts/tracking_attention_20260926/adjacent_product`へ分離し、通常installを上書きしない。
+製品検証は`log/artifacts/tracking_attention_20260926/adjacent_product`へ分離し、通常installを上書きしない。
 CMakeはRelease・allow_external_sampler=OFF・GNG_BUILD_BENCHMARKS=ON・GNG_ENABLE_FRAME_LOG=OFF、ビルド`-j4`。
 製品CTestは`LD_LIBRARY_PATH`先頭を同ディレクトリとし、`ctest --test-dir <product> --no-tests=error --output-on-failure`。
 

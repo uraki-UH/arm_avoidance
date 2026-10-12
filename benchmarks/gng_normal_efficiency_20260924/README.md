@@ -64,6 +64,6 @@ python3 /ros2_ws/src/benchmarks/gng_normal_efficiency_20260924/summarize.py
 
 本番反映には`bash /ros2_ws/src/benchmarks/gng_normal_efficiency_20260924/install_validated.sh`を使用。検証済み集計と変更前ライブラリのSHA-256を確認する、今回の反映専用スクリプト。反映済み環境での再適用不可。
 
-比較ソース・ライブラリ・生JSON・ログは`artifacts/gng_normal_efficiency_20260924/`、一時ビルドは`/tmp/gng_normal_efficiency_build/`。通常のcolcon探索から除外。
+比較ソース・ライブラリ・生JSON・ログは`log/artifacts/gng_normal_efficiency_20260924/`、一時ビルドは`/tmp/gng_normal_efficiency_build/`。通常のcolcon探索から除外。
 
 [集計](summary.json)を参照。単一bag・同じ乱数列／時間刻みでの一致検証であり、任意環境・別コンパイラでの速度や完全一致の保証ではない。

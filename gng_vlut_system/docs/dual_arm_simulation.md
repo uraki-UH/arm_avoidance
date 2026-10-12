@@ -1,6 +1,6 @@
 # 双腕シミュレーションの制御・物理設定
 
-実機MID-360の接続・点群入力: [専用Dockerと取付TFの設定](../../integrations/mid360/README.md)。
+実機MID-360の接続・点群入力: [専用Dockerと取付TFの設定](../../hardware/mid360/README.md)。
 
 ## Gazebo Harmonicの標準effort制御
 
@@ -38,7 +38,7 @@ docker run --rm -it -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
 docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
   -e GZ_PARTITION=uraki_motor_check -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/workspace \
   uraki-gazebo-harmonic:local bash -c \
-  'source /opt/ros/jazzy/setup.bash; python3 gng_vlut_system/test/check_sim_motor.py --model fixture --output /workspace/artifacts/gz_motor_check/fixture'
+  'source /opt/ros/jazzy/setup.bash; python3 gng_vlut_system/test/check_sim_motor.py --model fixture --output /workspace/log/artifacts/gz_motor_check/fixture'
 ```
 
 検証条件: 重力あり、実URDFの左右`joint4`を同時駆動、各速度は軌道のピーク値。速度誤差RMS判定値0.05 rad/s、最大位置誤差判定値0.05 rad。停止試験では0.4 rad／0.8秒の別軌道の途中で、実測角速度0.2 rad/sを確認して保持指令を送信。全関節が0.02 rad/s未満で落ち着く時刻を停止時間とする。無制限トルク・直接速度設定による追従ではないことを、既知慣性モデルでも確認。
@@ -49,7 +49,7 @@ docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
 | long | 0.02412 | 0.03833 | 0.555 |
 
 既知慣性モデル: 慣性0.1 kg m²、トルク上限0.5 N m。飽和中の実測角加速度5.000 rad/s²、慣性×角加速度0.500 N m。標準コントローラの出力も上限内。
-実URDFの最大出力／URDF上限比: max 0.4014、long 0.5175。位置誤差最大値: max 0.00242 rad、long 0.00548 rad。合否と生波形は`artifacts/gz_motor_20261003/{fixture_02,max_final,long_final}/`の`report.json`、`joint_samples.json`、`controller_samples.json`。所有プロセスの終了確認も`report.json`へ保存。
+実URDFの最大出力／URDF上限比: max 0.4014、long 0.5175。位置誤差最大値: max 0.00242 rad、long 0.00548 rad。合否と生波形は`log/artifacts/gz_motor_20261003/{fixture_02,max_final,long_final}/`の`report.json`、`joint_samples.json`、`controller_samples.json`。所有プロセスの終了確認も`report.json`へ保存。
 
 ## タスクの組替えと方式選択
 
@@ -230,12 +230,12 @@ ros2 service call /sim_topo_dual_arm_max_long/task_executor/resume std_srvs/srv/
 ホストの元workspaceルートで1回実行:
 
 ```bash
-install -d -m 0700 artifacts/harmonic_launcher
+install -d -m 0700 docker/runtime/harmonic_launcher
 docker build -f docker/Dockerfile.gazebo_harmonic -t uraki-gazebo-harmonic:local .
 docker compose -f docker/compose.harmonic_launcher.yaml up -d
 ```
 
-- 待受: `artifacts/harmonic_launcher/launcher.sock`。専用ユーザー所有、権限0600。既定UID/GID: 1000。変更時は`GNG_LAUNCHER_UID`・`GNG_LAUNCHER_GID`を指定。
+- 待受: `docker/runtime/harmonic_launcher/launcher.sock`。専用ユーザー所有、権限0600。既定UID/GID: 1000。変更時は`GNG_LAUNCHER_UID`・`GNG_LAUNCHER_GID`を指定。
 - 起動受付: 1セッション。固定launchと検査済み引数のみ。Docker API・任意シェル実行の公開なし。
 - 終了連動: Ctrl+C・接続切断・5秒間のハートビート欠損。対象は当該セッションの子プロセスのみ。
 - 設定: `task_file`・`urdf`・ファイル指定の`scenario`は元workspaceの`gng_vlut_system/config/`または`urdf/`内。サービス側は読取専用。シナリオ名は組込み設定。コード・組込み設定の更新後は再ビルドと`up -d`が必要。
@@ -281,7 +281,7 @@ GUI: Humble入口からmax_longのメッシュ描画、Intel GPU・Mesa経由の
 docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
   -e GZ_PARTITION=task_check_manual -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/workspace \
   uraki-gazebo-harmonic:local \
-  python3 gng_vlut_system/test/check_task_program.py --output /workspace/artifacts/task_check_manual
+  python3 gng_vlut_system/test/check_task_program.py --output /workspace/log/artifacts/task_check_manual
 ```
 
 試験結果と所有プロセスの終了確認は出力先の`report.json`。点群回避性能・停止距離・実機安全性の検証ではない。
@@ -387,7 +387,7 @@ Harmonicでは全6環境の起動、箱・円柱の落下と台上接触、球�
 
 ```bash
 python3 gng_vlut_system/test/check_sim_motor.py --model max --scenario tabletop \
-  --output /workspace/artifacts/scenario_motor_check
+  --output /workspace/log/artifacts/scenario_motor_check
 ```
 
 球の物理試験は同じテストファイルの`test_rolling_environment_physics`。
@@ -466,10 +466,10 @@ timeout --signal=INT --kill-after=10s 120s /ros2_ws/build/gng_vlut_system/src/ro
 # Gazebo・標準制御の起動から表示照合、所有プロセスの停止まで
 python3 gng_vlut_system/test/check_sim_motor.py --model max --enable-topic-remap \
   --viewer-stream-topic /viewer_test/robot/pose \
-  --output /workspace/artifacts/gz_topics_check/max
+  --output /workspace/log/artifacts/gz_topics_check/max
 ```
 
-max接続試験: Viewer配信307件の実測角との差0 rad、別名トピックでの速度誤差RMS 0.02425 rad/s（目標ピーク0.5 rad/s）、保持指令後0.300秒で停止。best-effort入力の表示反映も確認。結果は`artifacts/gz_topics_20261004/max_complete/report.json`。
+max接続試験: Viewer配信307件の実測角との差0 rad、別名トピックでの速度誤差RMS 0.02425 rad/s（目標ピーク0.5 rad/s）、保持指令後0.300秒で停止。best-effort入力の表示反映も確認。結果は`log/artifacts/gz_topics_20261004/max_complete/report.json`。
 ブラウザ操作・点群入力・全ROS型のHumble/Jazzy間互換性はこの試験の対象外。
 
 ## Isaac Simの接続
@@ -544,7 +544,7 @@ GPU利用が成功した後、以下の共通試験で検証する。
 
 ```bash
 python3 gng_vlut_system/test/check_sim_motor.py --backend isaac --model max \
-  --output /workspace/artifacts/isaac_motor_check/max
+  --output /workspace/log/artifacts/isaac_motor_check/max
 ```
 
 共通試験の対象: 実測・TF・後発購読URDF・時刻、左右joint4の0.2／0.5 rad/s軌道、全関節のトルク出力制限、運動中の保持指令による停止。
@@ -584,7 +584,7 @@ ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=topodualarm
 ```bash
 ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 ROS2CLI_NO_DAEMON=1 \
   python3 /ros2_ws/src/gng_vlut_system/test/check_topodualarm_avoidance.py \
-  --output /ros2_ws/src/artifacts/topodualarm_trial
+  --output /ros2_ws/src/log/artifacts/topodualarm_trial
 ```
 
 ## 2026-10-01: max実機追従・Viewer・回避の作業計画
@@ -763,7 +763,7 @@ docker exec gng_cpu_container bash -lc '
 source /opt/ros/humble/setup.bash
 source /ros2_ws/install/local_setup.bash
 cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_depth_camera_cases.json --output artifacts/dual_arm_depth_camera_20261002/first --repeats 1 --timeout-sec 215 --max-total-sec 460 --estimate-sec 90 --continue-on-error
+python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_depth_camera_cases.json --output log/artifacts/dual_arm_depth_camera_20261002/first --repeats 1 --timeout-sec 215 --max-total-sec 460 --estimate-sec 90 --continue-on-error
 '
 ```
 
@@ -893,7 +893,7 @@ docker exec -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -
 source /opt/ros/humble/setup.bash
 source /ros2_ws/install/local_setup.bash
 cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_control_cases.json --output artifacts/dual_arm_control_20261001/first --repeats 1 --timeout-sec 210 --max-total-sec 450 --estimate-sec 90 --continue-on-error
+python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_control_cases.json --output log/artifacts/dual_arm_control_20261001/first --repeats 1 --timeout-sec 210 --max-total-sec 450 --estimate-sec 90 --continue-on-error
 '
 ```
 
@@ -930,7 +930,7 @@ ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max_long \
 `control/status.udp.is_physical_stop_confirmed`は常にfalse、端末の実測停止表示はGazeboのみ。
 実機送信・機種別校正・受信側停止は未検証。旧`topoarm_hardware.launch.py`の無条件ゼロ送信・再送実装は不使用、既存ファイルの変更なし。
 
-UDP再現試験: 上記バッチ実行の一覧を`gng_vlut_system/test/dual_arm_udp_cases.json`、出力先を`artifacts/dual_arm_udp_20261001/clock_retry`へ変更。
+UDP再現試験: 上記バッチ実行の一覧を`gng_vlut_system/test/dual_arm_udp_cases.json`、出力先を`log/artifacts/dual_arm_udp_20261001/clock_retry`へ変更。
 localhost模擬受信機を試験内で起動・終了。H前の無送信、補間目標との全CSV照合、Space遮断、L再開後のUDP OFF、実測途絶を対象とする有限試験。
 
 キー削減後の試験コマンド（再実行時は未使用の出力先へ変更）:
@@ -940,7 +940,7 @@ docker exec -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -
 source /opt/ros/humble/setup.bash
 source /ros2_ws/install/local_setup.bash
 cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_udp_cases.json --output artifacts/dual_arm_keys_20261001/udp_box_retry --repeats 1 --timeout-sec 210 --max-total-sec 450 --estimate-sec 90 --continue-on-error
+python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_udp_cases.json --output log/artifacts/dual_arm_keys_20261001/udp_box_retry --repeats 1 --timeout-sec 210 --max-total-sec 450 --estimate-sec 90 --continue-on-error
 '
 ```
 
@@ -985,7 +985,7 @@ docker exec -it gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash; so
 
 ```bash
 python3 -B gng_vlut_system/test/test_gazebo_stop_keyboard.py
-docker exec -e ROS_DOMAIN_ID=97 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash; source /ros2_ws/install/local_setup.bash; cd /ros2_ws/src; timeout --signal=TERM --kill-after=5 90 python3 -B gng_vlut_system/test/check_gazebo_stop_keyboard.py --output artifacts/gazebo_stop_keyboard_20261001/pty'
+docker exec -e ROS_DOMAIN_ID=97 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash; source /ros2_ws/install/local_setup.bash; cd /ros2_ws/src; timeout --signal=TERM --kill-after=5 90 python3 -B gng_vlut_system/test/check_gazebo_stop_keyboard.py --output log/artifacts/gazebo_stop_keyboard_20261001/pty'
 ```
 
 再実行時は`--output`を未使用パスへ変更。試験用domain97の既存ノード検出時は実行中止。
@@ -1001,7 +1001,7 @@ docker exec -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -
 source /opt/ros/humble/setup.bash
 source /ros2_ws/install/local_setup.bash
 cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/gazebo_software_stop_direct_cases.json --output artifacts/gazebo_software_stop_20261001/direct_diagnostics --repeats 2 --timeout-sec 600 --max-total-sec 2450 --estimate-sec 85 --continue-on-error
+python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/gazebo_software_stop_direct_cases.json --output log/artifacts/gazebo_software_stop_20261001/direct_diagnostics --repeats 2 --timeout-sec 600 --max-total-sec 2450 --estimate-sec 85 --continue-on-error
 '
 ```
 

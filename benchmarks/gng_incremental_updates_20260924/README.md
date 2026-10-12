@@ -68,20 +68,20 @@ python3 benchmarks/gng_incremental_updates_20260924/setup.py
 ```bash
 python3 benchmarks/gng_incremental_updates_20260924/snapshot_runtime.py
 for method in sync orphan edges combined; do
-  python3 benchmarks/gng_incremental_updates_20260924/optimize.py artifacts/gng_incremental_updates_20260924/${method}_source --method "$method"
-  python3 benchmarks/gng_incremental_updates_20260924/register_test.py artifacts/gng_incremental_updates_20260924/${method}_source
+  python3 benchmarks/gng_incremental_updates_20260924/optimize.py log/artifacts/gng_incremental_updates_20260924/${method}_source --method "$method"
+  python3 benchmarks/gng_incremental_updates_20260924/register_test.py log/artifacts/gng_incremental_updates_20260924/${method}_source
 done
 python3 benchmarks/gng_incremental_updates_20260924/prepare_pooled.py
 python3 benchmarks/gng_incremental_updates_20260924/prepare.py --methods before sync orphan edges combined pooled
 for method in before sync orphan edges combined pooled; do
-  python3 benchmarks/gng_followup_efficiency_20260924/instrument_attention.py artifacts/gng_incremental_updates_20260924/${method}_deterministic
+  python3 benchmarks/gng_followup_efficiency_20260924/instrument_attention.py log/artifacts/gng_incremental_updates_20260924/${method}_deterministic
 done
 bash benchmarks/gng_incremental_updates_20260924/build.sh before combined sync orphan edges
 bash benchmarks/gng_incremental_updates_20260924/run_suite.sh before sync orphan edges combined
 bash benchmarks/gng_incremental_updates_20260924/build.sh pooled
 bash benchmarks/gng_incremental_updates_20260924/verify_boundaries.sh
-mkdir -p artifacts/gng_incremental_updates_20260924/before_pool
-cp artifacts/gng_incremental_updates_20260924/before/{libgng_cpu.so,CMakeCache.txt,compile_commands.json} artifacts/gng_incremental_updates_20260924/before_pool/
+mkdir -p log/artifacts/gng_incremental_updates_20260924/before_pool
+cp log/artifacts/gng_incremental_updates_20260924/before/{libgng_cpu.so,CMakeCache.txt,compile_commands.json} log/artifacts/gng_incremental_updates_20260924/before_pool/
 bash benchmarks/gng_incremental_updates_20260924/run_suite.sh before_pool pooled
 python3 benchmarks/gng_incremental_updates_20260924/audit.py --methods sync orphan edges combined pooled
 python3 benchmarks/gng_incremental_updates_20260924/report.py

@@ -1,5 +1,7 @@
 # 入力ボクセル化なしの最小bsp3d版GNG
 
+現在の空間索引依存は[`gng_vlut_system/third_party/spatialtree`](../../../gng_vlut_system/third_party/spatialtree/README.md)の固定版。ルートの`bsp3d/`は不要。実験名・ライブラリ名は互換用に維持。過去の計測値・ハッシュは依存統一前の実装に対応。
+
 前回の`gng_bsp3d_sampled`をコピーした独立実験版。元CPU版・前回実験版・本番インストール先の変更なし。`COLCON_IGNORE`により通常colconビルドから除外。
 
 ## 最小処理

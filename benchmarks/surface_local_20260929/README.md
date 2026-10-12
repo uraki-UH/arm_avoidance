@@ -3,18 +3,18 @@
 ## 要約
 
 最終候補は `local_flat`。比較旧版・候補版のソース、固定入力、48試行のログ、品質照合結果を
-[artifacts/surface_local_20260929/perf](../../artifacts/surface_local_20260929/perf/) に保存。
+[log/artifacts/surface_local_20260929/perf](../../log/artifacts/surface_local_20260929/perf/) に保存。
 性能値の正本は同ディレクトリの `summary.csv` / `summary.json`、条件の詳細は `input_provenance.json`。
 `commands.json` は実行済みコマンド、各 `batch_*/*/command.json` は個々の計測起動記録。
 本手順は当時のsnapshotを再構築。現在のインストール済み曲面ライブラリへのリンクなし。
 採用結果・互換性は[リリース記録](../../gng_vlut_system/docs/releases/2026-09-29_surface_local_search.md)、
-本番ビルド・ROS試験を含む起動記録は[commands.md](../../artifacts/surface_local_20260929/commands.md)。
+本番ビルド・ROS試験を含む起動記録は[commands.md](../../log/artifacts/surface_local_20260929/commands.md)。
 
 ## 条件・検証
 
 - 対象は `tracker.update()` のCPU時間と経過時間。入力読込・CBOR/JSON処理・平面生成・ROS通信・Marker生成・描画は計測外。
 - `input.cbor.gz`：指定bag `/rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2` の `/lidar_points` 由来。
-  保存済み `artifacts/plane_consistency_20260924/frames.bin` の150入力へsnapshot平面処理を適用し、先頭50入力を除いた100入力のMap+Planeを固定。
+  保存済み `log/artifacts/plane_consistency_20260924/frames.bin` の150入力へsnapshot平面処理を適用し、先頭50入力を除いた100入力のMap+Planeを固定。
   平均19,143.9ノード。旧保存形式に `boundary_evidence` がなく0。報告された実運転60 msの直接再現ではない。
 - `small.cbor.gz`：`tmp/surface_incremental_20260915/observed.json` 由来、1,545ノード・10平面・21入力。
 - `large_curve.cbor.gz`：円柱288点・8平面と、離れた単一平面19,000点の合成、20入力。
@@ -38,7 +38,7 @@
 docker exec gng_cpu_container bash -c '
 set -euo pipefail
 trial_root=/tmp/surface_perf_20260929
-trial_saved=/ros2_ws/src/artifacts/surface_local_20260929/perf
+trial_saved=/ros2_ws/src/log/artifacts/surface_local_20260929/perf
 mkdir -p "$trial_root"
 cp -a "$trial_saved"/. "$trial_root"/
 for trial_input in input small large_curve; do

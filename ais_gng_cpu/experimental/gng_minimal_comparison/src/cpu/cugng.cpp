@@ -681,7 +681,7 @@ bool CUGNG::query_spatial(Vec3f &point, Node_d &winners, uint8_t *label) {
     winners.id1_d2 = winners.id2_d2 = FLT_MAX;
     if (label) {*label = 0;}
     if (!spatial_index) {return false;}
-    std::array<bsp3d::SearchResult<spatial_entry>, 2> nearest;
+    std::array<SpatialTree::SearchResult<spatial_entry, float, 3>, 2> nearest;
     const int num_nearest = spatial_index->findNBest({point.p[0], point.p[1], point.p[2]}, 2, nearest);
     if (num_nearest > 0) {
         winners.id1 = nearest[0].element->node_idx;

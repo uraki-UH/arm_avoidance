@@ -43,7 +43,7 @@
 
 ## 再現
 
-既存`gng_cpu_container`内で以下を実行。`before_source`は`artifacts/gng_production_efficiency_20260924/`へ保存済み。新規checkoutでは上記基準コミットの対象パッケージを同じ場所へ展開する必要あり。ビルドスクリプトは比較コピーの上書きを禁止。
+既存`gng_cpu_container`内で以下を実行。`before_source`は`log/artifacts/gng_production_efficiency_20260924/`へ保存済み。新規checkoutでは上記基準コミットの対象パッケージを同じ場所へ展開する必要あり。ビルドスクリプトは比較コピーの上書きを禁止。
 
 ```bash
 bash /ros2_ws/src/benchmarks/gng_production_efficiency_20260924/build.sh
@@ -63,7 +63,7 @@ bash /ros2_ws/src/benchmarks/gng_production_efficiency_20260924/install_validate
 
 ## 保存物と限界
 
-[集計](summary.json)、[ソース基準](base_revision.txt)、[本番反映](install.json)、[後片付け](verification.json)、[ライブラリSHA-256](library_sha256.json)を保存。生ログ・フレームJSON・共有ライブラリ・変更前後ソースはGit対象外の`artifacts/gng_production_efficiency_20260924/`。
+[集計](summary.json)、[ソース基準](base_revision.txt)、[本番反映](install.json)、[後片付け](verification.json)、[ライブラリSHA-256](library_sha256.json)を保存。生ログ・フレームJSON・共有ライブラリ・変更前後ソースはGit対象外の`log/artifacts/gng_production_efficiency_20260924/`。
 
 同じ入力・乱数列・時間刻みに対する一致を示す単一bagの検証。他データ・異なるコンパイラ・任意の実行タイミングでの完全一致を一般保証するものではない。作業中に外部で既存GNGの3プロセスが終了し、負荷条件は変化し得る。CPU固定、順序を入れ替えた3試行でも改善を確認。エージェントによる既存ROS・Viewer・bagの停止／再起動操作なし。
 

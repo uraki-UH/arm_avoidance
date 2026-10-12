@@ -1,0 +1,6 @@
+interface:
+  display_name: "必要に応じたエージェント分担"
+  short_description: "独立調査・レビュー・長時間実験の分担と、時間・品質・総使用量を管理"
+  default_prompt: "$delegate-agent-work を使い、今回の作業で有効な分担だけを選び、必要な実装と検証を完了してください。"
+policy:
+  allow_implicit_invocation: true

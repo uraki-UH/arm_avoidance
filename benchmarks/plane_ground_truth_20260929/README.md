@@ -10,7 +10,7 @@ CSV内の順序は生成器でシャッフル済み。重点・ボクセルサ�
 最大1,000ノード、その他は`Param`既定値。実際の設定は各試行の`learned/gng_metadata.json`へ保存。
 
 学習直後の同一グラフを`planes_before`と`planes_after`へ入力。両者はGTファイルを読まない構成。
-変更前は`artifacts/plane_merge_simplification_20260929/before.cpp`と`before_include`、変更後は現行の平面実装。
+変更前は`log/artifacts/plane_merge_simplification_20260929/before.cpp`と`before_include`、変更後は現行の平面実装。
 比較対象は残差悪化判定の撤去と接続長共通化。GNG自体の変更比較ではない。
 
 ## 正解・データ形式
@@ -54,8 +54,8 @@ runnerは`/home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py`を
 ```bash
 timeout 360 bash benchmarks/plane_ground_truth_20260929/build.sh
 PYTHONDONTWRITEBYTECODE=1 timeout 30 python3 -m unittest discover -s benchmarks/plane_ground_truth_20260929 -p 'test_*.py' -v
-python3 /tmp/plane_ground_truth_run_batch.py benchmarks/plane_ground_truth_20260929/cases.json --output artifacts/plane_ground_truth_20260929/batch --repeats 3 --timeout-sec 180 --max-total-sec 600 --estimate-sec 10
-python3 /tmp/plane_ground_truth_run_batch.py benchmarks/plane_ground_truth_20260929/noise_cases.json --output artifacts/plane_ground_truth_20260929/noise_batch --repeats 3 --timeout-sec 180 --max-total-sec 600 --estimate-sec 10
+python3 /tmp/plane_ground_truth_run_batch.py benchmarks/plane_ground_truth_20260929/cases.json --output log/artifacts/plane_ground_truth_20260929/batch --repeats 3 --timeout-sec 180 --max-total-sec 600 --estimate-sec 10
+python3 /tmp/plane_ground_truth_run_batch.py benchmarks/plane_ground_truth_20260929/noise_cases.json --output log/artifacts/plane_ground_truth_20260929/noise_batch --repeats 3 --timeout-sec 180 --max-total-sec 600 --estimate-sec 10
 ```
 
 出力先は再利用不可。再試行では新しいパスを指定。反復回数は`--repeats`、入力フレーム・点数は`run_case.py --frames/--points`で指定可能。

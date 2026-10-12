@@ -1,6 +1,13 @@
 #pragma once
 
-#include <bsp3d/bsp3d.hpp>
+#include <SpatialTree/MovingBSPTree.hpp>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <vector>
 #include <deque>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <tf2/LinearMath/Transform.h>
@@ -9,7 +16,7 @@ namespace robot_sim::planning {
 
 // map座標系の差分索引。TF・ID・ラベル変更では空間索引の更新なし
 class goal_spatial_index {
-  using point = bsp3d::point3<double>;
+  using point = SpatialTree::Point<double, 3>;
   struct entry {
     point position;
     std::size_t idx;
@@ -17,13 +24,14 @@ class goal_spatial_index {
     int index_in_cell = -1;
     bool is_indexed = false;
   };
-  using tree = bsp3d::Index<entry, double>;
+  using tree = SpatialTree::MovingBSPTree<entry, double, 3>;
   using map_type = ais_gng_msgs::msg::TopologicalMap;
 
 public:
   bool update(map_type::ConstSharedPtr map) {
     if (map == map_) return false;
     if (!map) {
+      root_cell_ = nullptr;
       tree_.reset();
       points_.clear();
       map_.reset();
@@ -65,6 +73,14 @@ public:
         }
       }
     }
+    // 更新・再構築後の葉ハンドルから取得した根。範囲検索中の全セル走査回避
+    root_cell_ = nullptr;
+    for (const auto &value : points_) {
+      if (!value.is_indexed) continue;
+      root_cell_ = static_cast<const tree::Cell *>(value.spatial_handle);
+      while (root_cell_->parent) root_cell_ = root_cell_->parent;
+      break;
+    }
     map_ = std::move(map);
     return has_changes;
   }
@@ -99,12 +115,37 @@ public:
     if (!has_finite_bounds) {
       for (const auto &value : points_) if (value.is_indexed) result.push_back(value.idx);
     } else {
-      tree_->query_aabb(min_point, max_point, [&](const entry *value) { result.push_back(value->idx); });
+      for (int axis = 0; axis < 3; ++axis)
+        if (min_point[axis] > max_point[axis])
+          throw std::invalid_argument("範囲検索には整列済みの上下限が必要です");
+      query_aabb(root_cell_, min_point, max_point, result);
     }
     return result;
   }
 
 private:
+  // 公開セル構造による閉区間検索。分割軸での枝刈りと葉内の座標キャッシュ照合
+  static void query_aabb(const tree::Cell *cell, const point &min_point,
+      const point &max_point, std::vector<std::size_t> &result) {
+    if (!cell || cell->count == 0) return;
+    if (!cell->isLeaf()) {
+      if (min_point[cell->axis] <= cell->threshold)
+        query_aabb(cell->child[0], min_point, max_point, result);
+      if (max_point[cell->axis] >= cell->threshold)
+        query_aabb(cell->child[1], min_point, max_point, result);
+      return;
+    }
+    for (int idx = 0; idx < cell->items.size(); ++idx) {
+      bool is_inside = true;
+      for (int axis = 0; axis < 3; ++axis) {
+        const double value = cell->items.coord(idx, axis);
+        is_inside = is_inside && value >= min_point[axis] && value <= max_point[axis];
+      }
+      if (is_inside) result.push_back(cell->items.elem(idx)->idx);
+    }
+  }
+
+  const tree::Cell *root_cell_ = nullptr;
   map_type::ConstSharedPtr map_;
   std::deque<entry> points_;
   std::unique_ptr<tree> tree_;

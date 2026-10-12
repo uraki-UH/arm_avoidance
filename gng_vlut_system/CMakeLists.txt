@@ -285,7 +285,7 @@ if(BUILD_TESTING AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test")
       rclcpp sensor_msgs geometry_msgs ais_gng_msgs ais_gng_feature_msgs gng_control_msgs)
   endif()
   ament_add_gtest(test_grasp_candidate_reachability test/test_grasp_candidate_reachability.cpp)
-  target_include_directories(test_grasp_candidate_reachability PRIVATE src ../bsp3d/include)
+  target_include_directories(test_grasp_candidate_reachability PRIVATE src third_party/spatialtree/include)
   ament_target_dependencies(test_grasp_candidate_reachability
     tf2 ais_gng_msgs ais_gng_feature_msgs gng_control_msgs)
   ament_add_gtest(

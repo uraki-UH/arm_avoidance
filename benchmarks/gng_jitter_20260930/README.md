@@ -61,5 +61,5 @@ voxelは周辺中央値4.076→7.307ms、全voxel照合は23.119→35.309ms。�
 解析補助表示は単一コア群の辞書キーで一度失敗、表示側を修正。生データ・試行の成功とは独立。
 所有launch・GNG・補助ノード・probeは終了済み。既存bag・TF・Viewerと3コンテナを維持。
 
-根拠: [集計](../../artifacts/gng_jitter_20260930/summary.csv)、[原ログ・CSV・解析](../../artifacts/gng_jitter_20260930/live/)、[終了確認](../../artifacts/gng_jitter_20260930/cleanup.json)。
+根拠: [集計](../../log/artifacts/gng_jitter_20260930/summary.csv)、[原ログ・CSV・解析](../../log/artifacts/gng_jitter_20260930/live/)、[終了確認](../../log/artifacts/gng_jitter_20260930/cleanup.json)。
 全起動コマンド・復元手順: [REPRODUCE.md](REPRODUCE.md)。

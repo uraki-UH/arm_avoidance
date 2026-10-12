@@ -32,15 +32,15 @@ for method in simple_before simple_after; do
 done
 for trial in 1 2 3; do
   for method in simple_before simple_after; do
-    timeout 45 artifacts/plane_consistency_20260924/"$method"/replay \
-      artifacts/plane_consistency_20260924/frames.bin \
-      > artifacts/plane_consistency_20260924/"$method"/final_"$trial".csv
+    timeout 45 log/artifacts/plane_consistency_20260924/"$method"/replay \
+      log/artifacts/plane_consistency_20260924/frames.bin \
+      > log/artifacts/plane_consistency_20260924/"$method"/final_"$trial".csv
   done
 done
 python3 benchmarks/plane_consistency_20260924/summarize.py --prefix simple_
 ```
 
-変更前ソースとヘッダは`artifacts/plane_consistency_20260924/simple_before/`へ保存。
+変更前ソースとヘッダは`log/artifacts/plane_consistency_20260924/simple_before/`へ保存。
 変更後の平面53テスト成功、変更前は点数制限撤去の追加1件が失敗。1,170＋99点／1,170＋1,170点、スケール0.1/1/10倍、段差・傾斜面拒否を検証。
 ROS用Releaseビルドと関連133テスト（平面53・非平面6・曲面74）が成功。
 `install.sh simple_runtime_before`で3バイナリをinode単位で反映、変更前を保存。
@@ -104,9 +104,9 @@ for method in absorption_before absorption_after; do
 done
 for trial in 1 2 3; do
   for method in absorption_before absorption_after; do
-    timeout 45 artifacts/plane_consistency_20260924/"$method"/replay \
-      artifacts/plane_consistency_20260924/frames.bin \
-      > artifacts/plane_consistency_20260924/"$method"/final_"$trial".csv
+    timeout 45 log/artifacts/plane_consistency_20260924/"$method"/replay \
+      log/artifacts/plane_consistency_20260924/frames.bin \
+      > log/artifacts/plane_consistency_20260924/"$method"/final_"$trial".csv
   done
 done
 python3 benchmarks/plane_consistency_20260924/summarize.py --prefix absorption_
@@ -135,7 +135,7 @@ ROS_DOMAIN_ID=173 ROS_LOCALHOST_ONLY=1 timeout -s INT -k 15 90 \
 
 2026-09-24に交差点bagから生成した同じGNG入力150フレームを、2026-09-25の面外分断修正前後へ入力。
 先頭50フレームを除く100フレームの平均を、交互3試行の中央値で比較。
-生データ・変更前ソース・ビルド・ログはGit対象外の`artifacts/plane_consistency_20260924/`。
+生データ・変更前ソース・ビルド・ログはGit対象外の`log/artifacts/plane_consistency_20260924/`。
 当時の集計値と入力SHA-256は[direction_summary.json](direction_summary.json)。
 先行の面幅・保持整合化は[summary.json](summary.json)、スケール追従は[scale_summary.json](scale_summary.json)、接触部照合は[contact_summary.json](contact_summary.json)、小断片救済は[fragment_summary.json](fragment_summary.json)に保存。
 
@@ -181,7 +181,7 @@ CPU時間は約6.6%減少。過去測定との時間差ではなく今回の交�
 - 救済追加前の診断：後半100フレームで接続不足18.47対、各側・接触部残差18.76対/フレームで拒否。診断自体の追加では非時間集計が一致。
 - 同診断の最終フレームで、小片を含む隣接44対のうち幾何条件を通る4対が1本接続で残存。ID対66/399、21/152、285/399、139/448。接続長比約1.34〜2.15。小断片61個中19個は他平面への直接接続なし。
 - 未所属点を1個挟む2対（176/223、285/439）の位置条件適合は救済追加前の診断結果。法線・時間安定性未評価、今回の統合対象外。画面との対応は未確認。
-- 先行の診断資料は`artifacts/plane_consistency_20260924/fragment_diagnosis/`・`fragment_after/`に保持。現行版の最終点群・接続・所属と集計は`direction_after/last_frame.json`・`statistics.csv`。
+- 先行の診断資料は`log/artifacts/plane_consistency_20260924/fragment_diagnosis/`・`fragment_after/`に保持。現行版の最終点群・接続・所属と集計は`direction_after/last_frame.json`・`statistics.csv`。
 
 規模別の合成入力（各100測定フレーム、先頭20フレーム除外、交互3試行のCPU平均時間の中央値）：
 
@@ -201,12 +201,12 @@ CPU時間は約6.6%減少。過去測定との時間差ではなく今回の交�
 
 ```bash
 timeout 100 bash benchmarks/plane_consistency_20260924/build.sh absorption_after
-timeout 45 artifacts/plane_consistency_20260924/absorption_after/replay \
-  artifacts/plane_consistency_20260924/frames.bin --diagnose \
-  > artifacts/plane_consistency_20260924/absorption_after/statistics.csv \
-  2> artifacts/plane_consistency_20260924/absorption_after/last_frame.json
+timeout 45 log/artifacts/plane_consistency_20260924/absorption_after/replay \
+  log/artifacts/plane_consistency_20260924/frames.bin --diagnose \
+  > log/artifacts/plane_consistency_20260924/absorption_after/statistics.csv \
+  2> log/artifacts/plane_consistency_20260924/absorption_after/last_frame.json
 timeout 30 python3 benchmarks/plane_consistency_20260924/diagnose_fragments.py \
-  artifacts/plane_consistency_20260924/absorption_after/last_frame.json
+  log/artifacts/plane_consistency_20260924/absorption_after/last_frame.json
 ```
 
 診断用ビルド・実行プロセスは全終了。診断によるROSノード・再生の起動停止なし。
@@ -218,26 +218,26 @@ source /ros2_ws/install/setup.bash
 cd /ros2_ws/src
 timeout -s INT -k 5 120 python3 benchmarks/plane_consistency_20260924/capture.py \
   --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 \
-  --config artifacts/plane_consistency_20260924/at128.yaml \
-  --output artifacts/plane_consistency_20260924/frames.bin --frames 150
+  --config log/artifacts/plane_consistency_20260924/at128.yaml \
+  --output log/artifacts/plane_consistency_20260924/frames.bin --frames 150
 for method in direction_before direction_after; do
   timeout 90 bash benchmarks/plane_consistency_20260924/build.sh "$method"
-  artifacts/plane_consistency_20260924/"$method"/tests
+  log/artifacts/plane_consistency_20260924/"$method"/tests
 done
 for trial in 1 2 3; do
   for method in direction_before direction_after; do
-    timeout 45 artifacts/plane_consistency_20260924/"$method"/replay \
-      artifacts/plane_consistency_20260924/frames.bin \
-      > artifacts/plane_consistency_20260924/"$method"/final_"$trial".csv
+    timeout 45 log/artifacts/plane_consistency_20260924/"$method"/replay \
+      log/artifacts/plane_consistency_20260924/frames.bin \
+      > log/artifacts/plane_consistency_20260924/"$method"/final_"$trial".csv
   done
 done
 python3 benchmarks/plane_consistency_20260924/summarize.py --prefix direction_
 ```
 
 `direction_before/tests`の追加6件の失敗は回帰検出の確認結果。保存済み入力の比較では取得コマンドを省略。
-ROS用Releaseビルドは`artifacts/plane_consistency_20260924/ros_build`へ分離。
+ROS用Releaseビルドは`log/artifacts/plane_consistency_20260924/ros_build`へ分離。
 `ais_gng_component_cpu`・`plane_cluster_incremental_node`を再ビルドし、平面46・非平面6・曲面74テストが成功。
-CTestでは`LD_LIBRARY_PATH=/ros2_ws/src/artifacts/plane_consistency_20260924/ros_build:$LD_LIBRARY_PATH`を指定し、ビルドしたライブラリを優先。
+CTestでは`LD_LIBRARY_PATH=/ros2_ws/src/log/artifacts/plane_consistency_20260924/ros_build:$LD_LIBRARY_PATH`を指定し、ビルドしたライブラリを優先。
 `bash benchmarks/plane_consistency_20260924/install.sh direction_runtime_before`でライブラリ2本・実行ファイル1本をinode単位で反映。
 反映直前のバイナリは`direction_runtime_before/`へ保存済み。先行修正時のバックアップも保持。配布先と試験用ビルドの一致を`cmp`で確認。
 

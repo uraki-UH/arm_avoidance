@@ -396,9 +396,13 @@ public:
                 us_listen_socket_close(0, listenSocket_);
                 listenSocket_ = nullptr;
             }
-            std::lock_guard<std::mutex> lock(connectionMutex_);
-            for (auto* ws : connections_) ws->close();
-            connections_.clear();
+            std::vector<WebSocket*> connections;
+            {
+                std::lock_guard<std::mutex> lock(connectionMutex_);
+                connections = connections_;
+            }
+            // closeコールバック内の接続削除に備えたロック外での切断
+            for (auto* ws : connections) ws->close();
         });
         if (serverThread_.joinable()) serverThread_.join();
     }

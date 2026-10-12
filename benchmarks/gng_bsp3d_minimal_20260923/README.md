@@ -10,7 +10,7 @@
 
 実行環境は既存`gng_cpu_container`内のROS Humble、numpy・scipy・PyYAML。bag・トピックは検証記録を参照。追加依存のインストールなし。
 
-[実装README](../../ais_gng_cpu/experimental/gng_bsp3d_minimal/README.md)の手順でビルドし、`libgng_bsp3d_minimal.so`を`artifacts/gng_bsp3d_minimal_20260923/`へ配置。比較元は`artifacts/gng_bsp3d_20260923/libgng_grid.so`と`artifacts/gng_bsp3d_sampled_20260923/libgng_bsp3d_sampled.so`が必要。
+[実装README](../../ais_gng_cpu/experimental/gng_bsp3d_minimal/README.md)の手順でビルドし、`libgng_bsp3d_minimal.so`を`log/artifacts/gng_bsp3d_minimal_20260923/`へ配置。比較元は`log/artifacts/gng_bsp3d_20260923/libgng_grid.so`と`log/artifacts/gng_bsp3d_sampled_20260923/libgng_bsp3d_sampled.so`が必要。
 
 コンテナ内:
 
@@ -19,4 +19,4 @@ bash /ros2_ws/src/benchmarks/gng_bsp3d_minimal_20260923/run_benchmarks.sh
 python3 /ros2_ws/src/benchmarks/gng_bsp3d_minimal_20260923/summarize.py
 ```
 
-出力はGit管理外の`artifacts/gng_bsp3d_minimal_20260923/`。生データのないcheckoutでは再計測が必要。ディレクトリ名の日付は作業開始日の2026-09-23、完了記録は翌2026-09-24。
+出力はGit管理外の`log/artifacts/gng_bsp3d_minimal_20260923/`。生データのないcheckoutでは再計測が必要。ディレクトリ名の日付は作業開始日の2026-09-23、完了記録は翌2026-09-24。

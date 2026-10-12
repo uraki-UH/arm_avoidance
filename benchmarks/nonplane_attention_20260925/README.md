@@ -1,7 +1,7 @@
 # 非平面重点サンプリングの検証（2026-09-25）
 
 本機能は同日のユーザー指示で撤去済み。以下は削除前の評価記録。
-旧`smoke.py`は削除前ソースとともに`artifacts/nonplane_attention_removal_20260925/source_before.tar.gz`へ退避。
+旧`smoke.py`は削除前ソースとともに`log/artifacts/nonplane_attention_removal_20260925/source_before.tar.gz`へ退避。
 現在の確認手順は[削除後検証](REMOVAL.md)を参照。共用の境界検索ベンチは保持。
 
 ## 要約
@@ -33,7 +33,7 @@ ROS_DOMAIN_ID=174 ROS_LOCALHOST_ONLY=1 timeout -s INT -k 20 180 \
   python3 benchmarks/nonplane_attention_20260925/smoke.py \
   --executable /ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu \
   --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 \
-  --output artifacts/nonplane_attention_20260925/optimized_installed
+  --output log/artifacts/nonplane_attention_20260925/optimized_installed
 ```
 
 追加選択処理の比較（初回2回除外、各7回中央値。既存ROS稼働中、CPU 0固定）：
@@ -41,8 +41,8 @@ ROS_DOMAIN_ID=174 ROS_LOCALHOST_ONLY=1 timeout -s INT -k 20 180 \
 ```bash
 g++ -std=c++17 -O3 -Iais_gng_cpu/src/ais_gng/include \
   benchmarks/nonplane_attention_20260925/selection.cpp \
-  -o artifacts/nonplane_attention_20260925/selection_compare
-trial_dir=artifacts/nonplane_attention_20260925
+  -o log/artifacts/nonplane_attention_20260925/selection_compare
+trial_dir=log/artifacts/nonplane_attention_20260925
 for iter in 1 2 3; do
   timeout 30 taskset -c 0 "$trial_dir/selection_compare" "$trial_dir/selection.bin" "$trial_dir/reference.bin" reference
   timeout 30 taskset -c 0 "$trial_dir/selection_compare" "$trial_dir/selection.bin" "$trial_dir/optimized.bin"
@@ -58,7 +58,7 @@ done
 対象はkd-tree構築・検索・重み混合。成分抽出・GNG学習・ROS配信は含まず、追加コストゼロとの主張なし。
 同じ点群でもGNGの乱数で対象ノードが変わるため、再試験の候補数・時間は一致を保証しない。
 
-生成物・設定・ログはGit対象外の`artifacts/nonplane_attention_20260925/`。
+生成物・設定・ログはGit対象外の`log/artifacts/nonplane_attention_20260925/`。
 単体検証は分離Releaseビルドでも実施。ROSラッパーは共有ライブラリを動的読込みするため統合検証は通常配布先が対象。
 通常ビルド確認は`cmake --build /ros2_ws/build/ais_gng --target ais_gng_component_cpu ais_gng_cpu test_nonplane_attention test_boundary_attention test_grasp_attention test_nonplane_component_extractor -j2`（timeout 240秒）。
 `test_optimized_installed.log`・`smoke_optimized_installed.log`・`optimized_installed/smoke_results.json`に最新結果。

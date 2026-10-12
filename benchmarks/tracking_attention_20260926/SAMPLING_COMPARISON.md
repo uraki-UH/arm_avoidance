@@ -60,7 +60,7 @@
   比較値0.5/0.7/0.9は内部整数変換のため、そのまま50/70/90%になるとは限らない。
 - `batch_screen/tune/change/unknown/holdout/resample_20260927`は順に18/24/12/12/20/12試行。
   生ログ・実行argv・seed・終了コード・cleanup・指標は各`report.json`、全指標集計は`sampling_summary_20260927.json`。
-  すべて`artifacts/tracking_attention_20260926/`配下。良い試行だけの選別なし。
+  すべて`log/artifacts/tracking_attention_20260926/`配下。良い試行だけの選別なし。
 - 既存NumPy/SciPy推奨版不一致の警告を保持。runnerの孤児回収競合を初期検証で修正し再検証。
   ホスト・Dockerでrunner回帰10件成功（回数、順序、環境、失敗、中断、時間上限、孤児回収、上書き拒否、指標検査）。
   C++試作品の点数変化単体検証、スキル構造検証も成功。
@@ -74,9 +74,9 @@
 以下はコンテナ内`source /ros2_ws/install/setup.bash`、`cd /ros2_ws/src`の後。再試行は新しい出力名が必須。
 
 ```bash
-c++ -std=c++17 -O3 -fPIC -shared -Iais_gng_cpu/src/gng_cpu/include benchmarks/tracking_attention_20260926/experiment_sampler.cpp -o artifacts/tracking_attention_20260926/retention_sampler.so
-python3 benchmarks/tracking_attention_20260926/verify.py suite --tag final_ --sampler-library /ros2_ws/src/artifacts/tracking_attention_20260926/retention_sampler.so --cases off np_points:.5 np_hold:.5:.05:0 np_hold:.5:.05:2 np_hold:.5:.05:4 --output artifacts/tracking_attention_20260926/retention_cases_20260927.json
-python3 skills/run-benchmark-batch/scripts/run_batch.py artifacts/tracking_attention_20260926/retention_cases_20260927.json --output artifacts/tracking_attention_20260926/batch_retention_20260927 --repeats 5 --start-seed 9 --timeout-sec 150 --max-total-sec 600 --estimate-sec 5.5
+c++ -std=c++17 -O3 -fPIC -shared -Iais_gng_cpu/src/gng_cpu/include benchmarks/tracking_attention_20260926/experiment_sampler.cpp -o log/artifacts/tracking_attention_20260926/retention_sampler.so
+python3 benchmarks/tracking_attention_20260926/verify.py suite --tag final_ --sampler-library /ros2_ws/src/log/artifacts/tracking_attention_20260926/retention_sampler.so --cases off np_points:.5 np_hold:.5:.05:0 np_hold:.5:.05:2 np_hold:.5:.05:4 --output log/artifacts/tracking_attention_20260926/retention_cases_20260927.json
+python3 skills/run-benchmark-batch/scripts/run_batch.py log/artifacts/tracking_attention_20260926/retention_cases_20260927.json --output log/artifacts/tracking_attention_20260926/batch_retention_20260927 --repeats 5 --start-seed 9 --timeout-sec 150 --max-total-sec 600 --estimate-sec 5.5
 ```
 
 保持の再生成／欠落はsuiteへ`--resample-ground`／`--label-gap-frames 2 --label-gap-period 5`を追加、np_pointsを除外。

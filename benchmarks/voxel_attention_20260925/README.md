@@ -1,7 +1,7 @@
 # ボクセル重点学習の検証（2026-09-25）
 
 本機能は同日のユーザー指示で撤去済み。以下は削除前の評価記録で、現行機能の説明ではない。
-旧専用ベンチ・スモーク・比較スクリプトはソースとともに`artifacts/nonplane_attention_removal_20260925/source_before.tar.gz`へ退避。
+旧専用ベンチ・スモーク・比較スクリプトはソースとともに`log/artifacts/nonplane_attention_removal_20260925/source_before.tar.gz`へ退避。
 以下の旧コマンドは削除前の環境用。現在の確認手順は[削除後検証](../nonplane_attention_20260925/REMOVAL.md)を参照。
 
 ## 要約
@@ -66,17 +66,17 @@ ROS_DOMAIN_ID=175 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 timeout -s INT 
 ```bash
 ROS_DOMAIN_ID=176 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 600 \
   python3 benchmarks/voxel_attention_20260925/compare.py \
-  --before /ros2_ws/src/artifacts/voxel_attention_20260925/optimization_before \
-  --after /ros2_ws/src/artifacts/nonplane_attention_20260925/install/lib \
+  --before /ros2_ws/src/log/artifacts/voxel_attention_20260925/optimization_before \
+  --after /ros2_ws/src/log/artifacts/nonplane_attention_20260925/install/lib \
   --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 \
-  --output artifacts/voxel_attention_20260925/compare_real --trials 2
+  --output log/artifacts/voxel_attention_20260925/compare_real --trials 2
 ```
 
 合成試験はドメイン177、出力先`compare_synthetic`へ変更し、`--synthetic --cpu 2 --frames 40 --warmup 10 --trials 3`を指定。
 初回実bag比較は3試行指定で600秒に到達、最後の条件が未完了。表は最初の2試行だけを使用。中断時の二重shutdownを修正。
 
-隔離検証では実行ファイルを`artifacts/nonplane_attention_20260925/ros_build/ais_gng_cpu`へ変更し、
-同ディレクトリと`artifacts/nonplane_attention_20260925/install/lib`を絶対パスで`LD_LIBRARY_PATH`の先頭に設定。
+隔離検証では実行ファイルを`log/artifacts/nonplane_attention_20260925/ros_build/ais_gng_cpu`へ変更し、
+同ディレクトリと`log/artifacts/nonplane_attention_20260925/install/lib`を絶対パスで`LD_LIBRARY_PATH`の先頭に設定。
 CPU試験は同じ隔離`gng_build`をRelease/LTO・`GNG_BUILD_BENCHMARKS=ON`でビルド後、`ctest --output-on-failure`。
 `ais_gng_cpu`は動的読込ラッパーのため、`ais_gng_component_cpu`も明示的なビルド対象。
 
@@ -91,16 +91,16 @@ timeout 120 g++ -std=c++20 -O3 -DGNG_VERSION=0 \
   benchmarks/voxel_attention_20260925/benchmark.cpp \
   ais_gng_cpu/src/gng_cpu/src/cpu/{cugng,voxel_grid}.cpp \
   ais_gng_cpu/src/gng_cpu/src/utils/{node,param,vec3f,utils}.cpp \
-  -o artifacts/voxel_attention_20260925/benchmark_optimized
+  -o log/artifacts/voxel_attention_20260925/benchmark_optimized
 for trial in 1 2 3; do
-  timeout 60 taskset -c 4 artifacts/voxel_attention_20260925/benchmark_no_visibility \
-    artifacts/nonplane_attention_20260925/selection.bin
-  timeout 60 taskset -c 4 artifacts/voxel_attention_20260925/benchmark_optimized \
-    artifacts/nonplane_attention_20260925/selection.bin
+  timeout 60 taskset -c 4 log/artifacts/voxel_attention_20260925/benchmark_no_visibility \
+    log/artifacts/nonplane_attention_20260925/selection.bin
+  timeout 60 taskset -c 4 log/artifacts/voxel_attention_20260925/benchmark_optimized \
+    log/artifacts/nonplane_attention_20260925/selection.bin
 done
 ```
 
-ログはGit対象外の`artifacts/voxel_attention_20260925/`。最適化後CPU22対象は`test_optimized_core.log`、隔離ROS6条件は`smoke_optimized.log`で成功。
+ログはGit対象外の`log/artifacts/voxel_attention_20260925/`。最適化後CPU22対象は`test_optimized_core.log`、隔離ROS6条件は`smoke_optimized.log`で成功。
 通常ビルドは`build_optimized_installed.log`、配布先6条件は`smoke_optimized_installed.log`で成功。試験前後のライブラリSHA-256一致。
 中断確認は比較コマンドを5秒上限・`--trials 1`・出力先`compare_shutdown`へ変更。子ノード終了と二重shutdown解消を確認。
 全試験・ベンチマーク・実行セッションは終了。既存3コンテナ、bag 293745・GNG 305235・Viewer launch 305269を維持。追加デーモン残留なし。

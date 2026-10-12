@@ -32,7 +32,7 @@ ROS_DOMAIN_ID=178 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 240 \
 既存bag PID 293745、GNG launch 305234／node 305235、Viewer launch 305269と既存3コンテナを維持。
 新規デーモン・試験プロセスの残存なし。すべてのビルド・試験セッション終了を確認。
 配布先の廃止ヘッダーへの壊れたsymlink 2件もバックアップ先へ退避。
-ビルド・テストログ：`artifacts/nonplane_attention_removal_20260925/`（Git対象外）。
+ビルド・テストログ：`log/artifacts/nonplane_attention_removal_20260925/`（Git対象外）。
 削除前ソースのバックアップ：同ディレクトリの`source_before.tar.gz`。
 
 通常利用は再ビルド後、使用中launchを終了して同じコマンドで再起動：

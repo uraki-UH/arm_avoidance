@@ -26,7 +26,7 @@
 - 環境確認の初回は差替えに伴う`(deleted)`表記を相違として検出。読み込みアドレス・権限・inodeの比較へ修正し、同一ライブラリの保持を再確認。
 
 [集計](report.json)、[反映](install.json)、[環境確認](runtime_verification.json)、[検証スクリプト](verify.py)。
-[既存検証手順](../gng_unused_mapping_20260924/README.md)を再利用し、生成スクリプト・生ログ・フレームJSON・ソースコピーは`artifacts/gng_search_readability_20260924/`に保存。
+[既存検証手順](../gng_unused_mapping_20260924/README.md)を再利用し、生成スクリプト・生ログ・フレームJSON・ソースコピーは`log/artifacts/gng_search_readability_20260924/`に保存。
 再現には削除前ではなく今回の整理前の`before_source`、同じbag、ROS Humbleが必要。
 
 起動コマンド（すべて終了済み）：

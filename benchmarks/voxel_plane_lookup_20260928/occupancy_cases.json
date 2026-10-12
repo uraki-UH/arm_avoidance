@@ -7,8 +7,8 @@
         "taskset",
         "-c",
         "4",
-        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/build/compare",
-        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "/ros2_ws/src/log/artifacts/voxel_plane_lookup_20260928/build/compare",
+        "/ros2_ws/src/log/artifacts/voxel_plane_lookup_20260928",
         "@seed@",
         "@case_dir@",
         "regular"
@@ -22,8 +22,8 @@
         "taskset",
         "-c",
         "4",
-        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/build/compare",
-        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "/ros2_ws/src/log/artifacts/voxel_plane_lookup_20260928/build/compare",
+        "/ros2_ws/src/log/artifacts/voxel_plane_lookup_20260928",
         "@seed@",
         "@case_dir@",
         "occupancy"

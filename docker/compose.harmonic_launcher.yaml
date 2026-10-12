@@ -28,7 +28,7 @@ services:
     devices:
       - "${GNG_RENDER_DEVICE:-/dev/dri/renderD128}:/dev/dri/renderD128"
     volumes:
-      - ${GNG_LAUNCHER_RUNTIME_DIR:-../artifacts/harmonic_launcher}:/run/gng-harmonic
+      - ${GNG_LAUNCHER_RUNTIME_DIR:-./runtime/harmonic_launcher}:/run/gng-harmonic
       - ../gng_vlut_system/config:/workspace/gng_vlut_system/config:ro
       - ../urdf:/workspace/urdf:ro
       - ./fastdds_harmonic_udp.xml:/run/fastdds_udp.xml:ro

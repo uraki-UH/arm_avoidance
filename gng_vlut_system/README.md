@@ -260,7 +260,7 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 `gng_results/topo_dual_arm_max_long_independent/independent_arms.json`から左右のファイルを読み込みます。
 従来の14関節モデルを表示する場合は`enable_independent_arms:=false`と、
 `gng_model_path`・`vlut_path`を指定します。以前の検査済みモデルは
-`artifacts/gng_self_collision_fix_20261001/long/model/`に保持しています。
+`log/artifacts/gng_self_collision_fix_20261001/long/model/`に保持しています。
 名前・モデル・設定の切替には、起動中のブリッジの終了と新しい設定での再起動が必要です。
 
 別モデルのToPoDualArmは次の指定です。左右グリッパーの体積確認用トピック
@@ -370,7 +370,7 @@ VLUT用の占有・危険ボクセルへの変換には除去後のトピック�
 
 ### ROI登録とAiS-GNGの自己判定共有
 
-実機MID-360のドライバ導入・IP設定・点群受信は[専用Docker環境の手順](../integrations/mid360/README.md)を参照。
+実機MID-360のドライバ導入・IP設定・点群受信は[専用Docker環境の手順](../hardware/mid360/README.md)を参照。
 GNGコンテナのビルドとは独立した導入。実機の出力トピックは公式既定の`/livox/lidar`。
 
 ```bash

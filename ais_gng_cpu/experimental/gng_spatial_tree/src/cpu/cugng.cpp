@@ -1013,7 +1013,7 @@ bool CUGNG::query_spatial(Vec3f &point, Node_d &winners, uint8_t *label) {
     if (label) {*label = 0;}
     // 木全体の最近傍2ノード。固定範囲の候補列挙・候補配列の確保なし。
     if (!spatial_index) {return false;}
-    std::array<bsp3d::SearchResult<spatial_entry>, 2> nearest;
+    std::array<SpatialTree::SearchResult<spatial_entry, float, 3>, 2> nearest;
     const int num_nearest = spatial_index->findNBest(
         {point.p[0], point.p[1], point.p[2]}, 2, nearest);
     if (num_nearest > 0) {

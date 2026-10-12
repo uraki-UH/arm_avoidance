@@ -8,7 +8,7 @@
 #include "define.h"
 
 #include <cstdint>
-#include <bsp3d/bsp3d.hpp>
+#include <SpatialTree/MovingBSPTree.hpp>
 #include <fuzzrobo/libgng/sampling_api.h>
 #include <fuzzrobo/libgng/observation_pixel_view.hpp>
 
@@ -127,7 +127,7 @@ class CUGNG {
         int index_in_cell = 0;
         uint32_t node_idx = 0;
     };
-    using spatial_tree = bsp3d::Index<spatial_entry>;
+    using spatial_tree = SpatialTree::MovingBSPTree<spatial_entry, float, 3>;
     std::unique_ptr<spatial_tree> spatial_index;
     std::vector<spatial_entry> spatial_entries;
     bool query_spatial(Vec3f &point, Node_d &winners, uint8_t *label);

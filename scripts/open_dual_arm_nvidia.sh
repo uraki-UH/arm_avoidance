@@ -16,7 +16,7 @@ if [[ "${enable_backend:-1}" == 1 ]]; then
         bash /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/start_ros.sh --ensure
 fi
 exec env viewer_gpu="${viewer_gpu:-auto}" \
-    viewer_profile_dir="${viewer_profile_dir:-${XDG_CACHE_HOME:-$HOME/.cache}/topo-dual-arm-gpu-auto}" \
+    viewer_profile_prefix=topo-dual-arm \
     bash "$script_dir/open_viewer_nvidia.sh" \
     "http://127.0.0.1:8877/?model=$model" \
     --ozone-platform=x11 --window-size=1440,1000 "$@"

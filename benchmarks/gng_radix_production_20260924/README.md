@@ -78,6 +78,6 @@ bash /ros2_ws/src/benchmarks/gng_radix_production_20260924/run.sh
 python3 /ros2_ws/src/benchmarks/gng_radix_production_20260924/summarize.py
 ```
 
-すべて有限タイムアウト付きで実行。ビルド・測定の保存先は`artifacts/gng_radix_production_20260924/`。本番インストール先は使用しない。
+すべて有限タイムアウト付きで実行。ビルド・測定の保存先は`log/artifacts/gng_radix_production_20260924/`。本番インストール先は使用しない。
 
-Git管理対象の[集計](summary.json)、[本番不変・後片付けの確認](verification.json)、[基準出力との一致](baseline_identity.json)、[実験版ソースSHA-256](experimental_source_sha256.json)、[ライブラリSHA-256](library_sha256.json)を保存。生ログ・フレームJSON・NPZスナップショット・共有ライブラリはGit管理対象外の`artifacts/`に保存。
+Git管理対象の[集計](summary.json)、[本番不変・後片付けの確認](verification.json)、[基準出力との一致](baseline_identity.json)、[実験版ソースSHA-256](experimental_source_sha256.json)、[ライブラリSHA-256](library_sha256.json)を保存。生ログ・フレームJSON・NPZスナップショット・共有ライブラリはGit管理対象外の`log/artifacts/`に保存。

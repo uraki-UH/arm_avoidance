@@ -64,6 +64,6 @@ def generate_launch_description():
         DeclareLaunchArgument('output_dir', default_value=''),
         DeclareLaunchArgument('enable_autostart', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('launcher_socket', default_value=os.environ.get('GNG_HARMONIC_SOCKET',
-            str(package_dir.parent / 'artifacts/harmonic_launcher/launcher.sock'))),
+            str(package_dir.parent / 'docker/runtime/harmonic_launcher/launcher.sock'))),
         OpaqueFunction(function=launch_setup),
     ])

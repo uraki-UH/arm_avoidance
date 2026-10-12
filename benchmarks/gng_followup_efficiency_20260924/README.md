@@ -60,17 +60,17 @@ Release＋既存LTO、CPU 0固定、交差点bagの先頭300フレームと100�
 
 ```bash
 python3 benchmarks/gng_followup_efficiency_20260924/prepare_sources.py --methods before attention_ids attention_spans search cluster edges combined combined_xyz
-python3 benchmarks/gng_followup_efficiency_20260924/optimize_attention.py artifacts/gng_followup_efficiency_20260924/combined_source --variant ids
+python3 benchmarks/gng_followup_efficiency_20260924/optimize_attention.py log/artifacts/gng_followup_efficiency_20260924/combined_source --variant ids
 for method in combined combined_xyz; do
   for step in search cluster edges; do
-    python3 benchmarks/gng_followup_efficiency_20260924/optimize_$step.py artifacts/gng_followup_efficiency_20260924/${method}_source
+    python3 benchmarks/gng_followup_efficiency_20260924/optimize_$step.py log/artifacts/gng_followup_efficiency_20260924/${method}_source
   done
 done
-python3 benchmarks/gng_followup_efficiency_20260924/register_attention_test.py artifacts/gng_followup_efficiency_20260924/combined_source --variant ids
-python3 benchmarks/gng_followup_efficiency_20260924/register_attention_test.py artifacts/gng_followup_efficiency_20260924/combined_xyz_source --variant before
+python3 benchmarks/gng_followup_efficiency_20260924/register_attention_test.py log/artifacts/gng_followup_efficiency_20260924/combined_source --variant ids
+python3 benchmarks/gng_followup_efficiency_20260924/register_attention_test.py log/artifacts/gng_followup_efficiency_20260924/combined_xyz_source --variant before
 python3 benchmarks/gng_followup_efficiency_20260924/prepare.py --methods before attention_ids attention_spans search cluster edges combined combined_xyz
 for method in before attention_ids attention_spans search cluster edges combined combined_xyz; do
-  python3 benchmarks/gng_followup_efficiency_20260924/instrument_attention.py artifacts/gng_followup_efficiency_20260924/${method}_deterministic
+  python3 benchmarks/gng_followup_efficiency_20260924/instrument_attention.py log/artifacts/gng_followup_efficiency_20260924/${method}_deterministic
 done
 bash benchmarks/gng_followup_efficiency_20260924/build.sh before attention_ids attention_spans search cluster edges
 bash benchmarks/gng_followup_efficiency_20260924/run_probe.sh before attention_ids attention_spans search cluster
@@ -103,7 +103,7 @@ cmake --build /tmp/gng_followup_attention_test_build/before --target attention_l
 
 ## 保存と限界
 
-生ログ・ライブラリ・比較ソースは`artifacts/gng_followup_efficiency_20260924/`。通常colcon探索から除外済み。作成した検証プロセスは終了し、所有する一時ビルドだけを片付け、元データと結果は保存。
+生ログ・ライブラリ・比較ソースは`log/artifacts/gng_followup_efficiency_20260924/`。通常colcon探索から除外済み。作成した検証プロセスは終了し、所有する一時ビルドだけを片付け、元データと結果は保存。
 
 初回読取ではGNGを含む12プロセスが存在したが、保存した検証前ベースライン時点ではViewer＋bagの9プロセス。終了時も同じPID・コマンドの9プロセスで一致。GNG停止操作は実施しておらず、消失時刻・原因は未特定。新ライブラリは次回GNG起動から有効。
 

@@ -39,7 +39,7 @@
 - 合成10条件と実bag各条件の先頭16候補について、索引と全所有ノード走査の6隣接判定が一致。
 - 初回3試行は19.15秒、Header初期化警告の修正後3試行は19.90秒、失敗0。表は後者。
 - 全試行 `cleanup_ok=true`、比較PID 574766/574772/574777および最終batchの子プロセスは終了。
-- 原本：`artifacts/voxel_plane_lookup_20260928/final_batch/report.json`、各試行 `frames.csv`。
+- 原本：`log/artifacts/voxel_plane_lookup_20260928/final_batch/report.json`、各試行 `frames.csv`。
 - 条件・入力SHA256：同ディレクトリ `conditions.json`。既存設定・installはこの比較では未変更。
 
 コンテナ内 `/ros2_ws/src` での比較再現コマンド（出力先は未作成のパスが必要）：
@@ -47,12 +47,12 @@
 ```bash
 source /opt/ros/humble/setup.bash
 PYTHONDONTWRITEBYTECODE=1 timeout 90 python3 benchmarks/voxel_plane_lookup_20260928/prepare.py \
-  --output /ros2_ws/src/artifacts/voxel_plane_lookup_retest
+  --output /ros2_ws/src/log/artifacts/voxel_plane_lookup_retest
 cmake -S benchmarks/voxel_plane_lookup_20260928 \
-  -B artifacts/voxel_plane_lookup_retest/build -DCMAKE_BUILD_TYPE=Release
-timeout 240 cmake --build artifacts/voxel_plane_lookup_retest/build -j4
+  -B log/artifacts/voxel_plane_lookup_retest/build -DCMAKE_BUILD_TYPE=Release
+timeout 240 cmake --build log/artifacts/voxel_plane_lookup_retest/build -j4
 PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py \
-  artifacts/voxel_plane_lookup_retest/cases.json --output artifacts/voxel_plane_lookup_retest/batch \
+  log/artifacts/voxel_plane_lookup_retest/cases.json --output log/artifacts/voxel_plane_lookup_retest/batch \
   --repeats 3 --timeout-sec 120 --max-total-sec 360 --estimate-sec 6.4
 ```
 

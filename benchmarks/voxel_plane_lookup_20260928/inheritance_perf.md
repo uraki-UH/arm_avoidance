@@ -40,7 +40,7 @@ ROSログのGNG欄はgng_execとログ捕捉初期化の経過時間であり、
 - 導入有無の追加10試行は予測40秒・実測36.33秒、全件成功・cleanup_ok確認。本番ソース変更なし。
 - 既存ROSの停止・再起動なし。結果は次回GNG起動からの適用。
 
-結果正本：artifacts/voxel_plane_lookup_20260928/inheritance_perf/以下の
+結果正本：log/artifacts/voxel_plane_lookup_20260928/inheritance_perf/以下の
 batch/report.json（全処理）、replay_batch/report.json（統合案）、history_batch/report.json（最終案）。
 before.cppは試験開始時の所属継承ありソースの保存版。
 
@@ -48,7 +48,7 @@ before.cppは試験開始時の所属継承ありソースの保存版。
 
 ```bash
 bash benchmarks/voxel_plane_lookup_20260928/build_inheritance.sh
-python3 /tmp/inheritance_perf_run_batch.py benchmarks/voxel_plane_lookup_20260928/inheritance_replay_cases.json --output artifacts/voxel_plane_lookup_20260928/inheritance_perf/history_batch --repeats 10 --timeout-sec 20 --max-total-sec 180 --estimate-sec 1
+python3 /tmp/inheritance_perf_run_batch.py benchmarks/voxel_plane_lookup_20260928/inheritance_replay_cases.json --output log/artifacts/voxel_plane_lookup_20260928/inheritance_perf/history_batch --repeats 10 --timeout-sec 20 --max-total-sec 180 --estimate-sec 1
 timeout 180 cmake --build /ros2_ws/build/ais_gng --target test_plane_cluster_incremental -j2
 timeout 60 /ros2_ws/build/ais_gng/test_plane_cluster_incremental
 timeout 60 cmake --install /ros2_ws/build/ais_gng
@@ -58,7 +58,7 @@ runnerはrun-benchmark-batchスキル同梱スクリプトのコピー。再試�
 追加比較の起動コマンド（同コンテナ・作業ディレクトリ、全試験終了済み）：
 
 ```bash
-python3 /tmp/inheritance_perf_run_batch.py /tmp/inheritance_gng_cases.json --output artifacts/voxel_plane_lookup_20260928/inheritance_perf/gng_impact_batch --repeats 5 --timeout-sec 30 --max-total-sec 300 --estimate-sec 4
+python3 /tmp/inheritance_perf_run_batch.py /tmp/inheritance_gng_cases.json --output log/artifacts/voxel_plane_lookup_20260928/inheritance_perf/gng_impact_batch --repeats 5 --timeout-sec 30 --max-total-sec 300 --estimate-sec 4
 ```
 
 結果はgng_impact_batch/report.json。初回ビルドはGitの所有権検査で失敗し、

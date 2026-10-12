@@ -10,6 +10,8 @@
 - `run-benchmark-batch` - 反復回数・所要時間予測・結果保存・完了待ちを備えた汎用テスト実行
 - `optimize-agent-instructions` - 正解付きタスクで指示書の改善案を生成し、品質・トークンを比較して採否を判定
 
+- `delegate-agent-work` - 独立調査・レビュー・指示改善・長時間実験の分担と実行条件を判断
+
 ## Additions
 
 新しい workspace-local skill を追加したら、この一覧に 1 行だけ追記する。

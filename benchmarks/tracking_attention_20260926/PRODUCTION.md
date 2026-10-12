@@ -41,7 +41,7 @@ GNGの総学習4,000回、既存の非平面成分抽出、候補トピック`/d
 - 公開構造体末尾のmode追加によりAPI利用側も再ビルドが必要。外部任意サンプラーの公開制限は維持。
   ROS既定modeはnearest_nonplane、APIの省略時modeは既存ソース互換のcoarse。機能の宣言既定OFFは維持。
 - 稼働中GNGの共有ライブラリ実体を同一内容の別inodeで保護してから通常ビルド。
-  旧libの控えは`artifacts/nearest_nonplane_20260927/installed_before.so`。既存プロセスの停止なし。
+  旧libの控えは`log/artifacts/nearest_nonplane_20260927/installed_before.so`。既存プロセスの停止なし。
 
 実行は`docker exec gng_cpu_container bash -lc '…'`内。以下はsource後、workspace `/ros2_ws`から：
 
@@ -52,12 +52,12 @@ colcon build --packages-select gng_cpu ais_gng --symlink-install --cmake-args -D
 ctest --test-dir /ros2_ws/build/gng_cpu --output-on-failure
 ctest --test-dir /ros2_ws/build/ais_gng -R 'test_grasp_attention|test_boundary_attention|test_spatial_sampling|test_nonplane_component_extractor|test_plane_cluster_incremental' --output-on-failure
 cd /ros2_ws/src
-PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/tracking_attention_20260926/production_cases.json --output artifacts/nearest_nonplane_20260927/ros_batch --repeats 3 --start-seed 1 --timeout-sec 150 --max-total-sec 600 --estimate-sec 10
-ROS_DOMAIN_ID=183 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 15 150 taskset -c 4 python3 benchmarks/tracking_attention_20260926/verify.py ros --tracking-mode nearest_nonplane --cell-size .5 --ratio .5 --max-points 200000 --seed 27 --validation --output artifacts/nearest_nonplane_20260927/validation.json
+PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/tracking_attention_20260926/production_cases.json --output log/artifacts/nearest_nonplane_20260927/ros_batch --repeats 3 --start-seed 1 --timeout-sec 150 --max-total-sec 600 --estimate-sec 10
+ROS_DOMAIN_ID=183 ROS_LOCALHOST_ONLY=1 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 15 150 taskset -c 4 python3 benchmarks/tracking_attention_20260926/verify.py ros --tracking-mode nearest_nonplane --cell-size .5 --ratio .5 --max-points 200000 --seed 27 --validation --output log/artifacts/nearest_nonplane_20260927/validation.json
 ```
 
 runner出力は上書き禁止。再試行時は新しい出力名を指定。実測445.69秒、初期予測120秒は初回実測後に補正。
-生ログ・argv・PID・終了コード・cleanupは`artifacts/nearest_nonplane_20260927/ros_batch/`。
+生ログ・argv・PID・終了コード・cleanupは`log/artifacts/nearest_nonplane_20260927/ros_batch/`。
 集計は同階層`ros_summary.json`、失効は`validation.json`。集計コマンドは`verify.py summarize`。
 製品版は同階層`product`へCMake構成（Release、allow_external_sampler=OFF、GNG_BUILD_BENCHMARKS=ON、GNG_ENABLE_FRAME_LOG=OFF）、`-j4`ビルド。
 CTestは`LD_LIBRARY_PATH`の先頭にproductを指定し`ctest --test-dir <product> --no-tests=error --output-on-failure`。

@@ -51,5 +51,5 @@ Pコア内のCPU実行時間増の原因: 未特定。周波数・SMT・メモ�
 - バッチ: 4/4試行成功、予測492秒／実482.61秒。
 - 終了: 比較4回・通常起動1回・probeの所有24PID残留なし。既存bag・TF・Viewer・3コンテナ維持。
 
-根拠: [通常運転集計](../../artifacts/gng_affinity_20260930/live/before_shutdown/summary.csv)、[全生データ](../../artifacts/gng_affinity_20260930/live/)、[終了確認](../../artifacts/gng_affinity_20260930/live/cleanup.json)。
+根拠: [通常運転集計](../../log/artifacts/gng_affinity_20260930/live/before_shutdown/summary.csv)、[全生データ](../../log/artifacts/gng_affinity_20260930/live/)、[終了確認](../../log/artifacts/gng_affinity_20260930/live/cleanup.json)。
 全起動コマンド: [REPRODUCE.md](REPRODUCE.md)。

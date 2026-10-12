@@ -18,8 +18,8 @@
 既存コンテナ`gng_cpu_container`内のROS Humble、Pythonのnumpy・scipy・PyYAML・rosbag2_py、Boost・OpenSSL・ykpivを使用。追加インストールなし。グラフ描画にはmatplotlibも必要。
 
 1. 実装READMEのコマンドでReleaseビルドとCTestを実行。
-2. `artifacts/gng_bsp3d_sampled_20260923/`を作成し、ビルド先から`libgng_bsp3d_pure.so`と`libgng_bsp3d_sampled.so`を配置。
-3. 比較元の`artifacts/gng_bsp3d_20260923/libgng_grid.so`と`libgng_bsp3d.so`を確認。生成方法は[旧独立版README](../../ais_gng_cpu/experimental/gng_spatial_tree/README.md)。保存済みバイナリのSHA-256は`sha256.json`を参照。
+2. `log/artifacts/gng_bsp3d_sampled_20260923/`を作成し、ビルド先から`libgng_bsp3d_pure.so`と`libgng_bsp3d_sampled.so`を配置。
+3. 比較元の`log/artifacts/gng_bsp3d_20260923/libgng_grid.so`と`libgng_bsp3d.so`を確認。生成方法は[旧独立版README](../../ais_gng_cpu/experimental/gng_spatial_tree/README.md)。保存済みバイナリのSHA-256は`sha256.json`を参照。
 4. コンテナ内で以下を実行。
 
 ```bash
@@ -32,6 +32,6 @@ OPENBLAS_NUM_THREADS=1 python3 /ros2_ws/src/benchmarks/gng_bsp3d_sampled_2026092
 
 使用bagは`/rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3`、トピックは`/lidar_points`。bagファイルからの直接読込で、ROSノードやbag再生の新規起動なし。
 
-生JSON・ログ・出力グラフ・共有ライブラリ・再集計結果はGit管理外の`artifacts/gng_bsp3d_sampled_20260923/`へ保存。`summarize.py`による、このディレクトリの保存済み集計の上書きなし。生データのないcheckoutでは再計測が必要。
+生JSON・ログ・出力グラフ・共有ライブラリ・再集計結果はGit管理外の`log/artifacts/gng_bsp3d_sampled_20260923/`へ保存。`summarize.py`による、このディレクトリの保存済み集計の上書きなし。生データのないcheckoutでは再計測が必要。
 
 同一版の試行間グラフ照合と、同一版の`node.grid`違いの照合を実施。異なる方式同士のグラフ完全一致を示すものではない。

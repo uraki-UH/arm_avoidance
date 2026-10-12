@@ -102,7 +102,7 @@ def main():
     for command in ("ip", "nmcli", "docker", "sudo"):
         if not shutil.which(command):
             raise ValueError(f"ホストPCに{command}が必要です")
-    config = yaml.safe_load((root / "integrations/mid360/mid360.yaml").read_text())
+    config = yaml.safe_load((root / "hardware/mid360/mid360.yaml").read_text())
     host = network_config(config)
     devices = {}
     for row in output("nmcli", "-t", "-f", "DEVICE,TYPE", "device", "status").splitlines():

@@ -41,7 +41,7 @@
 
 5 cm以内: 両モデル・両腕とも100%。左右独立の位置被覆であり、任意の同時双腕目標・TCP姿勢角・14次元関節空間全体の被覆保証は対象外。全域2 cmを目指す場合は、参照サンプリングの追加と、別系列の検証が必要。
 
-[TCP分布比較図](../../artifacts/gng_coverage_repair_20261001/tcp_coverage.png)
+[TCP分布比較図](../../log/artifacts/gng_coverage_repair_20261001/tcp_coverage.png)
 
 ## 処理と検証
 
@@ -61,7 +61,7 @@ Docker内での通常モデル。元モデルファイルの置換なし。long�
 ```bash
 source /ros2_ws/install/setup.bash
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
-  params_file:=/ros2_ws/src/artifacts/gng_coverage_repair_20261001/max/model/preview.yaml \
+  params_file:=/ros2_ws/src/log/artifacts/gng_coverage_repair_20261001/max/model/preview.yaml \
   joint_control_backend:=viewer enable_dynamixel_input:=false
 ```
 
@@ -71,15 +71,15 @@ namespace: `coverage_max_2cm` / `coverage_long_2cm`。既定表示の辺はTCP�
 
 | 処理 | コード | 実行argv・終了状態 |
 | --- | --- | --- |
-| 被覆候補選択 | [select_coverage.py](select_coverage.py) | [selection_batch](../../artifacts/gng_coverage_repair_20261001/selection_batch/report.json) |
-| 衝突・接続・独立姿勢生成 | [repair_graph.cpp](repair_graph.cpp)、[build.py](build.py) | [graph_batch](../../artifacts/gng_coverage_repair_20261001/graph_batch/report.json) |
+| 被覆候補選択 | [select_coverage.py](select_coverage.py) | [selection_batch](../../log/artifacts/gng_coverage_repair_20261001/selection_batch/report.json) |
+| 衝突・接続・独立姿勢生成 | [repair_graph.cpp](repair_graph.cpp)、[build.py](build.py) | [graph_batch](../../log/artifacts/gng_coverage_repair_20261001/graph_batch/report.json) |
 | 保存先・Viewer設定 | [prepare_model.py](prepare_model.py) | 各モデルの`model/preview.yaml` |
-| 通常VLUT生成 | `offline_urdf_trainer_dual.launch.py` | [vlut_batch](../../artifacts/gng_coverage_repair_20261001/vlut_batch/report.json) |
-| 全データ・被覆検査 | [verify_repair.py](verify_repair.py) | [verification_batch](../../artifacts/gng_coverage_repair_20261001/verification_batch/report.json) |
-| 独立位置検査 | [verify_vlut_geometry.py](verify_vlut_geometry.py)、[局所占有出力](dump_local_voxels.cpp) | [geometry_batch](../../artifacts/gng_coverage_repair_20261001/geometry_batch/report.json)、[局所出力コマンド](../../artifacts/gng_coverage_repair_20261001/local_voxel_commands.json) |
-| ROS配信検査 | [probe_viewer.py](probe_viewer.py) | [viewer_batch](../../artifacts/gng_coverage_repair_20261001/viewer_batch/report.json) |
-| coreビルド・回帰 | core・testの通常ビルド | [全コマンドと終了状態](../../artifacts/gng_coverage_repair_20261001/core_fix_validation/summary.json) |
-| 実行状態の確認 | [audit_runtime.py](audit_runtime.py) | [runtime_final](../../artifacts/gng_coverage_repair_20261001/runtime_final.json) |
+| 通常VLUT生成 | `offline_urdf_trainer_dual.launch.py` | [vlut_batch](../../log/artifacts/gng_coverage_repair_20261001/vlut_batch/report.json) |
+| 全データ・被覆検査 | [verify_repair.py](verify_repair.py) | [verification_batch](../../log/artifacts/gng_coverage_repair_20261001/verification_batch/report.json) |
+| 独立位置検査 | [verify_vlut_geometry.py](verify_vlut_geometry.py)、[局所占有出力](dump_local_voxels.cpp) | [geometry_batch](../../log/artifacts/gng_coverage_repair_20261001/geometry_batch/report.json)、[局所出力コマンド](../../log/artifacts/gng_coverage_repair_20261001/local_voxel_commands.json) |
+| ROS配信検査 | [probe_viewer.py](probe_viewer.py) | [viewer_batch](../../log/artifacts/gng_coverage_repair_20261001/viewer_batch/report.json) |
+| coreビルド・回帰 | core・testの通常ビルド | [全コマンドと終了状態](../../log/artifacts/gng_coverage_repair_20261001/core_fix_validation/summary.json) |
+| 実行状態の確認 | [audit_runtime.py](audit_runtime.py) | [runtime_final](../../log/artifacts/gng_coverage_repair_20261001/runtime_final.json) |
 
 補助C++の再ビルド例（Docker内）。通常package build/install済みの環境が前提。
 

@@ -1,5 +1,7 @@
 # 固定グリッドを使わないbsp3d版GNG
 
+現在の空間索引依存は[`gng_vlut_system/third_party/spatialtree`](../../../gng_vlut_system/third_party/spatialtree/README.md)の固定版。ルートの`bsp3d/`は不要。実験名・ライブラリ名は互換用に維持。過去の計測値・ハッシュは依存統一前の実装に対応。
+
 `../gng_spatial_tree`からコピーした独立実験版。元CPU版・既存tree版・bsp3d本体への編集なし。通常のROS launchへの組込みとインストール先の差替えは未実施。
 
 ## 2つの比較版

@@ -53,7 +53,7 @@ services:
   # MID-360実機ドライバ。サービス指定またはlidarプロファイルによる有効化
   mid360:
     extends:
-      file: integrations/mid360/compose.yaml
+      file: hardware/mid360/compose.yaml
       service: mid360
     profiles:
       - lidar

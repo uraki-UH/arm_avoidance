@@ -52,18 +52,18 @@ CPU 4へ固定、各12回の先頭3回を除外した中央値を3試行し、�
 source /ros2_ws/install/setup.bash
 cd /ros2_ws/src
 timeout -s INT -k 20 480 colcon build --base-paths ais_gng_cpu/src --build-base /ros2_ws/build --install-base /ros2_ws/install --packages-select gng_cpu ais_gng --executor sequential --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
-cmake --build artifacts/nonplane_attention_20260925/gng_build -j 4
-ctest --test-dir artifacts/nonplane_attention_20260925/gng_build --output-on-failure
+cmake --build log/artifacts/nonplane_attention_20260925/gng_build -j 4
+ctest --test-dir log/artifacts/nonplane_attention_20260925/gng_build --output-on-failure
 ctest --test-dir /ros2_ws/build/ais_gng --output-on-failure -R 'test_(grasp_attention|boundary_attention|spatial_sampling|nonplane_component_extractor)$'
 ROS_DOMAIN_ID=179 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 480 python3 benchmarks/common_sampling_20260925/smoke.py --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 --frames 60 --trials 2
 ROS_DOMAIN_ID=179 PYTHONDONTWRITEBYTECODE=1 timeout -s INT -k 20 240 python3 benchmarks/common_sampling_20260925/smoke.py --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 --frames 16 --trials 1 --validation
-g++ -std=c++20 -O3 -DNDEBUG -DGNG_VERSION=0 -Iais_gng_cpu/src/gng_cpu/src -Iais_gng_cpu/src/gng_cpu/include benchmarks/common_sampling_20260925/scaling.cpp ais_gng_cpu/src/gng_cpu/src/cpu/voxel_grid.cpp ais_gng_cpu/src/gng_cpu/src/utils/node.cpp ais_gng_cpu/src/gng_cpu/src/utils/param.cpp ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp ais_gng_cpu/src/gng_cpu/src/utils/utils.cpp -o artifacts/common_sampling_20260925/scaling
-timeout 30 taskset -c 4 artifacts/common_sampling_20260925/scaling artifacts/nonplane_attention_20260925/selection.bin
+g++ -std=c++20 -O3 -DNDEBUG -DGNG_VERSION=0 -Iais_gng_cpu/src/gng_cpu/src -Iais_gng_cpu/src/gng_cpu/include benchmarks/common_sampling_20260925/scaling.cpp ais_gng_cpu/src/gng_cpu/src/cpu/voxel_grid.cpp ais_gng_cpu/src/gng_cpu/src/utils/node.cpp ais_gng_cpu/src/gng_cpu/src/utils/param.cpp ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp ais_gng_cpu/src/gng_cpu/src/utils/utils.cpp -o log/artifacts/common_sampling_20260925/scaling
+timeout 30 taskset -c 4 log/artifacts/common_sampling_20260925/scaling log/artifacts/nonplane_attention_20260925/selection.bin
 ```
 
 CPU試験先は`GNG_BUILD_BENCHMARKS=ON`の既存分離ビルド。新規配置では同条件のCMake構成が必要。
 比較用ライブラリ・固定入力・生成YAML・生ログはGit対象外。共通化後だけの機能確認は`--validation`を使用。
-保存先は`artifacts/common_sampling_20260925/`。最終値は`comparison.json`、`validation.json`、`scaling_final.log`。
+保存先は`log/artifacts/common_sampling_20260925/`。最終値は`comparison.json`、`validation.json`、`scaling_final.log`。
 ビルドと単体試験は`colcon_build_final.log`、`core_test_final.log`、`ros_unit_test_final.log`。
 各ノードの起動コマンド・PID・終了値は`comparison_final.log`と`validation_final.log`の`start:`／`stopped:`行。
 ROSドメイン179で分離し、スクリプトの`finally`で自分の子プロセスグループだけを停止。全試験セッション終了。

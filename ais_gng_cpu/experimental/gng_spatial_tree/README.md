@@ -1,5 +1,7 @@
 # bsp3d・grid版GNG（独立比較版）
 
+現在の空間索引依存は[`gng_vlut_system/third_party/spatialtree`](../../../gng_vlut_system/third_party/spatialtree/README.md)の固定版。ルートの`bsp3d/`は不要。実験名・ライブラリ名は互換用に維持。過去の計測値・ハッシュは依存統一前の実装に対応。
+
 2026-09-23時点の`ais_gng_cpu/src/gng_cpu`をコピーした実験版。元のcugng.cpp・cugng.hpp・CPUライブラリ・YAMLへの変更なし。API互換の共有ライブラリとして単独実行。ROS launchへの組込み・インストール先の置換は未実施。
 
 2026-09-24に旧SpatialTree方式を削除。過去の計測スクリプトとのパス互換のため、ディレクトリ名 `gng_spatial_tree` は維持。旧版の再現にはGit履歴または保存ライブラリが必要。
@@ -9,8 +11,8 @@
 - `src/cpu/cugng.cpp`: bsp3d版。元CPU版から独立したコピー。
 - `src/cpu/cugng_grid_reference.cpp`: 同時点のグリッド版比較用コピー。
 - ノード追加・移動・削除に合わせた索引更新。移動時の索引更新省略なし。
-- bsp3d版は`bsp3d/include/bsp3d/bsp3d.hpp`の`bsp3d::Index`（`MovingBSPTree`）を索引として利用。既存GNGの学習規則を維持し、`findNBest`で木全体の2近傍を取得。範囲検索・探索時の子セルソートなし。
-- bsp3dの3次元既定値を使用。葉32点、実点群境界箱の更新なし、近似誤差0。追加・移動・削除をすべて索引API経由で反映し、葉内の座標キャッシュと同期。
+- bsp3d版は`gng_vlut_system/third_party/spatialtree`の`SpatialTree::MovingBSPTree`を索引として利用。既存GNGの学習規則を維持し、`findNBest`で木全体の2近傍を取得。範囲検索・探索時の子セルソートなし。
+- 固定SpatialTreeの3次元既定値を使用。葉32点、実点群境界箱の更新なし、近似誤差0。追加・移動・削除をすべて索引API経由で反映し、葉内の座標キャッシュと同期。
 - 警戒領域・寿命リセット・重点学習ラベルの判定対象も最近傍2ノード。距離判定には既存の`node.interval`・`node.s1_reset_range`・`ds.range_max`を継続使用。3番目以降のノードによる判定なし。
 - 同距離時は木の探索順に依存し、グリッド版とのノードID選択順・グラフの完全一致保証なし。
 - YAMLの入力範囲・ボクセル処理・ノード上限・セル当たり10ノードの管理は従来どおり。入力点の追加除外なし。固定グリッドの管理メモリは残存。
@@ -26,7 +28,7 @@ cmake --build /tmp/gng_spatial_copy_build -j2
 ctest --test-dir /tmp/gng_spatial_copy_build --output-on-failure --timeout 30
 ```
 
-APIテスト16件（2方式×8件）、最近傍検索の全走査照合1件、bsp3d同梱の索引テスト1件、計18件。空・1ノード・遠方・境界・同距離・追加・移動・削除・再初期化、寿命とラベル判定を検証。
+APIテスト16件（2方式×8件）、最近傍検索の全走査照合1件、計17件。空・1ノード・遠方・境界・同距離・追加・移動・削除・再初期化、寿命とラベル判定を検証。
 
 `libgng_grid.so`・`libgng_bsp3d.so`を生成。通常のROSパッケージとは別ビルド。
 既定の`GNG_DETERMINISTIC_BENCHMARK=ON`は2方式の学習乱数・LPF時間刻み（0.1秒）を固定。これは比較専用の条件。実時間・非固定乱数の動作には同オプションをOFFで再ビルド。

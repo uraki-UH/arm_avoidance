@@ -49,7 +49,7 @@ OFF 2.616 ms、重点0.5 m 7.753 ms、重点1.0 m 6.720 ms（100回平均）。
   警告対象の既存設定・環境は変更せず、同条件で比較。
 
 再現用正本は`verify.py`と`cost.cpp`。生ログ・JSON・変更前コピーは
-`artifacts/tracking_attention_20260926/`へ保存（Git対象外）。最終結果は`final_*`、`ros_*_4/5/9_validation`。
+`log/artifacts/tracking_attention_20260926/`へ保存（Git対象外）。最終結果は`final_*`、`ros_*_4/5/9_validation`。
 開始時の`before/gng_cpu`と`before/at128.yaml`を保持したローカル環境が前提。
 前後の決定的コピーは初回`prepare`で作成済み。再実行時は上書きせず新しい`--tag`を指定。
 コンテナで`source /ros2_ws/install/setup.bash`、`cd /ros2_ws/src`の後に実行：

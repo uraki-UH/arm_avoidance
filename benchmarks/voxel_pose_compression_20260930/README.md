@@ -74,7 +74,7 @@
 
 ソース: [compress.cpp](compress.cpp)、[prepare.py](prepare.py)、[verify.py](verify.py)、[dedup.py](dedup.py)、[synthetic_test.py](synthetic_test.py)。小規模集計: [summary.json](summary.json)、[quality_summary.json](quality_summary.json)。
 
-生ログ・24試行のCSV・メタデータ・圧縮ファイル・終了確認: [artifacts/voxel_pose_compression_20260930](../../artifacts/voxel_pose_compression_20260930)。群の集合和は集計のみで、近似圧縮バイナリの保存なし。可逆辞書圧縮バイナリは`dedup_results/*/result.voxshared`。
+生ログ・24試行のCSV・メタデータ・圧縮ファイル・終了確認: [log/artifacts/voxel_pose_compression_20260930](../../log/artifacts/voxel_pose_compression_20260930)。群の集合和は集計のみで、近似圧縮バイナリの保存なし。可逆辞書圧縮バイナリは`dedup_results/*/result.voxshared`。
 
 ## 再現と起動コマンド
 
@@ -109,14 +109,14 @@ timeout 60s python3 /tmp/voxel_pose_compression_20260930/synthetic_test.py --out
 
 対象: 許容差8 cm、seed 20260931（trial 2）。max 1,593代表、long 4,831代表。学習結果から選んだ実姿勢の表示用コピー。再学習・グループ間経路の再生成なし。
 
-出力: `artifacts/voxel_viewer_preview_20260930/{max,long}/gng.bin`・`vlut.bin`・`preview.yaml`。GNG v9の代表ノード生レコードと元ID、代表同士の元辺、VLUT v2の代表姿勢の元占有を保持。非代表への辺は除外。群全体の集合和占有や群色分けは未収録。
+出力: `log/artifacts/voxel_viewer_preview_20260930/{max,long}/gng.bin`・`vlut.bin`・`preview.yaml`。GNG v9の代表ノード生レコードと元ID、代表同士の元辺、VLUT v2の代表姿勢の元占有を保持。非代表への辺は除外。群全体の集合和占有や群色分けは未収録。
 
 Docker内の起動コマンド（通常のViewerと同じROSドメイン）:
 
 ```bash
 source /ros2_ws/install/setup.bash
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
-  params_file:=/ros2_ws/src/artifacts/voxel_viewer_preview_20260930/max/preview.yaml \
+  params_file:=/ros2_ws/src/log/artifacts/voxel_viewer_preview_20260930/max/preview.yaml \
   joint_control_backend:=viewer enable_dynamixel_input:=false
 ```
 
@@ -136,9 +136,9 @@ Viewerの対象トピック:
 起動した検証コマンド（終了済み）:
 
 ```bash
-docker exec gng_cpu_container bash -c 'source /ros2_ws/install/setup.bash && export ROS_DOMAIN_ID=91 ROS_LOCALHOST_ONLY=1 && python3 /ros2_ws/src/artifacts/voxel_viewer_preview_20260930/probe_viewer.py /ros2_ws/src/artifacts/voxel_viewer_preview_20260930/max && python3 /ros2_ws/src/artifacts/voxel_viewer_preview_20260930/probe_viewer.py /ros2_ws/src/artifacts/voxel_viewer_preview_20260930/long'
+docker exec gng_cpu_container bash -c 'source /ros2_ws/install/setup.bash && export ROS_DOMAIN_ID=91 ROS_LOCALHOST_ONLY=1 && python3 /ros2_ws/src/log/artifacts/voxel_viewer_preview_20260930/probe_viewer.py /ros2_ws/src/log/artifacts/voxel_viewer_preview_20260930/max && python3 /ros2_ws/src/log/artifacts/voxel_viewer_preview_20260930/probe_viewer.py /ros2_ws/src/log/artifacts/voxel_viewer_preview_20260930/long'
 ```
 
 検証終了: 全所有launch・子プロセス停止、既存13プロセスと3コンテナの同一性確認。停止時ログの`SIGINT`・`exit code -2`は検証スクリプトの終了操作に対応。停止前のERRORなし。
 
-コード: [export_preview.py](export_preview.py)（CSVから通常形式への抽出）、[probe_viewer.py](probe_viewer.py)（ROS配信照合と終了処理）。入力・出力SHA、抽出時の全生レコード読戻し検査、起動コマンド、ログ、終了確認は[表示用成果物](../../artifacts/voxel_viewer_preview_20260930)へ保存。抽出時の実引数は`export_commands.json`。
+コード: [export_preview.py](export_preview.py)（CSVから通常形式への抽出）、[probe_viewer.py](probe_viewer.py)（ROS配信照合と終了処理）。入力・出力SHA、抽出時の全生レコード読戻し検査、起動コマンド、ログ、終了確認は[表示用成果物](../../log/artifacts/voxel_viewer_preview_20260930)へ保存。抽出時の実引数は`export_commands.json`。

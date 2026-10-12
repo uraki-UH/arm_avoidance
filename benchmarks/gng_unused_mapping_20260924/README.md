@@ -25,7 +25,7 @@
 - 起動したビルド・比較・試験は全終了、一時ビルド削除済み。既存ROS11プロセスと3コンテナを維持。状態確認の初回は確認コマンド自身を誤検知し、判定を修正して再確認。
 
 [集計](report.json)、[配布確認](install.json)、[環境確認](runtime_verification.json)。
-生ログ・フレームJSON・ソースコピーは`artifacts/gng_unused_mapping_20260924/`に保存。
+生ログ・フレームJSON・ソースコピーは`log/artifacts/gng_unused_mapping_20260924/`に保存。
 比較元は削除前に保存した`before_source`を使用し、[前](before_source_sha256.json)・[後](after_source_sha256.json)のSHA-256で識別。
 
 実行コマンド（既存の比較用コピー・bag・ROS Humbleが必要）：

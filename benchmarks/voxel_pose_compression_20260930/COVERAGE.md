@@ -44,7 +44,7 @@
 
 原因の解釈: 角度空間での平均化と未被覆点の保存条件不足が有力。平均化・隣接更新・ノード上限それぞれの寄与率は比較実験していないため、単独原因の断定は未実施。
 
-根拠: [GNGの更新実装](../../gng_vlut_system/src/core/gng/GrowingNeuralGas.cpp)、[学習器](../../gng_vlut_system/src/offline_tools/offline_urdf_trainer.cpp)、[max生成ログ](../../artifacts/effectivity_refresh_20260928/topo_dual_arm_max.log)、[long生成ログ](../../artifacts/effectivity_refresh_20260928/topo_dual_arm_max_long.log)。
+根拠: [GNGの更新実装](../../gng_vlut_system/src/core/gng/GrowingNeuralGas.cpp)、[学習器](../../gng_vlut_system/src/offline_tools/offline_urdf_trainer.cpp)、[max生成ログ](../../log/artifacts/effectivity_refresh_20260928/topo_dual_arm_max.log)、[long生成ログ](../../log/artifacts/effectivity_refresh_20260928/topo_dual_arm_max_long.log)。
 
 次の設計候補: 到達マップの実証拠姿勢から未被覆位置を補完し、独立サンプルに対する位置・双腕同時・必要な手先姿勢角の許容誤差を満たす条件で代表を削減。接続は関節空間側の元経路との対応と補間衝突を別途検証。今回の調査では再学習・モデル更新なし。
 
@@ -52,7 +52,7 @@
 
 測定: 元GNG基準2条件、独立可動域基準2条件、全て正常終了。最近傍探索の先頭64姿勢を全点対距離計算と照合、全代表の自己距離0、左右同時距離の上下界を検査。元GNG・代表GNG・入力CSV・可動域マップ・URDFは読取りのみ。
 
-結果と終了記録: [artifacts/voxel_coverage_20261001](../../artifacts/voxel_coverage_20261001)。追加サンプル比較前のROS実行状態と終了後状態を保存。新規ROS・コンテナ起動なし。
+結果と終了記録: [log/artifacts/voxel_coverage_20261001](../../log/artifacts/voxel_coverage_20261001)。追加サンプル比較前のROS実行状態と終了後状態を保存。新規ROS・コンテナ起動なし。
 
 再現コマンド（ホスト、出力先は未作成ファイル、依存はNumPy・SciPy・PyYAML）:
 

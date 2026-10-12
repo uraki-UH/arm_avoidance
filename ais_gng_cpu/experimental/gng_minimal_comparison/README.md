@@ -1,5 +1,7 @@
 # 最小GNGの入力ボクセル・ノード探索比較
 
+現在の空間索引依存は[`gng_vlut_system/third_party/spatialtree`](../../../gng_vlut_system/third_party/spatialtree/README.md)の固定版。ルートの`bsp3d/`は不要。実験名・ライブラリ名は互換用に維持。過去の計測値・ハッシュは依存統一前の実装に対応。
+
 `gng_bsp3d_minimal`の独立コピー。`COLCON_IGNORE`付きで通常のROSビルド・launch・本番ライブラリへの組込みなし。
 
 | ライブラリ | 学習候補 | ノード探索 |
@@ -43,7 +45,7 @@ cmake -S /ros2_ws/src/ais_gng_cpu/experimental/gng_minimal_comparison \
 cmake --build /tmp/gng_minimal_comparison_build -j 4
 ctest --test-dir /tmp/gng_minimal_comparison_build --output-on-failure
 cp /tmp/gng_minimal_comparison_build/libgng_minimal_*.so \
-  /ros2_ws/src/artifacts/gng_minimal_comparison_20260924/
+  /ros2_ws/src/log/artifacts/gng_minimal_comparison_20260924/
 ```
 
 比較時は乱数をフレーム番号、ラベルLPFの時間刻みを0.1秒に固定。本番利用を想定する場合は`GNG_DETERMINISTIC_BENCHMARK=OFF`が必要だが、今回の計測・ROS組込みの対象外。

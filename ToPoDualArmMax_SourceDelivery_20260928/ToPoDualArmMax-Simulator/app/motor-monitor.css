@@ -1,0 +1,37 @@
+/* 関節一覧と読取り専用表示。指標タブ・関節別表示形式の共通配色 */
+.motor-monitor{border:1px solid var(--line);border-radius:8px;padding:12px;margin:16px 0;font-size:13px;min-width:0;scroll-margin-top:110px}
+.motor-monitor button{background:var(--panel);color:var(--text)}
+.motor-monitor button:hover{background:#f1f5ed;border-color:#79bb35}
+.motor-heading{display:flex;align-items:center;gap:10px;white-space:nowrap;margin-bottom:10px}
+.motor-heading h3{font-size:16px;margin:0;flex:none}
+.motor-hint{font-size:11px;color:var(--muted);cursor:help}
+.motor-monitor [hidden]{display:none!important}
+.motor-monitor label{display:flex;flex-wrap:wrap;justify-content:space-between;margin:8px 0;gap:6px}
+.motor-monitor select,.motor-monitor input[type=text]{width:100%;font-size:13px;box-sizing:border-box}
+.motor-monitor input[type=text],.motor-monitor input[type=number]{border:1px solid var(--line);border-radius:5px;background:var(--panel);padding:7px;min-width:0;max-width:100%}
+.motor-monitor details{margin:10px 0}
+.motor-monitor details:not([open])>:not(summary){display:none}
+.motor-monitor summary{font-size:13px;cursor:pointer}
+.motor-tabs{display:flex;flex-wrap:wrap;gap:4px}
+.motor-tabs button{flex:1 1 auto;font-size:13px;padding:7px 6px}
+.motor-monitor button[aria-selected=true]{background:#edf7e2;border-color:#79bb35;color:#345714}
+.motor-view-tabs{display:flex;gap:2px;margin:0}
+.motor-view-tabs button{font-size:11px;padding:4px 5px;white-space:nowrap}
+.motor-joint-list{display:grid;min-width:0}
+.motor-joint{border-bottom:1px solid var(--line);padding:9px 0;min-width:0}
+.motor-joint-heading{display:grid;grid-template-columns:minmax(0,1fr) auto 96px;align-items:center;gap:6px}
+.motor-joint-heading strong{font-size:12px;overflow-wrap:anywhere;min-width:0}
+.motor-values{display:flex;flex-direction:column;align-items:flex-end;gap:3px;min-width:0}
+.motor-values output{font-size:12px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;text-align:right}
+.motor-monitor .sim{color:#568622}.motor-monitor .hardware{color:#218398}
+.motor-monitor input[type=range]:disabled{opacity:1;cursor:default;pointer-events:none;width:100%;margin:7px 0 0}
+#physics-panel .motor-monitor input[type=range]{border:0;background:transparent;padding:0;height:16px}
+.motor-gauges .sim input{accent-color:#79bb35}.motor-gauges .hardware input{accent-color:#39aeca}
+.motor-plot{display:block;width:100%;height:150px;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;background:#101713}
+.motor-legend{font-size:11px;display:flex;gap:10px;margin:0;margin-left:auto}
+.motor-monitor .motor-note{font-size:11px;line-height:1.5;color:var(--muted);margin:6px 0}
+.motor-joint-checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0 8px}
+.motor-joint-checks label{justify-content:flex-start;align-items:center;overflow-wrap:anywhere;font-size:12px}
+.motor-visibility summary{display:block}
+.motor-monitor .motor-load{background:#17394c;border-color:#377ba1;color:#b6e4ff}
+@media(max-width:700px){.motor-monitor{scroll-margin-top:12px}}

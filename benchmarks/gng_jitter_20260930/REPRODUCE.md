@@ -1,6 +1,6 @@
 # GNG時間変動の再現手順（2026-09-30）
 
-成果は `artifacts/gng_jitter_20260930/live/` と `profile/` に保管。実行済み各試験の完全な起動引数は `live/batch_*/001_*/command.json`、外側のバッチ起動コマンドは `live/run_*_command.txt`。本番ソース・build・installへの変更なし。計測版は `/tmp` のみの共有ライブラリ。
+成果は `log/artifacts/gng_jitter_20260930/live/` と `profile/` に保管。実行済み各試験の完全な起動引数は `live/batch_*/001_*/command.json`、外側のバッチ起動コマンドは `live/run_*_command.txt`。本番ソース・build・installへの変更なし。計測版は `/tmp` のみの共有ライブラリ。
 
 ## 前提と保存範囲
 
@@ -20,8 +20,8 @@
 
 ```bash
 mkdir -p /tmp/gng_jitter_root_20260930 /tmp/gng_jitter_20260930
-cp -a /home/uraki/uraki_ws/artifacts/gng_jitter_20260930/live/. /tmp/gng_jitter_root_20260930/
-cp -a /home/uraki/uraki_ws/artifacts/gng_jitter_20260930/profile/. /tmp/gng_jitter_20260930/
+cp -a /home/uraki/uraki_ws/log/artifacts/gng_jitter_20260930/live/. /tmp/gng_jitter_root_20260930/
+cp -a /home/uraki/uraki_ws/log/artifacts/gng_jitter_20260930/profile/. /tmp/gng_jitter_20260930/
 tar -xzf /tmp/gng_jitter_20260930/profile_source.tar.gz -C /tmp/gng_jitter_20260930
 
 docker exec gng_cpu_container mkdir -p /tmp/gng_jitter_root_20260930 /tmp/gng_jitter_20260930

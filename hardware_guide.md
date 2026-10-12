@@ -49,5 +49,5 @@ realsense
 ros2 run dynamixel_joint_state_bridge dynamixel_joint_state_bridge_node \
   --ros-args \
   -r __ns:=/ToPoDualArm \
-  --params-file /ros2_ws/src/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge.yaml \
+  --params-file /ros2_ws/src/hardware/dynamixel/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge.yaml \
   -p output_topic:=viewer_joint_states

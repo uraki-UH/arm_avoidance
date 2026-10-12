@@ -474,6 +474,7 @@ def launch_setup(context, *args, **kwargs):
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
             condition=IfCondition(LaunchConfiguration("enable_robot_state_publisher")),
             launch_arguments={
+                "params_file": params_file,
                 "robot_name": robot_name,
                 "enable_joint_state_publisher": "false",
                 "publish_initial_joint_state": (

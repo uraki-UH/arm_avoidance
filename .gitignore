@@ -5,6 +5,9 @@
 __pycache__/
 *.pyc
 
+# pytestの一時キャッシュ
+.pytest_cache/
+
 *.db
 *.VC.db
 *.vc.db
@@ -23,8 +26,14 @@ build/
 ToPoDualArm/
 
 # 実験の生成物・生ログ・生データ。再現資料と保存済み集計は benchmarks/ に分離。
-/artifacts/*
-!/artifacts/COLCON_IGNORE
+!/log/
+/log/*
+!/log/artifacts/
+/log/artifacts/*
+!/log/artifacts/COLCON_IGNORE
+
+# Dockerサービスのソケット・ロックなどの実行時生成物
+/docker/runtime/
 
 # ビルド・実行ログとTypeScriptの増分ビルド生成物
 *.log

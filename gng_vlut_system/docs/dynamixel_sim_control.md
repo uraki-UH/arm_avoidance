@@ -370,7 +370,7 @@ ros2 launch gng_vlut_system dynamixel_current_pose.launch.py \
 
 `output_topic`は実測JointStateの配信先、`enable_viewer_output:=false`は既存Viewer用の追加配信を無効化。初期姿勢publisherとの混在防止。
 
-Max／Longの既定換算: [dynamixel_joint_state_bridge_max_ids_31_52.yaml](../../dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_max_ids_31_52.yaml)。旧設定と手編集済みのID31〜52設定は保持。`mapping_file`の明示指定は自動選択より優先。実機表示launchの既定モデルはLong。Viewer launchでは機体YAMLの`dynamixel_mapping_file`を使用。
+Max／Longの既定換算: [dynamixel_joint_state_bridge_max_ids_31_52.yaml](../../hardware/dynamixel/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_max_ids_31_52.yaml)。旧設定と手編集済みのID31〜52設定は保持。`mapping_file`の明示指定は自動選択より優先。実機表示launchの既定モデルはLong。Viewer launchでは機体YAMLの`dynamixel_mapping_file`を使用。
 
 肩の下垂姿勢: 右ID32の+90°→`R_joint2`の+90°、左ID42の+90°→`L_joint2`の−90°。肩の旧±90°オフセットによる相殺なし。他の腕軸・首の符号と原点は現行の手編集済み設定を継承。
 

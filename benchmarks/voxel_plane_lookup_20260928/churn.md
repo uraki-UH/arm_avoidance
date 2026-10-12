@@ -44,9 +44,9 @@ ROS通信・人車分類・本番の重点サンプラー設定を含まない�
 再現コマンドはdocker exec gng_cpu_container bash -lc内、ROS環境読込み後の/ros2_ws/srcで実行：
 
 ```bash
-timeout 40 cmake -S benchmarks/voxel_plane_lookup_20260928 -B artifacts/voxel_plane_lookup_20260928/churn_build -DCMAKE_BUILD_TYPE=Release -Denable_churn_diagnostics=ON
-timeout 240 cmake --build artifacts/voxel_plane_lookup_20260928/churn_build -j2
-PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/voxel_plane_lookup_20260928/support_cases.json --output artifacts/voxel_plane_lookup_20260928/support_final_batch --repeats 3 --timeout-sec 90 --max-total-sec 540 --estimate-sec 4
+timeout 40 cmake -S benchmarks/voxel_plane_lookup_20260928 -B log/artifacts/voxel_plane_lookup_20260928/churn_build -DCMAKE_BUILD_TYPE=Release -Denable_churn_diagnostics=ON
+timeout 240 cmake --build log/artifacts/voxel_plane_lookup_20260928/churn_build -j2
+PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/voxel_plane_lookup_20260928/support_cases.json --output log/artifacts/voxel_plane_lookup_20260928/support_final_batch --repeats 3 --timeout-sec 90 --max-total-sec 540 --estimate-sec 4
 timeout 240 cmake --build /ros2_ws/build/gng_cpu -j2
 timeout 60 ctest --test-dir /ros2_ws/build/gng_cpu --output-on-failure
 timeout 60 cmake --install /ros2_ws/build/gng_cpu
