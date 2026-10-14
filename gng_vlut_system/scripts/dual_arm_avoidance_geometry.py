@@ -279,24 +279,26 @@ class robot_geometry:
                           -self.radii[first]-self.radii[second] < min_clearance_th)
 
     def internal_clearances(self, centers):
-        """自己干渉ペアと実行系から与えられた環境形状の表面間距離 [m]。"""
+        """単一姿勢・姿勢列の自己干渉ペアと環境形状の表面間距離 [m]。"""
         first, second = self.self_pairs.T
-        self_gaps = np.linalg.norm(centers[first]-centers[second], axis=1)-self.radii[first]-self.radii[second]
+        self_gaps = np.linalg.norm(centers[..., first, :]-centers[..., second, :], axis=-1)-self.radii[first]-self.radii[second]
         gaps = [self_gaps]
         for kind, position, rotation_matrix, half_size in self.environment_shapes:
-            local = (centers[self.is_arm]-position) @ rotation_matrix
+            local = (centers[..., self.is_arm, :]-position) @ rotation_matrix
             if kind == 'plane':
-                surface = local[:, 2]
+                surface = local[..., 2]
             elif kind == 'box':
                 delta = np.abs(local)-half_size
-                surface = np.linalg.norm(np.maximum(delta, 0), axis=1)+np.minimum(delta.max(axis=1), 0)
+                surface = np.linalg.norm(np.maximum(delta, 0), axis=-1)+np.minimum(delta.max(axis=-1), 0)
             else:
                 raise ValueError('未対応の環境衝突形状: '+kind)
             gaps.append(surface-self.radii[self.is_arm])
-        return np.concatenate(gaps)
+        return np.concatenate(gaps, axis=-1)
 
     def has_internal_clearance(self, centers, min_clearance_th=0.005):
-        return not np.any(self.internal_clearances(centers) < min_clearance_th)
+        """単一姿勢の真偽値、姿勢列の姿勢ごとの判定配列。"""
+        result = ~np.any(self.internal_clearances(centers) < min_clearance_th, axis=-1)
+        return bool(result) if np.ndim(result) == 0 else result
 
     def choose_step(self, positions, home, hand, elbow, radius, min_clearance, max_step,
                     min_internal_clearance_th=0.005):

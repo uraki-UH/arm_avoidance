@@ -108,6 +108,7 @@ class gng_runtime:
         from voxel_msgs.msg import Voxel
         from tf2_msgs.msg import TFMessage
         from geometry_msgs.msg import TransformStamped
+        from gng_control_msgs.srv import CheckArmPair
         from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
         self.node, self.scene = node, scene
         self.namespace = 'sim_'+params['robot_name']
@@ -129,6 +130,8 @@ class gng_runtime:
         self.lock = threading.Lock()
         self.subscriptions = []
         self.publishers = []
+        self.pair_client = None
+        self.checked_pair = None
         self.process = None
         self.directory = None
         self.log = None
@@ -145,6 +148,7 @@ class gng_runtime:
                 raise ValueError('同じ機体のGNG回避セッションが既に存在します')
             active_runtimes.add(self.namespace)
         try:
+            self.pair_client = node.create_client(CheckArmPair, '/'+self.namespace+'/check_arm_pair')
             qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.voxels = node.create_publisher(Voxel, '/'+self.namespace+'/roi_voxels', qos)
             self.publishers.append(self.voxels)
@@ -193,7 +197,7 @@ class gng_runtime:
             params_file.write_text(yaml.safe_dump({'/**': {'ros__parameters': self.params}}, allow_unicode=True))
             self.log = open(Path(self.directory.name) / 'runtime.log', 'w')
             self.command = ['ros2', 'launch', 'gng_vlut_system', 'gng_viewer_bridge.launch.py',
-                'params_file:='+str(params_file), 'joint_control_backend:=external',
+                'params_file:='+str(params_file), 'joint_control_backend:=external', 'edge_mode:=0',
                 'state_topic:=/'+self.namespace+'/joint_states', 'enable_joint_state_publisher:=false',
                 'enable_environment_voxelization:=true', 'enable_dynamixel_joint_state_input:=false',
                 'enable_dynamixel_current_pose:=false', 'enable_realsense_mount_tf:=false']
@@ -331,6 +335,27 @@ class gng_runtime:
                     return '記録ROIと自己マスクの時刻不一致'
         return ''
 
+    def check_node_pair(self, pair_ids):
+        """左右経由ノードの組合せ姿勢のみの照合。区間検査なし、直近1組だけの再利用。"""
+        from gng_control_msgs.srv import CheckArmPair
+        key = (pair_ids['left_arm'], pair_ids['right_arm'])
+        if self.checked_pair is not None and self.checked_pair[0] == key:
+            return self.checked_pair[1]
+        if not self.pair_client.service_is_ready():
+            return None
+        request = CheckArmPair.Request(left_node_id=int(key[0]), right_node_id=int(key[1]))
+        future = self.pair_client.call_async(request)
+        ready = threading.Event()
+        future.add_done_callback(lambda _: ready.set())
+        if not ready.wait(.5):
+            future.cancel()
+            return None
+        result = future.result()
+        if result is None or not result.is_valid or result.has_path_check:
+            return None
+        self.checked_pair = (key, bool(result.is_collision_free))
+        return self.checked_pair[1]
+
     def status(self):
         return dict(namespace=self.namespace, joint_state_topic='/'+self.namespace+'/joint_states',
                     roi_topic=self.roi_topic, num_points=self.num_points,
@@ -369,6 +394,8 @@ class gng_runtime:
                                 break
                             time.sleep(.05)
         finally:
+            if self.pair_client is not None:
+                self.node.destroy_client(self.pair_client)
             for subscription in self.subscriptions:
                 self.node.destroy_subscription(subscription)
             for publisher in self.publishers:

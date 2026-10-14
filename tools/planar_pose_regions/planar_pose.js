@@ -64,6 +64,48 @@ const planar_pose = (() => {
     return { points, tool_angle: angle };
   }
 
+  /* SE(3)形式の手先姿勢。平面モデルの有効成分はx・y・yaw、姿勢はxyzw四元数 */
+  function tool_pose(config, angles_deg) {
+    const { points, tool_angle } = forward_kinematics(config, angles_deg);
+    return { position_m: [...points[points.length - 1], 0],
+      quaternion_xyzw: [0, 0, Math.sin(tool_angle / 2), Math.cos(tool_angle / 2)],
+      active_coordinates: ["x", "y", "yaw"], model_scope: "planar" };
+  }
+
+  /* 世界座標の並進差・開始手先座標の最短回転ベクトル。四元数の符号同値性の保持 */
+  function tool_pose_difference(first, second) {
+    function normalized(values) {
+      if (!Array.isArray(values) || values.length !== 4 || !values.every(Number.isFinite)) throw new Error("姿勢四元数は有限値4個");
+      const length = Math.hypot(...values);
+      if (length < 1e-12) throw new Error("ゼロ四元数は対象外");
+      return values.map(value => value / length);
+    }
+    for (const pose of [first, second]) if (!Array.isArray(pose.position_m) || pose.position_m.length !== 3 || !pose.position_m.every(Number.isFinite)) throw new Error("手先位置は有限値3個");
+    const [x, y, z, w] = normalized(first.quaternion_xyzw);
+    const [other_x, other_y, other_z, other_w] = normalized(second.quaternion_xyzw);
+    const relative = [w * other_x - x * other_w - y * other_z + z * other_y,
+      w * other_y + x * other_z - y * other_w - z * other_x,
+      w * other_z - x * other_y + y * other_x - z * other_w,
+      w * other_w + x * other_x + y * other_y + z * other_z];
+    if (relative[3] < 0) for (let idx = 0; idx < 4; idx += 1) relative[idx] *= -1;
+    const norm = Math.hypot(...relative.slice(0, 3));
+    const angle = 2 * Math.atan2(norm, Math.max(0, relative[3]));
+    const rotation_vector_rad = relative.slice(0, 3).map(value => norm > 1e-12 ? value * angle / norm : 2 * value);
+    const translation_m = second.position_m.map((value, idx) => value - first.position_m[idx]);
+    return { translation_m, rotation_vector_rad, vector: [...translation_m, ...rotation_vector_rad],
+      translation_dist_m: Math.hypot(...translation_m), rotation_angle_deg: angle / degree_scale };
+  }
+
+  /* 手先6成分の局所微分。並進[m/deg]・回転ベクトル[rad/deg]、逆運動学なし */
+  function tool_jacobian(config, angles_deg) {
+    const { points } = forward_kinematics(config, angles_deg);
+    const terminal = points[points.length - 1];
+    return [angles_deg.map((_, idx) => -(terminal[1] - points[idx][1]) * degree_scale),
+      angles_deg.map((_, idx) => (terminal[0] - points[idx][0]) * degree_scale),
+      ...Array.from({ length: 3 }, () => new Array(config.num_joints).fill(0)),
+      new Array(config.num_joints).fill(degree_scale)];
+  }
+
   function point_segment_dist_squared(x, y, first, second) {
     const delta_x = second[0] - first[0];
     const delta_y = second[1] - first[1];
@@ -352,11 +394,11 @@ const planar_pose = (() => {
   }
 
   /* リンク向きの連動制約からの支持半平面包絡。起点の円膨張・全姿勢列挙なし */
-  function build_region_envelope(config, input_bounds) {
+  function build_region_envelope(config, input_bounds, options = {}) {
     const bounds = region_bounds(config, input_bounds);
     if (!bounds) throw new Error("空の姿勢領域");
     const { resolution, world_half_size, grid_width } = config;
-    const occupied = new Uint8Array(grid_width * grid_width);
+    const occupied = options.enable_rasterization === false ? null : new Uint8Array(grid_width * grid_width);
     const origin_supports = new Array(support_directions.length).fill(0);
     const primitives = [];
     const reach_bounds = endpoint_reach_bounds(config, bounds);
@@ -380,7 +422,7 @@ const planar_pose = (() => {
       const max_reach = Math.max(reach_bounds[link_idx], reach_bounds[link_idx + 1]) + radius;
       const min_y = Math.max(0, Math.ceil((-supports[48] + world_half_size) / resolution - 0.5));
       const max_y = Math.min(grid_width - 1, Math.floor((supports[16] + world_half_size) / resolution - 0.5));
-      for (let y_idx = min_y; y_idx <= max_y; y_idx += 1) {
+      for (let y_idx = min_y; occupied && y_idx <= max_y; y_idx += 1) {
         const y = (y_idx + 0.5) * resolution - world_half_size;
         if (Math.abs(y) > max_reach + 1e-10) continue;
         const radial_extent = Math.sqrt(Math.max(0, max_reach * max_reach - y * y));
@@ -403,8 +445,8 @@ const planar_pose = (() => {
       for (let idx = 0; idx < origin_supports.length; idx += 1) origin_supports[idx] = tight_endpoint_supports[idx];
     }
     const ids = [];
-    for (let id = 0; id < occupied.length; id += 1) if (occupied[id]) ids.push(id);
-    return { ids, primitives };
+    if (occupied) for (let id = 0; id < occupied.length; id += 1) if (occupied[id]) ids.push(id);
+    return { ids, primitives, tool_position_supports: origin_supports };
   }
 
   /* 全関節姿勢・同一格子の共通キャッシュ。円形ツールの占有不変回転も共有対象 */
@@ -497,6 +539,7 @@ const planar_pose = (() => {
         coordinate_constraints: is_coupled ? orientation_constraints : constraints,
       },
       occupied_ids: envelope.ids, envelope_primitives: envelope.primitives, sampled_occupied_ids,
+      tool_position_supports: envelope.tool_position_supports,
       change_cells,
       split_priority: Math.round(change_cells * Math.sqrt(total_length / Math.max(config.resolution, extent)) /
         Math.sqrt(Math.max(1, sample_poses[0].ids.length)) * 1e8) / 1e8,
@@ -676,7 +719,7 @@ const planar_pose = (() => {
   }
 
   /* 全関節の制約交差・共有面・実行可能な通過姿勢による接続。角点接触は対象外 */
-  function connect_cells(cells) {
+  function connect_cells(config, cells) {
     const edges = [];
     const neighbors = cells.map(() => []);
     const tolerance = 1e-8;
@@ -685,6 +728,12 @@ const planar_pose = (() => {
     for (let first_idx = 0; first_idx < cells.length; first_idx += 1) {
       const first = cells[first_idx];
       first.id = first_idx;
+      first.task_region = { type: "forward_image_of_joint_region", active_coordinates: ["x", "y", "yaw"],
+        reference_pose: tool_pose(config, first.center_angles_deg), jacobian: tool_jacobian(config, first.center_angles_deg),
+        position_supports_xy_m: first.tool_position_supports,
+        min_unwrapped_yaw_deg: first.min_orientations_deg[num_joints - 1],
+        max_unwrapped_yaw_deg: first.max_orientations_deg[num_joints - 1],
+        has_local_linear_model_only: true };
       for (let second_idx = first_idx + 1; second_idx < cells.length; second_idx += 1) {
         const second = cells[second_idx];
         const port_angles_deg = [];
@@ -725,7 +774,9 @@ const planar_pose = (() => {
           port_angles_deg.splice(0, port_angles_deg.length, ...joint_angles(reference_orientations(intersection)));
         }
         const edge_idx = edges.length;
-        edges.push({ first_idx, second_idx, port_angles_deg });
+        edges.push({ first_idx, second_idx, port_angles_deg, port_tool_pose: tool_pose(config, port_angles_deg),
+          connection_basis: "shared_joint_face", has_task_pose_continuity: true,
+          has_velocity_continuity: false, is_collision_checked: false });
         neighbors[first_idx].push(edge_idx);
         neighbors[second_idx].push(edge_idx);
       }
@@ -787,8 +838,8 @@ const planar_pose = (() => {
       uniform_cells.push(evaluate_cell(registry, { min_angles_deg, max_angles_deg }));
       if (uniform_cells.length % 16 === 0) await checkpoint("全関節・角度等間隔", uniform_cells.length);
     }
-    const uniform = connect_cells(uniform_cells);
-    const adaptive = connect_cells(adaptive_cells);
+    const uniform = connect_cells(config, uniform_cells);
+    const adaptive = connect_cells(config, adaptive_cells);
     registry.retain_envelopes([...uniform_cells, ...adaptive_cells]);
     return {
       config, registry, uniform, adaptive,
@@ -997,7 +1048,7 @@ const planar_pose = (() => {
       support_directions: support_directions.map((direction) => [direction.x, direction.y]),
       config: result.config, graph_name, stats: result.stats,
       nodes: graph.cells.map((cell) => ({
-        id: cell.id, region: cell.region,
+        id: cell.id, region: cell.region, task_region: cell.task_region,
         min_angles_deg: cell.min_angles_deg, max_angles_deg: cell.max_angles_deg,
         min_orientations_deg: cell.min_orientations_deg, max_orientations_deg: cell.max_orientations_deg,
         representative_angles_deg: cell.center_angles_deg,
@@ -1007,12 +1058,14 @@ const planar_pose = (() => {
       })),
       edges: graph.edges.map((edge) => ({
         first_idx: edge.first_idx, second_idx: edge.second_idx, port_angles_deg: edge.port_angles_deg,
+        port_tool_pose: edge.port_tool_pose, connection_basis: edge.connection_basis,
+        has_task_pose_continuity: edge.has_task_pose_continuity, has_velocity_continuity: false, is_collision_checked: false,
       })),
     };
   }
 
   return {
-    create_config, forward_kinematics, rasterize_pose, create_registry, evaluate_cell,
+    create_config, forward_kinematics, tool_pose, tool_pose_difference, tool_jacobian, rasterize_pose, create_registry, evaluate_cell,
     union_ids, intersect_ids, subtract_ids, symmetric_diff_count, angles_at,
     build_region_envelope, contains_pose, project_cell, matches_slice, slice_polygon, projected_pose, interpolate_angles,
     build_comparison, sample_edge, motion_bound, graph_stats, graph_neighborhood, export_graph,

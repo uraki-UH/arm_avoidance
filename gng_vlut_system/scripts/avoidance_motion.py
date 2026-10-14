@@ -38,11 +38,11 @@ def select_motion(flags: motion_flags) -> motion_kind:
         return motion_kind.fault
     if not flags.has_active_joints:
         return motion_kind.monitoring
+    if flags.can_return:
+        return motion_kind.monitoring if flags.is_home else motion_kind.returning
     if not flags.has_safe_neighbors or not flags.can_finish_retreat:
         return motion_kind.avoiding
-    if not flags.can_return:
-        return motion_kind.waiting_for_clearance
-    return motion_kind.monitoring if flags.is_home else motion_kind.returning
+    return motion_kind.waiting_for_clearance
 
 
 @dataclass(frozen=True)

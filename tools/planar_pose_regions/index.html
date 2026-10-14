@@ -32,8 +32,9 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
 #graph_canvas{height:360px;cursor:pointer;touch-action:none}#graph_stats,#workspace_stats{font-size:12px;color:#527086;line-height:1.7;margin-top:8px}
 #constraint_params table{width:100%;border-collapse:collapse;font-size:12px}#constraint_params th,#constraint_params td{padding:5px 8px;text-align:right;border-bottom:1px solid #e4ebf1}#constraint_params th:first-child,#constraint_params td:first-child{text-align:left}
 #neighbor_candidates table{width:100%;border-collapse:collapse;font-size:12px}#neighbor_candidates th,#neighbor_candidates td{padding:5px 6px;text-align:right;border-bottom:1px solid #e4ebf1}#neighbor_candidates th:first-child,#neighbor_candidates td:first-child{text-align:left}.candidate_button{padding:3px 6px;font-size:12px;color:#2465b8;background:transparent}#neighbor_candidates tr[data-is_selected=true]{background:#e3f0ee}#candidate_summary{font-size:12px;line-height:1.7;color:#527086;margin:8px 0}
+.reach_card{margin-top:16px}.reach_controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:12px 0}.reach_views{display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1fr);gap:16px}#reach_canvas{height:320px}#reach_metrics table{width:100%;border-collapse:collapse;font-size:13px}#reach_metrics th,#reach_metrics td{padding:8px 5px;border-bottom:1px solid #e4ebf1;text-align:right}#reach_metrics th:first-child,#reach_metrics td:first-child{text-align:left}#reach_status,#task_stats{font-size:12px;line-height:1.7;color:#527086;margin:8px 0}.reach_legend{margin-top:10px}
 [hidden]{display:none!important}
-@media(max-width:950px){.layout{grid-template-columns:1fr}.map_canvas{height:300px}#arm_canvas{height:380px}}
+@media(max-width:950px){.layout,.reach_views{grid-template-columns:1fr}.map_canvas{height:300px}#arm_canvas{height:380px}}
 @media(max-width:520px){main{padding:12px}.controls,.card{padding:12px}header{flex-wrap:wrap}h1{font-size:20px}.maps{grid-template-columns:1fr}.map_canvas{height:270px}#arm_canvas{height:320px}}
 </style>
 </head>
@@ -68,7 +69,7 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
 <div class="arm_header"><h2>姿勢グラフ</h2><span class="muted">ノード選択で作業空間と連動</span></div>
 <div class="view_tabs" aria-label="グラフ表示"><button id="graph_tab" aria-pressed="true">接続グラフ</button><button id="partition_tab" aria-pressed="false">領域比較</button></div>
 <div id="graph_panel">
-<div class="view_controls"><select id="graph_kind" aria-label="グラフの構築方式"><option value="adaptive">占有適応</option><option value="uniform">角度等間隔</option></select><select id="graph_scope" aria-label="接続グラフの表示範囲"><option value="local">選択周辺（2辺以内）</option><option value="all">全体</option></select></div>
+<div class="view_controls"><select id="graph_kind" aria-label="グラフの構築方式"><option value="adaptive">占有適応</option><option value="uniform">角度等間隔</option></select><select id="graph_scope" aria-label="接続グラフの表示範囲"><option value="local">選択周辺（2辺以内）</option><option value="all">全体</option></select><select id="graph_embedding" aria-label="接続グラフの配置"><option value="topology">接続関係で配置</option><option value="task">手先位置で配置</option></select></div>
 <canvas id="graph_canvas" aria-label="姿勢ノードと双方向の接続辺"></canvas>
 <div id="graph_stats"></div>
 <p class="hint">橙：選択 / 緑：移動先 / 青：その他の隣接 / 灰：2辺先。クリック：ノード・辺の選択</p>
@@ -93,11 +94,33 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
 <button id="play_edge" class="play" disabled>辺を再生</button>
 </div>
 <div id="edge_stats"></div>
+<div id="task_stats"></div>
 <div id="candidate_summary"></div>
 <details><summary>隣接候補（パレート比較）</summary><div id="neighbor_candidates"></div></details>
 </div>
 </section>
 </div>
+<section class="card reach_card" aria-label="ARMTD型比較">
+<div class="arm_header"><h2>制動付き到達集合 · ARMTD型比較</h2><button id="reach_save" disabled>JSON保存</button></div>
+<div class="reach_controls">
+<label class="field">目標<select id="reach_goal"><option value="family">加速度指定</option><option value="neighbor">選択した隣接姿勢</option></select></label>
+<label class="field">比較対象<select id="reach_scope"><option value="family">軌道族全体</option><option value="slice">中心軌道に絞り込み</option></select></label>
+<label class="field">初速 [deg/s]<input id="reach_velocity" type="number" value="0" min="-180" max="180" step="5"></label>
+<label class="field">中心加速度 [deg/s²]<input id="reach_acceleration" type="number" value="0" min="-360" max="360" step="5"></label>
+<label class="field">加速度幅 ± [deg/s²]<input id="reach_width" type="number" value="40" min="0" max="360" step="5"></label>
+<label class="field">計画 [s]<input id="reach_plan" type="number" value="0.5" min="0.05" max="3" step="0.05"></label>
+<label class="field">制動 [s]<input id="reach_brake" type="number" value="0.5" min="0.05" max="3" step="0.05"></label>
+<label class="field">時間区間 [s]<select id="reach_step"><option value="0.1">0.1</option><option value="0.05" selected>0.05</option><option value="0.02">0.02</option></select></label>
+<label class="field">多項式次数<select id="reach_degree"><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option></select></label>
+<label class="links_toggle"><input id="reach_obstacle" type="checkbox">障害物例</label>
+<button id="reach_compare" class="build" disabled>現在姿勢から比較</button>
+</div>
+<div class="reach_views">
+<div><div class="view_controls"><label>表示 <select id="reach_method"><option value="joint_interval">関節区間包絡</option><option value="armtd_polynomial" selected>ARMTD型・回転合成</option><option value="planar_polynomial">平面特化・累積角</option></select></label></div><canvas id="reach_canvas" aria-label="制動までの占有包絡・手先軌道と向き"></canvas><div class="legend reach_legend"><span style="--color:#c4d9ed">占有包絡</span><span style="--color:#9952b2">中心軌道の手先</span><span style="--color:#cb7a20">開始姿勢</span><span style="--color:#198c90">停止姿勢</span></div></div>
+<div><div id="reach_metrics"></div><div id="reach_status" role="status" aria-live="polite">未評価 · 現在姿勢を取得して比較</div></div>
+</div>
+<p class="hint">平面運動：x・y・yaw / 手先出力：位置3成分＋四元数 / 実機・自己衝突・追従誤差：対象外</p>
+</section>
 <details>
 <summary>評価方法・対象範囲</summary>
 <p>対象：全3～5関節、設定した可動域。±150°・±180°も選択可能。占有適応の制約：min_dev ≤ A(q−q0) ≤ max_dev。関節角・累積角の一次制約と元の可動域の共通部分がノード領域。二次制約は未実装。</p>
@@ -106,15 +129,23 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
 <p>折りたたみ：隣接リンクの到達距離80%の境界による近位2関節の初期層別。全関節の直積分割なし。通常分割には相対関節角の上位1候補も追加。分割優先度には代表姿勢の占有セル数・姿勢サイズを反映。固定ノード予算では他の領域が粗くなる場合あり。</p>
 <p>同一設定・同一姿勢の占有登録は比較2方式で共有。構築時間は描画待ちを含む合計であり、共有キャッシュを使う各方式の独立性能比較ではない。再生中は現在姿勢のみ評価し、フレームごとの履歴蓄積はなし。</p>
 <p>局所移動：現在姿勢→共有境界→隣接領域への進入。進入距離の上界：セル幅の半分。代表姿勢間の方式も選択可能。候補比較：開始姿勢からの追加掃引セル数／最大関節累積移動角。非劣候補から優先度に従って選択。軌道評価は有限サンプルであり、連続衝突保証・目標までの経路計画は対象外。軌道占有は別表示。</p>
-<p>円形ツールでは最終関節を円中心の回転として設定。占有が同一でも角度・ツール方向は保持。本デモは独自の領域分割試作であり、既存GNG学習の変更、自己衝突・障害物検査、連続領域の安全保証、実機制御は対象外。</p>
-<p>接続：全関節制約の共通部分が共有面になるノード同士。通過姿勢も連動制約内。選択周辺：2辺以内の実部分グラフ。全体図：距離尺度を持たない表示用配置。2軸投影：外接枠。断面：他関節固定の正確な多角形。橙包絡・接続グラフ：常に全関節領域。</p>
+<p>円形ツール：最終関節による円中心の回転。占有不変でも角度・ツール方向の保持。本デモ：独自の領域分割・到達集合の比較試作。既存GNG学習の変更、自己衝突、実機制御、安全認証：対象外。障害物例の評価：下記の到達集合比較のみ。</p>
+<p>接続：全関節制約の共有面と通過姿勢。手先領域：全関節領域の順運動学による像。JSON：位置3成分・xyzw四元数・局所6成分ヤコビアン・XY位置支持上界・未折返しyaw区間。平面版の有効成分：x・y・yaw、真の6次元領域ではない形式。ヤコビアン：基準姿勢近傍のみ、全領域の線形近似保証なし。位置と向きの周辺包絡の直積：正確な到達領域ではない外側近似。</p>
+<p>手先位置で配置：代表姿勢のXY位置、短線による向き、代表→共有通過姿勢→代表の曲線。曲線の描画：有限サンプル。関節共有面による位置・向きの連続接続。手先領域の重なりによる辺追加なし。速度・加速度の連続接続：未保証。選択周辺：2辺以内。接続関係の全体配置：距離尺度なし。2軸投影：外接枠、断面：他関節固定の多角形。</p>
+<p>到達集合比較：現在姿勢からの手動照会。初速：全関節への同じ入力値。中心加速度：指定値、または選択隣接領域への進入姿勢からの逆算。加速度幅：各関節の独立パラメータ、時間変数：全関節共有。「軌道族全体」と「中心軌道への絞り込み」の各比較内で、開始姿勢・速度・軌道族・時間区間の共通化。中心軌道の停止姿勢と手先軌道の表示。保存：開始／中心軌道終端の手先姿勢、6成分差分、占有包絡・制約判定の比較用JSON。</p>
+<p>ARMTD型：<a href="https://arxiv.org/abs/2002.01591" target="_blank" rel="noopener">ARMTD論文</a>の「事前の関節到達集合→初速度のslice→現在角への回転→リンク占有」に沿った独立計算核。事前初速区間：10 deg/s幅のビン、保持キャッシュ：直近1設定。軌道：定加速度の計画区間＋停止までの制動区間。表現：時間・加速度の共有依存多項式、3次Taylorと4次残差。次数・項数の削減分：独立残差への移行、slice後も保持。大角度変動：sin・cosの全区間への退避。原著のCORA・rotatotope・GPU・IPOPTの完全再現ではないCPU向け検証実装。</p>
+<p>比較方式：関節区間包絡／ARMTD型の関節回転合成／平面特化の累積角。各時間区間の64方向支持上界を合併し、各方式の格子登録は1回。既存ノード構築とは別の制動付き軌道評価、既存方式への自動置換なし。照会時間：事前処理を含む本ブラウザの単発値。2方式目以降での事前計算共有のため、独立した冷間性能比較ではない値。</p>
+<p>組み込み口：<code>armtd_reachability.create_backend(planar_pose)</code>の<code>compare</code>・<code>evaluate</code>・<code>evaluate_graph_edge</code>。隣接接続の評価：開始／目標の領域所属、二次軌道と一次制約の全境界交点、関節角・速度・計画加速度・制動加速度、静的障害物との支持分離。分離未確認：衝突確定とは別。自己衝突・追従誤差・トルク制約・移動障害物・全体経路最適化：対象外。浮動小数点の誤差余裕：検証付き丸め演算による証明ではない実装。実機への送信・安全保証：なし。</p>
 </details>
 </main>
 <script src="./planar_pose.js"></script>
+<script src="./armtd_reachability.js"></script>
 <script>
 "use strict";
 (() => {
   const engine = globalThis.planar_pose;
+  const reach_engine = globalThis.armtd_reachability;
+  const reach_backend = reach_engine.create_backend(engine);
   const element = (id) => document.getElementById(id);
   const state = {
     result: null, config: null, angles_deg: [20, -40, 35, -25, 20],
@@ -122,6 +153,8 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
     build_version: 0, playback: null, frame_id: null, last_pose: null, last_pose_key: "",
     scene: null, graph_layouts: {}, graph_hits: { nodes: [], edges: [] },
     neighbor_comparison: null, comparison_timer: null, has_manual_neighbor_choice: false,
+    reach_comparison: null, reach_connection: null,
+    task_display_paths: { uniform: new Map(), adaptive: new Map() },
   };
 
   function set_status(message) { element("status").textContent = message; }
@@ -212,6 +245,8 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
     element("play_edge").disabled = !has_graph || !state.sweep;
     element("neighbor").disabled = !has_graph;
     element("graph_kind").disabled = !has_graph;
+    element("reach_compare").disabled = !has_graph;
+    element("reach_save").disabled = !state.reach_comparison;
     element("play_region").textContent = state.playback?.kind === "region" ? "再生停止" : "領域内を再生";
     element("play_edge").textContent = state.playback?.kind === "edge" ? "再生停止" : "辺を再生";
   }
@@ -223,6 +258,8 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
     state.is_building = false;
     state.is_dirty = true;
     state.sweep = null;
+    state.reach_comparison = null; state.reach_connection = null;
+    element("reach_metrics").replaceChildren(); element("reach_status").textContent = "設定変更あり · 再構築後に比較";
     element("edge_stats").textContent = "";
     set_status("設定変更あり：構築ボタンで更新。グラフは前回設定の表示");
     update_buttons();
@@ -248,6 +285,7 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
       state.graph_layouts = {
         uniform: graph_layout(result.uniform), adaptive: graph_layout(result.adaptive),
       };
+      state.task_display_paths = { uniform: new Map(), adaptive: new Map() };
       state.is_dirty = false;
       state.is_building = false;
       state.cell_idx = 0;
@@ -390,9 +428,13 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
   }
 
   function restore_edge_stats() {
-    if (!state.sweep) { element("edge_stats").textContent = "隣接領域なし"; return; }
+    if (!state.sweep) { element("edge_stats").textContent = "隣接領域なし"; element("task_stats").textContent = ""; return; }
     element("edge_stats").textContent = "追加掃引 " + state.sweep.added_cells + "セル / 関節移動 " +
       state.sweep.max_joint_travel_deg.toFixed(1) + "° / 軌道サンプル " + state.sweep.samples.length + "姿勢";
+    const path = state.sweep.coordinates;
+    const difference = engine.tool_pose_difference(engine.tool_pose(state.config, path[0]), engine.tool_pose(state.config, path[path.length - 1]));
+    element("task_stats").textContent = "手先変位 " + (difference.translation_dist_m * 100).toFixed(1) + " cm / 向き変位 " +
+      difference.rotation_angle_deg.toFixed(1) + "° / 接続：関節共有面 / 速度接続：未評価";
   }
 
   /* 占有・順運動学の再計算を伴わない表示用参照 */
@@ -776,6 +818,18 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
     }
   }
 
+  /* 代表姿勢→共有通過姿勢→代表姿勢の手先表示用曲線。FKのみ・格子登録なし */
+  function task_edge_points(graph, edge_idx) {
+    const cached = state.task_display_paths[state.graph_name];
+    if (cached.has(edge_idx)) return cached.get(edge_idx);
+    const edge = graph.edges[edge_idx], points = [];
+    const coordinates = [graph.cells[edge.first_idx].center_angles_deg, edge.port_angles_deg, graph.cells[edge.second_idx].center_angles_deg];
+    for (let leg = 0; leg < 2; leg += 1) for (let idx = leg ? 1 : 0; idx <= 16; idx += 1) {
+      points.push(engine.tool_pose(state.config, engine.interpolate_angles(coordinates[leg], coordinates[leg + 1], idx / 16)).position_m.slice(0, 2));
+    }
+    cached.set(edge_idx, points); return points;
+  }
+
   function draw_graph() {
     const canvas = element("graph_canvas");
     if (canvas.clientWidth === 0) return;
@@ -784,10 +838,32 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
     const scene = state.scene;
     if (!graph || !scene) { state.graph_hits = { nodes: [], edges: [] }; return; }
     const is_local = element("graph_scope").value === "local";
+    const is_task = element("graph_embedding").value === "task";
     const node_ids = is_local ? scene.neighborhood.node_ids : graph.cells.map((cell) => cell.id);
     const edge_ids = is_local ? scene.neighborhood.edge_ids : graph.edges.map((_, idx) => idx);
     const positions = new Map();
-    if (is_local) {
+    let task_point = ([x, y]) => [x, y];
+    if (is_task) {
+      let min_x = Infinity, max_x = -Infinity, min_y = Infinity, max_y = -Infinity;
+      function include_point([x, y]) { min_x = Math.min(min_x, x); max_x = Math.max(max_x, x); min_y = Math.min(min_y, y); max_y = Math.max(max_y, y); }
+      for (const idx of node_ids) include_point(graph.cells[idx].task_region.reference_pose.position_m);
+      for (const idx of edge_ids) for (const point of task_edge_points(graph, idx)) include_point(point);
+      const span_x = Math.max(0.2, max_x - min_x + 0.08), span_y = Math.max(0.2, max_y - min_y + 0.08);
+      const task_scale = Math.min((width - 70) / span_x, (height - 52) / span_y);
+      const center_x = (min_x + max_x) / 2, center_y = (min_y + max_y) / 2;
+      task_point = ([x, y]) => [width / 2 + (x - center_x) * task_scale, height / 2 - (y - center_y) * task_scale];
+      for (const idx of node_ids) positions.set(idx, task_point(graph.cells[idx].task_region.reference_pose.position_m));
+      context.strokeStyle = "#e6edf3"; context.lineWidth = 1; context.font = "10px system-ui"; context.fillStyle = "#60798d";
+      const step = [0.05, 0.1, 0.25, 0.5, 1].find(value => value >= Math.max(span_x, span_y) / 6) ?? 2;
+      for (let value = Math.ceil((center_x - span_x / 2) / step) * step; value <= center_x + span_x / 2; value += step) {
+        context.beginPath(); context.moveTo(...task_point([value, center_y - span_y / 2])); context.lineTo(...task_point([value, center_y + span_y / 2])); context.stroke();
+        context.fillText(value.toFixed(2), task_point([value, center_y])[0] - 10, height - 8);
+      }
+      for (let value = Math.ceil((center_y - span_y / 2) / step) * step; value <= center_y + span_y / 2; value += step) {
+        context.beginPath(); context.moveTo(...task_point([center_x - span_x / 2, value])); context.lineTo(...task_point([center_x + span_x / 2, value])); context.stroke();
+        context.fillText(value.toFixed(2), 4, task_point([center_x, value])[1] + 3);
+      }
+    } else if (is_local) {
       positions.set(state.cell_idx, [width / 2, height / 2]);
       const outer_radius = Math.min(width, height) / 2 - 30;
       for (const hop of [1, 2]) {
@@ -814,8 +890,16 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
       const is_incident = edge.first_idx === state.cell_idx || edge.second_idx === state.cell_idx;
       context.strokeStyle = is_selected ? "#9952b2" : is_incident ? "#4d93b5" : "#becdd8";
       context.lineWidth = is_selected ? 3 : is_incident ? 1.8 : 0.9;
-      context.beginPath(); context.moveTo(...first); context.lineTo(...second); context.stroke();
-      hits.edges.push({ edge_idx, first, second });
+      const points = is_task ? task_edge_points(graph, edge_idx).map(task_point) : [first, second];
+      context.beginPath(); context.moveTo(...points[0]);
+      for (let idx = 1; idx < points.length; idx += 1) {
+        context.lineTo(...points[idx]); hits.edges.push({ edge_idx, first: points[idx - 1], second: points[idx] });
+      }
+      context.stroke();
+      if (is_task && (is_selected || is_incident)) {
+        context.fillStyle = is_selected ? "#9952b2" : "#4d93b5";
+        context.beginPath(); context.arc(...task_point(edge.port_tool_pose.position_m), 2.3, 0, Math.PI * 2); context.fill();
+      }
     }
     for (const idx of node_ids) {
       const [x, y] = positions.get(idx);
@@ -826,7 +910,13 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
       const color = is_selected ? "#cb7a20" : is_target ? "#198c90" : is_neighbor ? "#428caf" : "#8ba0b0";
       context.fillStyle = color; context.strokeStyle = "#fff"; context.lineWidth = 1.5;
       context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill(); context.stroke();
-      if (is_selected || is_target || is_local && (node_ids.length <= 26 || is_neighbor)) {
+      if (is_task) {
+        const quaternion = graph.cells[idx].task_region.reference_pose.quaternion_xyzw;
+        const yaw = 2 * Math.atan2(quaternion[2], quaternion[3]);
+        context.strokeStyle = color; context.lineWidth = 1.5; context.beginPath(); context.moveTo(x, y);
+        context.lineTo(x + (radius + 13) * Math.cos(yaw), y - (radius + 13) * Math.sin(yaw)); context.stroke();
+      }
+      if (is_selected || is_target || !is_task && is_local && (node_ids.length <= 26 || is_neighbor)) {
         const text = "N" + idx;
         context.font = is_selected || is_target ? "bold 12px system-ui" : "11px system-ui";
         const text_width = context.measureText(text).width;
@@ -842,15 +932,130 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
     canvas.dataset.edge_ids = edge_ids.join(",");
     canvas.dataset.num_nodes_visible = String(node_ids.length);
     canvas.dataset.num_edges_visible = String(edge_ids.length);
+    canvas.dataset.embedding = is_task ? "tool_pose_xy" : "topology";
+    canvas.dataset.num_edge_segments = String(hits.edges.length);
     element("graph_stats").textContent = "表示 " + node_ids.length + "ノード・" + edge_ids.length +
       "辺 / 全体 " + graph.cells.length + "ノード・" + graph.edges.length + "辺 / " +
-      (is_local ? "選択から2辺以内" : "角度順の配置・距離尺度なし");
+      (is_task ? "手先XY [m]・短線：向き・曲線：共有境界経由 / 手先一致による辺追加なし" :
+        is_local ? "選択から2辺以内" : "角度順の配置・距離尺度なし");
     if (state.is_dirty || state.is_building) {
       context.fillStyle = "#ffffffa3"; context.fillRect(0, 0, width, height);
     }
   }
 
-  function render() { draw_arm(); draw_graph(); draw_map("uniform"); draw_map("adaptive"); }
+  const reach_names = { joint_interval: "関節区間包絡", armtd_polynomial: "ARMTD型・回転合成", planar_polynomial: "平面特化・累積角" };
+  const reach_obstacles = [[[0.60, 0.25], [0.82, 0.25], [0.82, 0.47], [0.60, 0.47]]];
+
+  /* 手動照会の固定スナップショット。描画・再生フレームからの到達集合再計算なし */
+  async function compare_reachability() {
+    if (!state.result || state.is_dirty || state.is_building) return;
+    stop_playback();
+    element("reach_compare").disabled = true;
+    element("reach_status").textContent = "到達集合の比較中";
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    if (state.is_dirty || state.is_building) { update_buttons(); return; }
+    try {
+      const config = state.config, size = config.num_joints;
+      const start_angles_deg = state.angles_deg.slice(0, size);
+      const velocity = Number(element("reach_velocity").value), width = Number(element("reach_width").value);
+      const acceleration = Number(element("reach_acceleration").value);
+      const plan = Number(element("reach_plan").value), brake = Number(element("reach_brake").value);
+      if (![width, acceleration, velocity].every(Number.isFinite) || width < 0 || width > 360 || Math.abs(acceleration) > 360 || Math.abs(velocity) > 180) throw new Error("速度・加速度設定の範囲");
+      const has_target = element("reach_goal").value === "neighbor";
+      if (has_target && !state.sweep) throw new Error("隣接姿勢の選択が必要");
+      const target_angles_deg = has_target ? [...state.sweep.coordinates.at(-1)] : null;
+      const accelerations = target_angles_deg ? target_angles_deg.map((value, idx) =>
+        (value - start_angles_deg[idx] - velocity * (2 * plan + brake) / 2) * 2 / (plan * (plan + brake))) : new Array(size).fill(acceleration);
+      const velocity_center = Math.round(velocity / 10) * 10;
+      const options = { start_angles_deg, start_velocities_deg_s: new Array(size).fill(velocity),
+        min_initial_velocities_deg_s: new Array(size).fill(velocity_center - 5),
+        max_initial_velocities_deg_s: new Array(size).fill(velocity_center + 5),
+        min_accelerations_deg_s2: accelerations.map(value => value - width), max_accelerations_deg_s2: accelerations.map(value => value + width),
+        plan_time_sec: plan, brake_time_sec: brake, time_step_sec: Number(element("reach_step").value), max_degree: Number(element("reach_degree").value) };
+      const parameters = element("reach_scope").value === "slice" ? new Array(size).fill(0) : null;
+      const obstacles = element("reach_obstacle").checked ? reach_obstacles : [];
+      const comparison = reach_backend.compare(config, options, parameters, obstacles);
+      const connection = has_target ? reach_backend.evaluate_graph_edge(config, selected_cell(), state.scene.target, start_angles_deg,
+        { ...options, target_angles_deg, obstacles }) : null;
+      state.reach_comparison = { ...comparison, config, obstacles };
+      state.reach_connection = connection;
+      const table = document.createElement("table"), header = document.createElement("tr");
+      for (const title of ["方式", "占有 [セル]", "照会 [ms]", "事前 [ms]", "駆動制約", "障害物分離"]) {
+        const item = document.createElement("th"); item.textContent = title; header.append(item);
+      }
+      table.append(header);
+      for (const result of comparison.methods) {
+        const row = document.createElement("tr"); row.dataset.method = result.method;
+        for (const value of [reach_names[result.method], result.occupied_ids.length, result.elapsed_ms.toFixed(1), result.preparation_ms.toFixed(1),
+          result.limits.is_feasible ? "範囲内" : "範囲外", result.separation.has_obstacles ? (result.separation.can_separate ? "確認" : "未確認") : "対象なし"]) {
+          const item = document.createElement("td"); item.textContent = String(value); row.append(item);
+        }
+        table.append(row);
+      }
+      element("reach_metrics").replaceChildren(table);
+      const result = comparison.methods[1];
+      element("reach_status").textContent = "開始角度: " + start_angles_deg.map(value => value.toFixed(1)).join(" / ") + " deg\n" +
+        "比較対象: " + (parameters ? "中心軌道" : "同一軌道族") + " / 制動終了: " + comparison.motion.duration_sec.toFixed(2) + " s\n" +
+        "時間区間: " + result.num_time_intervals + " / 格子登録: 各方式1回 / 事前到達集合: 共有\n" +
+        "照会時間: 本ブラウザの単発値、事前処理を含む\n" +
+        (connection ? "中心軌道の接続: " + (connection.can_connect ? "理想モデル内で実行可能" : "未成立") +
+          " / 領域内: " + (connection.can_stay_in_regions ? "確認" : "未確認") + "\n" : "") +
+        "安全保証: なし / 障害物分離未確認: 衝突確定とは別";
+      element("reach_status").style.whiteSpace = "pre-line";
+      element("reach_canvas").dataset.comparison_scope = comparison.comparison_scope;
+      element("reach_canvas").dataset.num_methods = "3";
+      draw_reachability();
+    } catch (error) {
+      state.reach_comparison = null; state.reach_connection = null;
+      element("reach_metrics").replaceChildren(); element("reach_status").textContent = "比較失敗: " + error.message;
+      draw_reachability();
+    } finally { update_buttons(); }
+  }
+
+  function draw_reachability() {
+    const { context, width, height } = canvas_context("reach_canvas");
+    const comparison = state.reach_comparison;
+    if (!comparison) return;
+    const { config, motion } = comparison;
+    const result = comparison.methods.find(item => item.method === element("reach_method").value);
+    const scale = (Math.min(width, height) - 32) / (2 * config.world_half_size);
+    const point = ([x, y]) => [width / 2 + scale * x, height / 2 - scale * y];
+    context.strokeStyle = "#e4ebf1"; context.lineWidth = 1;
+    for (const value of [-1, 0, 1]) {
+      context.beginPath(); context.moveTo(...point([value, -1.3])); context.lineTo(...point([value, 1.3]));
+      context.moveTo(...point([-1.3, value])); context.lineTo(...point([1.3, value])); context.stroke();
+    }
+    context.fillStyle = "#c4d9ed";
+    for (const id of result.occupied_ids) {
+      const position = point([(id % config.grid_width) * config.resolution - config.world_half_size,
+        (Math.floor(id / config.grid_width) + 1) * config.resolution - config.world_half_size]);
+      context.fillRect(...position, config.resolution * scale, config.resolution * scale);
+    }
+    for (const obstacle of comparison.obstacles) {
+      context.fillStyle = "#b8575780"; context.beginPath();
+      obstacle.forEach((position, idx) => idx ? context.lineTo(...point(position)) : context.moveTo(...point(position)));
+      context.closePath(); context.fill();
+    }
+    const poses = Array.from({ length: 41 }, (_, idx) => engine.forward_kinematics(config,
+      reach_engine.trajectory_at(motion, motion.duration_sec * idx / 40, comparison.parameters ?? new Array(config.num_joints).fill(0)).angles_deg));
+    context.strokeStyle = "#9952b2"; context.lineWidth = 2; context.beginPath();
+    poses.forEach((pose, idx) => idx ? context.lineTo(...point(pose.points.at(-1))) : context.moveTo(...point(pose.points.at(-1))));
+    context.stroke();
+    poses.forEach((pose, idx) => {
+      if (idx % 4) return;
+      context.strokeStyle = idx === 0 ? "#cb7a20" : idx === 40 ? "#198c90" : "#708ba14a";
+      context.lineWidth = idx === 0 || idx === 40 ? 3 : 1; context.beginPath();
+      pose.points.forEach((position, joint_idx) => joint_idx ? context.lineTo(...point(position)) : context.moveTo(...point(position)));
+      context.stroke();
+      const tip = pose.points.at(-1);
+      context.strokeStyle = "#9952b2"; context.lineWidth = 1; context.beginPath(); context.moveTo(...point(tip));
+      context.lineTo(...point([tip[0] + 0.09 * Math.cos(pose.tool_angle), tip[1] + 0.09 * Math.sin(pose.tool_angle)])); context.stroke();
+    });
+    element("reach_canvas").dataset.method = result.method;
+    element("reach_canvas").dataset.num_cells = String(result.occupied_ids.length);
+  }
+
+  function render() { draw_arm(); draw_graph(); draw_map("uniform"); draw_map("adaptive"); draw_reachability(); }
 
   element("graph_canvas").addEventListener("pointerdown", (event) => {
     if (!state.result || state.is_dirty || state.is_building) return;
@@ -891,7 +1096,7 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
   element("graph_tab").addEventListener("click", () => show_panel("graph"));
   element("partition_tab").addEventListener("click", () => show_panel("partition"));
   element("graph_kind").addEventListener("change", () => switch_graph(element("graph_kind").value));
-  for (const id of ["graph_scope", "pose_scope", "enable_occupancy", "enable_path_occupancy"]) element(id).addEventListener("change", render);
+  for (const id of ["graph_scope", "graph_embedding", "pose_scope", "enable_occupancy", "enable_path_occupancy"]) element(id).addEventListener("change", render);
 
   for (const graph_name of ["uniform", "adaptive"]) {
     element(graph_name + "_canvas").addEventListener("pointerdown", (event) => {
@@ -968,9 +1173,24 @@ details{margin-top:16px;font-size:13px;color:#50677b}summary{cursor:pointer}deta
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
+  element("reach_compare").addEventListener("click", compare_reachability);
+  element("reach_method").addEventListener("change", draw_reachability);
+  element("reach_goal").addEventListener("change", () => { element("reach_acceleration").disabled = element("reach_goal").value === "neighbor"; });
+  element("reach_save").addEventListener("click", () => {
+    if (!state.reach_comparison) return;
+    const data = { ...reach_engine.export_motion(state.reach_comparison), config: state.reach_comparison.config,
+      obstacles: state.reach_comparison.obstacles,
+      connection: state.reach_connection ? { can_connect: state.reach_connection.can_connect,
+        can_stay_in_regions: state.reach_connection.can_stay_in_regions, task_difference: state.reach_connection.task_difference,
+        connection_scope: state.reach_connection.connection_scope, is_real_robot_certified: false } : null };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = "planar_armtd_comparison.json"; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
   document.addEventListener("visibilitychange", () => { if (document.hidden) stop_playback(); });
   window.addEventListener("pagehide", () => { state.build_version += 1; clearTimeout(state.comparison_timer); stop_playback(); });
   new ResizeObserver(render).observe(document.querySelector(".layout"));
+  new ResizeObserver(draw_reachability).observe(document.querySelector(".reach_card"));
   refresh_axes();
   build();
 })();

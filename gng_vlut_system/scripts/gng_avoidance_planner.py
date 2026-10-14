@@ -142,13 +142,24 @@ class gng_path_search:
             batch = self.geometry.centers(poses)
             distances = self.cloud_tree.query(batch[:, is_arm].reshape(-1, 3))[0].reshape(len(batch), -1)
             gaps = np.min(distances-self.geometry.radii[is_arm]-self.cell_radius, axis=1)
-            for gap, centers in zip(gaps, batch):
-                if gap < min_gap:
-                    return False
-                if not self.has_planning_clearance(centers):
+            cloud_rejections = np.flatnonzero(gaps < min_gap)
+            end = int(cloud_rejections[0]) if len(cloud_rejections) else len(batch)
+            # 最初の点群棄却より前だけの一括自己干渉検査。従来の棄却順・理由を維持。
+            if end:
+                # 最初の姿勢での早期棄却。通過した区間だけ残りの姿勢を一括検査。
+                rejection_idx = None if self.has_planning_clearance(batch[0]) else 0
+                if rejection_idx is None and end > 1:
+                    has_clearance = np.broadcast_to(self.has_planning_clearance(batch[1:end]), (end-1,))
+                    internal_rejections = np.flatnonzero(~has_clearance)
+                    if len(internal_rejections):
+                        rejection_idx = int(internal_rejections[0])+1
+                if rejection_idx is not None:
+                    centers = batch[rejection_idx]
                     if not self.geometry.has_inter_arm_clearance(centers, self.config.get('min_internal_clearance_th', .005)):
                         self.has_inter_arm_rejection = True
                     return False
+            if len(cloud_rejections):
+                return False
         return True
 
     def has_planning_clearance(self, centers):
@@ -332,6 +343,13 @@ class gng_avoidance_policy(gng_path_search):
         """制御刻み幅で切断しない経由姿勢。時間補間・速度制限は実行系の管轄。"""
         return self.select_target(None, None, None)
 
+    def can_return_to_home(self, home_target, has_safe_neighbors, can_finish_retreat):
+        """既定の復帰判定。近傍状態・退避完了・復帰区間・観測継続時間の照合。"""
+        has_clear_return = (has_safe_neighbors and can_finish_retreat
+                            and self.has_safe_target_neighbors(home_target)
+                            and self.can_bridge(self.positions, home_target, self.config['min_clearance_th']))
+        return has_stable_return_clearance(self, has_clear_return)
+
     def select_target(self, _hand, _elbow, step):
         # 障害物の真値位置は計画に不使用。自己除去後の観測点とVLUT状態のみの利用
         if getattr(self, 'is_stop_latched', False):
@@ -372,10 +390,7 @@ class gng_avoidance_policy(gng_path_search):
         max_retreat_clearance_dev_th = .001
         can_finish_retreat = (getattr(self, 'motion_phase', '') == 'returning'
                               or self.config['target_clearance']-self.cloud_gap <= max_retreat_clearance_dev_th)
-        has_clear_return = (has_safe_neighbors and can_finish_retreat
-                            and self.has_safe_target_neighbors(home_target)
-                            and self.can_bridge(self.positions, home_target, self.config['min_clearance_th']))
-        can_return = has_stable_return_clearance(self, has_clear_return)
+        can_return = self.can_return_to_home(home_target, has_safe_neighbors, can_finish_retreat)
         self.motion_flags = motion_flags(
             has_active_joints=True, has_safe_neighbors=has_safe_neighbors,
             can_finish_retreat=can_finish_retreat, can_return=can_return,
