@@ -1,0 +1,24 @@
+{
+  "cases": [
+    {
+      "name": "cost_probe",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "self_measure",
+        "log/artifacts/fov_shadow/measure_shadow.py",
+        "--case-dir",
+        "@case_dir@",
+        "--duration",
+        "3"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 120
+    }
+  ]
+}

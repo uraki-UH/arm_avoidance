@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ais_gng/topological_plane/surface_model.hpp"
+#include "ais_gng/topological_plane/surface_model_link.hpp"
 #include <unordered_map>
 
 namespace fuzzrobo::surface_model
@@ -32,7 +33,7 @@ private:
   };
   std::string method_ = "model";
   std::unordered_map<std::uint32_t, smooth_node> smooth_nodes_;
-  std::vector<std::pair<std::uint64_t, bool>> smooth_links_;
+  std::vector<smooth_link> smooth_links_;
   std::array<double, 3> smooth_limits_{};
   struct reference_node { std::uint16_t id; std::uint32_t frame; Eigen::Vector3d position; };
   struct track { region surface; std::vector<reference_node> reference; };

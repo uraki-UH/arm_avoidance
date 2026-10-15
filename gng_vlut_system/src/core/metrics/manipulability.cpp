@@ -134,10 +134,10 @@ double calculateManipulabilityMeasure(const Eigen::MatrixXd &J,
 }
 
 // 方向可操作性の評価
-double
-evaluateDirectionalManipulability(const ManipulabilityEllipsoid &ellipsoid,
-                                  const Eigen::Vector3d &direction) {
-  if (!ellipsoid.valid)
+template <typename metric_type>
+static double evaluate_directional_sample(const metric_type &ellipsoid,
+                                          const Eigen::Vector3d &direction) {
+  if (!is_valid(ellipsoid))
     return 0.0;
 
   Eigen::Vector3d d = direction.normalized();
@@ -154,6 +154,16 @@ evaluateDirectionalManipulability(const ManipulabilityEllipsoid &ellipsoid,
   }
 
   return (sum_sq > 0) ? 1.0 / std::sqrt(sum_sq) : 0.0;
+}
+
+double evaluateDirectionalManipulability(const ManipulabilityEllipsoid &ellipsoid,
+                                         const Eigen::Vector3d &direction) {
+  return evaluate_directional_sample(ellipsoid, direction);
+}
+
+double evaluateDirectionalManipulability(const manipulability_sample &ellipsoid,
+                                         const Eigen::Vector3d &direction) {
+  return evaluate_directional_sample(ellipsoid, direction);
 }
 
 // 条件数の計算

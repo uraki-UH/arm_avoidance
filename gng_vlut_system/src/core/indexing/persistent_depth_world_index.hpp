@@ -44,6 +44,12 @@ struct depth_camera_intrinsics
     {
       throw std::invalid_argument("depth camera intrinsics are invalid");
     }
+    // 画素番号とbucket内位置に共通の32bit表現の上限検査
+    if (static_cast<std::uint64_t>(width) * height >
+      std::numeric_limits<std::uint32_t>::max())
+    {
+      throw std::length_error("depth image pixel count exceeds uint32 range");
+    }
   }
 
   std::size_t pixel_num() const
@@ -153,7 +159,7 @@ public:
       pixel_state &pixel = pixels_[pixel_idx];
       if (current_depth_mm == 0U) {
         ++stats.invalid_depth_pixel_num;
-        if (!pixel.has_point) {
+        if (pixel.depth_mm == 0U) {
           continue;
         }
         pixel.free_confirmation_count = static_cast<std::uint16_t>(std::min<std::uint32_t>(
@@ -170,7 +176,7 @@ public:
 
       ++stats.valid_depth_pixel_num;
       const Eigen::Vector3f current_point = deproject(pixel_idx, current_depth_mm, camera_to_world_);
-      if (!pixel.has_point) {
+      if (pixel.depth_mm == 0U) {
         add_point(pixel_idx, current_depth_mm, current_point);
         ++stats.inserted_point_num;
         continue;
@@ -301,12 +307,12 @@ public:
 private:
   struct pixel_state
   {
-    bool has_point{false};
+    // 深度0を未登録の印として共用。有効深度と有効状態の二重管理なし
     std::uint16_t depth_mm{0U};
     std::uint16_t free_confirmation_count{0U};
     Eigen::Vector3f point{Eigen::Vector3f::Zero()};
     voxel_idx::world_bucket_key bucket_key{};
-    std::size_t bucket_offset{0U};
+    std::uint32_t bucket_offset{0U};
   };
 
   voxel_idx::world_bucket_key to_key(const Eigen::Vector3d &point) const
@@ -352,13 +358,12 @@ private:
     if (bucket.empty()) {
       ++active_bucket_num_;
     }
-    pixel.has_point = true;
     pixel.depth_mm = depth_mm;
     pixel.free_confirmation_count = 0U;
     pixel.point = point;
     pixel.bucket_key = key;
-    pixel.bucket_offset = bucket.size();
-    bucket.push_back(pixel_idx);
+    pixel.bucket_offset = static_cast<std::uint32_t>(bucket.size());
+    bucket.push_back(static_cast<std::uint32_t>(pixel_idx));
     ++active_point_num_;
   }
 
@@ -369,7 +374,7 @@ private:
     if (bucket_it == buckets_.end() || pixel.bucket_offset >= bucket_it->second.size()) {
       throw std::logic_error("persistent bucket state is invalid");
     }
-    std::vector<std::size_t> &bucket = bucket_it->second;
+    std::vector<std::uint32_t> &bucket = bucket_it->second;
     const std::size_t moved_pixel_idx = bucket.back();
     bucket[pixel.bucket_offset] = moved_pixel_idx;
     pixels_[moved_pixel_idx].bucket_offset = pixel.bucket_offset;
@@ -402,7 +407,7 @@ private:
   std::vector<Eigen::Vector3f> rays_;
   std::vector<pixel_state> pixels_;
   std::unordered_map<
-    voxel_idx::world_bucket_key, std::vector<std::size_t>, voxel_idx::world_bucket_key_hash> buckets_;
+    voxel_idx::world_bucket_key, std::vector<std::uint32_t>, voxel_idx::world_bucket_key_hash> buckets_;
   Eigen::Isometry3f camera_to_world_{Eigen::Isometry3f::Identity()};
   bool has_camera_to_world_{false};
   std::size_t active_bucket_num_{0U};

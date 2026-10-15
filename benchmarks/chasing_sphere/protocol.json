@@ -1,0 +1,45 @@
+{
+  "model": "topo_dual_arm_max_long",
+  "training_seeds": [
+    11,
+    17,
+    23
+  ],
+  "development_seeds": [
+    31,
+    37
+  ],
+  "holdout_seeds": [
+    101,
+    107,
+    131,
+    149
+  ],
+  "speed_ratios": [
+    0.2,
+    0.8
+  ],
+  "duration_sec": 18,
+  "max_development_rounds": 3,
+  "max_batch_sec": 900,
+  "max_trial_sec": 150,
+  "metrics": [
+    "safe_sec",
+    "is_failure",
+    "failure_penalty_sec",
+    "first_failure_speed_ratio",
+    "contact_sec",
+    "proxy_contact_sec",
+    "internal_failure_sec",
+    "num_round_trips",
+    "min_proxy_gap_m",
+    "propose_p95_ms"
+  ],
+  "selection_rule": "失敗数と無事故継続時間を優先。往復回数と計算時間を含むPareto比較。全試験で失敗時に打切り、未観測の残り時間を成功時間に含めない",
+  "failure_rule": "最初の物理接触、30 ms継続の内部干渉、6 rad/s超の関節速度、計画角度域から0.05 rad超過。continuous関節の計画域は±πであり、物理的な関節限界ではない。接触時間は打切りまでの観測値であり全時間比較に使用しない",
+  "holdout_rule": "調整後の実装・重み・設定を固定。未使用の方向・半径・目標・遅延で一度だけ評価。失敗結果も保持",
+  "sensor_scope": "理想球観測から開始、評価条件に遅延・雑音を含む。MID-360死角の検証とは別",
+  "representation_scope": "既存GNG代表姿勢を保持。解析的な連続球包絡での外部照会、再ボクセル化なし",
+  "has_hardware_output": false,
+  "evaluation_clarification": "評価後の名称訂正のみ。打切り条件・閾値・失敗数・測定値の変更なし。初版のURDF可動域という記述はcontinuous関節に不適切"
+}

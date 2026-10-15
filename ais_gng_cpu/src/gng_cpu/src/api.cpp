@@ -55,11 +55,9 @@ MY_API int gng_setParameter(const char *paramerter_name, const uint32_t index, c
     } else if (name.rfind("node.observation.", 0) == 0) {
         return false;
     } else if (name == "node.covariance_enabled") {
-        core.enable_covariance = value != 0;
-        if (!core.enable_covariance) {for (auto &node : core.nodes) {node.winner_stats = {};}}
+        core.set_statistics_enabled(value != 0, core.enable_support);
     } else if (name == "node.enable_support") {
-        core.enable_support = value != 0;
-        if (!core.enable_support) {for (auto &node : core.nodes) {node.support_stats = {};}}
+        core.set_statistics_enabled(core.enable_covariance, value != 0);
     } else if (name == "node.covariance_winner_rank_max" && (value == 1 || value == 2)) {
         core.max_covariance_winner_rank = static_cast<uint16_t>(value);
     } else if (name == "node.support.sample_alpha" && value >= 0 && value <= 1) {
@@ -389,15 +387,19 @@ MY_API gng_node_statistics gng_get_node_statistics(uint16_t node_id) {
     gng_node_statistics result;
     if (node_id >= gng.n1.nodes.size() || gng.n1.nodes[node_id].id == NODE_NOID) {return result;}
     const auto &node = gng.n1.nodes[node_id];
-    result.winner_point_count = node.winner_stats.count;
-    result.support_weight_sum = node.support_stats.count;
+    if (!gng.n1.enable_covariance && !gng.n1.enable_support) {return result;}
+    static const node_moments empty_stats{};
+    const auto &winner = gng.n1.enable_covariance ? gng.n1.winner_stats[node_id] : empty_stats;
+    const auto &support = gng.n1.enable_support ? gng.n1.support_stats[node_id] : empty_stats;
+    result.winner_point_count = winner.count;
+    result.support_weight_sum = support.count;
     for (std::size_t row = 0; row < 3; ++row) {
         for (std::size_t column = 0; column < 3; ++column) {
             const auto idx = 3 * row + column;
-            result.winner_point_covariance[idx] = node.winner_stats.covariance[idx] / std::max(1.0, node.winner_stats.count - 1);
+            result.winner_point_covariance[idx] = winner.covariance[idx] / std::max(1.0, winner.count - 1);
             if (result.support_weight_sum > 0) {
-                result.support_moment[idx] = node.support_stats.covariance[idx] +
-                    (node.support_stats.mean[row] - node.pos.p[row]) * (node.support_stats.mean[column] - node.pos.p[column]);
+                result.support_moment[idx] = support.covariance[idx] +
+                    (support.mean[row] - node.pos.p[row]) * (support.mean[column] - node.pos.p[column]);
             }
         }
     }

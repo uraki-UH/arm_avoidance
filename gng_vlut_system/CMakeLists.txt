@@ -6,6 +6,25 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# 連続占有領域の数値部品。ROS非依存の単独ビルドと通常パッケージへの同梱。
+add_library(gng_region_kernel SHARED src/core/collision/region_kernel.cpp)
+target_compile_features(gng_region_kernel PRIVATE cxx_std_17)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(gng_region_kernel PRIVATE -ffp-contract=off)
+endif()
+install(TARGETS gng_region_kernel LIBRARY DESTINATION lib/${PROJECT_NAME})
+# 観測光線と既存ROI格子による三状態照会。ROS非依存の数値部品。
+add_library(gng_visibility_kernel SHARED src/core/indexing/visibility_kernel.cpp)
+target_compile_features(gng_visibility_kernel PRIVATE cxx_std_17)
+install(TARGETS gng_visibility_kernel LIBRARY DESTINATION lib/${PROJECT_NAME} COMPONENT visibility_kernel)
+add_library(gng_dynamic_kernel SHARED src/core/planning/dynamic_avoidance_kernel.cpp)
+target_compile_features(gng_dynamic_kernel PRIVATE cxx_std_17)
+install(TARGETS gng_dynamic_kernel LIBRARY DESTINATION lib/${PROJECT_NAME} COMPONENT dynamic_kernel)
+option(enable_region_kernel_only "連続占有領域の数値部品だけのビルド" OFF)
+if(enable_region_kernel_only)
+  return()
+endif()
+
 # 追加計画器の既定無効化。依存未配置時も通常ビルドの継続。
 option(enable_optional_motion_planners "MoveIt/OMPLのBIT*登録拡張" OFF)
 macro(add_optional_motion_planners)
@@ -336,6 +355,8 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 )
 
 install(PROGRAMS
+  scripts/gng_edge_vlut.py
+  scripts/gng_region_vlut.py
   scripts/object_class_recognition_node.py
   scripts/mobile_gng_preview.py
   scripts/mobile_gng_node.py
@@ -366,5 +387,10 @@ install(PROGRAMS
   ${CMAKE_CURRENT_SOURCE_DIR}/../dummy_joint_pub.py
   DESTINATION lib/${PROJECT_NAME}
 )
+
+# 任意配置のVRM変換ツール。未配置のGit取得先でのビルド継続
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/urdf_vrm.py")
+  install(PROGRAMS scripts/urdf_vrm.py DESTINATION lib/${PROJECT_NAME})
+endif()
 
 ament_auto_package()

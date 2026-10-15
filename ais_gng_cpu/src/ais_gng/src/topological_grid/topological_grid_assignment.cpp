@@ -624,7 +624,7 @@ void TemporalVoxelFilter::appendSample(
   if (history.samples.size() == config_.history_window_size) {
     const auto &expired = history.samples.front();
     if (expired.has_label) {
-      --history.label_counts[expired.label];
+      history.label_counts.decrement(expired.label);
       --history.label_observation_count;
     }
     if (expired.has_input_points) {
@@ -635,7 +635,7 @@ void TemporalVoxelFilter::appendSample(
 
   history.samples.push_back(sample);
   if (sample.has_label) {
-    ++history.label_counts[sample.label];
+    history.label_counts.increment(sample.label);
     ++history.label_observation_count;
   }
   if (sample.has_input_points) {
@@ -973,7 +973,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     if (history.label_observation_count == 0) {
       continue;
     }
-    history.active_label = dominantLabel(history.label_counts);
+    history.active_label = history.label_counts.dominant_label();
 
     auto stable_voxel = voxel;
     stable_voxel.label = history.active_label;
@@ -1044,7 +1044,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       continue;
     }
     if (history.label_observation_count > 0) {
-      history.active_label = dominantLabel(history.label_counts);
+      history.active_label = history.label_counts.dominant_label();
     }
     auto stable_voxel = history.last_voxel;
     stable_voxel.label = history.active_label;

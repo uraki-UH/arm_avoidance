@@ -59,7 +59,7 @@ struct Status {
   // --- 物理指標 (include/metrics/ 内のライブラリを利用) ---
 
   // 静的（運動学的）可操作性
-  Manipulability::ManipulabilityEllipsoid manip_info;
+  Manipulability::manipulability_sample manip_info;
 
   // 以前の ManipulabilityInfo にあった追加指標
   float min_singular_value = 0.0f;
@@ -67,18 +67,18 @@ struct Status {
   float dynamic_manipulability = 0.0f;
 
   // 動的可操作性
-  Manipulability::ManipulabilityEllipsoid dynamic_manip_info;
+  Manipulability::manipulability_value dynamic_manip_info;
 
   // 回転可操作性
-  Manipulability::ManipulabilityEllipsoid rotational_manip_info;
+  Manipulability::manipulability_sample rotational_manip_info;
 
   // --- その他 ---
   std::unordered_map<std::string, float> metadata; // 汎用メタデータ
 
   Status() {
-    manip_info.valid = false;
-    dynamic_manip_info.valid = false;
-    rotational_manip_info.valid = false;
+    manip_info.is_valid = false;
+    dynamic_manip_info.is_valid = false;
+    rotational_manip_info.is_valid = false;
   }
 };
 

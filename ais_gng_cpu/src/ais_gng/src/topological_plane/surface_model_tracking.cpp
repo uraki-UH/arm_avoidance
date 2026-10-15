@@ -258,7 +258,7 @@ result tracker::update_smooth_graph(const ais_gng_msgs::msg::TopologicalMap &map
     dirty_key(static_cast<std::uint32_t>(key>>32));
     dirty_key(static_cast<std::uint32_t>(key));
   };
-  std::vector<std::pair<std::uint64_t,bool>> links;
+  std::vector<smooth_link> links;
   links.reserve(map.edges.size()/2);
   for (std::size_t i=0; i+1<map.edges.size(); i+=2) {
     const auto a=map.edges[i], b=map.edges[i+1];
@@ -272,13 +272,15 @@ result tracker::update_smooth_graph(const ais_gng_msgs::msg::TopologicalMap &map
   const double min_cos=std::cos(config.max_link_normal_deg*angle_scale);
   const double max_sin=std::sin(config.max_link_tangent_deg*angle_scale);
   std::size_t old_idx=0;
-  for (auto &[key,can_connect]:links) {
-    while (old_idx<smooth_links_.size() && smooth_links_[old_idx].first<key) {
-      if (smooth_links_[old_idx].second) dirty_link(smooth_links_[old_idx].first);
+  for (auto &link:links) {
+    const auto key=link.key();
+    bool can_connect=link.is_connected();
+    while (old_idx<smooth_links_.size() && smooth_links_[old_idx].key()<key) {
+      if (smooth_links_[old_idx].is_connected()) dirty_link(smooth_links_[old_idx].key());
       ++old_idx;
     }
-    const bool has_previous=old_idx<smooth_links_.size() && smooth_links_[old_idx].first==key;
-    const bool has_previous_connection=has_previous && smooth_links_[old_idx].second;
+    const bool has_previous=old_idx<smooth_links_.size() && smooth_links_[old_idx].key()==key;
+    const bool has_previous_connection=has_previous && smooth_links_[old_idx].is_connected();
     const auto a=indices.at(static_cast<std::uint32_t>(key>>32));
     const auto b=indices.at(static_cast<std::uint32_t>(key));
     if (has_previous && !has_geometry_change[a] && !has_geometry_change[b]) can_connect=has_previous_connection;
@@ -293,6 +295,7 @@ result tracker::update_smooth_graph(const ais_gng_msgs::msg::TopologicalMap &map
         std::abs(left.normal.dot(right.normal))>=min_cos &&
         std::max(left_dev*left_dev,right_dev*right_dev)<=max_sin*max_sin*dist2;
     }
+    link.set_connected(can_connect);
     if (has_previous_connection!=can_connect) dirty_link(key);
     if (has_previous) ++old_idx;
     if (can_connect) {
@@ -301,7 +304,7 @@ result tracker::update_smooth_graph(const ais_gng_msgs::msg::TopologicalMap &map
     }
   }
   for (;old_idx<smooth_links_.size();++old_idx)
-    if (smooth_links_[old_idx].second) dirty_link(smooth_links_[old_idx].first);
+    if (smooth_links_[old_idx].is_connected()) dirty_link(smooth_links_[old_idx].key());
 
   // 接続可否不変の成分は所属を再利用。切断・追加・ID消失の影響成分だけ再探索。
   std::vector<bool> has_connectivity_change(num), has_visited(num,false);

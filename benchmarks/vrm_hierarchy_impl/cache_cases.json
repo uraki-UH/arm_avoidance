@@ -1,0 +1,8 @@
+{
+  "cases": [
+    {"name":"versioned_cache_build","argv":["/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/reference/vrm","build","cover3","--budget","304","--floordepth","0","--tau",".005","--base",".7","--rmax","100"],
+      "cwd":"/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/reference","env":{"OMP_NUM_THREADS":"2"},"timeout_sec":90},
+    {"name":"versioned_cache_audit","argv":["/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/reference/audit","103","@case_dir@/metrics.json","4"],
+      "cwd":"/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/reference","env":{"OMP_NUM_THREADS":"2"},"metrics":"metrics.json","timeout_sec":90}
+  ]
+}

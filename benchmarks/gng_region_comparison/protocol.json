@@ -1,0 +1,103 @@
+{
+  "format": "gng_region_comparison_v1",
+  "robot": "topo_dual_arm_max_long",
+  "active_joint_names": [
+    "L_joint1",
+    "L_joint2",
+    "L_joint3",
+    "L_joint4",
+    "L_joint5",
+    "L_joint6",
+    "L_joint7"
+  ],
+  "geometry": "same_urdf_outer_spheres_all_profile_links_no_floor",
+  "self_collision_policy": "existing_connected_distance_3_and_initial_overlap_exclusions_common_to_all_methods",
+  "strict_policy_audit": "separate_fixed_right_gripper_cover_overlap_no_silent_exclusion",
+  "methods": [
+    "occupancy_cover",
+    "quadratic_cover",
+    "urdf_boxes"
+  ],
+  "max_num_regions": [
+    64,
+    128
+  ],
+  "max_build_sec": 20,
+  "max_num_relations": 500000,
+  "max_num_cells": 16384,
+  "max_extra_cells_th": 384,
+  "max_num_splits": 2,
+  "max_num_growth_checks": 0,
+  "internal_policy": "separate",
+  "voxel_size": 0.05,
+  "clearance_margin": 0.02,
+  "min_gap": 0.01,
+  "min_internal_gap": 0.005,
+  "cell_radius": 0,
+  "training_source": "log/artifacts/gng_region_cover/native_cached.npz",
+  "num_training_poses": 8,
+  "num_protected_poses": 8,
+  "num_scenes": 24,
+  "num_ref_samples": 129,
+  "num_heldout_transitions": 12,
+  "heldout_samples": {
+    "uniform": 2048,
+    "near_training": 512,
+    "folded": 512,
+    "joint_ends": 256
+  },
+  "near_training_half_width_rad": 0.03,
+  "num_trials": 5,
+  "scene_seed_offset": 23000,
+  "pose_seed_offset": 32000,
+  "mandatory_zero": [
+    "num_false_clear",
+    "num_false_blocked",
+    "num_final_false_clear",
+    "num_final_false_blocked",
+    "num_transition_violations",
+    "num_missing_required",
+    "num_counter_errors"
+  ],
+  "quality_no_regression": [
+    "indexed_required_count",
+    "uniform_indexed_ratio",
+    "near_training_indexed_ratio",
+    "folded_indexed_ratio",
+    "joint_ends_indexed_ratio",
+    "reachability_ratio",
+    "protected_reachability_ratio",
+    "fast_clear_safe_ratio",
+    "blocked_detection_ratio"
+  ],
+  "resource_minimize": [
+    "num_regions",
+    "num_raw_bytes",
+    "num_relations",
+    "online_total_ms",
+    "query_p95_ms",
+    "update_p95_ms",
+    "num_visited_postings"
+  ],
+  "relative_gain": {
+    "min_gain_ratio_th": 0.1,
+    "max_timing_regression_ratio_th": 0.05,
+    "max_exact_resource_regression_ratio_th": 0,
+    "require_all_trials_direction": true
+  },
+  "interpretation": {
+    "comparative": "mandatory gates plus per-stratum quality nonregression; no resource regression outside timing tolerance; at least one >=10% resource gain, or >=5 percentage point quality gain without resource regression",
+    "strong_replacement": "comparative plus provisional workload targets and ROS runtime integration and strict geometry validity; not claimed by this offline benchmark",
+    "task_target": {
+      "min_reachability_ratio_th": 0.98,
+      "min_protected_reachability_ratio_th": 0.98,
+      "max_unknown_safe_ratio_th": 0.05
+    },
+    "target_status": "existing_project_engineering_targets_not_theorems_or_user_approved_real_robot_requirements",
+    "full_coverage": "finite samples do not prove all feasible configurations or all IK branches",
+    "unsupported_denominator": "null outside numeric runner metrics, explicit valid flags inside metrics; never zero-as-success",
+    "reference": "dense_sphere_FK_plus_global_motion_bounds; collision_witness_or_continuous_clear_bound; unresolved_separate",
+    "runtime": "common endpoint validation plus existing gng_path_search.can_bridge fallback; model injection only in test harness; no launch changes",
+    "budget": "matched caps, not matched actual node counts; build time one measurement per model, no timing superiority claim from it"
+  }
+}

@@ -1,5 +1,7 @@
 # 任意: ROS 2 / VMware / AiS-GNG-FVG連携
 
+Ubuntuの別PCでNVIDIAなしにROS 2・CPU物理から準備する場合は、[ワークスペースの初回構築手順](../../../../RUN_GUIDE.md)を参照してください。
+
 通常のシミュレータを起動する際、このフォルダーの設定は不要です。
 
 ## サーバーとROSブリッジの一括起動
@@ -20,6 +22,81 @@ Docker内で操作中ならアプリのルートで `bash start_ros.sh`。Node.j
 旧版が残っている場合は `bash start_ros.sh --restart` で同じ配置・ポートの起動元とブリッジを停止して再起動します。別配置・別ポートのプロセスは対象外です。管理中のブリッジはPythonソース更新を検知して自動再起動します（外部起動したサービスの再利用中は対象外）。
 Docker内で `bash start_ros.sh` を直接実行した場合は、Ctrl+Cで今回起動したサービスだけを停止。既存サービスの設定は変更しません。ブリッジのROSドメインは起動環境の `ROS_DOMAIN_ID` に従います。
 別ポートは `bash start_ros.sh --port 8880 --bridge-port 8881`。ブラウザのURLと送信先も表示された値に変更してください。
+
+## ROS launch プラグイン
+
+ブラウザの選択肢・引数入力と、ROS側の起動・準備判定・停止を登録定義で接続する共通枠組み。アルゴリズム本体はROSノードまたは既存のPython実装へ配置。登録・型検証・launch管理・WebSocket接続は`ros_plugins.py`に集約。
+
+### 利用
+
+「ROS2連携 → ROS launch プラグイン」で機能・引数を選び、開始／停止。初期プラグイン`robot_tf`は独立名前空間の`robot_state_publisher`。関節指令の出力なし。開始中・実行中は引数編集不可。ログ欄は末尾8 KiB。
+
+GNG／OSCBFは「物理 → 回避モジュール」から選択。設定欄も同じ登録定義から生成。GNGのROS launchは物理セッションの開始・終了と連動。OSCBFは既存Pythonフィルタの互換アダプタ。
+
+既存のブラウザサーバーとROSブリッジの更新が必要。動作停止後にSimulatorルートで`bash start_ros.sh --restart`を実行し、ブラウザを再読み込み。エージェントによる既存サービスの停止・再起動は未実施。
+
+### launchの追加
+
+`plugins/`にJSONを追加。起動対象のROS packageとlaunchは事前導入が必要。次の例の`my_planner`は利用者のpackage名に置換。
+
+```json
+{
+  "version": 1,
+  "id": "my_planner",
+  "category": "launch",
+  "label": "経路計画",
+  "description": "ROSノードによる経路計画",
+  "parameters": {
+    "namespace": {"type": "string", "label": "名前空間", "default": "browser_planner"},
+    "publish_hz": {"type": "number", "label": "配信 Hz", "default": 10, "min": 1, "max": 30}
+  },
+  "launch": {
+    "package": "my_planner",
+    "file": "planner.launch.py",
+    "arguments": {
+      "namespace": {"parameter": "namespace"},
+      "publish_hz": {"parameter": "publish_hz"}
+    },
+    "ready": {
+      "kind": "topic",
+      "name": "/{namespace}/status",
+      "message_type": "std_msgs/msg/String",
+      "max_wait_sec": 20
+    }
+  }
+}
+```
+
+ブラウザ再読み込みで一覧と設定欄を反映。launchの追加だけならJSの分岐追加は不要。`parameters`の型は`string`／`topic`／`bool`／`number`／`integer`。`choices`は選択肢、`min`／`max`は数値範囲、`default`は既定値、`is_required`は必須指定。`topic`は絶対ROSトピック名。`is_hidden`はUI非公開の接続用引数。
+
+`launch.arguments`は利用者入力の`parameter`、接続処理が渡す`context`、固定値のいずれか。引数はシェルを介さず配列で`ros2 launch --noninteractive`へ渡す。ブラウザからの要求は登録IDと宣言済み引数のみ。
+
+`ready`はこのlaunchが提供する`topic`または`service`。名前・型で準備判定。型付きの出力が既にある名前空間、同じプラグインの同じ名前空間の重複起動は拒否。準備時間切れ・異常終了は失敗状態とログで表示。ROS出力の継続確認は0.5秒間隔、実行後の出力失効は2秒の猶予。
+
+ローカルlaunchは`package`／`file`の代わりに`path: "plugins/launch/example.launch.py"`で登録可能。登録ディレクトリ外へのパス参照は禁止。
+
+`interfaces`は入力・出力の仕様記載。トピック名・メッセージ型・対応パラメータを宣言可能。自動リマップや任意メッセージの描画は含まない。結果の描画には既存のROS Scene Layersなどを使用。
+
+### 物理方式の追加
+
+`category: "physics"`とPythonの`adapter: "module:class"`を登録。`models`は対応するモデルID。アダプタの役割は次の共通接続。
+
+- `prepare(settings, robot)`：学習モデルなどの準備。`fixed_joint_names`を含む辞書を返却。
+- `create(scene, settings, node, robot, prepared)`：計算実装との接続オブジェクトを返却。
+- 接続オブジェクト：`update()`、`apply()`、`status`。所有資源がある場合は`close()`。目標姿勢の受付は`set_targets()`。
+- `capabilities.can_set_goal_pose`：ブラウザからの名目目標姿勢の受付。
+- `capabilities.pose_sources`：対応する姿勢入力元。
+- `display`：表示名、状態名、数値項目。表示用の整形だけで、動作判定・制御への使用なし。
+
+`gng_avoidance.py`の`gng_adapter`と`oscbf_avoidance/__init__.py`の`oscbf_adapter`が実装例。GNGは学習条件から固定関節を準備し、既存のGNG/VLUTノードとPython回避処理を接続。制御アルゴリズムを新規実装する場合はROSノードへ置き、アダプタには状態・指令・結果の橋渡しを配置。
+
+### 所有権と終了
+
+新規launchは独立したプロセスグループで管理。明示停止、接続先変更、ブラウザ再読み込み・切断、ブリッジ終了時に所有グループを停止。SIGINT→SIGTERM→SIGKILLで子ノードも回収。既存の外部プロセスは停止対象外。ブラウザの別タブへの切替だけでは汎用launchを停止しない。物理セッションの停止方針は従来どおり。
+
+API：ブラウザサーバーの`GET /api/plugins`が公開カタログ。ROSブリッジのHTTPポート+1にあるWebSocket `/plugins`が`start`／`stop`を受付。起動構成・Pythonアダプタの指定はローカル登録定義だけで管理。
+
+現在の移行対象は起動管理・方式選択・設定画面。GNGのPython回避処理、OSCBFのPythonフィルタ、ブラウザのIK・表示用計算は既存実装を維持。アルゴリズム全体のROSノード化は別の移行範囲。
 
 ## ROS処理結果の表示専用接続
 
@@ -198,7 +275,7 @@ Humble実受信で848×480全画素の対応・無効値・共通時刻・既存
 一括起動後、「環境 → MuJoCo」で使用します。Python依存は `mujoco==3.3.7`、Dockerfileにも追加済みです。
 未導入の場合はコンテナ内で `python3 -m pip install mujoco==3.3.7`。更新後は `bash start_ros.sh --restart` とブラウザ再読み込みです。
 
-- ロボットと物体のON/OFFは、右クリックと「物理」タブで共通の「物理を有効にする」を使用。ロボットは既定ONで、物理タブでは物体未選択時にロボット全体が対象。物理開始後は基台固定の関節動力学を使用。標準・Longの同梱URDFから関節軸、慣性、可動範囲、トルク上限、グリッパー連動を生成。
+- ロボットと物体のON/OFFは、右クリックの「物理を有効にする」または「物理」タブの一覧のON／OFFボタンを使用。ロボットは既定ONで、物理タブでは物体未選択時にロボット全体が対象。物理開始後は基台固定の関節動力学を使用。標準・Longの同梱URDFから関節軸、慣性、可動範囲、トルク上限、グリッパー連動を生成。
 - シミュレータ操作中の手動操作・軌道による角度変更は目標値として扱い、MuJoCoの結果を表示へ反映。ロボットの力学をOFFにすると描画のみとなり、ロボットの接触形状・接触力・関節指令は物理計算から除外。環境だけの物理実行やROS実測の直接表示との併用が可能。接触判定だけを返す検査機能は未実装。
 - テーブル注視・ポーズ再生・VM AI動作・プリセットは、物理OFFならブリッジ不要。動作ボタンからの物理自動起動なし。ロボットの力学ONで明示的に物理を開始した場合のみ接続完了を待ち、物理時間で指令を進行。実行中の切断では再生を停止。
 - 「関節固定・自己接触・回避」で選択した関節は開始時の角度を拘束し、駆動対象から除外。基台・URDF固定関節は固定。固定・連動・可動範囲はソルバによる拘束で微小な誤差あり。
@@ -223,21 +300,47 @@ Longブラウザで首0.4 rad・左肩0.3 radへの追従と左肩固定（約0.
 
 ### MID-360 bagによるGNG-VLUT回避
 
+計算・再検査・判定範囲は既定方策`graph`の仕様。追加の回避優先方策は下記参照。
+
 - 対象: Long、`gng_vlut_system/config/topo_dual_arm_max_long.yaml`の独立左右腕モデル。学習済みGNG/VLUT・独自ROSメッセージが必要。
-- 操作: Longで開き、姿勢入力元を「シミュレータ操作」に設定。「物理」タブの「関節固定・自己接触・回避」で「GNG-VLUT（MID-360 bag）」を選択し、「物理を開始」。必要なROSノードは自動起動、停止・切断時に終了。
+- 操作: Longで開き、姿勢入力元を「シミュレータ操作」に設定。「物理」タブの「関節固定・自己接触・回避」で「GNG-VLUT（ROS launch）」を選択し、「物理を開始」。必要なROSノードは自動起動、停止・切断時に終了。
 - 目標: 物理停止中に関節スライダー・手先ドラッグで任意の腕姿勢を作り、物理を開始すると、その姿勢を回避後の復帰目標に使用。GNG動作中の関節スライダー・ポーズ指定も目標値として保持し、描画姿勢はMuJoCo実測を維持。
 - 姿勢例: ポーズ欄の「前方・肘曲げ」。Longの手先は基台基準で約`(0.409, ±0.203, 0.444) m`、肘は40°。首・腰・グリッパーの目標は学習条件の0。物理開始前の基準姿勢指定と、GNG動作中の復帰目標更新に対応。
 - 入力: `/livox/lidar`、`/topo_dual_arm_max_long/roi_voxels`、記録自己マスク`/topo_dual_arm_max_long/self_voxel`。bagのGNG状態・関節姿勢・自己除去済みROIは回避入力に使用しない。
-- 計算: 記録自己マスクで記録ロボットの残像を除去したROIから、MuJoCo実測姿勢の自己形状をさらに除去。占有・危険ボクセルからVLUT判定を更新し、学習時の自己干渉フィルタを通過した関節角GNG接続（`edge_mode=0`）上で安全ノード列を探索。片腕ずつ経由姿勢をMuJoCoへ入力し、既存の補間で継続追従。計画更新は約10 Hz、モータ制御は500 Hz。URDFの指令速度・トルク上限での位置・速度PD。
-- 再検査: 残りの経路ノードの最新VLUT状態と保存済み接続を制御周期で照合。左右腕の組合せは次の経由ノードで既存の`check_arm_pair`サービスへ照会。反対腕の最寄りノード変更時は再計画。実行時の区間サンプリング・全身形状による区間衝突判定なし。接続のない安全ノードへの直接移動なし。
+- 計算: 記録自己マスク一致部と自己境界候補を除いたROIを占有・危険ボクセルとVLUTへ入力。境界・孤立候補を含む制御用照合は別系統。現在のシミュレータ自己領域による環境点の除去なし。学習時の自己干渉フィルタを通過した関節角GNG接続（`edge_mode=0`）上で安全ノード列を探索。片腕ずつ経由姿勢をMuJoCoへ入力し、既存の補間で継続追従。計画更新は約10 Hz、モータ制御は500 Hz。URDFの指令速度・トルク上限での位置・速度PD。
+- 自己除去: 直近32個の記録自己マスクから近傍時刻を選択、時刻差上限0.05 sec。格子・原点・フレームの一致確認。マスク外の中心間距離0.02 mを自己境界候補として分離。候補はGNG環境から除外、制御用`control_voxels`と要確認評価には保持。空間索引の再利用、再ボクセル化・膨張セル集合の全生成なし。
+- ノイズ候補: 境界外の26近傍、または直前観測の近傍セルによる空間・時間の裏付け分類。孤立した新規物体の削除なし。元bag時刻の巻戻し・1秒を超える観測間隔・格子変更では時間的裏付けの持越しなし。
+- 接触評価: 記録自己マスク一致部の除去後ROIとMuJoCo実測の`self_voxel`を照合。受信鮮度1 sec・時刻差0.2 secの近似評価。境界外の裏付けあり重なりは`contact`、自己境界・孤立候補のみは`uncertain`、重なりなしは`clear`、欠測・空入力・不一致は`unavailable`。自己境界も未分離総重なり数に保持。対象は全リンク。実物との厳密な接触・自己点群の完全除去の証明なし。
+- 再検査: 経路ノードの最新VLUT状態・接続・左右組合せの照合。観測制約ON、回避優先方策、または自己境界候補のある観測では、制御用ボクセル・自己干渉に対する残区間検査。姿勢間隔0.025 rad、周期0.02 sec、新規指令は適用前に検査。連続区間安全の厳密な保証なし。
+- 観測格子: 既定`fov_shadow`。`free`＝センサ視野内・非遮蔽の推定自由空間、`obstacle`＝記録自己除去後の制御用環境セル、`unknown`＝物体・記録ロボットの背後、視野外、近距離死角。孤立・自己境界候補も制御用障害物に保持。既存ROIと同じ解像度・原点・ID、Long基台の各軸−1.2〜1.2 m。GNGノード三値とは別分類。
+- 視野・遮蔽: MID-360公称視野は水平360°、上下−7〜52°、近距離死角0.1 m（[仕様](https://www.livoxtech.com/jp/mid-360/specs)）。生点群・既存ROI・記録自己マスクの有限幅投影による影の上書き。格子と取付姿勢の座標キャッシュ、点群の再登録・反復膨張なし。freeは未検出物体の不在証明ではなく、新しい観測ごとのobstacle・unknownへの変更を許容。
+- 観測制約: 既定ON。開始身体以外への新規進入はfreeが条件、開始身体内でも障害物の免除なし。点群・ROIの元時刻差上限0.15 sec、受信後0.3 secでfree失効。空ROIでも有効な測距・視野推定があれば利用、測距なし・TF欠落・範囲外・処理上限超過は保持。過去freeの蓄積・点単位の走査歪み補正なし。
+- 切替・依存: GUI「遮蔽・視野外への進入制限」、CLI `--roi-visibility fov_shadow|ray|legacy`。`ray`は実光線の通過セルだけのfree、`strict`は`ray`の互換名、`legacy`は観測制約なしの比較用。C++部品`libgng_visibility_kernel.so`のビルド・installが必要、未配置・ABI不一致での暗黙な制約解除なし。
 - 表示: 計画状態とMuJoCoの腕の実速度を分けて表示。復帰候補があっても実速度が小さい場合は「復帰待ち・姿勢保持」。安全な開始姿勢にいる場合は、回避入力があっても常時の腕動作は不要。入力不足は該当トピック名を表示。
-- 出力: `/sim_topo_dual_arm_max_long/`以下の`joint_states`、`self_voxel`、`roi_voxels`、`self_filter_roi_voxels`、`occupied_voxels`、`danger_voxels`、左右`Tmap_*`・`gng_node_states_stamped`。関節フィードバックは実測の位置・速度・トルク、上限50 Hz。ROS送信チェックボックスとは独立。
-- 座標: 記録ROIの`topo_dual_arm_max_long/base_link`と仮想基台を重ねる構成。取付角45度はROI生成時に適用済みで、再適用なし。ROIの観測範囲・欠損は記録どおり。MID-360点群は受信鮮度確認に使用し、再ボクセル化なし。
-- 時刻: 新着ROIだけを現在のROS時刻へ更新。bag巻戻しに対応。起動時の入力待機は時間制限なし。入力欠測・空ROIは姿勢保持し、観測更新を継続。観測点への近接・重なり自体では停止せず退避を探索。新しい有効観測で経路を再検査。異常な関節状態・モデル不一致は停止。
+- 出力: `/sim_topo_dual_arm_max_long/`以下の`joint_states`、`self_voxel`、`roi_voxels`、`control_voxels`、`occupied_voxels`、`danger_voxels`、左右`Tmap_*`・`gng_node_states_stamped`。環境分類は`supported_environment_voxels`／`uncertain_environment_voxels`、自己境界候補は`recorded_self_boundary_voxels`、重なりは`contact_voxels`／`uncertain_contact_voxels`。関節フィードバックは実測の位置・速度・トルク、上限50 Hz。ROS送信チェックボックスとは独立。
+- 評価記録: CLI・物理応答の`avoidance.observation`。`state`は現在の判定、`history_state`は観測履歴。重なり数・未確定重なり数・ノイズ候補分離前の重なり数、最大重なり・接触サンプル数・有効観測時間`covered_sec`を保持。最後の`clear`だけでは実験成功の判定不可。記録自己マスク内に重なった実物・遮蔽領域の識別は対象外。
+- 分類記録: `avoidance.roi_visibility`に方式・鮮度・セル数・棄却理由・更新／照会時間。購読時だけの`observed_free_voxels`は`fov_shadow`では推定freeも含む互換出力。障害物は`fov_shadow`で`control_voxels`、`ray`で`supported_environment_voxels`、範囲内の残りはunknown。`observation.clear`は重なりなしであり、自由空間の保証とは別。[自己除去](../../../../benchmarks/self_filter/results.json)、[視野推定の評価](../../../../benchmarks/fov_shadow/results.json)。
+- 座標: 記録ROIの`topo_dual_arm_max_long/base_link`と仮想基台を重畳。ROIに取付角45度の再適用なし。視野・遮蔽・光線にはMID-360の生点群と元時刻のセンサTFを使用。ROI占有点群の再登録なし。
+- 時刻: 新着ROIだけのROS現在時刻への対応、観測側のbag巻戻しへの対応。起動時の入力待機は時間制限なし。欠測・無効な観測は姿勢保持、近接・重なり時は検査済み退避候補の探索。有効観測での再検査、異常な関節状態・モデル不一致では停止。
 - 制約: 学習時の首・腰・グリッパー固定条件を既存のMuJoCo関節拘束へ反映。GNG対象の腕関節は固定不可。同じ機体の回避セッションは1つ。実機指令の出力なし。
 - 判定範囲: VLUTはノード姿勢での環境干渉、左右組合せ検査はノード姿勢での自己干渉。実測・任意目標と最寄りノードの接続は近似。学習時の接続検査と危険ボクセルによる余裕を利用した構成であり、動的障害物に対する区間全体の厳密な保証なし。
 
-既存bagが上記3入力を再生中なら追加の再生は不要。限定再生する場合は、ROSコンテナ内で`bash /ros2_ws/src/scripts/play_arm_avoidance_bag.sh --loop`。GUI入力欄はROI・点群トピックの変更用。
+既存bagが上記3入力とセンサTFを再生中なら追加の再生は不要。限定再生はROSコンテナ内で`bash /ros2_ws/src/scripts/play_arm_avoidance_bag.sh --loop`。観測制約追加後も、この単視点bagでの往復タスク完遂・全身重なり解消は未達。観測不足による保持と回避成功の区別が必要。
+
+#### 回避優先方策（実験）
+
+- 選択: GNG設定の「回避方策」=`avoidance_first`、またはCLIの`--gng-strategy avoidance_first`。既定値: `graph`。既存ブリッジの実行中は、利用者によるバックエンド更新・再起動が必要。
+- 優先順位: 退避 → 姿勢保持 → タスク復帰。現在姿勢または目標までの区間の離隔0.10 mを契機とするタスク中断。離隔0.14 m・安全継続0.5 secを条件とする復帰。距離は観測ボクセルとURDF外接球の近似値。
+- 退避先: 各関節の両方向微動と合成降下方向の一括評価。目標姿勢への誘引なし、角度更新幅0.12 rad。自己干渉・関節範囲・区間離隔の確認済み候補のみの採用。最新観測による残区間検査の周期0.02 sec、検査姿勢間隔0.025 rad。
+- 制限: 局所探索による行き止まり・通過不能時の姿勢保持。動的障害物の将来位置・制動距離・連続区間安全の保証なし。全身ボクセル重なりの解消は未達。実機指令なし。[自己境界分離前の比較](../../../../benchmarks/avoidance_first/results.json)。
+
+#### 予測・不一致適応方策（実験）
+
+- 選択: 回避方策`vrm_predictive`、CLI `--gng-strategy vrm_predictive`。既定は`graph`のまま、既存GNG/VLUTと実URDFの再利用。同梱3軸モデルの流用なし。
+- 予測: 0.5 sec先までの「観測VLUT状態が安全以外へ変わる」リスク。履歴8観測・一次隣接、16入力・24中間素子のMLP。冷間時の接近傾向、期限経過後の教師によるオンライン学習、見逃し率と誤警報による閾値調整。校正済み衝突確率ではない選好値。
+- 費用: 追加URDF距離照会96姿勢／腕、MLP推論1,024ノード、学習512例／更新の上限。現在判定は全VLUTノードで継続。既存KD-tree・ノード接続の再利用、ボクセルの反復登録・膨張なし。
+- 実行: 現在離隔・復帰条件は`avoidance_first`と共通の0.10 m／0.14 m・0.5 sec。現在の条件を満たす場合だけ予測による先回り迂回。行き止まり時は予測だけを除外し再探索、現在の障害物・観測制約・自己干渉の解除なし。
+- 制限: セッション内学習、再生区間変更時の学習初期化はセッション再開始。視野外への進入制約・未知の障害物運動・制動距離の保証は未解決。既存方式より良い回避の実証・実機検証は未達。[評価・再現設定](../../../../benchmarks/vrm_predictive/results.json)。
 
 ### CLIでのMuJoCo・GNG-VLUT実行
 
@@ -247,6 +350,12 @@ Longブラウザで首0.4 rad・左肩0.3 radへの追従と左肩固定（約0.
 # 既存ROS入力で実行し、JSONLを保存
 bash scripts/run_dual_arm_simulation.sh --duration 30 \
   --output log/artifacts/dual_arm_cli/run.jsonl
+
+# 回避優先方策。既存ROS入力での実行
+bash scripts/run_dual_arm_simulation.sh --gng-strategy avoidance_first --duration 30
+
+# 予測・不一致適応方策。既存ROS入力での実行
+bash scripts/run_dual_arm_simulation.sh --gng-strategy vrm_predictive --duration 30
 
 # 独立ドメインでbagを再生し、Viewer受信用ブリッジも起動
 bash scripts/run_dual_arm_simulation.sh --domain-id 197 --duration 0 \
@@ -262,6 +371,34 @@ TF: MuJoCo実配置から`world → sim_<robot_name>/<URDFルート>`を配信�
 出力: `start`・`state`・`summary`のJSONL。関節角[rad]・速度[rad/s]・トルク[N m]・回避状態・最大腕関節変化[deg]。`--report-sec`は出力周期のみ。既存出力ファイルへの上書きなし。終了コードは0=正常、2=起動・実行エラー、3=GNG入力未成立または`--min-motion-deg`未達。静止が正常な場面では移動量の下限指定は不要。
 
 終了: 有限時間またはSIGINT/SIGTERMで、CLI所有のbag・GNG launch・受信用ブリッジを停止。`--duration 0`はCtrl+Cまで継続。既存のbag・ノードは停止しない。ブラウザを閉じるだけではCLIを停止しない。
+
+### 手先追跡球の比較試験
+
+元ワークスペースのルートで実行。初回のみ`gng_dynamic_kernel`のビルド・installが必要（[コマンド](../../../../benchmarks/chasing_sphere/commands.json)）。
+
+```bash
+bash scripts/run_dual_arm_simulation.sh --scenario chasing_sphere
+```
+
+- 実行系: Long左腕の実URDF・MuJoCo、既定20 sec、制御20 Hz。ブラウザ描画・ROSノード・実機出力なし。
+- 追跡球: 半径0.06 m、手先の現在位置への追跡、加速度制限付き。速度目標は無障害往復の実測手先最高速度の20→80%。腕停止時も追跡継続、瞬間的な腕速度との比較ではない方式。
+- 設定: `--scenario-file <JSON>`、時間の上書きは`--duration <sec>`。`policy`は`avoidance_first`／`vrm_predictive`／`rollout_reactive`／`rollout_cv`／`rollout_sequence`、`candidate_metric`は`joint`／`occupancy`。既定は`rollout_cv`＋`joint`。
+- 保存先: 開始JSONの`case_dir`。指標・失敗理由・実測関節姿勢・球軌道・モデルハッシュ。任意指定は`--case-dir <新規ディレクトリ>`、既存結果への上書き禁止。
+- 計算: 既存GNG代表姿勢・接続の保持、球包絡のAABB粗照合とC++詳細照合、候補列のFK共用。点群の反復ボクセル登録なし。占有方式は代表姿勢候補の再順位付けであり、ノード領域の再構築ではない比較。
+- 予測: 等速モデル、または疎な文脈記憶＋追跡係数同定。後者は完全なHTMではない実験方式。予測と別に現在観測・自己干渉の検査。
+
+固定評価: 学習3条件、調整2条件、未使用4条件×6方式。未使用条件の評価中は時系列記憶の重み固定、評価後の追加調整なし。[評価定義・全結果](../../../../benchmarks/chasing_sphere/results.json)。
+
+| 方式 | 失敗判定までの時間・条件平均 [sec] | 18 sec完走 [件/4件] | 制御p95・条件平均 [ms] |
+| --- | ---: | ---: | ---: |
+| 回避優先 | 4.01 | 0 | 10.82 |
+| 既存予測・不一致適応 | 3.80 | 0 | 19.67 |
+| 等速予測ロールアウト | 10.07 | 1 | 19.18 |
+| 疎な時系列記憶 | 10.13 | 0 | 20.08 |
+
+制限: 初回接触、30 ms継続の内部形状干渉、異常速度、計画角度域逸脱で打切り。continuous関節の±πは物理限界ではなく計画域。選定方式の失敗は計画域逸脱2件・接触1件、往復タスクの安定完遂は未達。理想球観測を前提とし、遅延・雑音条件を含む比較。MID-360の死角・実点群・連続安全性・実機安全性の保証なし。ロボット自己接触のMuJoCo設定はOFF、自己干渉は既存URDF外接球ペアで検査。追加要素の優越性は未確認のため、通常のGNG/VLUT既定方式は変更なし。
+
+検証: 回帰164件通過、上記起動コマンドで既定20 sec実行・終了の確認。全試験プロセスの終了、既存Viewer・ROSノードの維持。
 
 ### s・r・fの接続選択
 

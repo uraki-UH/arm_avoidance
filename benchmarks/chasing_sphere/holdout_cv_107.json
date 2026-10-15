@@ -1,0 +1,20 @@
+{
+  "duration_sec": 18,
+  "seed": 107,
+  "radius_m": 0.075,
+  "speed_ratios": [
+    0.2,
+    0.8
+  ],
+  "start_dist_m": 0.45,
+  "candidate_metric": "joint",
+  "enable_learning": false,
+  "policy": "rollout_cv",
+  "initial_direction": [
+    0.5,
+    1.0,
+    0.3
+  ],
+  "observation_delay_sec": 0.05,
+  "observation_noise_m": 0.001
+}

@@ -43,7 +43,7 @@ def load_models(params_file):
 
 
 class gng_inputs:
-    def __init__(self, node, params, models, root_link, max_age_sec=1.0):
+    def __init__(self, node, params, models, root_link, max_age_sec=1.0, control_voxel_topic=None):
         from rclpy.qos import QoSProfile, DurabilityPolicy
         from tf2_ros import Buffer, TransformListener
         from ais_gng_msgs.msg import TopologicalMap, TopologicalNodeStates
@@ -75,7 +75,7 @@ class gng_inputs:
                     if callback.__name__ != 'on_states':
                         self.fixed_subscriptions[name, callback.__name__] = subscription
             self.subscriptions.append(node.create_subscription(Voxel,
-                params['environment_voxelization']['voxel_topic'],
+                control_voxel_topic or params['environment_voxelization']['voxel_topic'],
                 lambda msg: self.receive(self.on_voxels, 'voxels', msg), qos))
         except Exception:
             self.close()
@@ -182,7 +182,7 @@ class gng_inputs:
             now = time.monotonic()
             missing = []
             if self.cloud is None or now-self.cloud[2] > self.max_age_sec:
-                missing.append('自己除去後の環境ボクセル')
+                missing.append('記録自己除去後の環境ボクセル')
             for name in self.models:
                 graph = self.graphs.get(name, {})
                 if ('labels' not in graph or not graph.get('has_matching_ids', False)

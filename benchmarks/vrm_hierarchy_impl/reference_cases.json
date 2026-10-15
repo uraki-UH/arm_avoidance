@@ -1,0 +1,5 @@
+{
+  "cases": [{"name":"reference_fix", "argv":["python3","/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/reference_check.py","--output","@case_dir@/metrics.json"],
+    "cwd":"/home/uraki/uraki_ws", "metrics":"metrics.json", "timeout_sec":480,
+    "env":{"PYTHONDONTWRITEBYTECODE":"1","OMP_NUM_THREADS":"2","OPENBLAS_NUM_THREADS":"1"}}]
+}

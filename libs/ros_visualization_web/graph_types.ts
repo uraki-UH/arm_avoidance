@@ -43,7 +43,7 @@ export interface GraphCluster {
     match: number;
     reliability: number;
     velocity: [number, number, number];
-    nodeIds: number[];  // Viewer受信時の正規化後の所属ノードID
+    nodeIds: number[] | Uint16Array;  // Viewer受信時の正規化後の所属ノードID
     hasVelocityObservation?: boolean;
     velCovXx?: number;
     velCovXy?: number;
@@ -55,7 +55,7 @@ export type GraphMode = 'static' | 'dynamic';
 export interface GraphData {
     timestamp: number;
     nodes: GraphNode[];
-    edges: number[]; // 接続端点の配列添字 [始点, 終点, ...]
+    edges: number[] | Uint16Array; // 接続端点の配列添字 [始点, 終点, ...]
     clusters: GraphCluster[];
     clusterLabels?: number[];
     frameId?: string;

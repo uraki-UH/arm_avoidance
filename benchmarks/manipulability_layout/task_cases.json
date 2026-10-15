@@ -1,0 +1,532 @@
+{
+  "cases": [
+    {
+      "name": "force_arm_linear_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_linear_2.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_arm_linear_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_linear_2.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_arm_linear_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_linear_4.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_arm_linear_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_linear_4.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_arm_factor_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_factor_2.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_arm_factor_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_factor_2.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_arm_factor_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_factor_4.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_arm_factor_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_arm_factor_4.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_linear_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_linear_2.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_linear_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_linear_2.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_linear_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_linear_4.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_linear_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_linear_4.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_factor_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_factor_2.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_factor_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_factor_2.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_factor_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_factor_4.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_joint_factor_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_joint_factor_4.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_linear_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_linear_2.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_linear_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_linear_2.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_linear_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_linear_4.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_linear_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_linear_4.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_factor_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_factor_2.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_factor_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_factor_2.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_factor_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_factor_4.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "force_position_factor_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/force_position_factor_4.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_linear_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_linear_2.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_linear_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_linear_2.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_linear_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_linear_4.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_linear_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_linear_4.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_factor_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_factor_2.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_factor_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_factor_2.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_factor_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_factor_4.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_arm_factor_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_arm_factor_4.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_linear_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_linear_2.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_linear_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_linear_2.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_linear_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_linear_4.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_linear_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_linear_4.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_factor_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_factor_2.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_factor_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_factor_2.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_factor_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_factor_4.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_joint_factor_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_joint_factor_4.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_linear_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_linear_2.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_linear_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_linear_2.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_linear_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_linear_4.bin",
+        "full",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_linear_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_linear_4.bin",
+        "shared",
+        "linear",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_factor_2_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_factor_2.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_factor_2_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_factor_2.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_factor_4_full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_factor_4.bin",
+        "full",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "velocity_position_factor_4_shared",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/task_query",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/velocity_position_factor_4.bin",
+        "shared",
+        "factor",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

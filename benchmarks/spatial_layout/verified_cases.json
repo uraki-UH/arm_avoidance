@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "name": "vlut_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/before/benchmark",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/vlut.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "vlut_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/after/benchmark",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/vlut.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

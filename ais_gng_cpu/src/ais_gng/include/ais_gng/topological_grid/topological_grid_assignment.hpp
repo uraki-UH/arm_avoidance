@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <ais_gng/topological_grid/label_histogram.hpp>
 
 #include <array>
 #include <cstddef>
@@ -399,7 +400,7 @@ private:
   struct History
   {
     std::deque<HistorySample> samples;
-    std::array<std::size_t, 256> label_counts{};
+    detail::label_histogram label_counts;
     std::size_t label_observation_count = 0;
     std::size_t point_input_observation_count = 0;
     std::uint8_t active_label = 0;

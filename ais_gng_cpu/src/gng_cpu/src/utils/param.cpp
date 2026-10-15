@@ -106,7 +106,7 @@ void Param::init() {
     node.clusted_s1_age[3] = 3; // unknown (clusted)
 
     edge.num_max = 300000;
-    edge.age_max = 100;
+    edge.age_max = bounded_uint<UINT32_MAX - 1>{100};
     edge.distance_min2[0] = 0 * 0; // default
     edge.distance_min2[1] = 0.2 * 0.2;  // safe (clusted)
     edge.distance_min2[2] = 0.2 * 0.2;// wall (clusted)
@@ -143,8 +143,9 @@ bool Param::setParameter(const char *p_c, const uint32_t index, const float valu
     if (p == "node.grid" && value > 0) {
         config.node_grid = value;
     /* Node Config */
-    } else if (p == "node.num_max" && value >= 0){
-        node.num_max = value;
+    } else if (p == "node.num_max" && std::isfinite(value) && value >= 1 &&
+        value <= std::numeric_limits<uint16_t>::max() && std::floor(value) == value){
+        node.num_max = static_cast<int>(value);
     } else if (p == "node.learning_num" && value >= 0) {
         node.learning_num = value;
     } else if (p == "node.unknown_learning_rate" && value >= 0.5 && value < 1) {
@@ -173,8 +174,10 @@ bool Param::setParameter(const char *p_c, const uint32_t index, const float valu
     /* Edge Config */
     } else if (p == "edge.num_max" && value >= 0) {
         edge.num_max = value;
-    } else if (p == "edge.age_max" && value >= 0) {
-        edge.age_max = value;
+    } else if (p == "edge.age_max" && std::isfinite(value) && value >= 0 &&
+        static_cast<double>(value) < std::numeric_limits<uint32_t>::max() && std::floor(value) == value) {
+        // 切断判定前のインクリメント用の表現余裕
+        edge.age_max = bounded_uint<UINT32_MAX - 1>{static_cast<uint32_t>(value)};
     /* Label Config */
     } else if (p == "label.fuzzy.unknown" && value >= 0)  {
         label.fuzz_unknown_1 = 1.f / value;

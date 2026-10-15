@@ -24,6 +24,12 @@ cb
 
 ## 入力トピックの指定
 
+CPUコアの`node.num_max`は1〜65535、`edge.age_max`は0〜4294967294の整数。ノードID・隣接ID・空間セル内のノードIDは16bit、共有エッジの索引・寿命カウンタとフレーム番号・入力点番号は32bit。未使用ノードの内部印は65535。年齢設定は値域を保証する整数型による保持。C APIの設定値は従来どおりfloat経由のため、大きな整数ではfloatの表現精度の制約あり。
+
+勝者共分散と入力支持の統計は、それぞれの機能が有効なときだけ別の連続配列へ確保。OFFへの切替時は該当履歴と領域を破棄し、再有効化後は新規集計。座標・法線・統計演算の精度とROSメッセージの型は変更なし。
+
+`topological_grid_node`の時系列ボクセル履歴は、256種類のラベルの存在を256bitで管理し、存在するラベルの頻度だけを連続配列へ保持。ラベルの値域0〜255、頻度の`size_t`精度、履歴窓、同数時の小さいラベル優先は維持。全ラベル分の頻度配列を各セルへ常設する方式からの置換で、追加の切替設定は不要。
+
 ```bash
 ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input:=/livox/lidar
 ```
@@ -127,7 +133,7 @@ CPUの学習配分と追加条件の評価は[共通サンプラー](docs/sampli
 
 `input.voxel_grid_unit: 0.0`はボクセル間引きなし。YAMLの範囲・入力点数上限は引き続き適用。正値ではセル内平均化を適用。
 
-実行中のROS変更に対応する値は`node.learning_num`、`node.interval`、`node.s1_age_max`、`node.clusted_s1_age`、`node.static.age_min`、`node.static.s1_age_max`、`node.eta_decay_rate`、`node.unknown_learning_rate`、`node.s1_reset_range`、`ds.range_max`、`performance.log_interval_ms`。平面クラスタが有効な場合は`plane_cluster.use_node_rho_for_seed_order`も対応。
+実行中のROS変更に対応する値は`node.learning_num`、`node.interval`、`node.s1_age_max`、`node.clusted_s1_age`、`node.static.age_min`、`node.static.s1_age_max`、`edge.age_max`、`node.eta_decay_rate`、`node.unknown_learning_rate`、`node.s1_reset_range`、`ds.range_max`、`performance.log_interval_ms`。平面クラスタが有効な場合は`plane_cluster.use_node_rho_for_seed_order`も対応。
 
 `node.static.s1_age_max`は長期記憶ノードの未観測・未選択寿命（GNG更新回数、正の整数、既定100）。近傍入力の観測または学習の勝者選択でカウンタをリセットし、削除判定後に1加算。寿命到達時に削除。秒数・学習反復数ではなく、`node.static.age_min: -1`による長期記憶への昇格無効は別設定。新項目の対応はCPUのみ。[対応範囲と検証](../gng_vlut_system/docs/releases/2026-09-23_gng_static_age_parameter.md)。
 
@@ -192,6 +198,8 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml surface_
 新方式は `smooth_surface` と所属を出力し、球・円柱の係数や曲率フィットは出力しない。
 実入力で高速化を確認した一方、背景平面まで大きく統合する場合があるため比較用の選択肢。
 設定・出力契約・測定値は[仕様と検証記録](../gng_vlut_system/docs/releases/2026-09-15_smooth_surface_graph.md)を参照。
+
+追跡リンクの内部保持は、63bitの端点キーと1bitの接続状態を明示的に詰めた64bit整数。比較はキー・状態の辞書順と同一。保存・通信へのC++ビットフィールドの直接利用なし。
 
 ## 物体GNGデータセット保存
 

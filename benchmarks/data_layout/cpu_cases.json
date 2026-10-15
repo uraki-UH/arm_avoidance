@@ -1,0 +1,118 @@
+{
+  "cases": [
+    {
+      "name": "stats_off_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_before",
+        "/ros2_ws/src/log/artifacts/data_layout/build_before_seeded/libgng_cpu.so",
+        "0",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "stats_off_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_after",
+        "/ros2_ws/src/log/artifacts/data_layout/build_after_seeded/libgng_cpu.so",
+        "0",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "stats_on_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_before",
+        "/ros2_ws/src/log/artifacts/data_layout/build_before_seeded/libgng_cpu.so",
+        "1",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "stats_on_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_after",
+        "/ros2_ws/src/log/artifacts/data_layout/build_after_seeded/libgng_cpu.so",
+        "1",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "links_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/packing_benchmark",
+        "links_before",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "links_bitfield",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/packing_benchmark",
+        "links_bitfield",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "links_packed",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/packing_benchmark",
+        "links_packed",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "values_u16",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/packing_benchmark",
+        "values_u16",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "values_10bit",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/packing_benchmark",
+        "values_10bit",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "flags_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/packing_benchmark",
+        "flags_before",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "flags_packed",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/packing_benchmark",
+        "flags_packed",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

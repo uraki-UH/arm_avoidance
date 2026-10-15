@@ -53,6 +53,40 @@ struct ManipulabilityEllipsoid {
         valid(false), manip_x(0.0), manip_y(0.0), manip_z(0.0) {}
 };
 
+// ノード常設用の計算済み指標と主軸。派生表示値・中心の重複保持なし
+struct manipulability_sample {
+  Eigen::Vector3d singular_values = Eigen::Vector3d::Zero();
+  Eigen::Matrix3d principal_directions = Eigen::Matrix3d::Identity();
+  double manipulability = 0.0;
+  double condition_number = 0.0;
+  double min_singular_value = 0.0;
+  bool is_valid = false;
+
+  manipulability_sample() = default;
+  manipulability_sample(const ManipulabilityEllipsoid &source)
+      : singular_values(source.singular_values),
+        principal_directions(source.principal_directions),
+        manipulability(source.manipulability), condition_number(source.condition_number),
+        min_singular_value(source.min_singular_value), is_valid(source.valid) {}
+};
+
+// スカラー参照だけの動的指標。方向・表示情報の常設確保なし
+struct manipulability_value {
+  double manipulability = 0.0;
+  bool is_valid = false;
+
+  manipulability_value() = default;
+  manipulability_value(const ManipulabilityEllipsoid &source)
+      : manipulability(source.manipulability), is_valid(source.valid) {}
+};
+
+inline bool is_valid(const ManipulabilityEllipsoid &value) {return value.valid;}
+inline bool is_valid(const manipulability_sample &value) {return value.is_valid;}
+
+// 常設形式からの方向評価。行列復元・固有値分解なし
+double evaluateDirectionalManipulability(const manipulability_sample &ellipsoid,
+                                         const Eigen::Vector3d &direction);
+
 /**
  * @brief ヤコビ行列を計算
  * @param joints 関節情報のリスト

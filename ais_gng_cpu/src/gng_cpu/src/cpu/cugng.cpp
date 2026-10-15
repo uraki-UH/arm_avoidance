@@ -13,6 +13,8 @@ CUGNG::CUGNG(){
 }
 
 bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config) {
+    // 未接続印を除く16bitノードIDに整合する容量の検査
+    if (_gng_config->num_max < 1 || _gng_config->num_max > NODE_NOID) {return false;}
     enable_node_insertion = false;
     insertion_planes.clear(); insertion_owners.clear(); insertion_stats = {};
     sampling.reset_input();
@@ -62,6 +64,8 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
 
     // malloc
     nodes.resize(node_num_max);
+    winner_stats.assign(enable_covariance ? node_num_max : 0, {});
+    support_stats.assign(enable_support ? node_num_max : 0, {});
     unobserved_frames.assign(node_num_max, 0);
     search_nodes.resize(node_num_max);
     orphan_node_words.assign((node_num_max + 63) / 64, 0);
@@ -106,6 +110,8 @@ void CUGNG::clear() {
     node_num = 0;
     next_free_idx = 0;
     nodes.clear();
+    vector<node_moments>().swap(winner_stats);
+    vector<node_moments>().swap(support_stats);
     unobserved_frames.clear();
     search_nodes.clear();
     orphan_node_words.clear();
@@ -131,6 +137,15 @@ void CUGNG::clear() {
     map_delta_capture_enabled = false;
     map_delta_frame_open = false;
 }
+void CUGNG::set_statistics_enabled(bool enable_covariance, bool enable_support) {
+    this->enable_covariance = enable_covariance;
+    this->enable_support = enable_support;
+    if (enable_covariance) {winner_stats.resize(nodes.size());}
+    else {vector<node_moments>().swap(winner_stats);}
+    if (enable_support) {support_stats.resize(nodes.size());}
+    else {vector<node_moments>().swap(support_stats);}
+}
+
 void CUGNG::setTrainingEventCapture(bool enable) {
     if (enable && training_events.empty()) {
         resizeTrainingEventBuffer();
@@ -281,10 +296,10 @@ void CUGNG::update_winner_statistics(const Node_d &winners, const Vec3f &point) 
         auto &node = nodes[ids[rank - 1]];
         if (enable_covariance && rank <= (enable_support ? 1 : max_covariance_winner_rank)) {
             const Vec3f residual(point.p[0] - node.pos.p[0], point.p[1] - node.pos.p[1], point.p[2] - node.pos.p[2]);
-            node.winner_stats.add_residual(residual);
+            winner_stats[ids[rank - 1]].add_residual(residual);
         }
         if (enable_support) {
-            node.support_stats.add_input(point, rank == 1 ? support_sample_alpha : support_second_alpha,
+            support_stats[ids[rank - 1]].add_input(point, rank == 1 ? support_sample_alpha : support_second_alpha,
                 rank == 1 ? 1.0 : support_second_weight);
         }
     }
@@ -635,9 +650,9 @@ void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_
     int disconnect_num = 0;
     for (i = 0; i < node0.edge_num; ++i) {
         const uint32_t edge_idx = edge_slots[node0.id][i];
-        edge_count[edge_idx]++;
+        if (edge_count[edge_idx] != UINT32_MAX) {++edge_count[edge_idx];}
         /* Edgeの年齢による切断 */
-        if (edge_count[edge_idx] > edge_config->age_max){
+        if (edge_count[edge_idx] > edge_config->age_max.value()){
             disconnect_ids[disconnect_num++] = node0.edges[i];
         }
     }
@@ -924,6 +939,8 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
         if (nodes[i].id == NODE_NOID) {
             auto& node = nodes[i];
             node.init(i, gng_config.eta_s1, gng_config.eta_s2, pos);
+            if (enable_covariance) {winner_stats[i] = {};}
+            if (enable_support) {support_stats[i] = {};}
             node.frame = frame_number;
             unobserved_frames[i] = 0;
             mark_orphan_node(node);

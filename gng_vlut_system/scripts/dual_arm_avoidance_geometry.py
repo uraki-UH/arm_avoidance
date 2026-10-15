@@ -2,6 +2,7 @@
 """URDF外接球と接近カプセルによる局所退避の幾何計算。"""
 from pathlib import Path
 from itertools import product
+import os
 import struct
 import xml.etree.ElementTree as ET
 
@@ -26,6 +27,8 @@ def origin(element):
 
 
 def mesh_vertices(path):
+    if Path(path).suffix.lower() != '.stl':
+        raise ValueError(f'未対応のメッシュ形式（STLのみ）: {path}')
     data = Path(path).read_bytes()
     count = struct.unpack_from('<I', data, 80)[0] if len(data) >= 84 else 0
     if len(data) == 84 + 50*count:
@@ -35,12 +38,43 @@ def mesh_vertices(path):
                      if line.strip().startswith('vertex ')])
 
 
+def resolve_mesh_path(filename, mesh_directory):
+    """相対・絶対・file URI・ROS package URIのローカル資源解決。外部取得なし。"""
+    if filename.startswith('file://'):
+        from urllib.parse import unquote, urlsplit
+        parts = urlsplit(filename)
+        if parts.netloc not in ('', 'localhost'):
+            raise ValueError('ローカル以外のfile URIは未対応')
+        path = Path(unquote(parts.path))
+    elif filename.startswith('package://'):
+        package, separator, relative = filename[len('package://'):].partition('/')
+        if not separator or package in ('', '.', '..') or '..' in Path(relative).parts or relative.startswith('/'):
+            raise ValueError('メッシュのpackage URIの不正')
+        candidates = [Path(prefix)/'share'/package/relative for prefix in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if prefix]
+        for parent in (Path(mesh_directory), *Path(mesh_directory).parents):
+            candidates.extend((parent/package/relative, parent/relative) if parent.name == package else (parent/package/relative,))
+        path = next((candidate for candidate in candidates if candidate.is_file()), None)
+        if path is None:
+            raise FileNotFoundError(f'メッシュのpackage URI未解決: {filename}')
+    elif '://' in filename:
+        raise ValueError(f'未対応のメッシュURI: {filename}')
+    else:
+        path = Path(filename)
+        if not path.is_absolute():
+            path = Path(mesh_directory)/path
+    if not path.is_file():
+        raise FileNotFoundError(f'メッシュ未配置: {path}')
+    return path
+
+
 def read_joint_geometry(root):
     """URDF記載順の関節定義・独立関節名・位置制限・親リンク。"""
     joints, joint_names, limits, parents = [], [], [], {}
     for item in root.findall('joint'):
         name = item.get('name')
         kind = item.get('type')
+        if kind not in ('fixed', 'revolute', 'continuous', 'prismatic'):
+            raise ValueError(f'未対応の関節形式: {name}: {kind}')
         mimic = item.find('mimic')
         idx = -1
         if kind != 'fixed' and mimic is None:
@@ -61,8 +95,13 @@ def shape_vertices(shape, mesh_directory, link_name):
     """形状ローカル座標の頂点群。基本形状は外接箱の頂点群。"""
     mesh = shape.find('geometry/mesh')
     if mesh is not None:
-        vertices = mesh_vertices(mesh_directory/mesh.get('filename'))
-        vertices *= np.fromstring(mesh.get('scale', '1 1 1'), sep=' ')
+        vertices = mesh_vertices(resolve_mesh_path(mesh.get('filename', ''), mesh_directory))
+        if vertices.ndim != 2 or vertices.shape[1] != 3 or not len(vertices) or not np.isfinite(vertices).all():
+            raise ValueError(f'メッシュ頂点の不正: {link_name}')
+        scale = np.fromstring(mesh.get('scale', '1 1 1'), sep=' ')
+        if scale.shape != (3,) or not np.isfinite(scale).all() or np.any(scale == 0):
+            raise ValueError(f'メッシュ倍率の不正: {link_name}')
+        vertices *= scale
         return vertices
     box = shape.find('geometry/box')
     if box is not None:
@@ -137,6 +176,10 @@ def compile_link_operations(root, joints, joint_names, parents):
             if mimic is not None:
                 idx = joint_names.index(mimic.get('joint'))
                 multiplier, offset = float(mimic.get('multiplier', '1')), float(mimic.get('offset', '0'))
+            if kind == 'fixed':
+                axis = np.array([1., 0., 0.])
+            elif axis.shape != (3,) or not np.isfinite(axis).all() or np.linalg.norm(axis) == 0:
+                raise ValueError(f'可動関節軸の不正: {name}')
             axis = axis/np.linalg.norm(axis)
             x, y, z = axis
             cross = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])

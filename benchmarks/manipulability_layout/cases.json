@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "name": "full",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/benchmark",
+        "full",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/records.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "stored",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/benchmark",
+        "stored",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/records.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "quaternion",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/benchmark",
+        "quaternion",
+        "/ros2_ws/src/log/artifacts/manipulability_layout/records.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

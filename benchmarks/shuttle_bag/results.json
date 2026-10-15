@@ -1,0 +1,322 @@
+{
+  "model": "topo_dual_arm_max_long",
+  "runtime": "Docker ROS 2 Humble + headless MuJoCo; ROS_DOMAIN_ID=222; ROS_LOCALHOST_ONLY=1",
+  "bag": "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+  "duration_sec": 60,
+  "num_trials_per_condition": 1,
+  "task": {
+    "config": "benchmarks/shuttle_bag/task.json",
+    "active_profile": "left_arm",
+    "other_arm": "hold",
+    "frame": "base_footprint",
+    "eef_link": "L_tcp",
+    "poses": {
+      "a": {
+        "position_m": [
+          0.4090399314095698,
+          0.2027621284023964,
+          0.44389686743797246
+        ],
+        "quaternion_xyzw": [
+          -0.08418598292804967,
+          0.8160349234443868,
+          -0.022557566139591187,
+          -0.5713938048381432
+        ]
+      },
+      "b": {
+        "position_m": [
+          0.36135252078722757,
+          0.24942664279978813,
+          0.3447747847411888
+        ],
+        "quaternion_xyzw": [
+          -0.2113091309680973,
+          0.7198009200513775,
+          0.046846106503345156,
+          -0.6595760221295003
+        ]
+      }
+    },
+    "position_change_m": 0.11948578707928521,
+    "orientation_change_deg": 22.377736198462266,
+    "nominal_max_velocity_rad_sec": 2.0,
+    "nominal_max_acceleration_rad_sec2": 8.0,
+    "urdf_max_velocity_rad_sec": 3.0,
+    "nominal_trajectory": "関節空間5次補間。手先直線・一定方向の補間ではない区別。",
+    "switching": "実測の関節・手先位置・向き・速度の到達条件成立時だけのA/B交替。停止・回避中の未到達目標の保持、通常動作再開時の実測姿勢からの再接続。",
+    "arrival_conditions": {
+      "max_joint_error_rad_th": 0.035,
+      "max_eef_position_error_m_th": 0.015,
+      "max_eef_orientation_error_deg_th": 3.0,
+      "max_velocity_rad_sec_th": 0.12
+    }
+  },
+  "calibration": {
+    "representative_gate": {
+      "num_checks": 6,
+      "num_errors": 0,
+      "num_early_rejections": 1
+    },
+    "nominal_slow": {
+      "num_arrivals": 6,
+      "num_round_trips": 3,
+      "num_resumptions": 0,
+      "max_velocity_rad_sec": 0.5482503843308754,
+      "max_effort_ratio": 0.32433455851497567,
+      "covered_sec": 11.33527135848999,
+      "max_num_overlap_voxels": 54,
+      "num_contact_samples": 135,
+      "num_evaluation_samples": 459,
+      "num_uncertain_samples": 38,
+      "motion_deg": 33.62874813877906,
+      "num_bridge_queries": 0,
+      "num_rejected_bridge_queries": 0,
+      "num_colliding_representatives_skipped": 0,
+      "num_hierarchy_queries": 0,
+      "num_hierarchy_fast_clear": 0,
+      "num_hierarchy_internal_certificates": 0,
+      "normal_sec": 10.75000000000051,
+      "avoiding_sec": 0,
+      "stopped_sec": 0,
+      "waiting_sec": 0.1100000000000001,
+      "propose_mean_ms": 2.610145083491699
+    },
+    "nominal_fast": {
+      "num_arrivals": 19,
+      "num_round_trips": 9,
+      "num_resumptions": 0,
+      "max_velocity_rad_sec": 2.1896628198430967,
+      "max_effort_ratio": 0.7081731501221059,
+      "covered_sec": 11.33041787147522,
+      "max_num_overlap_voxels": 55,
+      "num_contact_samples": 134,
+      "num_evaluation_samples": 459,
+      "num_uncertain_samples": 50,
+      "motion_deg": 34.75661024584003,
+      "num_bridge_queries": 0,
+      "num_rejected_bridge_queries": 0,
+      "num_colliding_representatives_skipped": 0,
+      "num_hierarchy_queries": 0,
+      "num_hierarchy_fast_clear": 0,
+      "num_hierarchy_internal_certificates": 0,
+      "normal_sec": 10.740000000000508,
+      "avoiding_sec": 0,
+      "stopped_sec": 0,
+      "waiting_sec": 0.1100000000000001,
+      "propose_mean_ms": 2.527687248427831
+    }
+  },
+  "conditions": {
+    "nominal": {
+      "metrics": {
+        "num_arrivals": 103,
+        "num_round_trips": 51,
+        "num_resumptions": 0,
+        "max_velocity_rad_sec": 2.1899716914123335,
+        "max_effort_ratio": 0.7373464964940896,
+        "covered_sec": 59.34422564506531,
+        "max_num_overlap_voxels": 64,
+        "num_contact_samples": 518,
+        "num_evaluation_samples": 2394,
+        "num_uncertain_samples": 139,
+        "motion_deg": 34.7596273644209,
+        "num_bridge_queries": 0,
+        "num_rejected_bridge_queries": 0,
+        "num_colliding_representatives_skipped": 0,
+        "num_hierarchy_queries": 0,
+        "num_hierarchy_fast_clear": 0,
+        "num_hierarchy_internal_certificates": 0,
+        "normal_sec": 56.350000000023805,
+        "avoiding_sec": 0,
+        "stopped_sec": 0,
+        "waiting_sec": 0.10000000000000009,
+        "propose_mean_ms": 2.5421416798021346
+      },
+      "num_resumptions_followed_by_arrival": 0,
+      "has_achieved_collision_free_task": false,
+      "has_valid_window": true,
+      "events": "log/artifacts/shuttle_bag/paired_run/001_nominal/details.json",
+      "has_stopped_test_processes": true
+    },
+    "detailed": {
+      "metrics": {
+        "num_arrivals": 82,
+        "num_round_trips": 41,
+        "num_resumptions": 12,
+        "max_velocity_rad_sec": 2.393942412122527,
+        "max_effort_ratio": 1.0,
+        "covered_sec": 59.339144706726074,
+        "max_num_overlap_voxels": 54,
+        "num_contact_samples": 469,
+        "num_evaluation_samples": 2394,
+        "num_uncertain_samples": 151,
+        "motion_deg": 72.42083254001736,
+        "num_bridge_queries": 788,
+        "num_rejected_bridge_queries": 226,
+        "num_colliding_representatives_skipped": 209,
+        "num_hierarchy_queries": 0,
+        "num_hierarchy_fast_clear": 0,
+        "num_hierarchy_internal_certificates": 0,
+        "normal_sec": 46.88000000002144,
+        "avoiding_sec": 1.5199999999999019,
+        "stopped_sec": 7.960000000002552,
+        "waiting_sec": 0.14999999999997793,
+        "bridge_mean_ms": 9.043852266480142,
+        "propose_mean_ms": 15.57776966304749
+      },
+      "num_resumptions_followed_by_arrival": 11,
+      "has_achieved_collision_free_task": false,
+      "has_valid_window": true,
+      "events": "log/artifacts/shuttle_bag/paired_run/001_detailed/details.json",
+      "has_stopped_test_processes": true
+    },
+    "hierarchy": {
+      "metrics": {
+        "num_arrivals": 86,
+        "num_round_trips": 43,
+        "num_resumptions": 12,
+        "max_velocity_rad_sec": 2.3299381211985084,
+        "max_effort_ratio": 1.0,
+        "covered_sec": 59.3516902923584,
+        "max_num_overlap_voxels": 55,
+        "num_contact_samples": 536,
+        "num_evaluation_samples": 2394,
+        "num_uncertain_samples": 144,
+        "motion_deg": 38.631130042037135,
+        "num_bridge_queries": 752,
+        "num_rejected_bridge_queries": 263,
+        "num_colliding_representatives_skipped": 264,
+        "num_hierarchy_queries": 752,
+        "num_hierarchy_fast_clear": 0,
+        "num_hierarchy_internal_certificates": 0,
+        "normal_sec": 47.480000000021796,
+        "avoiding_sec": 0.13000000000015888,
+        "stopped_sec": 8.880000000002058,
+        "waiting_sec": 0.13000000000000012,
+        "bridge_mean_ms": 9.785797768869243,
+        "propose_mean_ms": 15.655000310887084
+      },
+      "num_resumptions_followed_by_arrival": 11,
+      "has_achieved_collision_free_task": false,
+      "has_valid_window": true,
+      "events": "log/artifacts/shuttle_bag/paired_run/001_hierarchy/details.json",
+      "has_stopped_test_processes": true
+    }
+  },
+  "representative_gate": {
+    "api": "gng_path_search.can_bridge(..., target_node_id=ID)",
+    "collision_label": 2,
+    "condition": "終点とIDの代表姿勢の完全一致。別姿勢・危険ラベル3・ID未指定への早期棄却の伝播なし。",
+    "unit_tests": {
+      "num_checks": 6,
+      "num_errors": 0,
+      "num_early_rejections": 1
+    },
+    "legacy_query_regression": {
+      "num_queries": 200,
+      "num_query_mismatches": 0,
+      "num_fast_clear": 27,
+      "num_old_region_formats": 3,
+      "num_errors": 0
+    },
+    "counter_scope": "探索中に省略した衝突代表候補の延べ回数。固有ノード数・従来方式からの純減数ではない区別。"
+  },
+  "findings": {
+    "has_verified_shuttle_task": true,
+    "has_observed_stop_or_retreat_and_resume": true,
+    "has_achieved_collision_free_task": false,
+    "has_verified_hierarchy_acceleration": false,
+    "hierarchy_query_count": 752,
+    "hierarchy_fast_clear_count": 0,
+    "num_sampled_hierarchy_poses": 292,
+    "num_sampled_hierarchy_poses_outside_fixed_domain": 292,
+    "hierarchy_limit": "従来の片腕階層索引を使用。保持腕・腰・首の実測変動を含む固定条件不一致が残り、高速通過・内部証明は全照会で0件。",
+    "max_measured_joint_velocity_rad_sec": 2.393942412122527,
+    "has_effort_saturation_in_avoidance": true
+  },
+  "limitations": [
+    "各条件1回の予備実験。往復回数の差を階層方式の優越性とみなさない条件。",
+    "接触評価は全身自己ボクセルと、記録自己除去・支持分類後の環境の重なり。腕と固定部の重なりの区別なし。",
+    "bag環境のMuJoCo物理衝突形状化・実機試験なし。疎な未確定点は回避入力に保持。",
+    "指令速度設定は実測速度の厳密上限ではない。回避時の実測最大2.394 rad/s、URDF上限3 rad/s。回避時にeffort上限への到達あり。",
+    "5次補間の加速度上限は通常タスクの基準指令用。実測加速度・退避軌道・制動距離の保証なし。",
+    "nominal条件はシミュレーション内でのみ障害物への反応を無効化した比較対照。"
+  ],
+  "commands": [
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src; PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/shuttle_bag/calibration_cases.json --output log/artifacts/shuttle_bag/calibration_run --repeats 1 --max-total-sec 180 --estimate-sec 25"
+      ],
+      "has_stopped_test_processes": true,
+      "report": "log/artifacts/shuttle_bag/calibration_run/report.json"
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src; PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/shuttle_bag/cases.json --output log/artifacts/shuttle_bag/paired_run --repeats 1 --max-total-sec 360 --estimate-sec 80"
+      ],
+      "has_stopped_test_processes": true,
+      "report": "log/artifacts/shuttle_bag/paired_run/report.json"
+    },
+    {
+      "argv": [
+        "timeout",
+        "20s",
+        "python3",
+        "log/artifacts/hierarchy_backend/check.py",
+        "selector",
+        "--seed",
+        "211",
+        "--output",
+        "/home/uraki/uraki_ws/log/artifacts/shuttle_bag/legacy_metrics.json"
+      ],
+      "env": {
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "has_stopped_test_processes": true
+    }
+  ],
+  "cleanup": {
+    "has_stopped_test_processes": true,
+    "num_owned_recorded_subprocesses": 20,
+    "has_remaining_owned_subprocesses": false,
+    "has_preserved_existing_viewer": true,
+    "existing_viewer_pids": [
+      21179,
+      21186
+    ],
+    "has_preserved_container_states": true
+  },
+  "has_hardware_output": false,
+  "has_installed_shuttle_controller_in_browser": false,
+  "production_changes": [
+    "gng_vlut_system/scripts/gng_avoidance_planner.py: 代表姿勢衝突候補の任意ID付き早期棄却API。既存呼出しの既定動作の維持。",
+    "gng_vlut_system/README.md: 早期棄却の条件・領域全体へ伝播しない制約。"
+  ],
+  "source_sha256": {
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_avoidance.py": "80fa770ad7c7db0ce2d802ad5af846e4cc045cc9110226942bb92a957526a30d",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_runtime.py": "b1394ba20f8d0236309bec1fda9a4918aef51c97962e6bdaac5d5c4147d4848d",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_observation.py": "1cb8de5515103f8c889ee5cb4f0f96040e8efc5b270d645681887f33889b59cb",
+    "gng_vlut_system/scripts/gng_avoidance_planner.py": "2b86abb212c1200e6210289227b580572f623570ce6637bb19e0465177db40ce",
+    "gng_vlut_system/scripts/urdf_vrm.py": "d3a3460c4bcec792cd603083fec0adb3886d1db95582e5cccd49cbb06c20f988",
+    "gng_vlut_system/scripts/task_program.py": "56060f53816b4068b626d71a252b3d9f2346f1766eb4b51b2d7d2c7c2224ca9b",
+    "log/artifacts/shuttle_bag/trial.py": "c09b37650b5be71d2f980e0456e70cd6477330016095c394179b814b0cd32494",
+    "log/artifacts/shuttle_bag/check_representative.py": "66c25b4455defbec49bd963192849b07007999169eb971b2eef12821cd7f4a40"
+  }
+}

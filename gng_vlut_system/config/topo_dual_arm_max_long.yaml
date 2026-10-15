@@ -147,7 +147,7 @@
       apply_self_collision_exclusion_pairs: true
       # 全身メッシュの内部充填ボクセル解像度 [m]。プリミティブは元形状での判定。
       voxel_size: 0.001
-      environment_ignore_links: []
+      # 環境衝突の除外リンク指定なし。ノード既定の空リスト
       #(隣接リンク同士は自動で衝突判定をしないように設定)
       self_collision_exclusion_pairs:
         - "L_finger_left|L_finger_right"

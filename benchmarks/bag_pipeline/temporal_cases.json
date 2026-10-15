@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "name": "before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/bag_pipeline/temporal_build/before",
+        "/ros2_ws/src/log/artifacts/bag_pipeline/temporal_input/frames.bin",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/bag_pipeline/temporal_build/after",
+        "/ros2_ws/src/log/artifacts/bag_pipeline/temporal_input/frames.bin",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

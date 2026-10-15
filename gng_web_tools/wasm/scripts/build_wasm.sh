@@ -13,7 +13,8 @@ fi
 mkdir -p "${OUT_DIR}"
 
 em++ \
-  -std=c++17 \
+  -std=c++20 \
+  -fexceptions \
   -O3 \
   -I"${ROOT_DIR}/include" \
   -I"${gng_cpu_dir}/include" \

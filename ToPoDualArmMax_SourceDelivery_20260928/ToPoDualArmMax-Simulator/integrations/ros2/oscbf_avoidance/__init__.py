@@ -14,3 +14,12 @@ def create_filter(scene, settings):
     from .filter import CollisionFilter
     defaults = json.loads((root / 'defaults.json').read_text())
     return CollisionFilter(scene, dict(defaults, **settings))
+
+
+# プラグインの共通接続。既存速度フィルタへの委譲
+class oscbf_adapter:
+    def prepare(self, settings, robot):
+        return dict(fixed_joint_names=())
+
+    def create(self, scene, settings, node, robot, prepared):
+        return create_filter(scene, settings)

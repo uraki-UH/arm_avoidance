@@ -28,12 +28,19 @@ def nonnegative(value):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--scenario', choices=('live','chasing_sphere'), default='live', help='既存ROS入力／手先追跡球の有限試験')
+    parser.add_argument('--scenario-file', type=Path, help='追跡球の試験設定JSON')
+    parser.add_argument('--case-dir', type=Path, help='追跡球の結果保存先。省略時は日時付きの新規ディレクトリ')
     parser.add_argument('--model', choices=('long', 'standard'), default='long')
     parser.add_argument('--avoidance', choices=('gng', 'none', 'oscbf'), default='gng')
+    parser.add_argument('--gng-strategy', choices=('graph', 'avoidance_first', 'vrm_predictive'), default='graph',
+                        help='GNG方策。既定のノード列／回避優先／予測・不一致適応')
+    parser.add_argument('--roi-visibility', choices=('fov_shadow', 'ray', 'strict', 'legacy'), default='fov_shadow',
+                        help='視野内free＋遮蔽／観測光線／観測制約なし。strictは旧ray指定の互換名')
     parser.add_argument('--pose', choices=('forward', 'home', 'zero'), default='forward')
     parser.add_argument('--pose-file', type=Path, help='初期関節角のJSON辞書 [rad]。プリセットへの部分上書き')
     parser.add_argument('--goal-file', type=Path, help='復帰目標のJSON辞書 [rad]。初期姿勢への部分上書き')
-    parser.add_argument('--duration', type=nonnegative, default=30., help='実行時間 [sec]。0はCtrl+Cまで継続')
+    parser.add_argument('--duration', type=nonnegative, help='実行時間 [sec]。ROS入力の既定値30、追跡球は設定JSON。0はROS入力のみ')
     parser.add_argument('--report-sec', type=nonnegative, default=1., help='JSONL出力周期 [sec]')
     parser.add_argument('--output', type=Path, help='JSONL保存先。既存ファイルへの上書き禁止')
     parser.add_argument('--viewer-bridge-port', type=int, help='実測姿勢のViewer受信用ROSブリッジHTTPポート')
@@ -47,10 +54,22 @@ def parse_arguments():
     parser.add_argument('--rate', type=nonnegative, default=1., help='bag再生速度')
     parser.add_argument('--min-motion-deg', type=nonnegative, default=0., help='終了時の腕関節変化の検証下限 [deg]')
     args = parser.parse_args()
+    if args.scenario == 'chasing_sphere':
+        if args.model != 'long' or args.avoidance != 'gng' or args.bag or args.viewer_bridge_port or args.viewer_observe_port or args.pose_file or args.goal_file:
+            parser.error('追跡球はLongの独立物理試験です。bag・Viewer接続・個別姿勢入力との併用は未対応です')
+        if args.duration is not None and not 1 <= args.duration <= 180:
+            parser.error('追跡球の--durationは1～180 secです')
+    else:
+        if args.scenario_file or args.case_dir:
+            parser.error('--scenario-fileと--case-dirは追跡球用です')
+        if args.duration is None:
+            args.duration = 30.
     if args.report_sec == 0 or args.rate == 0:
         parser.error('--report-secと--rateには正値が必要です')
     if args.bag and args.avoidance != 'gng':
         parser.error('--bagはGNG回避用です')
+    if args.gng_strategy != 'graph' and args.avoidance != 'gng':
+        parser.error('--gng-strategyはGNG回避用です')
     if args.viewer_bridge_port is not None and not 1024 <= args.viewer_bridge_port <= 65534:
         parser.error('--viewer-bridge-portは1024～65534です')
     if args.viewer_bridge_port and args.avoidance != 'gng':
@@ -111,6 +130,18 @@ def wait_for_viewer_service(process, port, stop_event, enable_http=False):
 
 
 def run(args, emit):
+    if args.scenario == 'chasing_sphere':
+        from sphere_chase import run_case
+        config_file = args.scenario_file or simulator_dir.parents[1]/'benchmarks/chasing_sphere/default.json'
+        config = json.loads(config_file.read_text())
+        if args.duration is not None:
+            config['duration_sec'] = args.duration
+        output_dir = args.case_dir or simulator_dir.parents[1]/'log/artifacts/chasing_sphere'/time.strftime('manual_%Y%m%d_%H%M%S')
+        emit(dict(type='started',scenario=args.scenario,case_dir=str(output_dir)))
+        result = run_case(config,output_dir)
+        emit(dict(type='summary',scenario=args.scenario,case_dir=str(output_dir),
+                  failure_reason=result['failure_reason'],**result['metrics']))
+        return 0
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
     from rclpy.signals import SignalHandlerOptions
@@ -168,8 +199,12 @@ def run(args, emit):
                                     '/tf:='+prefix+'/tf', '/tf_static:='+prefix+'/tf_static'))
                     command.extend(('--loop', '--start-offset', str(args.start_offset), '--rate', str(args.rate)))
                     bag = subprocess.Popen(command, stdout=bag_log, stderr=bag_log, start_new_session=True)
-                settings = dict(mode=args.avoidance, points_topic=args.points_topic,
-                                roi_topic=args.roi_topic, recorded_self_topic=args.recorded_self_topic)
+                settings = dict(mode=args.avoidance)
+                if args.avoidance == 'gng':
+                    settings.update(gng_strategy=args.gng_strategy, enable_roi_visibility=args.roi_visibility != 'legacy',
+                                    visibility_model='ray' if args.roi_visibility in ('ray', 'strict') else 'fov_shadow',
+                                    points_topic=args.points_topic,
+                                    roi_topic=args.roi_topic, recorded_self_topic=args.recorded_self_topic)
                 if args.bag:
                     settings.update(recorded_tf_topic=prefix+'/tf', recorded_static_tf_topic=prefix+'/tf_static')
                 scene = PhysicsScene([], dict(model=args.model, pose=pose, position=[0, 0, 0], quaternion=[0, 0, 0, 1]),

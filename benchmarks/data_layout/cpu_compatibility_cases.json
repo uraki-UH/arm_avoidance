@@ -1,0 +1,48 @@
+{
+  "cases": [
+    {
+      "name": "stats_off_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_before",
+        "/ros2_ws/src/log/artifacts/data_layout/build_before_seeded/libgng_cpu.so",
+        "0",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "stats_off_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_after",
+        "/ros2_ws/src/log/artifacts/data_layout/build_after_compatibility_seeded/libgng_cpu.so",
+        "0",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "stats_on_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_before",
+        "/ros2_ws/src/log/artifacts/data_layout/build_before_seeded/libgng_cpu.so",
+        "1",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "stats_on_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout/gng_after",
+        "/ros2_ws/src/log/artifacts/data_layout/build_after_compatibility_seeded/libgng_cpu.so",
+        "1",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

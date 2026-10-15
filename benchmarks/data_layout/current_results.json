@@ -1,0 +1,849 @@
+{
+  "conditions": {
+    "num_repeats": 7,
+    "ordering": "条件順の試行ごとの循環・別プロセス・同時測定なし",
+    "environment": {
+      "cpu": "Intel Core i7-14650HX",
+      "compiler": "GCC 11.4.0",
+      "compiler_options": "-O3 -DNDEBUG",
+      "cpu_container": "gng_cpu_container",
+      "scope": "既存サービス稼働下での同一マシン比較。システム全体の最大メモリではなく各試験プロセスの測定"
+    },
+    "cpu": {
+      "num_node_capacity": 20000,
+      "num_input_points": 16000,
+      "num_learning_per_frame": 4000,
+      "num_frames": 50,
+      "random_seed": "比較用コピーだけframe_numberへ固定。本番コードは変更なし",
+      "scope": "ノード統計の分離・16bit整数化を含む全体差分。ビットフィールド単独の効果ではない"
+    },
+    "roi": {
+      "num_input_points": 300000,
+      "num_frames": 12,
+      "scope": "実ROI集約器の登録・並替え・自己除去出力。共通入力XYZ・点セル対応も最大RSSへ算入"
+    },
+    "flood": {
+      "grid": [
+        96,
+        96,
+        96
+      ],
+      "num_frames": 4,
+      "scope": "衝突外装の6近傍洪水探索カーネル。メッシュ読込み・OctoMap構築は対象外"
+    },
+    "links": {
+      "num_links": 200000,
+      "scope": "並替え・逐次更新・1走査。ランダム更新時間は別指標"
+    },
+    "flags": {
+      "num_records": 100000,
+      "num_passes": 16,
+      "scope": "5フラグ部分の保存処理"
+    },
+    "values": {
+      "num_values": 1000000,
+      "range": [
+        0,
+        1000
+      ],
+      "num_scan_passes": 32,
+      "num_random_updates": 2000000,
+      "scope": "例示値域による合成試験。実コードの対象フィールドなし。対象ごとのアクセス条件を伴わない一般化は対象外",
+      "can_determine_production_adoption": false
+    },
+    "load": {
+      "num_models": 2,
+      "num_nodes": 19976,
+      "scope": "Long左右GNGの構築・読込み。VLUT・可操作度再計算なし。OSページキャッシュ有効",
+      "baseline": "退避したv9と旧実装",
+      "candidate": "移行済みv10と現行実装",
+      "quality": "修正対象の可操作度スカラーを除く、角度・座標・状態・接続の一致"
+    },
+    "graph": {
+      "num_nodes": 20000,
+      "num_edge_values": 200000,
+      "num_clusters": 200,
+      "num_warmup": 5,
+      "num_decodes": 30,
+      "node_version": "22.23.3",
+      "scope": "現行デコーダーの格納配列幅だけの比較。メモリはGC後のheapUsedとarrayBuffers増分"
+    },
+    "units": {
+      "*_ms": "ms",
+      "*_bytes": "B",
+      "*_rss_kb": "KiB（Linux ru_maxrss）"
+    },
+    "elapsed_sec": {
+      "cpu": 55.602379226002085,
+      "graph": 17.38876969499688
+    }
+  },
+  "cpu": {
+    "stats_off_before": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 1238.707903,
+        "frame_ms": 24.77415806,
+        "init_rss_kb": 15452,
+        "peak_rss_kb": 18180,
+        "node_bytes": 360,
+        "num_nodes": 12564,
+        "geometry_hash": 1472692249,
+        "statistics_hash": 1420627397
+      },
+      "quartile_25": {
+        "total_ms": 1235.7264985000002,
+        "frame_ms": 24.71452997,
+        "init_rss_kb": 15396.0,
+        "peak_rss_kb": 17932.0,
+        "node_bytes": 360.0,
+        "num_nodes": 12537.5,
+        "geometry_hash": 410922526.0,
+        "statistics_hash": 930655301.0
+      },
+      "quartile_75": {
+        "total_ms": 1239.4779385000002,
+        "frame_ms": 24.78955877,
+        "init_rss_kb": 15610.0,
+        "peak_rss_kb": 18324.0,
+        "node_bytes": 360.0,
+        "num_nodes": 12576.5,
+        "geometry_hash": 3560245123.5,
+        "statistics_hash": 2885182341.0
+      }
+    },
+    "stats_off_after": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 1203.181229,
+        "frame_ms": 24.06362458,
+        "init_rss_kb": 13136,
+        "peak_rss_kb": 13520,
+        "node_bytes": 128,
+        "num_nodes": 12564,
+        "geometry_hash": 1472692249,
+        "statistics_hash": 1420627397
+      },
+      "quartile_25": {
+        "total_ms": 1200.3686685,
+        "frame_ms": 24.00737337,
+        "init_rss_kb": 13136.0,
+        "peak_rss_kb": 13440.0,
+        "node_bytes": 128.0,
+        "num_nodes": 12537.5,
+        "geometry_hash": 410922526.0,
+        "statistics_hash": 930655301.0
+      },
+      "quartile_75": {
+        "total_ms": 1205.122126,
+        "frame_ms": 24.102442519999997,
+        "init_rss_kb": 13520.0,
+        "peak_rss_kb": 13596.0,
+        "node_bytes": 128.0,
+        "num_nodes": 12576.5,
+        "geometry_hash": 3560245123.5,
+        "statistics_hash": 2885182341.0
+      }
+    },
+    "stats_on_before": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 1251.891944,
+        "frame_ms": 25.03783888,
+        "init_rss_kb": 15608,
+        "peak_rss_kb": 18132,
+        "node_bytes": 360,
+        "num_nodes": 12564,
+        "geometry_hash": 1472692249,
+        "statistics_hash": 1349101189
+      },
+      "quartile_25": {
+        "total_ms": 1246.482052,
+        "frame_ms": 24.92964104,
+        "init_rss_kb": 15332.0,
+        "peak_rss_kb": 18038.0,
+        "node_bytes": 360.0,
+        "num_nodes": 12537.5,
+        "geometry_hash": 410922526.0,
+        "statistics_hash": 1008198092.5
+      },
+      "quartile_75": {
+        "total_ms": 1255.5688755,
+        "frame_ms": 25.11137751,
+        "init_rss_kb": 15670.0,
+        "peak_rss_kb": 18306.0,
+        "node_bytes": 360.0,
+        "num_nodes": 12576.5,
+        "geometry_hash": 3560245123.5,
+        "statistics_hash": 2111759609.0
+      }
+    },
+    "stats_on_after": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 1221.297187,
+        "frame_ms": 24.42594374,
+        "init_rss_kb": 15056,
+        "peak_rss_kb": 17144,
+        "node_bytes": 128,
+        "num_nodes": 12564,
+        "geometry_hash": 1472692249,
+        "statistics_hash": 1349101189
+      },
+      "quartile_25": {
+        "total_ms": 1220.0315735,
+        "frame_ms": 24.40063147,
+        "init_rss_kb": 14892.0,
+        "peak_rss_kb": 17114.0,
+        "node_bytes": 128.0,
+        "num_nodes": 12537.5,
+        "geometry_hash": 410922526.0,
+        "statistics_hash": 1008198092.5
+      },
+      "quartile_75": {
+        "total_ms": 1222.968778,
+        "frame_ms": 24.459375559999998,
+        "init_rss_kb": 15100.0,
+        "peak_rss_kb": 17302.0,
+        "node_bytes": 128.0,
+        "num_nodes": 12576.5,
+        "geometry_hash": 3560245123.5,
+        "statistics_hash": 2111759609.0
+      }
+    },
+    "links_before": {
+      "num_runs": 7,
+      "median": {
+        "sort_ms": 21.074075,
+        "scan_ms": 0.14871871875,
+        "update_ms": 0.233466,
+        "random_update_ms": 6.617835,
+        "total_ms": 21.45296721875,
+        "bytes": 3200000,
+        "checksum": 4120017151799744
+      },
+      "quartile_25": {
+        "sort_ms": 20.870455,
+        "scan_ms": 0.14283329687500002,
+        "update_ms": 0.2279805,
+        "random_update_ms": 6.562065,
+        "total_ms": 21.236753671875,
+        "bytes": 3200000.0,
+        "checksum": 2138284894691968.0
+      },
+      "quartile_75": {
+        "sort_ms": 21.1792745,
+        "scan_ms": 0.15004378125,
+        "update_ms": 0.235614,
+        "random_update_ms": 7.227415499999999,
+        "total_ms": 21.564815531249998,
+        "bytes": 3200000.0,
+        "checksum": 5350507744348560.0
+      }
+    },
+    "links_bitfield": {
+      "num_runs": 7,
+      "median": {
+        "sort_ms": 24.046674,
+        "scan_ms": 0.13144328125,
+        "update_ms": 0.183795,
+        "random_update_ms": 4.226069,
+        "total_ms": 24.365416125,
+        "bytes": 1600000,
+        "checksum": 4120017151799744
+      },
+      "quartile_25": {
+        "sort_ms": 23.286847,
+        "scan_ms": 0.1303984375,
+        "update_ms": 0.1806305,
+        "random_update_ms": 4.183669,
+        "total_ms": 23.610359765625,
+        "bytes": 1600000.0,
+        "checksum": 2138284894691968.0
+      },
+      "quartile_75": {
+        "sort_ms": 24.3903,
+        "scan_ms": 0.13359035937500002,
+        "update_ms": 0.1901275,
+        "random_update_ms": 4.746514,
+        "total_ms": 24.699827515625,
+        "bytes": 1600000.0,
+        "checksum": 5350507744348560.0
+      }
+    },
+    "links_packed": {
+      "num_runs": 7,
+      "median": {
+        "sort_ms": 18.984284,
+        "scan_ms": 0.0655959375,
+        "update_ms": 0.098968,
+        "random_update_ms": 4.232122,
+        "total_ms": 19.14696096875,
+        "bytes": 1600000,
+        "checksum": 4120017151799744
+      },
+      "quartile_25": {
+        "sort_ms": 18.8086135,
+        "scan_ms": 0.0642551875,
+        "update_ms": 0.0933415,
+        "random_update_ms": 4.181796,
+        "total_ms": 18.97269665625,
+        "bytes": 1600000.0,
+        "checksum": 2138284894691968.0
+      },
+      "quartile_75": {
+        "sort_ms": 19.037415,
+        "scan_ms": 0.069474078125,
+        "update_ms": 0.1007335,
+        "random_update_ms": 4.309457999999999,
+        "total_ms": 19.211231625,
+        "bytes": 1600000.0,
+        "checksum": 5350507744348560.0
+      }
+    },
+    "values_u16": {
+      "num_runs": 7,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 6.679178,
+        "update_ms": 5.929425,
+        "random_update_ms": 0,
+        "total_ms": 12.608603,
+        "bytes": 2000000,
+        "checksum": 16009008096
+      },
+      "quartile_25": {
+        "sort_ms": 0.0,
+        "scan_ms": 6.6621095,
+        "update_ms": 5.8491,
+        "random_update_ms": 0.0,
+        "total_ms": 12.5342725,
+        "bytes": 2000000.0,
+        "checksum": 16008053984.0
+      },
+      "quartile_75": {
+        "sort_ms": 0.0,
+        "scan_ms": 6.6976865,
+        "update_ms": 6.1009405,
+        "random_update_ms": 0.0,
+        "total_ms": 12.7762685,
+        "bytes": 2000000.0,
+        "checksum": 16011317424.0
+      }
+    },
+    "values_10bit": {
+      "num_runs": 7,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 79.876816,
+        "update_ms": 10.445456,
+        "random_update_ms": 0,
+        "total_ms": 90.345917,
+        "bytes": 1250000,
+        "checksum": 16009008096
+      },
+      "quartile_25": {
+        "sort_ms": 0.0,
+        "scan_ms": 77.3346645,
+        "update_ms": 10.4147375,
+        "random_update_ms": 0.0,
+        "total_ms": 87.7823745,
+        "bytes": 1250000.0,
+        "checksum": 16008053984.0
+      },
+      "quartile_75": {
+        "sort_ms": 0.0,
+        "scan_ms": 80.7591915,
+        "update_ms": 10.563270500000002,
+        "random_update_ms": 0.0,
+        "total_ms": 91.070425,
+        "bytes": 1250000.0,
+        "checksum": 16011317424.0
+      }
+    },
+    "flags_before": {
+      "num_runs": 7,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 0,
+        "update_ms": 121.842067,
+        "random_update_ms": 0,
+        "total_ms": 121.842067,
+        "bytes": 8000000,
+        "checksum": 24793472
+      },
+      "quartile_25": {
+        "sort_ms": 0.0,
+        "scan_ms": 0.0,
+        "update_ms": 121.362743,
+        "random_update_ms": 0.0,
+        "total_ms": 121.362743,
+        "bytes": 8000000.0,
+        "checksum": 24784272.0
+      },
+      "quartile_75": {
+        "sort_ms": 0.0,
+        "scan_ms": 0.0,
+        "update_ms": 122.831755,
+        "random_update_ms": 0.0,
+        "total_ms": 122.831755,
+        "bytes": 8000000.0,
+        "checksum": 24812688.0
+      }
+    },
+    "flags_packed": {
+      "num_runs": 7,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 0,
+        "update_ms": 25.567984,
+        "random_update_ms": 0,
+        "total_ms": 25.567984,
+        "bytes": 1600000,
+        "checksum": 24793472
+      },
+      "quartile_25": {
+        "sort_ms": 0.0,
+        "scan_ms": 0.0,
+        "update_ms": 25.525596999999998,
+        "random_update_ms": 0.0,
+        "total_ms": 25.525596999999998,
+        "bytes": 1600000.0,
+        "checksum": 24784272.0
+      },
+      "quartile_75": {
+        "sort_ms": 0.0,
+        "scan_ms": 0.0,
+        "update_ms": 26.286018,
+        "random_update_ms": 0.0,
+        "total_ms": 26.286018,
+        "bytes": 1600000.0,
+        "checksum": 24812688.0
+      }
+    },
+    "roi_before": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 453.463937,
+        "frame_ms": 37.7886614166667,
+        "init_ms": 0.468256,
+        "storage_bytes": 4194304,
+        "auxiliary_bytes": 2400000,
+        "record_bytes": 16,
+        "num_cells": 254381,
+        "peak_rss_kb": 24204,
+        "checksum": 2739234693
+      },
+      "quartile_25": {
+        "total_ms": 449.6196,
+        "frame_ms": 37.4683,
+        "init_ms": 0.46215,
+        "storage_bytes": 4194304.0,
+        "auxiliary_bytes": 2400000.0,
+        "record_bytes": 16.0,
+        "num_cells": 254375.5,
+        "peak_rss_kb": 24144.0,
+        "checksum": 2126220053.0
+      },
+      "quartile_75": {
+        "total_ms": 454.35846300000003,
+        "frame_ms": 37.86320525,
+        "init_ms": 0.47067,
+        "storage_bytes": 4194304.0,
+        "auxiliary_bytes": 2400000.0,
+        "record_bytes": 16.0,
+        "num_cells": 254398.5,
+        "peak_rss_kb": 24246.0,
+        "checksum": 3068780549.0
+      }
+    },
+    "roi_native": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 466.329149,
+        "frame_ms": 38.8607624166667,
+        "init_ms": 0.476258,
+        "storage_bytes": 2097152,
+        "auxiliary_bytes": 2400000,
+        "record_bytes": 8,
+        "num_cells": 254381,
+        "peak_rss_kb": 22188,
+        "checksum": 2739234693
+      },
+      "quartile_25": {
+        "total_ms": 465.1195385,
+        "frame_ms": 38.759961541666655,
+        "init_ms": 0.470605,
+        "storage_bytes": 2097152.0,
+        "auxiliary_bytes": 2400000.0,
+        "record_bytes": 8.0,
+        "num_cells": 254375.5,
+        "peak_rss_kb": 22134.0,
+        "checksum": 2126220053.0
+      },
+      "quartile_75": {
+        "total_ms": 467.9107815,
+        "frame_ms": 38.992565125,
+        "init_ms": 0.5017095,
+        "storage_bytes": 2097152.0,
+        "auxiliary_bytes": 2400000.0,
+        "record_bytes": 8.0,
+        "num_cells": 254398.5,
+        "peak_rss_kb": 22222.0,
+        "checksum": 3068780549.0
+      }
+    },
+    "roi_word": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 460.387539,
+        "frame_ms": 38.36562825,
+        "init_ms": 0.464357,
+        "storage_bytes": 2097152,
+        "auxiliary_bytes": 2400000,
+        "record_bytes": 8,
+        "num_cells": 254381,
+        "peak_rss_kb": 22172,
+        "checksum": 2739234693
+      },
+      "quartile_25": {
+        "total_ms": 459.174148,
+        "frame_ms": 38.26451233333335,
+        "init_ms": 0.456176,
+        "storage_bytes": 2097152.0,
+        "auxiliary_bytes": 2400000.0,
+        "record_bytes": 8.0,
+        "num_cells": 254375.5,
+        "peak_rss_kb": 22108.0,
+        "checksum": 2126220053.0
+      },
+      "quartile_75": {
+        "total_ms": 462.49105199999997,
+        "frame_ms": 38.540921,
+        "init_ms": 0.472406,
+        "storage_bytes": 2097152.0,
+        "auxiliary_bytes": 2400000.0,
+        "record_bytes": 8.0,
+        "num_cells": 254398.5,
+        "peak_rss_kb": 22232.0,
+        "checksum": 3068780549.0
+      }
+    },
+    "flood_byte": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 27.713738,
+        "frame_ms": 6.9284345,
+        "init_ms": 0,
+        "storage_bytes": 884736,
+        "auxiliary_bytes": 3538944,
+        "record_bytes": 0,
+        "num_cells": 767087,
+        "peak_rss_kb": 13136,
+        "checksum": 1854326725
+      },
+      "quartile_25": {
+        "total_ms": 27.203594000000002,
+        "frame_ms": 6.800898500000001,
+        "init_ms": 0.0,
+        "storage_bytes": 884736.0,
+        "auxiliary_bytes": 3538944.0,
+        "record_bytes": 0.0,
+        "num_cells": 767087.0,
+        "peak_rss_kb": 13136.0,
+        "checksum": 552775621.0
+      },
+      "quartile_75": {
+        "total_ms": 29.100062,
+        "frame_ms": 7.2750155,
+        "init_ms": 0.0,
+        "storage_bytes": 884736.0,
+        "auxiliary_bytes": 3538944.0,
+        "record_bytes": 0.0,
+        "num_cells": 767087.0,
+        "peak_rss_kb": 13520.0,
+        "checksum": 3168376773.0
+      }
+    },
+    "flood_2bit": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 38.494619,
+        "frame_ms": 9.62365475,
+        "init_ms": 0,
+        "storage_bytes": 221184,
+        "auxiliary_bytes": 3538944,
+        "record_bytes": 0,
+        "num_cells": 767087,
+        "peak_rss_kb": 13136,
+        "checksum": 1854326725
+      },
+      "quartile_25": {
+        "total_ms": 37.824515,
+        "frame_ms": 9.45612875,
+        "init_ms": 0.0,
+        "storage_bytes": 221184.0,
+        "auxiliary_bytes": 3538944.0,
+        "record_bytes": 0.0,
+        "num_cells": 767087.0,
+        "peak_rss_kb": 13136.0,
+        "checksum": 552775621.0
+      },
+      "quartile_75": {
+        "total_ms": 39.537808,
+        "frame_ms": 9.884452,
+        "init_ms": 0.0,
+        "storage_bytes": 221184.0,
+        "auxiliary_bytes": 3538944.0,
+        "record_bytes": 0.0,
+        "num_cells": 767087.0,
+        "peak_rss_kb": 13520.0,
+        "checksum": 3168376773.0
+      }
+    },
+    "load_before": {
+      "num_runs": 7,
+      "median": {
+        "load_ms": 80.273147,
+        "peak_rss_kb": 47996,
+        "num_nodes": 19976,
+        "num_directed_edges": 151888,
+        "geometry_hash": 799448213,
+        "status_hash": 620588357,
+        "input_bytes": 5470384
+      },
+      "quartile_25": {
+        "load_ms": 79.9403465,
+        "peak_rss_kb": 47892.0,
+        "num_nodes": 19976.0,
+        "num_directed_edges": 151888.0,
+        "geometry_hash": 799448213.0,
+        "status_hash": 620588357.0,
+        "input_bytes": 5470384.0
+      },
+      "quartile_75": {
+        "load_ms": 80.77794850000001,
+        "peak_rss_kb": 48214.0,
+        "num_nodes": 19976.0,
+        "num_directed_edges": 151888.0,
+        "geometry_hash": 799448213.0,
+        "status_hash": 620588357.0,
+        "input_bytes": 5470384.0
+      }
+    },
+    "load_after": {
+      "num_runs": 7,
+      "median": {
+        "load_ms": 79.508132,
+        "peak_rss_kb": 47912,
+        "num_nodes": 19976,
+        "num_directed_edges": 151888,
+        "geometry_hash": 799448213,
+        "status_hash": 620588357,
+        "input_bytes": 5550288
+      },
+      "quartile_25": {
+        "load_ms": 79.135189,
+        "peak_rss_kb": 47790.0,
+        "num_nodes": 19976.0,
+        "num_directed_edges": 151888.0,
+        "geometry_hash": 799448213.0,
+        "status_hash": 620588357.0,
+        "input_bytes": 5550288.0
+      },
+      "quartile_75": {
+        "load_ms": 80.0464605,
+        "peak_rss_kb": 47960.0,
+        "num_nodes": 19976.0,
+        "num_directed_edges": 151888.0,
+        "geometry_hash": 799448213.0,
+        "status_hash": 620588357.0,
+        "input_bytes": 5550288.0
+      }
+    }
+  },
+  "graph": {
+    "graph_before": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 757.534574,
+        "decode_ms": 25.251152466666667,
+        "heap_bytes": 9760912,
+        "array_bytes": 0,
+        "retained_bytes": 9760912,
+        "checksum": 2599870000,
+        "graph_hash": 2092693175
+      },
+      "quartile_25": {
+        "total_ms": 750.3144255,
+        "decode_ms": 25.01048085,
+        "heap_bytes": 9760912.0,
+        "array_bytes": 0.0,
+        "retained_bytes": 9760912.0,
+        "checksum": 2599870000.0,
+        "graph_hash": 1354916509.5
+      },
+      "quartile_75": {
+        "total_ms": 762.5829865000001,
+        "decode_ms": 25.419432883333336,
+        "heap_bytes": 9761056.0,
+        "array_bytes": 0.0,
+        "retained_bytes": 9761056.0,
+        "checksum": 2599870000.0,
+        "graph_hash": 3575642137.5
+      }
+    },
+    "graph_after": {
+      "num_runs": 7,
+      "median": {
+        "total_ms": 758.493489,
+        "decode_ms": 25.2831163,
+        "heap_bytes": 7646728,
+        "array_bytes": 400000,
+        "retained_bytes": 8046728,
+        "checksum": 2599870000,
+        "graph_hash": 2092693175
+      },
+      "quartile_25": {
+        "total_ms": 755.5859875,
+        "decode_ms": 25.186199583333334,
+        "heap_bytes": 7646688.0,
+        "array_bytes": 400000.0,
+        "retained_bytes": 8046688.0,
+        "checksum": 2599870000.0,
+        "graph_hash": 1354916509.5
+      },
+      "quartile_75": {
+        "total_ms": 760.736901,
+        "decode_ms": 25.357896700000005,
+        "heap_bytes": 7646728.0,
+        "array_bytes": 400000.0,
+        "retained_bytes": 8073596.0,
+        "checksum": 2599870000.0,
+        "graph_hash": 3575642137.5
+      }
+    }
+  },
+  "quality": {
+    "num_completed_trials": 140,
+    "num_paired_output_checks": 77,
+    "all_paired_output_checks_passed": true,
+    "all_trial_processes_stopped": true
+  },
+  "commands": {
+    "cpu": "docker exec gng_cpu_container python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/data_layout/current_cpu_cases.json --output /ros2_ws/src/log/artifacts/data_layout_current/cpu_verified --repeats 7 --timeout-sec 40 --max-total-sec 360 --estimate-sec 1",
+    "graph": "python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/data_layout/current_graph_cases.json --output log/artifacts/data_layout_current/graph_verified --repeats 7 --timeout-sec 40 --max-total-sec 120 --estimate-sec 1"
+  },
+  "comparisons": [
+    {
+      "before": "stats_off_before",
+      "after": "stats_off_after",
+      "time_metric": "frame_ms",
+      "memory_metric": "peak_rss_kb",
+      "time_change_percent": -2.868042894855105,
+      "memory_change_percent": -25.632563256325636,
+      "decision": "採用済みを維持",
+      "reason": "統計領域の分離・整数幅縮小を含む全体変更。時間と最大RSSの両方に削減効果"
+    },
+    {
+      "before": "stats_on_before",
+      "after": "stats_on_after",
+      "time_metric": "frame_ms",
+      "memory_metric": "peak_rss_kb",
+      "time_change_percent": -2.4438816102805627,
+      "memory_change_percent": -5.448930068387381,
+      "decision": "採用済みを維持",
+      "reason": "統計出力の一致と、統計有効時にも残る時間・最大RSSの削減効果"
+    },
+    {
+      "before": "links_before",
+      "after": "links_bitfield",
+      "time_metric": "total_ms",
+      "memory_metric": "bytes",
+      "time_change_percent": 13.57597238905257,
+      "memory_change_percent": -50.0,
+      "decision": "不採用",
+      "reason": "C++ビットフィールドの領域半減と、並替えを含む処理時間の増加"
+    },
+    {
+      "before": "links_before",
+      "after": "links_packed",
+      "time_metric": "total_ms",
+      "memory_metric": "bytes",
+      "time_change_percent": -10.749124941488464,
+      "memory_change_percent": -50.0,
+      "decision": "採用済みを維持",
+      "reason": "明示的な64bit整数パックによる、領域半減と並替え・更新・走査時間の削減"
+    },
+    {
+      "before": "values_u16",
+      "after": "values_10bit",
+      "time_metric": "total_ms",
+      "memory_metric": "bytes",
+      "time_change_percent": 616.5418484506174,
+      "memory_change_percent": -37.5,
+      "decision": "参考測定・実コードの採否対象外",
+      "reason": "例示値域による合成試験。この更新・走査条件では値配列37.5%減、処理時間は約7倍。実フィールドのビット幅最適化への一般化なし"
+    },
+    {
+      "before": "flags_before",
+      "after": "flags_packed",
+      "time_metric": "total_ms",
+      "memory_metric": "bytes",
+      "time_change_percent": -79.01547090464248,
+      "memory_change_percent": -80.0,
+      "decision": "採用済みを維持",
+      "reason": "5フラグの書込み部分だけの効果。実ファイル全体はdouble精度修正により別途増加"
+    },
+    {
+      "before": "roi_before",
+      "after": "roi_native",
+      "time_metric": "frame_ms",
+      "memory_metric": "peak_rss_kb",
+      "time_change_percent": 2.8370970545338103,
+      "memory_change_percent": -8.329201784828955,
+      "decision": "追加採用なし",
+      "reason": "セル領域は半減、最大RSSは約8%減少。全7組で集約・並替え・自己除去処理が遅延"
+    },
+    {
+      "before": "roi_before",
+      "after": "roi_word",
+      "time_metric": "frame_ms",
+      "memory_metric": "peak_rss_kb",
+      "time_change_percent": 1.5268252743105393,
+      "memory_change_percent": -8.39530656089903,
+      "decision": "追加採用なし",
+      "reason": "セル領域は半減、最大RSSは約8%減少。全7組で集約・並替え・自己除去処理が遅延"
+    },
+    {
+      "before": "flood_byte",
+      "after": "flood_2bit",
+      "time_metric": "frame_ms",
+      "memory_metric": "peak_rss_kb",
+      "time_change_percent": 38.90085487565771,
+      "memory_change_percent": 0.0,
+      "decision": "不採用",
+      "reason": "状態配列は75%減少するものの、探索キューを含む最大RSSは変化なし、処理時間は増加"
+    },
+    {
+      "before": "load_before",
+      "after": "load_after",
+      "time_metric": "load_ms",
+      "memory_metric": "peak_rss_kb",
+      "time_change_percent": -0.9530148357083768,
+      "memory_change_percent": -0.1750145845487161,
+      "decision": "現行v10を維持",
+      "reason": "読込み時間と最大RSSはほぼ同等。採用理由は精度修正と通常経路の形式一本化"
+    },
+    {
+      "before": "graph_before",
+      "after": "graph_after",
+      "time_metric": "decode_ms",
+      "memory_metric": "retained_bytes",
+      "time_change_percent": 0.12658366138149635,
+      "memory_change_percent": -17.561719642590777,
+      "decision": "採用済みを維持",
+      "reason": "デコード時間は四分位範囲が重なりほぼ同等、保持メモリは約18%減少"
+    }
+  ]
+}

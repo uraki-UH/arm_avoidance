@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
 project(gng_wasm_core)
 
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
-endif()
+# 共有GNGコアのconceptsと同じC++規格
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -34,8 +34,9 @@ target_include_directories(gng_wasm_core PRIVATE
 target_compile_definitions(gng_wasm_core PRIVATE GNG_VERSION=0)
 
 if(EMSCRIPTEN)
-  target_compile_options(gng_wasm_core PRIVATE -fno-exceptions -fno-rtti)
+  target_compile_options(gng_wasm_core PRIVATE -fexceptions -fno-rtti)
   target_link_options(gng_wasm_core PRIVATE
+    -fexceptions
     "SHELL:-sALLOW_MEMORY_GROWTH=1"
     "SHELL:-sMODULARIZE=1"
     "SHELL:-sEXPORT_ES6=1"
@@ -60,14 +61,14 @@ if(EMSCRIPTEN)
     ${gng_cpu_dir}/src/utils
   )
   target_compile_definitions(gng_wasm_core_wasm PRIVATE GNG_VERSION=0)
-  target_compile_options(gng_wasm_core_wasm PRIVATE -fno-exceptions -fno-rtti)
+  target_compile_options(gng_wasm_core_wasm PRIVATE -fexceptions -fno-rtti)
   target_link_options(gng_wasm_core_wasm PRIVATE
+    -fexceptions
     "SHELL:-sALLOW_MEMORY_GROWTH=1"
     "SHELL:-sMODULARIZE=1"
     "SHELL:-sEXPORT_ES6=1"
     "SHELL:-sENVIRONMENT=web,worker,node"
-    "SHELL:-sNO_EXIT_RUNTIME=1"
-    "SHELL:-sNO_ENTRY=1"
+    --no-entry
     "SHELL:-sSTANDALONE_WASM=1"
     "SHELL:-sEXPORTED_FUNCTIONS=['_gng_wasm_create','_gng_wasm_destroy','_gng_wasm_reset','_gng_wasm_set_points','_gng_wasm_set_config','_gng_wasm_run','_gng_wasm_get_graph_json_size','_gng_wasm_write_graph_json','_gng_wasm_node_count','_gng_wasm_edge_count','_gng_wasm_iteration']"
     "SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"

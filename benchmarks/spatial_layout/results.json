@@ -1,0 +1,525 @@
+{
+  "default_model": "topo_dual_arm_max_long",
+  "scope": {
+    "vlut": "C++ DenseSpatialIndexの左右VLUT読込と同期照会。ROSノード全体・ブラウザ・Python回避経路の性能は対象外。既存Viewerサービス稼働、OSページキャッシュ有効。",
+    "roi": "採用見送りの合成stress条件。0.01m、-1..1mの201^3セル、各20000点・120フレーム。実機ROIや実bagの結果ではない。",
+    "latency": "VLUT差分更新は左右各8192占有セルの加算・減算、31バッチ。AABBは左右各12箱、別計測。raw参照は各8192セル、別計測。",
+    "memory": "rss_bytesは索引保持・照会後の/proc/self/statm、peak_rss_bytesはgetrusageのプロセス全体ピーク。関係データの精度・ID幅・保存形式は従来どおり。"
+  },
+  "accepted": {
+    "csr_offsets": {
+      "logical_before_bytes": 1829896,
+      "logical_after_bytes": 914956,
+      "meaning": "各セルoffset+countから、終端込みのoffset配列への変更。左右各1個の終端。vector容量余裕を除く論理サイズ。実メモリはRSSとピークRSSで別計測。"
+    },
+    "load_buffer": {
+      "before_bytes_per_relation": 24,
+      "after_bytes_per_relation": 16,
+      "meaning": "64bit世界セルIDを、復号済み32bitローカルセル番号へ置換。範囲検証とROI外sentinel。関係情報は完全保持。"
+    },
+    "input_validation": "途中で切れた入力・無効解像度・過大な格子の拒否。空の索引における関係配列の範囲外参照の除去。"
+  },
+  "rejected": {
+    "roi_nibble": {
+      "reason": "状態配列は半減するが、通常・共有ROIの双方で処理時間増。処理頻度を優先して現行byte保持。",
+      "production_changed": false
+    }
+  },
+  "verified_change_percent": {
+    "load_ms": -6.571944068561109,
+    "rss_bytes": -0.7553450262450356,
+    "peak_rss_bytes": -16.75096598729706,
+    "query_p50_ms": -5.9090666595534636,
+    "query_p95_ms": -5.329118728812454,
+    "aabb_p50_ms": -0.31034325383744177,
+    "raw_p50_ms": -8.234461329141263
+  },
+  "pilot": {
+    "plain_roi_before": {
+      "num_runs": 7,
+      "median": {
+        "p50_ms": 2.00115,
+        "p95_ms": 2.08236,
+        "rss_bytes": 12558336,
+        "peak_rss_bytes": 13467648,
+        "hash_low": 2878883923,
+        "hash_high": 1886149787,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "min": {
+        "p50_ms": 1.97723,
+        "p95_ms": 2.02551,
+        "rss_bytes": 12521472,
+        "peak_rss_bytes": 13271040,
+        "hash_low": 1638476035,
+        "hash_high": 209468508,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "max": {
+        "p50_ms": 2.02881,
+        "p95_ms": 2.5408,
+        "rss_bytes": 12681216,
+        "peak_rss_bytes": 13664256,
+        "hash_low": 4101207043,
+        "hash_high": 3405110273,
+        "num_points": 20000,
+        "num_frames": 120
+      }
+    },
+    "plain_roi_nibble": {
+      "num_runs": 7,
+      "median": {
+        "p50_ms": 2.11156,
+        "p95_ms": 2.17928,
+        "rss_bytes": 8507392,
+        "peak_rss_bytes": 13467648,
+        "hash_low": 2878883923,
+        "hash_high": 1886149787,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "min": {
+        "p50_ms": 2.07418,
+        "p95_ms": 2.11882,
+        "rss_bytes": 8396800,
+        "peak_rss_bytes": 13271040,
+        "hash_low": 1638476035,
+        "hash_high": 209468508,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "max": {
+        "p50_ms": 2.12965,
+        "p95_ms": 2.29946,
+        "rss_bytes": 8593408,
+        "peak_rss_bytes": 13664256,
+        "hash_low": 4101207043,
+        "hash_high": 3405110273,
+        "num_points": 20000,
+        "num_frames": 120
+      }
+    },
+    "shared_roi_before": {
+      "num_runs": 7,
+      "median": {
+        "p50_ms": 2.29923,
+        "p95_ms": 2.38831,
+        "rss_bytes": 13258752,
+        "peak_rss_bytes": 13467648,
+        "hash_low": 2981905283,
+        "hash_high": 2836275323,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "min": {
+        "p50_ms": 2.27848,
+        "p95_ms": 2.3559,
+        "rss_bytes": 13144064,
+        "peak_rss_bytes": 13271040,
+        "hash_low": 788146963,
+        "hash_high": 1652909731,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "max": {
+        "p50_ms": 2.33213,
+        "p95_ms": 2.43671,
+        "rss_bytes": 13303808,
+        "peak_rss_bytes": 13664256,
+        "hash_low": 4049050211,
+        "hash_high": 4142589138,
+        "num_points": 20000,
+        "num_frames": 120
+      }
+    },
+    "shared_roi_nibble": {
+      "num_runs": 7,
+      "median": {
+        "p50_ms": 2.44754,
+        "p95_ms": 2.55935,
+        "rss_bytes": 9064448,
+        "peak_rss_bytes": 13467648,
+        "hash_low": 2981905283,
+        "hash_high": 2836275323,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "min": {
+        "p50_ms": 2.40399,
+        "p95_ms": 2.53621,
+        "rss_bytes": 9003008,
+        "peak_rss_bytes": 13467648,
+        "hash_low": 788146963,
+        "hash_high": 1652909731,
+        "num_points": 20000,
+        "num_frames": 120
+      },
+      "max": {
+        "p50_ms": 2.47474,
+        "p95_ms": 3.14895,
+        "rss_bytes": 9109504,
+        "peak_rss_bytes": 13664256,
+        "hash_low": 4049050211,
+        "hash_high": 4142589138,
+        "num_points": 20000,
+        "num_frames": 120
+      }
+    },
+    "vlut_before": {
+      "num_runs": 7,
+      "median": {
+        "load_ms": 1108.21,
+        "rss_bytes": 127827968,
+        "peak_rss_bytes": 246743040,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 2932354590,
+        "query_hash_high": 2727989995,
+        "query_p50_ms": 14.9348,
+        "query_p95_ms": 15.3566,
+        "aabb_p50_ms": 0.197196,
+        "aabb_p95_ms": 0.205594,
+        "raw_p50_ms": 0.536193,
+        "raw_p95_ms": 0.594395
+      },
+      "min": {
+        "load_ms": 1101.95,
+        "rss_bytes": 127741952,
+        "peak_rss_bytes": 246611968,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 60142468,
+        "query_hash_high": 1613235355,
+        "query_p50_ms": 13.9026,
+        "query_p95_ms": 14.6346,
+        "aabb_p50_ms": 0.196592,
+        "aabb_p95_ms": 0.203161,
+        "raw_p50_ms": 0.528315,
+        "raw_p95_ms": 0.558681
+      },
+      "max": {
+        "load_ms": 1120.79,
+        "rss_bytes": 127963136,
+        "peak_rss_bytes": 246865920,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 3928205908,
+        "query_hash_high": 3863920355,
+        "query_p50_ms": 15.1466,
+        "query_p95_ms": 15.7777,
+        "aabb_p50_ms": 0.197532,
+        "aabb_p95_ms": 0.207038,
+        "raw_p50_ms": 0.590859,
+        "raw_p95_ms": 0.643664
+      }
+    },
+    "vlut_compact": {
+      "num_runs": 7,
+      "median": {
+        "load_ms": 1041.35,
+        "rss_bytes": 126947328,
+        "peak_rss_bytes": 205578240,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 2932354590,
+        "query_hash_high": 2727989995,
+        "query_p50_ms": 13.888,
+        "query_p95_ms": 14.7525,
+        "aabb_p50_ms": 0.198143,
+        "aabb_p95_ms": 0.205442,
+        "raw_p50_ms": 0.490658,
+        "raw_p95_ms": 0.523611
+      },
+      "min": {
+        "load_ms": 1029.69,
+        "rss_bytes": 126746624,
+        "peak_rss_bytes": 205443072,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 60142468,
+        "query_hash_high": 1613235355,
+        "query_p50_ms": 13.0629,
+        "query_p95_ms": 13.9916,
+        "aabb_p50_ms": 0.197477,
+        "aabb_p95_ms": 0.201973,
+        "raw_p50_ms": 0.461872,
+        "raw_p95_ms": 0.49772
+      },
+      "max": {
+        "load_ms": 1047.86,
+        "rss_bytes": 127078400,
+        "peak_rss_bytes": 205783040,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 3928205908,
+        "query_hash_high": 3863920355,
+        "query_p50_ms": 14.1156,
+        "query_p95_ms": 15.4198,
+        "aabb_p50_ms": 0.199007,
+        "aabb_p95_ms": 0.223447,
+        "raw_p50_ms": 0.51474,
+        "raw_p95_ms": 0.56892
+      }
+    },
+    "vlut_offsets": {
+      "num_runs": 7,
+      "median": {
+        "load_ms": 1101.19,
+        "rss_bytes": 126939136,
+        "peak_rss_bytes": 245850112,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 2932354590,
+        "query_hash_high": 2727989995,
+        "query_p50_ms": 13.8973,
+        "query_p95_ms": 14.3896,
+        "aabb_p50_ms": 0.197677,
+        "aabb_p95_ms": 0.205885,
+        "raw_p50_ms": 0.491704,
+        "raw_p95_ms": 0.540688
+      },
+      "min": {
+        "load_ms": 1095.61,
+        "rss_bytes": 126746624,
+        "peak_rss_bytes": 245596160,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 60142468,
+        "query_hash_high": 1613235355,
+        "query_p50_ms": 12.9331,
+        "query_p95_ms": 13.243,
+        "aabb_p50_ms": 0.196779,
+        "aabb_p95_ms": 0.202804,
+        "raw_p50_ms": 0.47383,
+        "raw_p95_ms": 0.514503
+      },
+      "max": {
+        "load_ms": 1118.53,
+        "rss_bytes": 127016960,
+        "peak_rss_bytes": 246091776,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 3928205908,
+        "query_hash_high": 3863920355,
+        "query_p50_ms": 14.1562,
+        "query_p95_ms": 14.8247,
+        "aabb_p50_ms": 0.198156,
+        "aabb_p95_ms": 0.208229,
+        "raw_p50_ms": 0.515461,
+        "raw_p95_ms": 0.560477
+      }
+    }
+  },
+  "verified": {
+    "vlut_after": {
+      "num_runs": 7,
+      "median": {
+        "load_ms": 1035.65,
+        "rss_bytes": 127008768,
+        "peak_rss_bytes": 205619200,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 2932354590,
+        "query_hash_high": 2727989995,
+        "query_p50_ms": 14.1095,
+        "query_p95_ms": 14.4659,
+        "aabb_p50_ms": 0.196589,
+        "aabb_p95_ms": 0.203146,
+        "raw_p50_ms": 0.499099,
+        "raw_p95_ms": 0.53149
+      },
+      "min": {
+        "load_ms": 1029.37,
+        "rss_bytes": 126750720,
+        "peak_rss_bytes": 205316096,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 60142468,
+        "query_hash_high": 1613235355,
+        "query_p50_ms": 12.9864,
+        "query_p95_ms": 13.2549,
+        "aabb_p50_ms": 0.195854,
+        "aabb_p95_ms": 0.201538,
+        "raw_p50_ms": 0.473818,
+        "raw_p95_ms": 0.512972
+      },
+      "max": {
+        "load_ms": 1039.77,
+        "rss_bytes": 127074304,
+        "peak_rss_bytes": 205856768,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 3928205908,
+        "query_hash_high": 3863920355,
+        "query_p50_ms": 14.2054,
+        "query_p95_ms": 14.9662,
+        "aabb_p50_ms": 0.197426,
+        "aabb_p95_ms": 0.21013,
+        "raw_p50_ms": 0.524767,
+        "raw_p95_ms": 0.586003
+      }
+    },
+    "vlut_before": {
+      "num_runs": 7,
+      "median": {
+        "load_ms": 1108.5,
+        "rss_bytes": 127975424,
+        "peak_rss_bytes": 246992896,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 2932354590,
+        "query_hash_high": 2727989995,
+        "query_p50_ms": 14.9956,
+        "query_p95_ms": 15.2802,
+        "aabb_p50_ms": 0.197201,
+        "aabb_p95_ms": 0.203535,
+        "raw_p50_ms": 0.543885,
+        "raw_p95_ms": 0.584747
+      },
+      "min": {
+        "load_ms": 1103.84,
+        "rss_bytes": 127799296,
+        "peak_rss_bytes": 246571008,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 60142468,
+        "query_hash_high": 1613235355,
+        "query_p50_ms": 14.0899,
+        "query_p95_ms": 14.3964,
+        "aabb_p50_ms": 0.196746,
+        "aabb_p95_ms": 0.201885,
+        "raw_p50_ms": 0.530802,
+        "raw_p95_ms": 0.567158
+      },
+      "max": {
+        "load_ms": 1136,
+        "rss_bytes": 128053248,
+        "peak_rss_bytes": 247058432,
+        "num_relations": 10040318,
+        "num_voxels": 228737,
+        "relation_hash_low": 2609101684,
+        "relation_hash_high": 58413582,
+        "query_hash_low": 3928205908,
+        "query_hash_high": 3863920355,
+        "query_p50_ms": 15.2978,
+        "query_p95_ms": 18.5296,
+        "aabb_p50_ms": 0.197776,
+        "aabb_p95_ms": 0.205633,
+        "raw_p50_ms": 0.57111,
+        "raw_p95_ms": 0.617847
+      }
+    }
+  },
+  "num_trials": 63,
+  "num_failed_trials": 0,
+  "initial_estimated_sec": {
+    "pilot": 98,
+    "verified": 28
+  },
+  "runner_elapsed_sec": {
+    "pilot": 42.95222666898917,
+    "verified": 22.79527320100169
+  },
+  "quality": "全10040318件のnode_id・distanceビット列・link_id、全セルの件数、同seedの検索・カウンタ結果の64bit hash完全一致。7seed。",
+  "tests": {
+    "test_reachability_voxel_accumulator": {
+      "tests": "33",
+      "failures": "0",
+      "errors": "0",
+      "disabled": "0"
+    },
+    "test_gng_collision_filter": {
+      "tests": "22",
+      "failures": "0",
+      "errors": "0",
+      "disabled": "0"
+    },
+    "test_gng_nearest_training": {
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "disabled": "0"
+    },
+    "test_candidate_metric_availability": {
+      "tests": "15",
+      "failures": "0",
+      "errors": "0",
+      "disabled": "0"
+    }
+  },
+  "input_sha256": {
+    "gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b",
+    "gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/vlut.bin": "d8d74e230581417740528ee36648727037cc675ca77f96d160bb4b5af4ea0a48"
+  },
+  "source_sha256": {
+    "gng_vlut_system/src/core/safety_engine/indexing/dense_spatial_index.hpp": "5a2d41ec1bd2268708130839d4418eeee4eec16086b5e6b5566faf45e5c56f96",
+    "gng_vlut_system/test/test_reachability_voxel_accumulator.cpp": "32a5b7c4f665399ed1d496ef0608257cc46ff3bddc7f8190ac477556deb2aa0a"
+  },
+  "commands": {
+    "build_comparisons": "docker exec gng_cpu_container python3 /ros2_ws/src/benchmarks/spatial_layout/prepare.py",
+    "pilot": "docker exec gng_cpu_container python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/spatial_layout/cases.json --output /ros2_ws/src/log/artifacts/spatial_layout/pilot --repeats 7 --timeout-sec 45 --max-total-sec 600 --estimate-sec 2",
+    "verified": "docker exec gng_cpu_container python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/spatial_layout/verified_cases.json --output /ros2_ws/src/log/artifacts/spatial_layout/verified --repeats 7 --timeout-sec 45 --max-total-sec 300 --estimate-sec 2",
+    "build": "docker exec gng_cpu_container cmake --build /ros2_ws/build/gng_vlut_system --parallel 2",
+    "tests": "docker exec gng_cpu_container bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/local_setup.bash && timeout 180 ctest --test-dir /ros2_ws/build/gng_vlut_system -R \"^(test_reachability_voxel_accumulator|test_gng_collision_filter|test_gng_nearest_training|test_candidate_metric_availability)$\" --output-on-failure'",
+    "install": "docker exec gng_cpu_container cmake --install /ros2_ws/build/gng_vlut_system"
+  },
+  "cleanup": {
+    "all_owned_trial_pids_stopped": true,
+    "num_owned_trial_pids": 63,
+    "preserved_existing_pids": [
+      1,
+      55,
+      102,
+      276,
+      325,
+      21179,
+      21180,
+      21182,
+      21184,
+      21186,
+      21188,
+      21190,
+      21192
+    ],
+    "existing_commands_unchanged": true,
+    "own_ros_launches_started": 0,
+    "new_ros_daemon_started": false,
+    "all_exec_sessions_finished": true,
+    "containers_unchanged": [
+      "gng-harmonic-launcher-launcher-1",
+      "gng_cpu_container",
+      "rosbridge_container",
+      "frontend"
+    ]
+  }
+}

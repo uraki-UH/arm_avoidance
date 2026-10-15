@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "name": "vlut_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/before/benchmark",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/vlut.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "vlut_offsets",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/offsets/benchmark",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/vlut.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "vlut_compact",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/compact/benchmark",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/vlut.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "plain_roi_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/roi_before/benchmark",
+        "plain",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "plain_roi_nibble",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/roi_nibble/benchmark",
+        "plain",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "shared_roi_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/roi_before/benchmark",
+        "shared",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "shared_roi_nibble",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/spatial_layout/roi_nibble/benchmark",
+        "shared",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

@@ -33,7 +33,7 @@ class nearest_node_index;
  */
 template <typename T_angle, typename T_coord> class GrowingNeuralGas {
 public:
-  uint32_t version = 9; // Version 9: Removed one obsolete status float
+  static constexpr uint32_t binary_format_version = 10; // 単一のGNG保存形式
   using UpdateTrigger = GNG::UpdateTrigger;
   using NodeType = NeuronNode<T_angle, T_coord>;
   using ManipulabilityCallback =

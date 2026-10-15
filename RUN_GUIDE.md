@@ -1,3 +1,92 @@
+# 別PCでの双腕ブラウザ・ROS 2の起動（Ubuntu・NVIDIA不要）
+
+ソース: [uraki-UH/arm_avoidance](https://github.com/uraki-UH/arm_avoidance)、開発ブランチ: `grasp_new4`。
+非公開の場合は受領者のGitHubアカウントへのアクセス権が必要です。共有元でcommit・pushしていない変更はリンク先に含まれません。共有時に対象commitを伝え、双方で`git rev-parse HEAD`の一致を確認してください。
+
+対象: Ubuntu系Linux、Docker EngineとDocker Compose plugin、WebGL 2対応のChrome / Edge / Firefox。ROS環境とNode.jsはコンテナ内へ導入するため、ホスト側のROS・Node.js・NVIDIAドライバ・CUDA・NVIDIA Container Toolkitは不要です。まずUbuntu 22.04相当のROS 2 Humble環境を使用します。別CPUアーキテクチャでのビルドは未検証です。
+
+| 機能 | 実行条件 |
+| --- | --- |
+| ROS 2、MuJoCoの関節・接触計算、ブラウザなしの物理実行 | CPUのみ。基本構築で利用可能 |
+| ブラウザのロボット・点群表示、RGB-D画像生成 | ホストブラウザのWebGL 2。NVIDIA専用機能なし。内蔵GPUも対象 |
+| GNG／VLUT回避・ROS結果の表示 | 追加のROSビルドと機体設定に対応する学習済みデータ |
+| AIS-GNGのライブ学習、OSCBF、人物検出、実機ドライバ、Isaac Sim | この基本構成の対象外。機能別の追加依存が必要 |
+
+「NVIDIA不要」と「画面表示までCPUだけで高速に処理可能」は別条件です。画面なしのCPU物理実行が、GPU非依存の最小確認になります。初回の依存取得・ROSビルドと、準備後の起動も区別してください。初回はネットワーク通信と大きなディスク空き容量が必要で、所要時間は回線・CPUに依存します。
+
+## ソース取得・基本構築
+
+```bash
+git clone --depth 1 --branch grasp_new4 https://github.com/uraki-UH/arm_avoidance.git
+cd arm_avoidance
+bash scripts/dual_arm_cpu.sh build
+bash scripts/dual_arm_cpu.sh check
+```
+
+リポジトリ全体の配置が必要です。Simulatorフォルダー単独では、UIビルドが参照する`ToPoFuzzy-Viewer/frontend/src/`・`libs/ros_visualization_web/`や、ROSの独自メッセージが不足します。
+
+`build`はCPUイメージ、基本ROSメッセージ4パッケージ、ブラウザUIの準備です。初回のnpm依存取得とUIビルドは、不足ファイルがある場合に実行します。UIソース変更後の明示再ビルドは、`shell`でアプリのルートから`npm ci && npm run build`。CPUイメージではPyTorch・YOLO・PyG・Emscripten・USDの追加インストールを省略します。既存の通常Docker構成は従来どおり開発用イメージを使用します。
+
+`check`はROSメッセージ・Python依存の読込み、C++点群処理の初回コンパイル、1秒間の画面なしMuJoCo実行です。成功時はJSONの`summary`が出力され、有限時間で終了します。ここではGNG回避の成功を判定しません。
+
+## ブラウザとROS 2の起動・終了
+
+```bash
+bash scripts/dual_arm_cpu.sh start
+```
+
+端末を開いたまま、ホストの通常ブラウザで **http://127.0.0.1:8877/?model=long** を開きます。他PC向けのこの手順では、NVIDIA／Intel用のブラウザ起動フラグは指定しません。ROS送信先は`http://127.0.0.1:8879`、関節・物理接続はその次のポートです。物理計算は「物理を開始」で開始、回避モジュールを使用しない基本確認から進めてください。ブラウザを閉じただけではROSサービスは停止しません。
+
+終了は起動端末でCtrl+C。その後のコンテナとネットワークの片付けは次のコマンドです。専用のbuild/install領域は保持します。
+
+```bash
+bash scripts/dual_arm_cpu.sh stop
+```
+
+この構成はUSBデバイス、X11認証、ホストGPU、privileged、実機ドライバを要求しません。ROS 2通信のためhost networkとIPCを使用します。既存の開発用`gng_cpu`とは別のComposeプロジェクト・build/install volumeです。両者を同時に起動すると既定ポートが競合するため、同じPCでは利用する構成を選んでください。ROSドメインを分離する場合は、build後の各コマンドと連携ノードへ同じ`ROS_DOMAIN_ID`を指定します。
+
+```bash
+ROS_DOMAIN_ID=38 bash scripts/dual_arm_cpu.sh start
+```
+
+## 画面なしのCPU実行・ROS確認
+
+```bash
+bash scripts/dual_arm_cpu.sh simulate --avoidance none --duration 3
+bash scripts/dual_arm_cpu.sh shell
+```
+
+`shell`内はROS 2 Humbleと構築済み独自パッケージを読込み済みです。別端末で`start`を起動した状態なら、`ros2 node list`・`ros2 topic list`でブリッジを確認できます。シミュレータの点群・関節送信はブラウザで明示的に有効化します。未送信のセンサがトピック一覧にない状態は正常です。`exit`で一時シェルを終了します。
+
+## GNG／VLUT回避まで使う場合
+
+```bash
+bash scripts/dual_arm_cpu.sh build-gng
+```
+
+`build-gng`はGNG・VLUTとROS表示ゲートウェイを追加構築します。既定はパッケージを順番に、C++の同時コンパイル数1で処理し、メモリ消費を抑えます。余裕があれば`CMAKE_BUILD_PARALLEL_LEVEL=2`などを指定できます。通常起動時の学習や再コンパイルはありません。ここで追加するのは腕のGNG／VLUT計画・判定と表示です。PyTorch依存のAIS-GNGライブ学習コンポーネントは含みません。
+
+**GitだけではLongの学習済みデータは揃いません。** `gng_results/topo_dual_arm_max_long_independent/`のmanifest・model.jsonは追跡されていますが、左右の`gng.bin`・`vlut.bin`は別途必要です。共有元と同じURDF・設定・固定関節条件に対応するデータを同じ相対配置へ置くか、[独立腕モデルの学習手順](gng_vlut_system/README.md#双腕学習viewerの既定モデル)に沿って生成します。`check-gng`は実ファイルの存在とモデル情報の整合性を確認し、不足時は終了コードを返します。データの代わりに空ファイルを置いて先へ進めないでください。
+
+追加データ配置後の確認と画面なし起動:
+
+```bash
+bash scripts/dual_arm_cpu.sh check-gng
+bash scripts/dual_arm_cpu.sh simulate --avoidance gng --duration 10
+```
+
+実点群の回避検証には入力のPointCloud2・TFなども必要です。入力なしの待機状態を回避成功として扱いません。終了コード3は、入力待ちなどの準備未完了、または指定した動作量の未達です。bag入力・任意目標・ROS結果の表示・トピック接続は[SimulatorのROS連携手順](ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md)を参照してください。ROS表示ゲートウェイは別途起動が必要で、コンテナ内では`source /ros2_ws/install/setup.bash`の後に`ros2 run topo_fuzzy_viewer viewer_ws_gateway_node`を実行します。
+
+## 起動できない場合
+
+- Dockerの接続権限エラー: ホスト側のDocker Engine起動と利用権限を確認。コンテナ内へのNVIDIA導入は不要。
+- WebGL 2の初期化失敗: ブラウザのハードウェアアクセラレーションと、そのPCの標準GPUドライバを確認。先に画面なしの`check`でROS・CPU計算を切り分け。
+- 8877／8879／8880番の競合: 利用中の別構成を確認し、この構成と重複起動しないこと。既存サービスの自動停止はなし。
+- 学習済みデータ不足: `check-gng`の対象ファイルと上記の追加条件を確認。
+- ソースと画面が不一致: `shell`内で`npm ci && npm run build`後、ブラウザを再読み込み。ROS・C++変更後は対応するbuild操作と、この構成の再起動。
+
+---
+
 # ToPoFuzzy-Viewer 実行ガイド
 
 ##　実行ガイド

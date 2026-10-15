@@ -1406,6 +1406,8 @@ public:
     mesh_root_dir_ = this->declare_parameter<std::string>("mesh_root_dir", "");
     gng_model_filename_ = this->declare_parameter<std::string>("gng.gng_model_filename", "gng.bin");
     vlut_filename_ = this->declare_parameter<std::string>("gng.vlut_filename", "vlut.bin");
+    enable_edge_vlut_ = declare_parameter<bool>("gng.enable_edge_vlut", false);
+    enable_roadmap_recipe_ = declare_parameter<bool>("gng.enable_roadmap_recipe", false);
     ground_z_threshold_ =
         this->declare_parameter<double>("gng.ground_z_threshold", 0.0);
     enable_ground_collision_ = this->declare_parameter<bool>(
@@ -2444,6 +2446,41 @@ public:
     }
 #endif
 
+    // 既存形式と学習結果を変えない、追加バックエンド用の構築レシピ。
+    if (enable_edge_vlut_ || enable_roadmap_recipe_) {
+      const auto &saved_gng = static_cast<const decltype(gng) &>(gng);
+      nlohmann::json recipe = {{"format", "gng_edge_vlut_recipe_v1"}, {"urdf_path", resolved_path},
+          {"joint_names", learning_joint_names}, {"nodes", nlohmann::json::array()},
+          {"edges", nlohmann::json::array()}, {"fixed_joints", nlohmann::json::object()}};
+      const std::unordered_set<int> exported_ids(saved_gng.getActiveIndices().begin(), saved_gng.getActiveIndices().end());
+      for (const auto &[name, joint] : base_model_obj.getJoints()) {
+        if (joint.type != kinematics::JointType::Fixed &&
+            std::find(learning_joint_names.begin(), learning_joint_names.end(), name) == learning_joint_names.end()) {
+          recipe["fixed_joints"][name] = 0.0;
+        }
+      }
+      for (int node_id : saved_gng.getActiveIndices()) {
+        const auto &node = saved_gng.nodeAt(node_id);
+        if (node.weight_angle.size() != static_cast<int>(learning_joint_names.size())) {
+          throw std::runtime_error("辺VLUTレシピの関節数不一致");
+        }
+        std::vector<double> angles(node.weight_angle.data(), node.weight_angle.data()+node.weight_angle.size());
+        recipe["nodes"].push_back({{"id", node_id}, {"angles", angles}});
+        for (int adjacent : saved_gng.getNeighborsAngle(node_id)) {
+          if (node_id < adjacent && exported_ids.count(adjacent) && saved_gng.isEdgeActive(node_id, adjacent)) {
+            recipe["edges"].push_back({node_id, adjacent});
+          }
+        }
+      }
+      const auto recipe_path = output_dir_path / "edge_vlut_recipe.json";
+      std::ofstream recipe_stream(recipe_path.string()+".tmp");
+      recipe_stream << recipe.dump(2) << '\n';
+      recipe_stream.close();
+      if (!recipe_stream) throw std::runtime_error("辺VLUTレシピの保存失敗");
+      std::filesystem::rename(recipe_path.string()+".tmp", recipe_path);
+      RCLCPP_INFO(get_logger(), "追加辺VLUTレシピ: %s", recipe_path.c_str());
+    }
+
     if (enable_independent_arms_) {
       nlohmann::json fixed_joints = nlohmann::json::object();
       for (const auto &[name, joint] : base_model_obj.getJoints()) {
@@ -2519,6 +2556,8 @@ private:
   bool initial_collision_only_ = false;
   bool generate_initial_collision_approval_only_ = false;
   bool vlut_only_ = false;
+  bool enable_edge_vlut_ = false;
+  bool enable_roadmap_recipe_ = false;
   bool use_voxel_collision_ = false;
   TcpThresholdConfig tcp_threshold_;
   double collision_voxel_size_ = 0.001;

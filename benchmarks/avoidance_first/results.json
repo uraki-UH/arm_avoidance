@@ -1,0 +1,370 @@
+{
+  "model": "topo_dual_arm_max_long",
+  "runtime": "Docker ROS 2 Humble + headless MuJoCo; ROS_DOMAIN_ID=223; ROS_LOCALHOST_ONLY=1",
+  "bag": "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+  "duration_sec": 60,
+  "num_trials_per_condition": 2,
+  "task_config": "benchmarks/shuttle_bag/task.json",
+  "active_profile": "left_arm",
+  "other_arm": "hold",
+  "conditions": {
+    "detailed": {
+      "runs": [
+        {
+          "trial": 1,
+          "metrics": {
+            "num_arrivals": 60,
+            "num_round_trips": 30,
+            "num_resumptions": 15,
+            "max_velocity_rad_sec": 2.44944810540733,
+            "max_effort_ratio": 1.0,
+            "covered_sec": 59.31816601753235,
+            "max_num_overlap_voxels": 69,
+            "num_contact_samples": 386,
+            "num_evaluation_samples": 2393,
+            "num_uncertain_samples": 128,
+            "motion_deg": 84.54599429123942,
+            "num_local_steps": 0,
+            "num_bridge_queries": 1287,
+            "num_rejected_bridge_queries": 205,
+            "num_colliding_representatives_skipped": 106,
+            "num_hierarchy_queries": 0,
+            "num_hierarchy_fast_clear": 0,
+            "num_hierarchy_internal_certificates": 0,
+            "normal_sec": 39.77000000002467,
+            "avoiding_sec": 2.3900000000002546,
+            "stopped_sec": 13.949999999998681,
+            "waiting_sec": 0.1599999999999835,
+            "bridge_mean_ms": 13.918670448429811,
+            "propose_mean_ms": 41.65289944884142
+          },
+          "simulation_sec": 56.93000000002361,
+          "contact_sample_fraction": 0.1613038027580443,
+          "num_moving_avoidance_report_frames": 9,
+          "num_resumptions_followed_by_arrival": 5,
+          "has_achieved_collision_free_task": false,
+          "details": "log/artifacts/avoidance_first/comparison/001_detailed/details.json",
+          "has_stopped_test_processes": true
+        },
+        {
+          "trial": 2,
+          "metrics": {
+            "num_arrivals": 85,
+            "num_round_trips": 42,
+            "num_resumptions": 12,
+            "max_velocity_rad_sec": 2.378046457200759,
+            "max_effort_ratio": 0.7813173191245101,
+            "covered_sec": 59.33137130737305,
+            "max_num_overlap_voxels": 57,
+            "num_contact_samples": 512,
+            "num_evaluation_samples": 2394,
+            "num_uncertain_samples": 135,
+            "motion_deg": 38.34202300194633,
+            "num_local_steps": 0,
+            "num_bridge_queries": 788,
+            "num_rejected_bridge_queries": 274,
+            "num_colliding_representatives_skipped": 261,
+            "num_hierarchy_queries": 0,
+            "num_hierarchy_fast_clear": 0,
+            "num_hierarchy_internal_certificates": 0,
+            "normal_sec": 47.54000000002151,
+            "avoiding_sec": 0.18000000000021998,
+            "stopped_sec": 8.610000000002092,
+            "waiting_sec": 0.250000000000159,
+            "bridge_mean_ms": 7.439406626087526,
+            "propose_mean_ms": 13.051862676555976
+          },
+          "simulation_sec": 57.24000000002399,
+          "contact_sample_fraction": 0.21386800334168754,
+          "num_moving_avoidance_report_frames": 0,
+          "num_resumptions_followed_by_arrival": 10,
+          "has_achieved_collision_free_task": false,
+          "details": "log/artifacts/avoidance_first/comparison/002_detailed/details.json",
+          "has_stopped_test_processes": true
+        }
+      ],
+      "summary": {
+        "num_round_trips": {
+          "mean": 36,
+          "min": 30,
+          "max": 42
+        },
+        "num_resumptions": {
+          "mean": 13.5,
+          "min": 12,
+          "max": 15
+        },
+        "max_num_overlap_voxels": {
+          "mean": 63,
+          "min": 57,
+          "max": 69
+        },
+        "num_contact_samples": {
+          "mean": 449,
+          "min": 386,
+          "max": 512
+        },
+        "covered_sec": {
+          "mean": 59.3247686624527,
+          "min": 59.31816601753235,
+          "max": 59.33137130737305
+        },
+        "normal_sec": {
+          "mean": 43.655000000023094,
+          "min": 39.77000000002467,
+          "max": 47.54000000002151
+        },
+        "avoiding_sec": {
+          "mean": 1.2850000000002373,
+          "min": 0.18000000000021998,
+          "max": 2.3900000000002546
+        },
+        "stopped_sec": {
+          "mean": 11.280000000000387,
+          "min": 8.610000000002092,
+          "max": 13.949999999998681
+        },
+        "propose_mean_ms": {
+          "mean": 27.352381062698697,
+          "min": 13.051862676555976,
+          "max": 41.65289944884142
+        },
+        "pooled_contact_sample_fraction": 0.18759139335700856
+      }
+    },
+    "avoidance_first": {
+      "runs": [
+        {
+          "trial": 1,
+          "metrics": {
+            "num_arrivals": 11,
+            "num_round_trips": 5,
+            "num_resumptions": 6,
+            "max_velocity_rad_sec": 2.3130945960277534,
+            "max_effort_ratio": 0.8576489989581191,
+            "covered_sec": 59.3368878364563,
+            "max_num_overlap_voxels": 54,
+            "num_contact_samples": 306,
+            "num_evaluation_samples": 2394,
+            "num_uncertain_samples": 83,
+            "motion_deg": 222.43593716310917,
+            "num_local_steps": 117,
+            "num_bridge_queries": 662,
+            "num_rejected_bridge_queries": 313,
+            "num_colliding_representatives_skipped": 0,
+            "num_hierarchy_queries": 0,
+            "num_hierarchy_fast_clear": 0,
+            "num_hierarchy_internal_certificates": 0,
+            "normal_sec": 7.390000000000057,
+            "avoiding_sec": 12.160000000004299,
+            "stopped_sec": 35.60000000001804,
+            "waiting_sec": 0.13000000000000012,
+            "bridge_mean_ms": 25.98618259482431,
+            "propose_mean_ms": 40.796100381928454
+          },
+          "simulation_sec": 55.95000000002241,
+          "contact_sample_fraction": 0.12781954887218044,
+          "num_moving_avoidance_report_frames": 63,
+          "num_resumptions_followed_by_arrival": 3,
+          "has_achieved_collision_free_task": false,
+          "details": "log/artifacts/avoidance_first/comparison/001_avoidance_first/details.json",
+          "has_stopped_test_processes": true
+        },
+        {
+          "trial": 2,
+          "metrics": {
+            "num_arrivals": 11,
+            "num_round_trips": 5,
+            "num_resumptions": 6,
+            "max_velocity_rad_sec": 2.347672174264054,
+            "max_effort_ratio": 0.9108086117050617,
+            "covered_sec": 59.32202172279358,
+            "max_num_overlap_voxels": 54,
+            "num_contact_samples": 303,
+            "num_evaluation_samples": 2393,
+            "num_uncertain_samples": 81,
+            "motion_deg": 224.09374093520526,
+            "num_local_steps": 117,
+            "num_bridge_queries": 665,
+            "num_rejected_bridge_queries": 317,
+            "num_colliding_representatives_skipped": 0,
+            "num_hierarchy_queries": 0,
+            "num_hierarchy_fast_clear": 0,
+            "num_hierarchy_internal_certificates": 0,
+            "normal_sec": 7.3099999999999685,
+            "avoiding_sec": 12.230000000004797,
+            "stopped_sec": 35.820000000017885,
+            "waiting_sec": 0.13000000000000012,
+            "bridge_mean_ms": 25.992638172946794,
+            "propose_mean_ms": 41.02225511541556
+          },
+          "simulation_sec": 56.15000000002266,
+          "contact_sample_fraction": 0.12661930631007104,
+          "num_moving_avoidance_report_frames": 63,
+          "num_resumptions_followed_by_arrival": 3,
+          "has_achieved_collision_free_task": false,
+          "details": "log/artifacts/avoidance_first/comparison/002_avoidance_first/details.json",
+          "has_stopped_test_processes": true
+        }
+      ],
+      "summary": {
+        "num_round_trips": {
+          "mean": 5,
+          "min": 5,
+          "max": 5
+        },
+        "num_resumptions": {
+          "mean": 6,
+          "min": 6,
+          "max": 6
+        },
+        "max_num_overlap_voxels": {
+          "mean": 54,
+          "min": 54,
+          "max": 54
+        },
+        "num_contact_samples": {
+          "mean": 304.5,
+          "min": 303,
+          "max": 306
+        },
+        "covered_sec": {
+          "mean": 59.32945477962494,
+          "min": 59.32202172279358,
+          "max": 59.3368878364563
+        },
+        "normal_sec": {
+          "mean": 7.350000000000013,
+          "min": 7.3099999999999685,
+          "max": 7.390000000000057
+        },
+        "avoiding_sec": {
+          "mean": 12.195000000004548,
+          "min": 12.160000000004299,
+          "max": 12.230000000004797
+        },
+        "stopped_sec": {
+          "mean": 35.71000000001796,
+          "min": 35.60000000001804,
+          "max": 35.820000000017885
+        },
+        "propose_mean_ms": {
+          "mean": 40.90917774867201,
+          "min": 40.796100381928454,
+          "max": 41.02225511541556
+        },
+        "pooled_contact_sample_fraction": 0.1272195529559223
+      }
+    }
+  },
+  "policy": {
+    "selector": "gng_strategy=avoidance_first",
+    "default_selector": "graph",
+    "trigger_clearance_th_m": 0.1,
+    "release_clearance_th_m": 0.14,
+    "return_clear_sec": 0.5,
+    "max_local_step_rad": 0.12,
+    "max_bridge_step_rad": 0.025,
+    "guard_period_sec": 0.02,
+    "min_clearance_th_m": 0.01,
+    "min_internal_clearance_th_m": 0.005,
+    "retreat_score": "観測ボクセルに対する近接外接球の二乗不足距離総和。タスク到達コストなし。",
+    "has_graph_fallback": false
+  },
+  "verification": {
+    "unit": {
+      "num_checks": 14,
+      "num_errors": 0
+    },
+    "smoke": {
+      "status": "completed",
+      "duration_sec": 12
+    },
+    "native_cli": {
+      "status": "completed",
+      "duration_sec": 30,
+      "is_ready": true,
+      "max_joint_motion_deg": 46.67043975113973,
+      "phases": {
+        "waiting": 163,
+        "monitoring": 192,
+        "blocked_clearance": 662,
+        "local_retreat": 630,
+        "blocked": 839,
+        "task_following": 182
+      },
+      "observation": {
+        "state": "clear",
+        "is_valid": true,
+        "message": "",
+        "num_environment_voxels": 1234,
+        "num_uncertain_voxels": 7,
+        "num_overlap_voxels": 0,
+        "num_uncertain_overlap_voxels": 0,
+        "num_raw_overlap_voxels": 0,
+        "pair_age_ms": 57.58976936340332,
+        "environment_stamp_sec": 1792085637.736815,
+        "self_stamp_sec": 1792085637.7944047,
+        "num_samples": 1077,
+        "num_contact_samples": 198,
+        "num_uncertain_samples": 45,
+        "covered_sec": 26.669804334640503,
+        "source_stamp_sec": 1791550916.6964514,
+        "history_state": "contact",
+        "max_num_overlap_voxels": 81,
+        "max_num_raw_overlap_voxels": 81
+      }
+    },
+    "estimated_comparison_sec": 312,
+    "actual_comparison_sec": 311.02038882700435
+  },
+  "evaluation": {
+    "is_self_contamination_ruled_out": false,
+    "current_preprocessing_verification": "benchmarks/self_filter/results.json",
+    "classification_note": "過去の値は自己境界未分離のボクセル重なり率。外部障害物との衝突率としての解釈不可。測定値の改変なし。",
+    "scope": "記録自己除去後環境とMuJoCo実測全身self_voxelの重なり。腕以外のリンクを含む格子評価。",
+    "has_hardware_output": false,
+    "has_achieved_collision_free_task": false,
+    "baseline": "既存の詳細区間検査つき往復ハーネス。同じbag・目標・指令速度・到達判定での比較。既定graphそのものとは異なる区間検査の追加。",
+    "candidate": "製品側のavoidance_first_policyと最新区間ガードを使用。比較ハーネスによる左腕選択・名目往復軌道との接続。通常CLIの選択経路はnative_cliで別途検証。",
+    "units": {
+      "mode_time": "simulation sec",
+      "covered_time": "valid observation sec",
+      "contact": "重なりありの評価サンプル数。接触事故件数ではない区別。",
+      "propose_mean_ms": "方策呼出しの平均ms。メインループの区間ガード・ROS処理は対象外。"
+    },
+    "limitations": [
+      "各2試行の予備比較。統計的な改善・実機安全性の証明なし。",
+      "重なり・未確定重なりの残存。局所探索の行き止まりと長時間保持。",
+      "動的障害物の将来位置・制動距離・連続区間安全の保証なし。",
+      "hierarchy_vlutの照会なし。階層索引の高速化との混同禁止。",
+      "ブラウザ用選択設定の追加、実ブラウザ画面での操作確認は未実施。",
+      "SciPyのNumPy推奨バージョン警告あり。全試行は正常終了。"
+    ]
+  },
+  "cleanup": {
+    "num_recorded_child_processes": 24,
+    "num_remaining_child_processes": 0,
+    "has_preserved_existing_viewer": true,
+    "num_existing_viewer_processes": 8,
+    "has_preserved_container_states": true,
+    "has_stopped_all_test_runners": true
+  },
+  "reports": {
+    "smoke": "log/artifacts/avoidance_first/smoke/report.json",
+    "comparison": "log/artifacts/avoidance_first/comparison/report.json",
+    "native": "log/artifacts/avoidance_first/native/report.json"
+  },
+  "source_sha256": {
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_avoidance.py": "0d39ed93d5cae0b944c98db56ec0a5823b4560b3579ea4a2bc82dbf0d9d18b45",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/simulate.py": "5f90f85977e091fe9c69af1a25264718c1fa1340cfeacfe54dbd6dcec14bdfd9",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/plugins/gng.json": "cb5a0e1bd431420549bb2ab04633b1f83b47f50763bf2a086db8c733c8c0e0e9",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_runtime.py": "b1394ba20f8d0236309bec1fda9a4918aef51c97962e6bdaac5d5c4147d4848d",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_observation.py": "1cb8de5515103f8c889ee5cb4f0f96040e8efc5b270d645681887f33889b59cb",
+    "gng_vlut_system/scripts/gng_avoidance_planner.py": "2b86abb212c1200e6210289227b580572f623570ce6637bb19e0465177db40ce",
+    "log/artifacts/avoidance_first/trial.py": "8423c523bfdc75cb0bafc3108f2779ffd2f8688c7b4bd162e50c3bbcf326514a",
+    "log/artifacts/avoidance_first/check_policy.py": "4bb23c2400473124692b552513c27a51d2cd17618c890d90649befe6c88eb745",
+    "log/artifacts/shuttle_bag/trial.py": "c09b37650b5be71d2f980e0456e70cd6477330016095c394179b814b0cd32494",
+    "benchmarks/shuttle_bag/task.json": "2636640ace343b599171488ed916b6f577404841f445ea6a74c49bb65335bdd9"
+  }
+}

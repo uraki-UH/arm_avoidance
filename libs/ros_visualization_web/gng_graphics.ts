@@ -167,7 +167,7 @@ export function updateNodeInstances(
  */
 export function updateEdgeInstances(
     mesh: THREE.InstancedMesh,
-    edges: number[],
+    edges: GraphData['edges'],
     nodes: GraphData['nodes'],
     edgeWidth: number,
     node_colors?: ReadonlyMap<number, string>,

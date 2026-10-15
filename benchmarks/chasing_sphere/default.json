@@ -1,0 +1,13 @@
+{
+  "policy": "rollout_cv",
+  "duration_sec": 20,
+  "seed": 11,
+  "radius_m": 0.06,
+  "speed_ratios": [
+    0.2,
+    0.8
+  ],
+  "start_dist_m": 0.38,
+  "enable_learning": false,
+  "candidate_metric": "joint"
+}

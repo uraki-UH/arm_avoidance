@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "name": "visibility_cost",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "self_measure",
+        "log/artifacts/roi_visibility/measure_visibility.py",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 90
+    }
+  ]
+}

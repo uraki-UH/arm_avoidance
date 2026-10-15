@@ -1,0 +1,102 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "is_stopped": true,
+  "has_hardware_output": false,
+  "runs": [
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/roi_visibility/unit_cases.json --output log/artifacts/roi_visibility/unit_final --repeats 1 --max-total-sec 90 --estimate-sec 2"
+      ],
+      "report": "log/artifacts/roi_visibility/unit_final/report.json"
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/roi_visibility/cases.json --output log/artifacts/roi_visibility/replay_final --repeats 2 --max-total-sec 480 --estimate-sec 78"
+      ],
+      "report": "log/artifacts/roi_visibility/replay_final/report.json"
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/roi_visibility/launch_cases.json --output log/artifacts/roi_visibility/launch --repeats 1 --max-total-sec 100 --estimate-sec 35"
+      ],
+      "report": "log/artifacts/roi_visibility/launch/report.json"
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/roi_visibility/cost_cases.json --output log/artifacts/roi_visibility/cost_final --repeats 3 --max-total-sec 180 --estimate-sec 20"
+      ],
+      "report": "log/artifacts/roi_visibility/cost_final/report.json"
+    }
+  ],
+  "build_commands": [
+    "cmake -S gng_vlut_system -B log/artifacts/roi_visibility/build -Denable_region_kernel_only=ON -DCMAKE_BUILD_TYPE=Release",
+    "cmake --build log/artifacts/roi_visibility/build --target gng_visibility_kernel -j2",
+    "cmake --install /ros2_ws/src/log/artifacts/roi_visibility/build --component visibility_kernel --prefix /ros2_ws/install/gng_vlut_system"
+  ],
+  "owned_command_records": [
+    "log/artifacts/roi_visibility/launch/001_native_graph/owned_commands.json",
+    "log/artifacts/roi_visibility/replay/001_legacy/owned_commands.json",
+    "log/artifacts/roi_visibility/replay/001_strict/owned_commands.json",
+    "log/artifacts/roi_visibility/replay/002_legacy/owned_commands.json",
+    "log/artifacts/roi_visibility/replay/002_strict/owned_commands.json",
+    "log/artifacts/roi_visibility/replay_final/001_legacy/owned_commands.json",
+    "log/artifacts/roi_visibility/replay_final/001_strict/owned_commands.json",
+    "log/artifacts/roi_visibility/replay_final/002_legacy/owned_commands.json",
+    "log/artifacts/roi_visibility/replay_final/002_strict/owned_commands.json"
+  ],
+  "all_batch_reports": [
+    "log/artifacts/roi_visibility/cost/report.json",
+    "log/artifacts/roi_visibility/cost_cache/report.json",
+    "log/artifacts/roi_visibility/cost_final/report.json",
+    "log/artifacts/roi_visibility/launch/report.json",
+    "log/artifacts/roi_visibility/replay/report.json",
+    "log/artifacts/roi_visibility/replay_final/report.json",
+    "log/artifacts/roi_visibility/unit/report.json",
+    "log/artifacts/roi_visibility/unit_cache/report.json",
+    "log/artifacts/roi_visibility/unit_final/report.json"
+  ],
+  "preserved_viewer_pids": [
+    21179,
+    21180,
+    21182,
+    21184,
+    21186,
+    21188,
+    21190,
+    21192
+  ],
+  "preserved_running_containers": [
+    "frontend",
+    "gng-harmonic-launcher-launcher-1",
+    "gng_cpu_container",
+    "rosbridge_container"
+  ]
+}

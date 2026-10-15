@@ -1,0 +1,214 @@
+{
+  "model": "topo_dual_arm_max_long",
+  "runtime": "Docker ROS 2 Humble + headless MuJoCo; ROS_DOMAIN_ID=221; ROS_LOCALHOST_ONLY=1",
+  "bag": "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+  "bag_metadata_sha256": "0f81f79de27efed0b6f87550a3806f072c1f98dbb993ca7a3104ba2b251075de",
+  "start_offset_sec": 0,
+  "duration_sec": 60,
+  "num_trials_per_condition": 1,
+  "selected_topics": [
+    "/livox/lidar",
+    "/topo_dual_arm_max_long/roi_voxels",
+    "/topo_dual_arm_max_long/self_voxel",
+    "/tf",
+    "/tf_static"
+  ],
+  "preparation": "bag停止中の学習済み左右モデル読込み完了後に先頭から再生",
+  "evaluation_scope": "記録自己除去後の環境とMuJoCo実測全身自己ボクセルの格子重なり。孤立・単発の未確定点は保留、回避入力からの削除なし。",
+  "controller_scope": "保持・既存ノード追従・実験用区間詳細検査・同じ区間検査への階層VLUT追加。既存製品コードの変更なし。",
+  "conditions": {
+    "hold": {
+      "metrics": {
+        "covered_sec": 59.339239835739136,
+        "num_evaluation_samples": 2394,
+        "num_contact_samples": 447,
+        "num_uncertain_samples": 36,
+        "max_num_overlap_voxels": 54,
+        "max_num_raw_overlap_voxels": 54,
+        "motion_deg": 2.1959475195293573e-16,
+        "num_bridge_queries": 0,
+        "num_hierarchy_queries": 0,
+        "num_hierarchy_fast_clear": 0,
+        "num_hierarchy_internal_certificates": 0,
+        "num_fixed_joint_mismatch_queries": 0,
+        "num_uncovered_endpoint_queries": 0
+      },
+      "has_valid_window": true,
+      "has_achieved_collision_free_motion": false,
+      "raw_metrics": "log/artifacts/hierarchy_bag/paired_run/001_hold/metrics.json",
+      "details": "log/artifacts/hierarchy_bag/paired_run/001_hold/details.json"
+    },
+    "node": {
+      "metrics": {
+        "covered_sec": 59.32782793045044,
+        "num_evaluation_samples": 2394,
+        "num_contact_samples": 436,
+        "num_uncertain_samples": 63,
+        "max_num_overlap_voxels": 137,
+        "max_num_raw_overlap_voxels": 137,
+        "motion_deg": 93.6415049323983,
+        "num_bridge_queries": 0,
+        "num_hierarchy_queries": 0,
+        "num_hierarchy_fast_clear": 0,
+        "num_hierarchy_internal_certificates": 0,
+        "num_fixed_joint_mismatch_queries": 0,
+        "num_uncovered_endpoint_queries": 0
+      },
+      "has_valid_window": true,
+      "has_achieved_collision_free_motion": false,
+      "raw_metrics": "log/artifacts/hierarchy_bag/paired_run/001_node/metrics.json",
+      "details": "log/artifacts/hierarchy_bag/paired_run/001_node/details.json"
+    },
+    "detailed": {
+      "metrics": {
+        "covered_sec": 59.342403173446655,
+        "num_evaluation_samples": 2394,
+        "num_contact_samples": 488,
+        "num_uncertain_samples": 154,
+        "max_num_overlap_voxels": 104,
+        "max_num_raw_overlap_voxels": 104,
+        "motion_deg": 78.56284032875675,
+        "num_bridge_queries": 2202,
+        "num_hierarchy_queries": 0,
+        "num_hierarchy_fast_clear": 0,
+        "num_hierarchy_internal_certificates": 0,
+        "num_fixed_joint_mismatch_queries": 0,
+        "num_uncovered_endpoint_queries": 0
+      },
+      "has_valid_window": true,
+      "has_achieved_collision_free_motion": false,
+      "raw_metrics": "log/artifacts/hierarchy_bag/paired_run/001_detailed/metrics.json",
+      "details": "log/artifacts/hierarchy_bag/paired_run/001_detailed/details.json"
+    },
+    "hierarchy": {
+      "metrics": {
+        "covered_sec": 59.317739963531494,
+        "num_evaluation_samples": 2393,
+        "num_contact_samples": 415,
+        "num_uncertain_samples": 60,
+        "max_num_overlap_voxels": 102,
+        "max_num_raw_overlap_voxels": 102,
+        "motion_deg": 69.18056683858248,
+        "num_bridge_queries": 844,
+        "num_hierarchy_queries": 844,
+        "num_hierarchy_fast_clear": 0,
+        "num_hierarchy_internal_certificates": 0,
+        "num_fixed_joint_mismatch_queries": 844,
+        "num_uncovered_endpoint_queries": 844
+      },
+      "has_valid_window": true,
+      "has_achieved_collision_free_motion": false,
+      "raw_metrics": "log/artifacts/hierarchy_bag/paired_run/001_hierarchy/metrics.json",
+      "details": "log/artifacts/hierarchy_bag/paired_run/001_hierarchy/details.json"
+    }
+  },
+  "models": [
+    {
+      "profile": "left_arm",
+      "filename": "/ros2_ws/src/log/artifacts/hierarchy_bag/left_arm.npz",
+      "num_parents": 128,
+      "num_leaves": 357,
+      "num_indexed_leaves": 132,
+      "indexed_domain_volume_ratio": 3.2479874789714826e-08,
+      "build_ms": 31147.2395699966
+    },
+    {
+      "profile": "right_arm",
+      "filename": "/ros2_ws/src/log/artifacts/hierarchy_bag/right_arm.npz",
+      "num_parents": 128,
+      "num_leaves": 356,
+      "num_indexed_leaves": 132,
+      "indexed_domain_volume_ratio": 3.346940502524377e-08,
+      "build_ms": 31135.239929993986
+    }
+  ],
+  "findings": {
+    "has_achieved_collision_free_avoidance": false,
+    "has_verified_hierarchy_acceleration": false,
+    "num_hierarchy_queries": 844,
+    "num_hierarchy_fast_clear": 0,
+    "num_hierarchy_internal_certificates": 0,
+    "num_fixed_joint_mismatch_queries": 844,
+    "cause": "片腕7軸領域の非対象関節は構築時の値へ固定。実測の腰・首の姿勢変動と反対腕の運動で全照会が対象領域外、全件が詳細検査へ委任。",
+    "next_requirements": [
+      "他関節の変動を安全に扱う包絡・座標分離の設計。固定値比較の単純な緩和による安全証明の流用不可。",
+      "全身重なりのリンク別切分けと、腕の回避不足・固定部の重なり・モデル差の識別。"
+    ]
+  },
+  "limitations": [
+    "各条件1回の予備実験。軌道・照会回数の差を含むため処理時間差からの性能優越判定なし。",
+    "全身自己ボクセルによる観測上の重なり。腕だけの接触や実物表面の衝突の断定不可。",
+    "bag環境をMuJoCoの物理衝突物体として生成した試験ではない。未観測・遮蔽領域と実機の安全保証なし。",
+    "階層照会時の所属診断を含む計測。純粋な製品処理時間ではない。",
+    "raw metricsのcontact_sec・uncertain_sec・clear_secは並行callbackの影響を受ける診断値。採用比較から除外。"
+  ],
+  "commands": [
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-lc",
+        "cd /ros2_ws/src; PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/hierarchy_bag/prepare_cases.json --output log/artifacts/hierarchy_bag/prepare_run --repeats 1 --timeout-sec 110 --max-total-sec 115 --estimate-sec 70"
+      ],
+      "has_stopped_test_processes": true,
+      "report": "log/artifacts/hierarchy_bag/prepare_run/report.json"
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src; PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/hierarchy_bag/smoke_cases.json --output log/artifacts/hierarchy_bag/smoke_run --repeats 1 --timeout-sec 115 --max-total-sec 120 --estimate-sec 20"
+      ],
+      "has_stopped_test_processes": true,
+      "report": "log/artifacts/hierarchy_bag/smoke_run/report.json"
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "--user",
+        "1000:1000",
+        "gng_cpu_container",
+        "bash",
+        "-c",
+        "cd /ros2_ws/src; PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/hierarchy_bag/cases.json --output log/artifacts/hierarchy_bag/paired_run --repeats 1 --timeout-sec 115 --max-total-sec 470 --estimate-sec 80"
+      ],
+      "has_stopped_test_processes": true,
+      "report": "log/artifacts/hierarchy_bag/paired_run/report.json"
+    }
+  ],
+  "cleanup": {
+    "has_stopped_test_processes": true,
+    "num_owned_recorded_subprocesses": 20,
+    "has_remaining_owned_subprocesses": false,
+    "has_preserved_existing_viewer": true,
+    "existing_viewer_pids": [
+      21179,
+      21186
+    ],
+    "has_preserved_container_states": true
+  },
+  "has_modified_production_code": false,
+  "has_hardware_output": false,
+  "source_sha256": {
+    "gng_vlut_system/scripts/gng_avoidance_planner.py": "ce828dc9f85151d9a80f9959d8936d16e125aaf0c57da3e79e594afc7fd02bb8",
+    "gng_vlut_system/scripts/urdf_vrm.py": "d3a3460c4bcec792cd603083fec0adb3886d1db95582e5cccd49cbb06c20f988",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_avoidance.py": "80fa770ad7c7db0ce2d802ad5af846e4cc045cc9110226942bb92a957526a30d",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_runtime.py": "b1394ba20f8d0236309bec1fda9a4918aef51c97962e6bdaac5d5c4147d4848d",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_observation.py": "1cb8de5515103f8c889ee5cb4f0f96040e8efc5b270d645681887f33889b59cb",
+    "gng_vlut_system/scripts/gng_edge_vlut.py": "996e1bbb8f5a6091fb852fbc0195190a455282b5f603430c05799943756a0be1",
+    "gng_vlut_system/scripts/gng_region_vlut.py": "0ab3ecc4461cd3da66dfedcf29eef3dc95114349c69beb671f7653049189a2b2",
+    "gng_vlut_system/src/core/collision/region_kernel.cpp": "3d0b74c910a7faf871d3226775d8a2a3b80094f4390ee199559fa64d5972c7ea",
+    "log/artifacts/hierarchy_bag/prepare.py": "6eef7ec800b4cd0d99f8a5e8db69948e7cf4524b5ec25c8acbeb5af1d994febc",
+    "log/artifacts/hierarchy_bag/trial.py": "cb93a4ea7b169036e540e25612798609b5e8e6b5e130c58c5ed5f8e363a0fd09"
+  }
+}

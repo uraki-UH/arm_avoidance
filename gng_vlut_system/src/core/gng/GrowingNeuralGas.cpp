@@ -89,15 +89,21 @@ template <typename T> void write_eigen(std::ofstream &out, const T &matrix) {
   out.write((char *)matrix.data(), rows * cols * sizeof(typename T::Scalar));
 }
 
-template <typename T> void read_eigen(std::ifstream &in, T &matrix) {
+template <typename T> bool read_eigen(std::ifstream &in, T &matrix) {
   typename T::Index rows = 0, cols = 0;
   in.read((char *)&rows, sizeof(typename T::Index));
   in.read((char *)&cols, sizeof(typename T::Index));
+  if (!in || rows < 0 || cols < 0 || rows > 4096 || cols > 4096 || rows * cols > 4096 ||
+      (T::RowsAtCompileTime != Eigen::Dynamic && rows != T::RowsAtCompileTime) ||
+      (T::ColsAtCompileTime != Eigen::Dynamic && cols != T::ColsAtCompileTime)) {
+    return false;
+  }
   if (T::RowsAtCompileTime == Eigen::Dynamic ||
       T::ColsAtCompileTime == Eigen::Dynamic) {
     matrix.resize(rows, cols);
   }
   in.read((char *)matrix.data(), rows * cols * sizeof(typename T::Scalar));
+  return static_cast<bool>(in);
 }
 } // namespace GrowingNeuralGas_Internal
 
@@ -1428,16 +1434,14 @@ void GrowingNeuralGas<T_angle, T_coord>::pruneToLargestComponent() {
 
 template <typename T_angle, typename T_coord>
 bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
-  // Always refresh coordinates to match current Kinematic Model (EEF Tip)
-  // before saving.
+  // 保存前の運動学モデルに基づく手先座標更新
   refresh_coord_weights();
 
   std::string resolved_path = robot_sim::common::resolvePath(filename);
   std::ofstream ofs(resolved_path, std::ios::binary);
   if (!ofs)
     return false;
-  uint32_t version = 9; // Version 9: Removed one obsolete status float
-  ofs.write((char *)&version, sizeof(version));
+  ofs.write(reinterpret_cast<const char *>(&binary_format_version), sizeof(binary_format_version));
   ofs.write((char *)&coord_layer_count_, sizeof(coord_layer_count_));
 
   int node_count = 0;
@@ -1455,46 +1459,40 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
 
       GrowingNeuralGas_Internal::write_eigen(ofs, nodes[i].weight_angle);
       GrowingNeuralGas_Internal::write_eigen(ofs, nodes[i].weight_coord);
-      if (version >= 6) {
-        int coord_count = static_cast<int>(nodes[i].weight_coords.size());
-        ofs.write((char *)&coord_count, sizeof(coord_count));
-        for (const auto &coord : nodes[i].weight_coords) {
-          GrowingNeuralGas_Internal::write_eigen(ofs, coord);
-        }
+      int coord_count = static_cast<int>(nodes[i].weight_coords.size());
+      ofs.write((char *)&coord_count, sizeof(coord_count));
+      for (const auto &coord : nodes[i].weight_coords) {
+        GrowingNeuralGas_Internal::write_eigen(ofs, coord);
       }
 
-      // Status fields
+      // 状態フラグ5項目の1バイト格納。C++ビットフィールドの直接保存なし
       ofs.write((char *)&nodes[i].status.level, sizeof(int));
-      ofs.write((char *)&nodes[i].status.is_surface, sizeof(bool));
-      bool is_active_surface = nodes[i].status.is_active_surface;
-      ofs.write((char *)&is_active_surface, sizeof(bool));
-      bool self_collision_free = nodes[i].status.self_collision_free;
-      ofs.write((char *)&self_collision_free, sizeof(bool));
-      bool active = nodes[i].status.active;
-      ofs.write((char *)&active, sizeof(bool));
-      bool is_boundary = nodes[i].status.is_boundary;
-      ofs.write((char *)&is_boundary, sizeof(bool));
+      const auto &status = nodes[i].status;
+      const uint8_t flags = (status.is_surface ? 1U : 0U) |
+          (status.is_active_surface ? 2U : 0U) |
+          (status.self_collision_free ? 4U : 0U) |
+          (status.active ? 8U : 0U) | (status.is_boundary ? 16U : 0U);
+      ofs.write(reinterpret_cast<const char *>(&flags), sizeof(flags));
 
       GrowingNeuralGas_Internal::write_eigen(ofs,
                                               nodes[i].status.ee_direction);
 
-      // ManipulabilityInfo (Version 4+)
+      // 可操作性値の元精度での保存。double領域の部分読書きの防止
       ofs.write((char *)&nodes[i].status.manip_info.manipulability,
-                sizeof(float));
+                sizeof(double));
       ofs.write((char *)&nodes[i].status.min_singular_value, sizeof(float));
       ofs.write((char *)&nodes[i].status.joint_limit_score, sizeof(float));
-      ofs.write((char *)&nodes[i].status.manip_info.valid, sizeof(bool));
+      ofs.write((char *)&nodes[i].status.manip_info.is_valid, sizeof(bool));
       ofs.write((char *)&nodes[i].status.dynamic_manipulability, sizeof(float));
 
-      // Rotational manipulability (Version 8+)
-      ofs.write((char *)&nodes[i].status.rotational_manip_info.manipulability, sizeof(float));
-      ofs.write((char *)&nodes[i].status.rotational_manip_info.valid, sizeof(bool));
+      // 回転可操作性値の元精度での保存
+      ofs.write((char *)&nodes[i].status.rotational_manip_info.manipulability, sizeof(double));
+      ofs.write((char *)&nodes[i].status.rotational_manip_info.is_valid, sizeof(bool));
 
-      // joint_positions is removed in version 7
     }
   }
 
-  // Angle edges
+  // 関節空間の接続
   int edge_count = 0;
   for (int i = 0; i < (int)nodes.size(); ++i) {
     if (nodes[i].id != -1) {
@@ -1520,41 +1518,14 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
     }
   }
 
-  if (version >= 6) {
-    for (int layer = 0; layer < coord_layer_count_; ++layer) {
-      const auto &edges =
-          (layer == 0) ? edges_coord : edges_coord_per_layer_[layer];
-      int coord_edge_count = 0;
-      for (int i = 0; i < (int)nodes.size(); ++i) {
-        if (nodes[i].id != -1) {
-          for (const auto &pair : edges[i]) {
-            if (i < pair.first)
-              coord_edge_count++;
-          }
-        }
-      }
-      ofs.write((char *)&coord_edge_count, sizeof(coord_edge_count));
-      for (int i = 0; i < (int)nodes.size(); ++i) {
-        if (nodes[i].id != -1) {
-          for (const auto &pair : edges[i]) {
-            int n = pair.first;
-            if (i < n) {
-              ofs.write((char *)&i, sizeof(int));
-              ofs.write((char *)&n, sizeof(int));
-              ofs.write((char *)&pair.second.age, sizeof(int));
-              bool e_active = pair.second.active;
-              ofs.write((char *)&e_active, sizeof(bool));
-            }
-          }
-        }
-      }
-    }
-  } else {
-    // Coord edges
+  // 座標層ごとの接続
+  for (int layer = 0; layer < coord_layer_count_; ++layer) {
+    const auto &edges =
+        (layer == 0) ? edges_coord : edges_coord_per_layer_[layer];
     int coord_edge_count = 0;
     for (int i = 0; i < (int)nodes.size(); ++i) {
       if (nodes[i].id != -1) {
-        for (const auto &pair : edges_coord[i]) {
+        for (const auto &pair : edges[i]) {
           if (i < pair.first)
             coord_edge_count++;
         }
@@ -1563,7 +1534,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
     ofs.write((char *)&coord_edge_count, sizeof(coord_edge_count));
     for (int i = 0; i < (int)nodes.size(); ++i) {
       if (nodes[i].id != -1) {
-        for (const auto &pair : edges_coord[i]) {
+        for (const auto &pair : edges[i]) {
           int n = pair.first;
           if (i < n) {
             ofs.write((char *)&i, sizeof(int));
@@ -1577,7 +1548,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
     }
   }
 
-  return true;
+  return static_cast<bool>(ofs);
 }
 
 template <typename T_angle, typename T_coord>
@@ -1587,6 +1558,21 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
   std::ifstream ifs(resolved_path, std::ios::binary);
   if (!ifs)
     return false;
+
+  uint32_t file_version = 0;
+  ifs.read(reinterpret_cast<char *>(&file_version), sizeof(file_version));
+  if (!ifs || file_version != binary_format_version) {
+    std::cerr << "GNG v10が必要です。旧データはtools/migrate_gng_v10.pyで移行してください。" << std::endl;
+    return false;
+  }
+  int num_coord_layers = 0;
+  int node_count = 0;
+  ifs.read(reinterpret_cast<char *>(&num_coord_layers), sizeof(num_coord_layers));
+  ifs.read(reinterpret_cast<char *>(&node_count), sizeof(node_count));
+  if (!ifs || num_coord_layers < 1 || num_coord_layers > 16 || node_count < 0 ||
+      static_cast<std::size_t>(node_count) > kMaxLoadableNodes) {
+    return false;
+  }
 
   // 既存ノードと索引・静的判定結果の破棄。
   invalidate_collision_cache();
@@ -1600,30 +1586,12 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     edges_coord[i].clear();
   }
 
-  uint32_t version;
-  ifs.read((char *)&version, sizeof(version));
-  if (version != 1 && version != 2 && version != 3 && version != 4 &&
-      version != 5 && version != 6 && version != 7 && version != 8 &&
-      version != 9) {
-    std::cerr << "Error: Unsupported GNG file version: " << version
-              << " (hex: 0x" << std::hex << version << std::dec << ")" << std::endl;
-    return false;
+  setCoordLayerCount(num_coord_layers);
+  for (auto &layer : edges_coord_per_layer_) {
+    for (auto &edges : layer) {edges.clear();}
   }
-
-  if (version >= 6) {
-    ifs.read((char *)&coord_layer_count_, sizeof(coord_layer_count_));
-    coord_layer_count_ = std::max(1, coord_layer_count_);
-  } else {
-    coord_layer_count_ = 1;
-  }
-  setCoordLayerCount(coord_layer_count_);
-
-  int node_count = 0;
-  ifs.read((char *)&node_count, sizeof(node_count));
-  if (!ifs || node_count < 0 ||
-      static_cast<std::size_t>(node_count) > kMaxLoadableNodes) {
-    std::cerr << "Error: Invalid GNG node count: " << node_count << std::endl;
-    return false;
+  for (auto &layer : edges_coord_per_layer_nodes_) {
+    for (auto &neighbors : layer) {neighbors.clear();}
   }
 
   const auto ensure_node_capacity = [this](std::size_t required) {
@@ -1672,88 +1640,55 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     float dummy;
     ifs.read((char *)&dummy, sizeof(float)); // error_coord
 
-    GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_angle);
-    GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_coord);
+    if (!GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_angle) ||
+        !GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_coord)) {return false;}
     nodes[id].weight_coords.clear();
-    if (version >= 6) {
-      int coord_count = 0;
-      ifs.read((char *)&coord_count, sizeof(coord_count));
-      coord_count = std::max(0, coord_count);
-      nodes[id].weight_coords.resize(coord_count);
-      for (int c = 0; c < coord_count; ++c) {
-        GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_coords[c]);
-      }
-      if (!nodes[id].weight_coords.empty()) {
-        nodes[id].weight_coord = nodes[id].weight_coords.front();
-      }
-    } else {
-      nodes[id].weight_coords.push_back(nodes[id].weight_coord);
+    int coord_count = 0;
+    ifs.read((char *)&coord_count, sizeof(coord_count));
+    if (!ifs || coord_count < 0 || coord_count > coord_layer_count_) {return false;}
+    nodes[id].weight_coords.resize(coord_count);
+    for (int c = 0; c < coord_count; ++c) {
+      if (!GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_coords[c])) {return false;}
+    }
+    if (!nodes[id].weight_coords.empty()) {
+      nodes[id].weight_coord = nodes[id].weight_coords.front();
     }
 
-    // Status
+    // 状態ビットの読込みと予約領域の検証
     ifs.read((char *)&nodes[id].status.level, sizeof(int));
-    bool b_tmp;
-    ifs.read((char *)&b_tmp, sizeof(bool));
-    nodes[id].status.is_surface = b_tmp;
-    ifs.read((char *)&b_tmp, sizeof(bool));
-    nodes[id].status.is_active_surface = b_tmp;
-    ifs.read((char *)&b_tmp, sizeof(bool));
-    nodes[id].status.self_collision_free = b_tmp;
-    ifs.read((char *)&b_tmp, sizeof(bool));
-    nodes[id].status.active = b_tmp;
-    if (version >= 5) {
-      ifs.read((char *)&b_tmp, sizeof(bool));
-      nodes[id].status.is_boundary = b_tmp;
-    }
+    uint8_t flags = 0;
+    ifs.read(reinterpret_cast<char *>(&flags), sizeof(flags));
+    if (!ifs || (flags & 0xE0U) != 0) {return false;}
+    nodes[id].status.is_surface = (flags & 1U) != 0;
+    nodes[id].status.is_active_surface = (flags & 2U) != 0;
+    nodes[id].status.self_collision_free = (flags & 4U) != 0;
+    nodes[id].status.active = (flags & 8U) != 0;
+    nodes[id].status.is_boundary = (flags & 16U) != 0;
 
-    GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].status.ee_direction);
-
-    if (version >= 4) {
-      ifs.read((char *)&nodes[id].status.manip_info.manipulability,
-               sizeof(float));
-      ifs.read((char *)&nodes[id].status.min_singular_value, sizeof(float));
-      ifs.read((char *)&nodes[id].status.joint_limit_score, sizeof(float));
-      if (version <= 8) {
-        float discarded_legacy_score = 0.0f;
-        ifs.read((char *)&discarded_legacy_score, sizeof(float));
-      }
-      ifs.read((char *)&nodes[id].status.manip_info.valid, sizeof(bool));
-      ifs.read((char *)&nodes[id].status.dynamic_manipulability, sizeof(float));
-    }
-
-    if (version >= 8) {
-      ifs.read((char *)&nodes[id].status.rotational_manip_info.manipulability, sizeof(float));
-      ifs.read((char *)&nodes[id].status.rotational_manip_info.valid, sizeof(bool));
-    } else {
-      nodes[id].status.rotational_manip_info.valid = false;
-      nodes[id].status.rotational_manip_info.manipulability = 0.0;
-    }
-
-    if (version < 7) {
-      int jp_size = 0;
-      ifs.read((char *)&jp_size, sizeof(int));
-      if (jp_size > 0) {
-        for (int i = 0; i < jp_size; ++i) {
-          Eigen::Vector3f dummy_vec;
-          GrowingNeuralGas_Internal::read_eigen(ifs, dummy_vec);
-        }
-      }
-    }
+    if (!GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].status.ee_direction)) {return false;}
+    ifs.read((char *)&nodes[id].status.manip_info.manipulability, sizeof(double));
+    ifs.read((char *)&nodes[id].status.min_singular_value, sizeof(float));
+    ifs.read((char *)&nodes[id].status.joint_limit_score, sizeof(float));
+    ifs.read((char *)&nodes[id].status.manip_info.is_valid, sizeof(bool));
+    ifs.read((char *)&nodes[id].status.dynamic_manipulability, sizeof(float));
+    ifs.read((char *)&nodes[id].status.rotational_manip_info.manipulability, sizeof(double));
+    ifs.read((char *)&nodes[id].status.rotational_manip_info.is_valid, sizeof(bool));
+    if (!ifs) {return false;}
   }
 
-  // Edges Angle
+  // 関節空間の接続
   int edge_count = 0;
   ifs.read((char *)&edge_count, sizeof(edge_count));
+  if (!ifs || edge_count < 0) {return false;}
   for (int k = 0; k < edge_count; ++k) {
     int n1, n2, age;
     ifs.read((char *)&n1, sizeof(int));
     ifs.read((char *)&n2, sizeof(int));
     ifs.read((char *)&age, sizeof(int));
 
-    bool active = true;
-    if (version >= 3) {
-      ifs.read((char *)&active, sizeof(bool));
-    }
+    bool active = false;
+    ifs.read((char *)&active, sizeof(bool));
+    if (!ifs) {return false;}
 
     if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
         (size_t)n2 < nodes.size() && nodes[n1].id >= 0 && nodes[n2].id >= 0) {
@@ -1765,58 +1700,34 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     }
   }
 
-  if (version >= 6) {
-    for (int layer = 0; layer < coord_layer_count_; ++layer) {
-      int coord_edge_count = 0;
-      ifs.read((char *)&coord_edge_count, sizeof(coord_edge_count));
-      for (int k = 0; k < coord_edge_count; ++k) {
-        int n1, n2, age;
-        ifs.read((char *)&n1, sizeof(int));
-        ifs.read((char *)&n2, sizeof(int));
-        ifs.read((char *)&age, sizeof(int));
-
-        bool active = true;
-        if (version >= 3) {
-          ifs.read((char *)&active, sizeof(bool));
-        }
-
-        if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
-            (size_t)n2 < nodes.size() && nodes[n1].id >= 0 && nodes[n2].id >= 0) {
-          add_edge_coord(layer, n1, n2);
-          auto &edges =
-              (layer == 0) ? edges_coord : edges_coord_per_layer_[layer];
-          edges[n1][n2].age = age;
-          edges[n2][n1].age = age;
-          edges[n1][n2].active = active;
-          edges[n2][n1].active = active;
-        }
-      }
-    }
-  } else {
-    // Edges Coord
+  // 座標層ごとの接続
+  for (int layer = 0; layer < coord_layer_count_; ++layer) {
     int coord_edge_count = 0;
     ifs.read((char *)&coord_edge_count, sizeof(coord_edge_count));
+    if (!ifs || coord_edge_count < 0) {return false;}
     for (int k = 0; k < coord_edge_count; ++k) {
       int n1, n2, age;
       ifs.read((char *)&n1, sizeof(int));
       ifs.read((char *)&n2, sizeof(int));
       ifs.read((char *)&age, sizeof(int));
 
-      bool active = true;
-      if (version >= 3) {
-        ifs.read((char *)&active, sizeof(bool));
-      }
+      bool active = false;
+      ifs.read((char *)&active, sizeof(bool));
+      if (!ifs) {return false;}
 
       if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
           (size_t)n2 < nodes.size() && nodes[n1].id >= 0 && nodes[n2].id >= 0) {
-        add_edge_coord(n1, n2);
-        edges_coord[n1][n2].age = age;
-        edges_coord[n2][n1].age = age;
-        edges_coord[n1][n2].active = active;
-        edges_coord[n2][n1].active = active;
+        add_edge_coord(layer, n1, n2);
+        auto &edges =
+            (layer == 0) ? edges_coord : edges_coord_per_layer_[layer];
+        edges[n1][n2].age = age;
+        edges[n2][n1].age = age;
+        edges[n1][n2].active = active;
+        edges[n2][n1].active = active;
       }
     }
   }
+  if (ifs.peek() != std::ifstream::traits_type::eof()) {return false;}
 
   if (loaded_node_index_limit > 0 &&
       loaded_node_index_limit < nodes.size()) {
@@ -1833,7 +1744,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     }
   }
 
-  // Make addable indices correct and rebuild active_indices_
+  // 空きIDと有効ノード索引の再構築
   while (!addable_node_indicies.empty())
     addable_node_indicies.pop();
   active_indices_.clear();
@@ -1845,7 +1756,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     }
   }
 
-  // 読み込み後に情報の補完を行う（V5以前のファイル対応）
+  // 現在の運動学モデルに基づく座標更新
   refresh_coord_weights();
 
   return true;

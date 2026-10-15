@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "id": "oscbf",
+  "category": "physics",
+  "label": "OSCBF（実験・速度フィルタ）",
+  "description": "既存Pythonフィルタの互換アダプタ。",
+  "models": [
+    "long",
+    "standard"
+  ],
+  "adapter": "oscbf_avoidance:oscbf_adapter",
+  "capabilities": {
+    "can_set_goal_pose": false
+  },
+  "parameters": {
+    "clearance": {
+      "type": "number",
+      "label": "接触余裕 m",
+      "default": 0.06,
+      "min": 0.005,
+      "max": 0.3
+    },
+    "max_joint_velocity": {
+      "type": "number",
+      "label": "関節速度上限 rad/s",
+      "default": 0.3,
+      "min": 0.001,
+      "max": 1.0
+    },
+    "max_constraints": {
+      "type": "integer",
+      "label": "拘束数上限",
+      "default": 64,
+      "min": 1,
+      "max": 128
+    }
+  },
+  "display": {
+    "label": "OSCBF",
+    "fields": [
+      {
+        "name": "solve_ms",
+        "label": "計算",
+        "unit": "ms",
+        "decimals": 1
+      },
+      {
+        "name": "num_constraints",
+        "label": "近接",
+        "unit": "組",
+        "decimals": 0
+      }
+    ]
+  }
+}

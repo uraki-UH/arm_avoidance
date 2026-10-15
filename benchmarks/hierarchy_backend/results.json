@@ -1,0 +1,279 @@
+{
+  "backend": "hierarchy_vlut",
+  "scope": "collision_query_backend_with_existing_gng_graph_and_node_labels",
+  "num_completed_trials": 14,
+  "num_compared_queries": 600,
+  "num_query_mismatches": 0,
+  "has_started_ros_nodes": false,
+  "has_full_gazebo_verification": false,
+  "has_hardware_verification": false,
+  "is_performance_improvement_verified": false,
+  "has_running_test_processes": false,
+  "source_sha256": {
+    "gng_vlut_system/scripts/gng_edge_vlut.py": "996e1bbb8f5a6091fb852fbc0195190a455282b5f603430c05799943756a0be1",
+    "gng_vlut_system/scripts/gng_avoidance_planner.py": "ce828dc9f85151d9a80f9959d8936d16e125aaf0c57da3e79e594afc7fd02bb8",
+    "gng_vlut_system/scripts/urdf_vrm.py": "d3a3460c4bcec792cd603083fec0adb3886d1db95582e5cccd49cbb06c20f988",
+    "gng_vlut_system/scripts/dual_arm_gng_lidar_demo.py": "4cecbae9ebd1150e6c4be01f8da8f9cd04cb7ee212f3d610a6f5f6a3782c1193",
+    "gng_vlut_system/launch/offline_urdf_trainer.launch.py": "cfc2f0a36d54b567ec4579fe64cde40e16cabe6e957cf394d7404c3e19aab253",
+    "gng_vlut_system/launch/dual_arm_gng_lidar_demo.launch.py": "f02002e9a9b69a3949238af094f555b6233e199e6ede237384d9c522887393eb",
+    "gng_vlut_system/launch/dual_arm_gazebo_demo.launch.py": "50f3ce9127095f30b368decc7d55e31b1a871259eeacc06e8422aa5a5c8f19e7",
+    "tools/gng_region_viewer/viewer.py": "369afad90f4efbbe570d09d4590d871e8f0415bcc1f50eab30ae11f31de69e92",
+    "gng_vlut_system/src/core/collision/region_kernel.cpp": "3d0b74c910a7faf871d3226775d8a2a3b80094f4390ee199559fa64d5972c7ea",
+    "log/artifacts/hierarchy_backend/check.py": "c08a1d6ebcbaedf0e741a3358196682d97d81bc9e6bf5fc81ce80c6439b3070b",
+    "log/artifacts/hierarchy_backend/launch_check.py": "eb77fd77b0962423cb0be09e0cf24a5093f9deedd5d90d639f0b38ae7088fd1d"
+  },
+  "commands": [
+    {
+      "argv": [
+        "python3",
+        "/home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py",
+        "benchmarks/hierarchy_backend/cases.json",
+        "--output",
+        "log/artifacts/hierarchy_backend/run_01",
+        "--repeats",
+        "1",
+        "--start-seed",
+        "211",
+        "--estimate-sec",
+        "8",
+        "--max-total-sec",
+        "180",
+        "--continue-on-error"
+      ],
+      "report": "log/artifacts/hierarchy_backend/run_01/report.json",
+      "has_running_processes": false
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py",
+        "benchmarks/hierarchy_backend/cases.json",
+        "--output",
+        "log/artifacts/hierarchy_backend/final_run",
+        "--repeats",
+        "3",
+        "--start-seed",
+        "211",
+        "--estimate-sec",
+        "5",
+        "--max-total-sec",
+        "180"
+      ],
+      "report": "log/artifacts/hierarchy_backend/final_run/report.json",
+      "has_running_processes": false
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py",
+        "benchmarks/hierarchy_backend/cases.json",
+        "--output",
+        "log/artifacts/hierarchy_backend/final_run_02",
+        "--repeats",
+        "3",
+        "--start-seed",
+        "211",
+        "--estimate-sec",
+        "5",
+        "--max-total-sec",
+        "180"
+      ],
+      "report": "log/artifacts/hierarchy_backend/final_run_02/report.json",
+      "has_running_processes": false
+    },
+    {
+      "argv": [
+        "python3",
+        "/home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py",
+        "benchmarks/hierarchy_backend/default_cases.json",
+        "--output",
+        "log/artifacts/hierarchy_backend/default_run",
+        "--repeats",
+        "1",
+        "--start-seed",
+        "214",
+        "--estimate-sec",
+        "34",
+        "--max-total-sec",
+        "150"
+      ],
+      "report": "log/artifacts/hierarchy_backend/default_run/report.json",
+      "has_running_processes": false
+    }
+  ],
+  "completed_trials": [
+    {
+      "name": "selector",
+      "seed": 211,
+      "elapsed_sec": 1.316124529010267,
+      "metrics": {
+        "num_queries": 200,
+        "num_query_mismatches": 0,
+        "num_fast_clear": 27,
+        "num_old_region_formats": 3,
+        "num_errors": 0
+      }
+    },
+    {
+      "name": "standard",
+      "seed": 211,
+      "elapsed_sec": 5.366385978006292,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 8,
+        "num_leaves": 64,
+        "num_indexed_leaves": 0,
+        "indexed_domain_volume_ratio": 0.0,
+        "build_ms": 3037.3551070078975
+      }
+    },
+    {
+      "name": "long",
+      "seed": 211,
+      "elapsed_sec": 5.416516930999933,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 8,
+        "num_leaves": 57,
+        "num_indexed_leaves": 0,
+        "indexed_domain_volume_ratio": 0.0,
+        "build_ms": 3030.764025999815
+      }
+    },
+    {
+      "name": "launch",
+      "seed": 211,
+      "elapsed_sec": 0.6661646949942224,
+      "metrics": {
+        "num_launch_files": 3,
+        "num_builder_modes": 4,
+        "num_errors": 0,
+        "num_started_nodes": 0
+      }
+    },
+    {
+      "name": "standard",
+      "seed": 212,
+      "elapsed_sec": 5.367219924999517,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 8,
+        "num_leaves": 64,
+        "num_indexed_leaves": 0,
+        "indexed_domain_volume_ratio": 0.0,
+        "build_ms": 3040.8204900013516
+      }
+    },
+    {
+      "name": "long",
+      "seed": 212,
+      "elapsed_sec": 5.417147997999564,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 8,
+        "num_leaves": 57,
+        "num_indexed_leaves": 0,
+        "indexed_domain_volume_ratio": 0.0,
+        "build_ms": 3031.0858610027935
+      }
+    },
+    {
+      "name": "launch",
+      "seed": 212,
+      "elapsed_sec": 0.6657896779943258,
+      "metrics": {
+        "num_launch_files": 3,
+        "num_builder_modes": 4,
+        "num_errors": 0,
+        "num_started_nodes": 0
+      }
+    },
+    {
+      "name": "selector",
+      "seed": 212,
+      "elapsed_sec": 1.2650077790021896,
+      "metrics": {
+        "num_queries": 200,
+        "num_query_mismatches": 0,
+        "num_fast_clear": 25,
+        "num_old_region_formats": 3,
+        "num_errors": 0
+      }
+    },
+    {
+      "name": "long",
+      "seed": 213,
+      "elapsed_sec": 5.416397276989301,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 8,
+        "num_leaves": 57,
+        "num_indexed_leaves": 0,
+        "indexed_domain_volume_ratio": 0.0,
+        "build_ms": 3030.162319992087
+      }
+    },
+    {
+      "name": "launch",
+      "seed": 213,
+      "elapsed_sec": 0.6160257700103102,
+      "metrics": {
+        "num_launch_files": 3,
+        "num_builder_modes": 4,
+        "num_errors": 0,
+        "num_started_nodes": 0
+      }
+    },
+    {
+      "name": "selector",
+      "seed": 213,
+      "elapsed_sec": 1.315627060001134,
+      "metrics": {
+        "num_queries": 200,
+        "num_query_mismatches": 0,
+        "num_fast_clear": 27,
+        "num_old_region_formats": 3,
+        "num_errors": 0
+      }
+    },
+    {
+      "name": "standard",
+      "seed": 213,
+      "elapsed_sec": 5.366076979000354,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 8,
+        "num_leaves": 64,
+        "num_indexed_leaves": 0,
+        "indexed_domain_volume_ratio": 0.0,
+        "build_ms": 3037.452681004652
+      }
+    },
+    {
+      "name": "default_long",
+      "seed": 214,
+      "elapsed_sec": 36.922723976007546,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 128,
+        "num_leaves": 493,
+        "num_indexed_leaves": 169,
+        "indexed_domain_volume_ratio": 7.35744833946228e-08,
+        "build_ms": 32329.836596996756
+      }
+    },
+    {
+      "name": "default_standard",
+      "seed": 214,
+      "elapsed_sec": 36.27142953198927,
+      "metrics": {
+        "num_errors": 0,
+        "num_parents": 128,
+        "num_leaves": 514,
+        "num_indexed_leaves": 183,
+        "indexed_domain_volume_ratio": 1.3969838619232178e-07,
+        "build_ms": 31764.415298996028
+      }
+    }
+  ]
+}

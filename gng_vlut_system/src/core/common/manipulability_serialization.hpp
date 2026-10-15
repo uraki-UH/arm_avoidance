@@ -85,16 +85,17 @@ inline geometry_msgs::msg::Quaternion toQuaternion(
   return out;
 }
 
+template <typename metric_type>
 inline void fillManipulabilityFields(
     ais_gng_feature_msgs::msg::TopologicalNodeFeature &node_msg,
-    const Manipulability::ManipulabilityEllipsoid &ellipsoid,
+    const metric_type &ellipsoid,
     bool is_goal = false) {
   node_msg.is_goal = is_goal;
-  node_msg.manip_valid = ellipsoid.valid;
+  node_msg.manip_valid = Manipulability::is_valid(ellipsoid);
   node_msg.manip_value = static_cast<float>(ellipsoid.manipulability);
   node_msg.manip_condition_number =
       static_cast<float>(ellipsoid.condition_number);
-  if (!ellipsoid.valid) {
+  if (!Manipulability::is_valid(ellipsoid)) {
     node_msg.manip_scale = geometry_msgs::msg::Vector3();
     node_msg.manip_orientation = geometry_msgs::msg::Quaternion();
     node_msg.manip_orientation.w = 1.0;
@@ -105,14 +106,15 @@ inline void fillManipulabilityFields(
   node_msg.manip_orientation = toQuaternion(ellipsoid.principal_directions);
 }
 
+template <typename metric_type>
 inline void fillRotationalManipulabilityFields(
     ais_gng_feature_msgs::msg::TopologicalNodeFeature &node_msg,
-    const Manipulability::ManipulabilityEllipsoid &ellipsoid) {
-  node_msg.rotational_manip_valid = ellipsoid.valid;
+    const metric_type &ellipsoid) {
+  node_msg.rotational_manip_valid = Manipulability::is_valid(ellipsoid);
   node_msg.rotational_manip_value = static_cast<float>(ellipsoid.manipulability);
   node_msg.rotational_manip_condition_number =
       static_cast<float>(ellipsoid.condition_number);
-  if (!ellipsoid.valid) {
+  if (!Manipulability::is_valid(ellipsoid)) {
     node_msg.rotational_manip_scale = geometry_msgs::msg::Vector3();
     node_msg.rotational_manip_orientation = geometry_msgs::msg::Quaternion();
     node_msg.rotational_manip_orientation.w = 1.0;

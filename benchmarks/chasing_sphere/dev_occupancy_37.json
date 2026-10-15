@@ -1,0 +1,13 @@
+{
+  "duration_sec": 18,
+  "seed": 37,
+  "radius_m": 0.06,
+  "speed_ratios": [
+    0.2,
+    0.8
+  ],
+  "start_dist_m": 0.38,
+  "candidate_metric": "occupancy",
+  "enable_learning": false,
+  "policy": "rollout_cv"
+}

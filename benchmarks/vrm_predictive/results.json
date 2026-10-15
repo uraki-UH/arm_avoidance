@@ -1,0 +1,257 @@
+{
+  "schema": "vrm_predictive_evaluation_v1",
+  "workspace": "/home/uraki/uraki_ws",
+  "robot": "topo_dual_arm_max_long",
+  "num_nodes_per_arm": 9988,
+  "source_sha256": {
+    "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+    "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5",
+    "gng_visibility.py": "d10a85db75af1c4e964c174278ce11034d279991c471d6262e6b69ecfba89524",
+    "gng_runtime.py": "3db3cc1047fcd0b2d41b14b94cf6fde96523fed748a3f8c47fdc25299823c6a2",
+    "gng_inputs.py": "39bf6818aab6dd65db3d76d6160b1d51a4a231a8aa88d8a5edcb0b177628af65"
+  },
+  "method": {
+    "selected_id": "vrm_predictive",
+    "default_id": "graph",
+    "horizon_sec": 0.5,
+    "history_observations": 8,
+    "num_inputs": 16,
+    "num_hidden_units": 24,
+    "max_num_dist_nodes": 96,
+    "max_num_inferred_nodes": 1024,
+    "max_num_training_samples": 512,
+    "trigger_clearance_th_m": 0.1,
+    "release_clearance_th_m": 0.14,
+    "return_clear_sec": 0.5,
+    "is_online_causal": true,
+    "has_voxel_reregistration": false,
+    "has_hardware_output": false
+  },
+  "validation": {
+    "num_checks": 133,
+    "unit_report": "log/artifacts/vrm_predictive/unit_verified/report.json",
+    "replay_report": "log/artifacts/vrm_predictive/replay_aligned/report.json",
+    "replay_trials": 6,
+    "replay_elapsed_sec": 281.9313495440001,
+    "native_cli_report": "log/artifacts/vrm_predictive/launch_aligned/report.json",
+    "native_cli_metrics": {
+      "num_prediction_updates": 304,
+      "max_prediction_update_ms": 82.08974900480825,
+      "num_free_messages": 178,
+      "max_num_free_cells": 311528,
+      "num_visibility_updates": 172
+    }
+  },
+  "cases": [
+    {
+      "name": "fov_predictive",
+      "trial": 1,
+      "duration_sec": 30.0,
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "num_contact_samples": 253,
+        "num_evaluation_samples": 1183,
+        "num_uncertain_samples": 38,
+        "max_velocity_rad_sec": 1.3082433323063152e-15,
+        "propose_mean_ms": 35.338764267984565,
+        "prediction_mean_total_update_ms": 19.24244058711444,
+        "prediction_num_events": 194208,
+        "prediction_num_missed": 159045,
+        "prediction_num_false_alarms": 52345,
+        "prediction_num_fallbacks": 0,
+        "visibility_rejected_outside_fov": 477,
+        "visibility_rejected_occluded": 30
+      },
+      "raw_metrics": "log/artifacts/vrm_predictive/replay_aligned/001_fov_predictive/metrics.json"
+    },
+    {
+      "name": "legacy_reactive",
+      "trial": 1,
+      "duration_sec": 30.0,
+      "metrics": {
+        "num_arrivals": 13,
+        "num_round_trips": 6,
+        "num_contact_samples": 245,
+        "num_evaluation_samples": 1183,
+        "num_uncertain_samples": 90,
+        "max_velocity_rad_sec": 2.293287766337691,
+        "propose_mean_ms": 17.9360556330263
+      },
+      "raw_metrics": "log/artifacts/vrm_predictive/replay_aligned/001_legacy_reactive/metrics.json"
+    },
+    {
+      "name": "legacy_predictive",
+      "trial": 1,
+      "duration_sec": 30.0,
+      "metrics": {
+        "num_arrivals": 12,
+        "num_round_trips": 6,
+        "num_contact_samples": 205,
+        "num_evaluation_samples": 1183,
+        "num_uncertain_samples": 103,
+        "max_velocity_rad_sec": 2.5297311283082657,
+        "propose_mean_ms": 43.867086677799804,
+        "prediction_mean_total_update_ms": 18.867114525699648,
+        "prediction_num_events": 169563,
+        "prediction_num_missed": 134860,
+        "prediction_num_false_alarms": 52044,
+        "prediction_num_fallbacks": 1
+      },
+      "raw_metrics": "log/artifacts/vrm_predictive/replay_aligned/001_legacy_predictive/metrics.json"
+    },
+    {
+      "name": "legacy_reactive",
+      "trial": 2,
+      "duration_sec": 30.0,
+      "metrics": {
+        "num_arrivals": 15,
+        "num_round_trips": 7,
+        "num_contact_samples": 242,
+        "num_evaluation_samples": 1183,
+        "num_uncertain_samples": 102,
+        "max_velocity_rad_sec": 2.4028139117391643,
+        "propose_mean_ms": 17.99667301834201
+      },
+      "raw_metrics": "log/artifacts/vrm_predictive/replay_aligned/002_legacy_reactive/metrics.json"
+    },
+    {
+      "name": "legacy_predictive",
+      "trial": 2,
+      "duration_sec": 30.0,
+      "metrics": {
+        "num_arrivals": 13,
+        "num_round_trips": 6,
+        "num_contact_samples": 250,
+        "num_evaluation_samples": 1183,
+        "num_uncertain_samples": 91,
+        "max_velocity_rad_sec": 2.4260792156826194,
+        "propose_mean_ms": 43.07088507983649,
+        "prediction_mean_total_update_ms": 18.371144519976404,
+        "prediction_num_events": 169251,
+        "prediction_num_missed": 136411,
+        "prediction_num_false_alarms": 50434,
+        "prediction_num_fallbacks": 1
+      },
+      "raw_metrics": "log/artifacts/vrm_predictive/replay_aligned/002_legacy_predictive/metrics.json"
+    },
+    {
+      "name": "fov_predictive",
+      "trial": 2,
+      "duration_sec": 30.0,
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "num_contact_samples": 254,
+        "num_evaluation_samples": 1183,
+        "num_uncertain_samples": 36,
+        "max_velocity_rad_sec": 1.3393535971159937e-15,
+        "propose_mean_ms": 36.569971205208674,
+        "prediction_mean_total_update_ms": 20.26762928832168,
+        "prediction_num_events": 186331,
+        "prediction_num_missed": 150445,
+        "prediction_num_false_alarms": 50100,
+        "prediction_num_fallbacks": 0,
+        "visibility_rejected_outside_fov": 471,
+        "visibility_rejected_occluded": 36
+      },
+      "raw_metrics": "log/artifacts/vrm_predictive/replay_aligned/002_fov_predictive/metrics.json"
+    }
+  ],
+  "aggregates": {
+    "fov_predictive": {
+      "round_trips": [
+        0,
+        0
+      ],
+      "contact_samples": [
+        253,
+        254
+      ],
+      "evaluation_samples": [
+        1183,
+        1183
+      ],
+      "contact_sample_pct": 21.428571428571427,
+      "propose_mean_ms": 35.95436773659662
+    },
+    "legacy_reactive": {
+      "round_trips": [
+        6,
+        7
+      ],
+      "contact_samples": [
+        245,
+        242
+      ],
+      "evaluation_samples": [
+        1183,
+        1183
+      ],
+      "contact_sample_pct": 20.583262890955197,
+      "propose_mean_ms": 17.966364325684154
+    },
+    "legacy_predictive": {
+      "round_trips": [
+        6,
+        6
+      ],
+      "contact_samples": [
+        205,
+        250
+      ],
+      "evaluation_samples": [
+        1183,
+        1183
+      ],
+      "contact_sample_pct": 19.23076923076923,
+      "propose_mean_ms": 43.468985878818145
+    }
+  },
+  "prediction_cost": {
+    "num_nodes": 9988,
+    "num_frames_per_trial": 240,
+    "num_trials": 3,
+    "mean_ms": 4.705635760131459,
+    "p95_ms": [
+      5.333847392466851,
+      5.280578207748476,
+      5.338076397310942
+    ],
+    "scope": "履歴・特徴・MLP推論・遅延教師学習。URDF距離照会・経路探索・ROS・物理を除外",
+    "raw_report": "log/artifacts/vrm_predictive/cost_gated/report.json",
+    "synthetic_recall": [
+      0.3012277459021654,
+      0.30022082192312294,
+      0.30176976353849816
+    ],
+    "synthetic_precision": [
+      0.5350268736000364,
+      0.5294915950094656,
+      0.5346020859797326
+    ],
+    "synthetic_scope": "1次元上の合成移動障害物・途中の運動周期変更。回避性能の評価とは別系統"
+  },
+  "assessment": {
+    "has_demonstrated_improvement": false,
+    "has_achieved_collision_free_task": false,
+    "operational_status": "検証済み",
+    "efficacy_status": "優位性未確認",
+    "reason": "同一現在離隔で往復回数の増加なし。全身重なりの減少は再現せず、提案処理費用は増加",
+    "observation_limit": "既定fov_shadowは視野外・遮蔽による保持。legacyは観測制約なしの比較条件であり利用推奨ではない",
+    "collision_metric": "記録自己除去後の裏付けあり環境セルと実測全身セルの重なりサンプル。実物との衝突回数ではない",
+    "prediction_metric": "予測発行時に安全だったノードが期限内の観測で安全以外へ変化。重複した予測窓を含むノード×発行回単位",
+    "statistical_limit": "bag先頭30秒・各条件2試行。統計的優位性、実機・未知分布・制動距離・厳密な連続安全は未検証"
+  },
+  "cleanup": {
+    "is_complete": true,
+    "has_test_processes": false,
+    "preserved_existing_viewer_pgid": 21179,
+    "preserved_containers": [
+      "gng-harmonic-launcher-launcher-1",
+      "gng_cpu_container",
+      "rosbridge_container",
+      "frontend"
+    ]
+  }
+}

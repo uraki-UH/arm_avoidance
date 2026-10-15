@@ -1,7 +1,7 @@
 import type { register_vehicle, vehicle_registration_result } from '../features/vehicleRegistration/types';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { deserializePointCloud } from '../utils/protocol';
-import { deserializeTopologicalMap, isTopologicalMapPacket, normalize_environment_cluster_ids } from '../utils/topologicalMapProtocol';
+import { deserializeTopologicalMap, isTopologicalMapPacket, normalize_environment_cluster_ids, graph_json_data } from '../utils/topologicalMapProtocol';
 import {
     PointCloudData,
     MarkerArrayData,
@@ -660,10 +660,12 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
             targetFrame = 'map'
         ): Promise<EditSessionInfo> => sendRpc('edit.openSession', { sourceTopic, targetFrame }),
         inspect_graph: (source_id: string, selection: graph_selection, graph?: GraphData, marker_array?: MarkerArrayData) =>
-            sendRpc<graph_snapshot>('edit.inspect_graph', { source_id, selection, graph, marker_array }),
+            sendRpc<graph_snapshot>('edit.inspect_graph', { source_id, selection,
+                graph: graph ? graph_json_data(graph) : undefined, marker_array }),
         inspect_graph_bounds: async (source_id: string, graph?: GraphData, marker_array?: MarkerArrayData) =>
             (await sendRpc<{ bounds: graph_bounds[] }>('edit.inspect_graph',
-                { source_id, graph, marker_array, enable_bounds_only: true })).bounds,
+                { source_id, graph: graph ? graph_json_data(graph) : undefined,
+                    marker_array, enable_bounds_only: true })).bounds,
         addEditRegion: (
             sessionId: string,
             min: [number, number, number],

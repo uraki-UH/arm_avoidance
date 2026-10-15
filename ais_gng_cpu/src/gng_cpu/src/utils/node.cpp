@@ -1,4 +1,5 @@
 #include "node.hpp"
+#include <stdexcept>
 
 Node::Node() {
     init(NODE_NOID, 0.f, 0.f);
@@ -8,8 +9,7 @@ Node::~Node() {
 }
 
 void Node::init(uint32_t _id, float _eta_s1, float _eta_s2) {
-    winner_stats = {};
-    support_stats = {};
+    if (_id > NODE_NOID) {throw std::out_of_range("node id exceeds 16 bits");}
     observation_range.clear();
     id = _id;
     edge_num = 0;

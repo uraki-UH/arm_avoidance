@@ -12,14 +12,25 @@ export interface TopologicalMapPacket {
     graph: GraphData;
 }
 
+/** JSON境界での通常配列への展開。受信・描画中の16bit格納幅の保持。 */
+export function graph_json_data(graph: GraphData): GraphData {
+    return { ...graph,
+        edges: graph.edges instanceof Uint16Array ? Array.from(graph.edges) : graph.edges,
+        clusters: graph.clusters.map(cluster => cluster.nodeIds instanceof Uint16Array
+            ? { ...cluster, nodeIds: Array.from(cluster.nodeIds) } : cluster),
+    };
+}
+
 /** 環境GNGの配列添字からViewer内のノードIDへの対応付け。他グラフは既存ID方式。 */
 export function normalize_environment_cluster_ids(tag: string, graph: GraphData): GraphData {
     if (tag !== '/topological_map') return graph;
-    return { ...graph, clusters: graph.clusters.map(cluster => ({
-        ...cluster,
-        nodeIds: cluster.nodeIds.flatMap(idx => Number.isInteger(idx) && idx >= 0 && idx < graph.nodes.length
-            ? [graph.nodes[idx].id ?? idx] : []),
-    })) };
+    return { ...graph, clusters: graph.clusters.map(cluster => {
+        const node_ids: number[] = [];
+        for (const idx of cluster.nodeIds) {
+            if (Number.isInteger(idx) && idx >= 0 && idx < graph.nodes.length) node_ids.push(graph.nodes[idx].id ?? idx);
+        }
+        return { ...cluster, nodeIds: node_ids };
+    }) };
 }
 
 function requireBytes(buffer: ArrayBuffer, offset: number, size: number): void {
@@ -96,8 +107,9 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer, accept_tag?: (tag
     offset += nodeNum * node_record_size;
 
     requireBytes(buffer, offset, edgeNum * 2);
-    const edges: number[] = [];
-    for (let i = 0; i < edgeNum; i += 1) edges.push(view.getUint16(offset + i * 2, true));
+    // 受信時の16bit格納幅の維持。文字列長による非整列offsetにも対応
+    const edges = new Uint16Array(edgeNum);
+    for (let i = 0; i < edgeNum; i += 1) edges[i] = view.getUint16(offset + i * 2, true);
     offset += edgeNum * 2;
 
     const clusters: GraphData['clusters'] = [];
@@ -105,8 +117,8 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer, accept_tag?: (tag
         requireBytes(buffer, offset, CLUSTER_RECORD_SIZE);
         const nodeIdNum = view.getUint32(offset + 76, true);
         requireBytes(buffer, offset + CLUSTER_RECORD_SIZE, nodeIdNum * 2);
-        const nodeIds: number[] = [];
-        for (let j = 0; j < nodeIdNum; j += 1) nodeIds.push(view.getUint16(offset + CLUSTER_RECORD_SIZE + j * 2, true));
+        const node_ids = new Uint16Array(nodeIdNum);
+        for (let j = 0; j < nodeIdNum; j += 1) node_ids[j] = view.getUint16(offset + CLUSTER_RECORD_SIZE + j * 2, true);
         clusters.push({
             id: view.getUint32(offset, true), label: view.getUint8(offset + 4), semanticLabel: view.getUint8(offset + 5),
             semanticReliability: view.getFloat32(offset + 8, true),
@@ -115,7 +127,7 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer, accept_tag?: (tag
             quat: [view.getFloat32(offset + 36, true), view.getFloat32(offset + 40, true), view.getFloat32(offset + 44, true), view.getFloat32(offset + 48, true)],
             match: view.getFloat32(offset + 52, true), reliability: view.getFloat32(offset + 56, true),
             velocity: [view.getFloat32(offset + 60, true), view.getFloat32(offset + 64, true), view.getFloat32(offset + 68, true)],
-            nodeIds,
+            nodeIds: node_ids,
         });
         offset += CLUSTER_RECORD_SIZE + nodeIdNum * 2;
     }
@@ -130,14 +142,14 @@ export function validate_graph(value: unknown): asserts value is GraphData {
     if (!value || typeof value !== 'object') throw Error('グラフ形式が不正です');
     const graph = value as GraphData;
     if (!Array.isArray(graph.nodes) || graph.nodes.length > 200000 ||
-        !Array.isArray(graph.edges) || graph.edges.length > 2000000 || graph.edges.length % 2 ||
+        !(Array.isArray(graph.edges) || graph.edges instanceof Uint16Array) || graph.edges.length > 2000000 || graph.edges.length % 2 ||
         !Array.isArray(graph.clusters) || graph.clusters.length > 65536) throw Error('グラフ配列が不正です');
     for (const node of graph.nodes) {
         if (!node || ![node.x, node.y, node.z].every(Number.isFinite)) throw Error('ノード座標が不正です');
     }
     if (!graph.edges.every(idx => Number.isInteger(idx) && idx >= 0 && idx < graph.nodes.length)) throw Error('エッジ添字が不正です');
     for (const cluster of graph.clusters) {
-        if (!cluster || !Number.isInteger(cluster.id) || !Array.isArray(cluster.nodeIds) ||
+        if (!cluster || !Number.isInteger(cluster.id) || !(Array.isArray(cluster.nodeIds) || cluster.nodeIds instanceof Uint16Array) ||
             cluster.nodeIds.length > 200000 || !cluster.nodeIds.every(Number.isInteger)) throw Error('クラスタ所属が不正です');
     }
 }

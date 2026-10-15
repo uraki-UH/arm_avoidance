@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "name": "avoidance_first",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "225",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/ros2_ws/src/log/artifacts/hierarchy_bag/libgng_region_kernel.so",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/self_filter/ros_logs"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "shuttle_trial",
+        "log/artifacts/self_filter/trial.py",
+        "--condition",
+        "avoidance_first",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "12",
+        "--max-velocity",
+        "2"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 115
+    }
+  ]
+}

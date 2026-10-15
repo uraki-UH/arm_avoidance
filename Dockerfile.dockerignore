@@ -1,0 +1,13 @@
+# このDockerfileのCOPY対象のみ。実験ログ・bag・ローカル生成物の送信除外
+**
+!Dockerfile
+!docker/
+!docker/ros2_pointcloud_defaults.sh
+!ToPoFuzzy-Viewer/
+!ToPoFuzzy-Viewer/frontend/
+!ToPoFuzzy-Viewer/frontend/package.json
+!ToPoFuzzy-Viewer/frontend/package-lock.json
+!ToPoDualArmMax_SourceDelivery_20260928/
+!ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/
+!ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/package.json
+!ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/package-lock.json

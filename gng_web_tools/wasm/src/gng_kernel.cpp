@@ -69,8 +69,12 @@ bool GngKernel::set_parameter(const char *name, std::uint32_t, float value) {
     config_.eb = value;
   } else if (parameter_name == "node.eta_s2" && value >= 0.0f && value <= 1.0f) {
     config_.en = value;
-  } else if (parameter_name == "edge.age_max" && value >= 0.0f) {
-    config_.max_age = static_cast<std::uint32_t>(value);
+  } else if (parameter_name == "edge.age_max") {
+    Param param;
+    if (!param.setParameter(name, 0, value)) {
+      return false;
+    }
+    config_.max_age = param.edge.age_max.value();
   } else {
     return false;
   }
@@ -158,7 +162,10 @@ bool GngKernel::initialize_cpu_core() {
   if (config_.en > 0.0f) {
     state->param.node.eta_s2 = finite_or(config_.en, state->param.node.eta_s2);
   }
-  state->param.edge.age_max = config_.max_age;
+  if (config_.max_age == UINT32_MAX) {
+    return false;
+  }
+  state->param.edge.age_max = bounded_uint<UINT32_MAX - 1>{config_.max_age};
 
   state->param.config.x_min = x_min - kRangeMargin;
   state->param.config.x_max = x_max + kRangeMargin;

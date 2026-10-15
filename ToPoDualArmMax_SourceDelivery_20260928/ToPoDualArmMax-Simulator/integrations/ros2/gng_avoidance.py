@@ -11,8 +11,14 @@ import numpy as np
 from gng_inputs import gng_inputs, load_models, workspace
 from gng_runtime import gng_runtime
 from dual_arm_avoidance_geometry import robot_geometry, origin
-from gng_avoidance_planner import gng_path_search
+from gng_avoidance_planner import gng_path_search, has_stable_return_clearance
 from avoidance_motion import motion_kind
+from gng_prediction import streaming_predictor
+
+
+def finite_clearance(value):
+    """観測障害物なしの場合のJSON互換値。無限離隔を有限の安全距離へ偽装しない表現。"""
+    return float(value) if np.isfinite(value) else None
 
 
 def check_kinematics(urdf_path, model):
@@ -118,16 +124,222 @@ class simulation_policy(gng_path_search):
         return target, True
 
 
+class avoidance_first_policy(simulation_policy):
+    """タスク進行より観測障害物からの退避を優先する実験方式。"""
+    def can_follow_task(self):
+        visibility = getattr(self, 'visibility', None)
+        if not self.cloud_tree.n and (visibility is None or visibility.model != 'fov_shadow'):
+            self.is_retreating = True
+            has_stable_return_clearance(self, False)
+            return False
+        target = self.positions.copy()
+        target[self.arm_indices] = self.home[self.arm_indices]
+        gap, _ = self.cloud_clearance(self.positions)
+        is_retreating = getattr(self, 'is_retreating', False)
+        margin = self.config['release_clearance_th'] if is_retreating else self.config['trigger_clearance_th']
+        has_clear_task = gap >= margin and self.can_bridge(self.positions, target, margin)
+        if not is_retreating and has_clear_task:
+            return True
+        self.is_retreating = True
+        if has_stable_return_clearance(self, has_clear_task):
+            self.is_retreating = False
+            self.clear_plan()
+            return True
+        return False
+
+    def retreat_scores(self, poses):
+        """近接球の二乗不足距離の総和。固定的な最小距離だけへの依存回避。"""
+        centers = self.geometry.centers(poses)
+        distances = self.cloud_tree.query(centers[:, self.geometry.is_arm].reshape(-1, 3))[0]
+        gaps = distances.reshape(len(poses), -1)-self.geometry.radii[self.geometry.is_arm]-self.cell_radius
+        deficits = np.maximum(0., self.config['release_clearance_th']-gaps)
+        return np.sum(deficits*deficits, axis=1), np.min(gaps, axis=1), centers
+
+    def select_retreat(self):
+        """両符号の関節微動と合成降下方向の一括評価。目標姿勢の誘引項なし。"""
+        self.clear_plan()
+        self.motion_phase = 'local_retreat'
+        if not self.cloud_tree.n:
+            self.motion_phase = 'waiting_for_clearance'
+            return self.positions.copy(), False
+        active = np.asarray(self.arm_indices)[self.active_angle_indices]
+        step = self.config['max_local_step']
+        poses = np.repeat(self.positions[None], 1+2*len(active), axis=0)
+        for idx, joint in enumerate(active):
+            poses[1+2*idx, joint] += step
+            poses[2+2*idx, joint] -= step
+        poses = np.clip(poses, self.geometry.limits[:, 0], self.geometry.limits[:, 1])
+        # 非操作関節の実測値保持。範囲外入力の補正による別関節への指令防止。
+        inactive = np.setdiff1d(np.arange(len(self.positions)), active)
+        poses[:, inactive] = self.positions[inactive]
+        scores, gaps, centers = self.retreat_scores(poses)
+        gradient = scores[1::2]-scores[2::2]
+        if len(gradient) and np.max(np.abs(gradient)) > 1e-12:
+            combined = self.positions.copy()
+            combined[active] -= step*gradient/np.max(np.abs(gradient))
+            combined[active] = np.clip(combined[active], self.geometry.limits[active, 0], self.geometry.limits[active, 1])
+            extra_scores, extra_gaps, extra_centers = self.retreat_scores(combined[None])
+            poses = np.concatenate((poses, combined[None]))
+            scores, gaps, centers = (np.concatenate(pair) for pair in
+                                     ((scores, extra_scores), (gaps, extra_gaps), (centers, extra_centers)))
+        has_internal = np.asarray(self.has_planning_clearance(centers))
+        min_gap = max(self.config['min_clearance_th'], gaps[0]-.0002)
+        candidates = np.flatnonzero((scores < scores[0]-1e-10) & (gaps >= min_gap) & has_internal)
+        # 上位候補だけの区間検査。通過可否未確認の退避指令は禁止。
+        for idx in candidates[np.argsort(scores[candidates])][:3]:
+            if self.can_bridge(self.positions, poses[idx], min_gap):
+                self.num_local_steps = getattr(self, 'num_local_steps', 0)+1
+                return poses[idx].copy(), True
+        self.motion_phase = 'waiting_for_clearance'
+        return self.positions.copy(), False
+
+    def select_waypoint(self):
+        if not self.can_follow_task():
+            return self.select_retreat()
+        self.clear_plan()
+        self.motion_phase = 'task_following'
+        target = self.positions.copy()
+        target[self.arm_indices] = self.home[self.arm_indices]
+        return target, True
+
+
+class predictive_policy(avoidance_first_policy):
+    """vrm_predictiveの先回り経路・不一致適応。現在観測の区間検査と独立した予測層。"""
+    def observe(self, cloud, graph):
+        if not hasattr(self, 'predictor'):
+            self.predictor = streaming_predictor()
+            self.num_prediction_fallbacks = 0
+        if self.predictor.last_sec == cloud[2]:
+            return
+        begin = time.perf_counter()
+        ids = tuple(self.angle_node_ids)
+        # 全ノードは既存VLUTラベルで予測。追加の形状距離照会だけの候補数制限。
+        ratios = np.linspace(0., 1., 4)[:, None]
+        samples = self.positions[self.arm_indices]+(self.home[self.arm_indices]-self.positions[self.arm_indices])*ratios
+        _, indices = self.angle_tree.query(samples, k=min(24, len(ids)))
+        indices = np.unique(indices)
+        inactive = np.setdiff1d(np.arange(len(self.positions)), self.arm_indices)
+        key = (id(self.angles), self.positions[inactive].tobytes(), indices.tobytes())
+        if getattr(self, 'centers_key', None) != key:
+            poses = np.repeat(self.positions[None], len(indices), axis=0)
+            poses[:, self.arm_indices] = np.asarray([self.angles[ids[int(idx)]] for idx in indices])
+            self.node_centers = self.geometry.centers(poses)[:, self.geometry.is_arm]
+            self.centers_key = key
+        dists = self.cloud_tree.query(self.node_centers.reshape(-1, 3))[0].reshape(len(indices), -1)
+        gaps = np.full(len(ids), np.inf)
+        gaps[indices] = np.min(dists-self.geometry.radii[self.geometry.is_arm]-self.cell_radius, axis=1)
+        risks = self.predictor.update(ids, self.adjacency, gaps, self.labels, cloud[2])
+        self.node_risks = dict(zip(ids, map(float, risks)))
+        self.prediction_ms = (time.perf_counter()-begin)*1000
+        self.max_prediction_ms = max(getattr(self, 'max_prediction_ms', 0.), self.prediction_ms)
+        self.total_prediction_ms = getattr(self, 'total_prediction_ms', 0.)+self.prediction_ms
+
+    def prediction_status(self):
+        return dict(self.predictor.status(), num_fallbacks=self.num_prediction_fallbacks,
+                    num_dist_nodes=len(self.node_centers), total_update_ms=self.prediction_ms,
+                    mean_total_update_ms=self.total_prediction_ms/self.predictor.num_updates,
+                    max_total_update_ms=self.max_prediction_ms)
+
+    def route_risk(self, first, second):
+        """関節直線の最寄りノード予測リスク。安全証明ではなく迂回選好の指標。"""
+        count = min(21, max(2, int(np.ceil(np.max(np.abs(second-first))/.08))+1))
+        poses = first+(second-first)*np.linspace(0., 1., count)[:, None]
+        _, indices = self.angle_tree.query(poses[:, self.arm_indices])
+        return max(self.node_risks.get(self.angle_node_ids[int(idx)], 0.) for idx in indices)
+
+    def can_follow_task(self):
+        # 反応型と共通の離隔・復帰継続条件。予測による現在の安全余裕の縮小なし。
+        self.has_clear_task = super().can_follow_task()
+        return self.has_clear_task and self.route_risk(self.positions, self.home) < self.predictor.risk_th
+
+    def find_predictive_path(self, goal, allow_prediction):
+        """観測安全ノードだけのL∞距離＋予測リスク探索。外れ時の逃げ道数による同点調整。"""
+        start = self.nearest_node(self.positions)
+        deadline = time.monotonic()+min(.01, self.config['max_plan_sec'])
+        def remaining(idx):
+            return float(np.max(np.abs(self.angles[idx]-self.angles[goal])))/1.6 if goal is not None else 0.
+        queue, costs, previous = [(remaining(start), 0., start)], {start:0.}, {start:None}
+        while queue and time.monotonic() < deadline:
+            _, cost, idx = heapq.heappop(queue)
+            if cost != costs[idx]:
+                continue
+            risk = self.node_risks.get(idx, 0.) if allow_prediction else 0.
+            is_destination = idx == goal if goal is not None else idx != start
+            if is_destination and self.has_safe_endpoint(idx) and risk < self.predictor.risk_th:
+                path = []
+                while idx is not None:
+                    path.append(idx)
+                    idx = previous[idx]
+                path.reverse()
+                self.plan_source = start
+                return path if self.has_safe_endpoint(start) else path[1:]
+            for other in self.adjacency.get(idx, ()):
+                if other not in self.angles or not self.has_safe_endpoint(other):
+                    continue
+                risk = self.node_risks.get(other, 0.) if allow_prediction else 0.
+                if risk >= self.predictor.risk_th:
+                    continue
+                degree = sum(self.has_safe_endpoint(neighbor) for neighbor in self.adjacency.get(other, ()))
+                length = float(np.max(np.abs(self.angles[other]-self.angles[idx])))
+                next_cost = cost+length*(1.+3.*risk)/(1.+.1*self.predictor.miss_rate*min(degree, 6))
+                if next_cost < costs.get(other, float('inf')):
+                    costs[other], previous[other] = next_cost, idx
+                    heapq.heappush(queue, (next_cost+remaining(other), next_cost, other))
+        return []
+
+    def select_waypoint(self):
+        self.clear_plan()
+        target = self.positions.copy()
+        target[self.arm_indices] = self.home[self.arm_indices]
+        if self.can_follow_task():
+            self.motion_phase = 'predictive_task'
+            return target, True
+        if not self.has_clear_task:
+            return self.select_retreat()
+        goal = self.nearest_node(self.home)
+        goal = goal if (self.has_safe_endpoint(goal)
+                        and self.node_risks.get(goal, 0.) < self.predictor.risk_th) else None
+        self.path = self.find_predictive_path(goal, True)
+        if not self.path:
+            # 行き止まり時だけの予測除外。現在の衝突・遮蔽・自己干渉の除外は禁止。
+            self.num_prediction_fallbacks += 1
+            self.path = self.find_predictive_path(goal, False)
+            if not self.path and self.can_bridge(self.positions, target, self.config['trigger_clearance_th'],
+                                                 target_node_id=self.nearest_node(target)):
+                self.motion_phase = 'predictive_fallback'
+                return target, True
+        while len(self.path) > 1 and np.max(np.abs(self.pose(self.path[0])-self.positions)) <= self.max_home_error_th:
+            self.plan_source = self.path.pop(0)
+        if self.path:
+            target = self.pose(self.path[0])
+            if self.can_bridge(self.positions, target, self.config['trigger_clearance_th'], target_node_id=self.path[0]):
+                self.num_plans += 1
+                self.motion_phase = 'predictive_detour'
+                return target, True
+        # 観測障害物を消さない局所退避。未検査の予測軌道の実行なし。
+        return self.select_retreat()
+
+
 class independent_policy:
     """片腕ずつのノード列追従と、経由ノードの左右組合せ確認。"""
-    def __init__(self, geometry, models, check_node_pair=None):
+    def __init__(self, geometry, models, check_node_pair=None, strategy='graph'):
+        policy_types = dict(graph=simulation_policy, avoidance_first=avoidance_first_policy,
+                            vrm_predictive=predictive_policy)
+        if strategy not in policy_types:
+            raise ValueError('未対応のGNG回避方策: '+str(strategy))
+        self.strategy = strategy
         self.geometry, self.models = geometry, models
         self.check_node_pair = check_node_pair
         self.policies = {}
         self.selected = None
         for name, model in models.items():
-            policy = simulation_policy()
+            policy = policy_types[strategy]()
             policy.config = dict(max_plan_sec=.5)
+            if strategy != 'graph':
+                policy.config.update(max_bridge_step=.025, min_clearance_th=.01,
+                                     min_planning_clearance_th=.005, trigger_clearance_th=.10,
+                                     release_clearance_th=.14, return_clear_sec=.5,
+                                     max_state_age_sec=.3, max_local_step=.12)
             policy.geometry = copy.copy(geometry)
             policy.arm_names = model['joint_names']
             policy.arm_indices = [geometry.joint_names.index(item) for item in policy.arm_names]
@@ -163,15 +375,21 @@ class independent_policy:
                 policy.clear_plan()
                 policy.pair_context = pair_context
             policy.cloud_tree, policy.cell_radius = cloud[:2]
+            if hasattr(policy, 'observe'):
+                policy.observe(cloud, graphs[name])
             gap = policy.cloud_clearance(positions)[0]
             gaps.append(gap)
             has_safe_neighbors = policy.has_safe_endpoint(measured_ids[name])
-            if not has_safe_neighbors:
+            is_priority_retreat = (self.strategy != 'graph' and
+                                   (getattr(policy, 'is_retreating', False) or gap < policy.config['trigger_clearance_th']))
+            if self.strategy == 'vrm_predictive':
+                is_priority_retreat |= policy.node_risks.get(measured_ids[name], 0.) >= policy.predictor.risk_th
+            if not has_safe_neighbors or is_priority_retreat:
                 candidates.append((0, gap, name))
             elif policy.path or np.max(np.abs(home[policy.arm_indices]-positions[policy.arm_indices])) > policy.max_home_error_th:
                 candidates.append((1, 0 if name == self.selected else 1, name))
         if not candidates:
-            return positions.copy(), dict(mode='gng', phase='monitoring', profile='', clearance_m=min(gaps),
+            return positions.copy(), dict(mode='gng', phase='monitoring', profile='', clearance_m=finite_clearance(min(gaps)),
                                           num_plans=sum(p.num_plans for p in self.policies.values()))
         name = min(candidates)[2]
         if name != self.selected:
@@ -193,7 +411,8 @@ class independent_policy:
             target = positions.copy()
         return target, dict(mode='gng', phase=policy.motion_phase if has_candidate else 'blocked',
                             profile=name, plan_node_ids=tuple(policy.path), entry_node_id=policy.plan_source,
-                            pair_node_ids=pair_ids, clearance_m=min(gaps),
+                            pair_node_ids=pair_ids, clearance_m=finite_clearance(min(gaps)),
+                            **(dict(prediction=policy.prediction_status()) if self.strategy == 'vrm_predictive' else {}),
                             num_plans=sum(p.num_plans for p in self.policies.values()))
 
     def close(self):
@@ -220,12 +439,13 @@ class gng_filter:
         self.home = dict(self.robot.targets)
         self.goal_generation = 0
         self.set_targets(self.home)
-        self.policy = independent_policy(self.geometry, self.models)
+        self.policy = independent_policy(self.geometry, self.models, strategy=settings.get('gng_strategy', 'graph'))
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='gng-control')
         self.future = None
         self.is_ready = False
         self.next_plan_sec = 0.
         self.target = self.positions()
+        self.next_guard_sec = 0.
         self.has_applied_target = False
         self.applied_plan_nodes = ()
         self.status = dict(mode='gng', phase='waiting', message='GNG/VLUT入力待機')
@@ -233,8 +453,11 @@ class gng_filter:
         self.runtime = None
         try:
             self.runtime = gng_runtime(node, params, settings, scene, self.geometry.root_link)
+            for policy in self.policy.policies.values():
+                policy.visibility = self.runtime.visibility
             self.policy.check_node_pair = self.runtime.check_node_pair
-            self.inputs = gng_inputs(node, self.runtime.params, self.models, self.geometry.root_link)
+            self.inputs = gng_inputs(node, self.runtime.params, self.models, self.geometry.root_link,
+                                     control_voxel_topic='/'+self.runtime.namespace+'/control_voxels')
         except Exception:
             self.pool.shutdown(wait=True, cancel_futures=True)
             self.policy.close()
@@ -321,7 +544,9 @@ class gng_filter:
         for name, value in self.fixed.items():
             if abs(positions[self.names.index(name)]-value) > .03:
                 raise RuntimeError('GNG停止: 固定関節が学習条件から外れました: '+name)
-        if not cloud[0].n:
+        has_fresh_inferred_map = (self.runtime.visibility is not None and self.runtime.visibility.model == 'fov_shadow'
+                                  and self.runtime.visibility.has_fresh_observation())
+        if not cloud[0].n and not has_fresh_inferred_map:
             # 新しい空ROIと通信途絶の区別。空観測による安全な自由空間との誤認防止。
             self.hold_for_environment('姿勢保持: ROI内の環境観測なし')
             return False
@@ -335,6 +560,7 @@ class gng_filter:
                     and target.shape == positions.shape and np.all(np.isfinite(target))):
                 self.target, self.status = target, status
                 self.has_applied_target = True
+                self.next_guard_sec = 0.
                 self.applied_plan_nodes = plan_nodes
         if self.has_applied_target and not self.has_current_plan_state(
                 self.status, self.applied_plan_nodes, graphs, positions):
@@ -343,6 +569,22 @@ class gng_filter:
             self.applied_plan_nodes = ()
             self.status = dict(mode='gng', phase='replanning', message='候補の失効による姿勢保持・再検査')
             self.robot.hold_position()
+        if ((self.runtime.visibility is not None or self.policy.strategy != 'graph'
+                or self.runtime.recorded_filter.num_boundary_voxels)
+                and self.has_applied_target
+                and now >= self.next_guard_sec):
+            # 非同期探索と独立した最新観測での短区間再検査。所有方策の共有状態への書込みなし。
+            self.next_guard_sec = now+.02
+            selected = self.policy.policies.get(self.status.get('profile'))
+            guard = gng_path_search()
+            guard.geometry = selected.geometry if selected is not None else self.geometry
+            guard.visibility = self.runtime.visibility
+            guard.config = dict(max_bridge_step=.025, min_clearance_th=.01, min_planning_clearance_th=.005)
+            guard.cloud_tree, guard.cell_radius = cloud[:2]
+            if not np.array_equal(positions, self.target) and not guard.can_bridge(positions, self.target, .01):
+                reason = self.runtime.visibility.last_reason if self.runtime.visibility is not None else 'obstacle'
+                self.hold_for_environment('姿勢保持: 区間照合 '+reason)
+                return False
         # 検査済み経由姿勢への継続追従。補間状態の保持とURDF速度制限はPhysicsRobotの管轄。
         self.robot.set_targets(dict(zip(self.names, map(float, self.target))))
         self.status.update(self.runtime.status())
@@ -365,3 +607,16 @@ class gng_filter:
             self.policy.close()
         finally:
             self.runtime.close()
+
+
+# プラグインの共通接続。学習条件の準備と既存回避実装への委譲
+class gng_adapter:
+    def prepare(self, settings, robot):
+        learned = load_models(settings.get('params_file') or str(workspace/'gng_vlut_system/config/topo_dual_arm_max_long.yaml'))
+        models = learned[1]
+        active = {name for model in models.values() for name in model['joint_names']}
+        fixed = {name for model in models.values() for name in model['fixed_joints']} - active
+        return dict(learned_models=learned, fixed_joint_names=fixed)
+
+    def create(self, scene, settings, node, robot, prepared):
+        return gng_filter(scene, settings, node, robot, prepared['learned_models'])

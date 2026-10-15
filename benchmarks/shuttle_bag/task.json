@@ -1,0 +1,16 @@
+{
+  "model": "long",
+  "active_profile": "left_arm",
+  "eef_link": "L_tcp",
+  "frame": "base_footprint",
+  "max_velocity": 2.0,
+  "max_acceleration": 8.0,
+  "max_position_error_th": 0.035,
+  "max_eef_position_error_th": 0.015,
+  "max_eef_orientation_error_deg_th": 3.0,
+  "max_arrival_velocity_th": 0.12,
+  "poses_deg": {
+    "a": {"L_joint1": -70, "L_joint2": -80, "L_joint4": -40, "R_joint1": 70, "R_joint2": 80, "R_joint4": 40},
+    "b": {"L_joint1": -35, "L_joint2": -65, "L_joint4": -75, "L_joint6": 15, "R_joint1": 70, "R_joint2": 80, "R_joint4": 40}
+  }
+}

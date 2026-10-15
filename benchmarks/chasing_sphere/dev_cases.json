@@ -1,0 +1,256 @@
+{
+  "cases": [
+    {
+      "name": "dev_reactive_31",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_reactive_31.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_reactive_37",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_reactive_37.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_vrm_31",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_vrm_31.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_vrm_37",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_vrm_37.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_rollout_reactive_31",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_rollout_reactive_31.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_rollout_reactive_37",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_rollout_reactive_37.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_cv_31",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_cv_31.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_cv_37",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_cv_37.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_sequence_31",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_sequence_31.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_sequence_37",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_sequence_37.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_occupancy_31",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_occupancy_31.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "dev_occupancy_37",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/dev_occupancy_37.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    }
+  ]
+}

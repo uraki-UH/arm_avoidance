@@ -584,7 +584,9 @@ def launch_setup(context, *args, **kwargs):
                     "occupied_voxels_topic": "occupied_voxels", "danger_voxels_topic": "danger_voxels",
                     "grasp.state_topic": name + "/grasp_state",
                     "grasp.applied_state_topic": name + "/grasp_state_applied",
-                    "enable_dynamic_manipulability": False,
+                    "robot.arm_root_link_name": profile["root_link"],
+                    "robot.arm_leaf_link_names": profile["eef_link"],
+                    "enable_dynamic_manipulability": True,
                     "visualization_gng.enabled": False,
                 }]))
         profiles_by_name = {item["profile"]: item for item in independent_profiles}
@@ -723,12 +725,13 @@ def launch_setup(context, *args, **kwargs):
     if enable_shared_roi_gng and not enable_environment_voxelization:
         raise ValueError('共有GNGにはenable_environment_voxelizationが必要です')
     if enable_environment_voxelization:
-        if not enable_self_recognition_viz or not yaml_enable_environment_self_filter:
-            raise ValueError('Viewerの環境ROIには自己認識と自己除去の有効化が必要です')
         environment = dict(yaml_environment_voxelization)
         input_kind = environment.get('input_kind', 'pointcloud')
         if input_kind not in ('pointcloud', 'voxel'):
             raise ValueError('environment_voxelization.input_kindはpointcloudまたはvoxelが必要です')
+        # 生点群の自己除去と、前処理済みvoxel入力の責務分離
+        if input_kind == 'pointcloud' and (not enable_self_recognition_viz or not yaml_enable_environment_self_filter):
+            raise ValueError('Viewerの環境点群ROIには自己認識と自己除去の有効化が必要です')
         if input_kind == 'voxel' and enable_shared_roi_gng:
             raise ValueError('共有GNGの入力には点群が必要です')
         if mid360_topic:
@@ -810,7 +813,7 @@ def launch_setup(context, *args, **kwargs):
             actions.append(Node(package='gng_vlut_system', executable='world_index_to_voxel_node',
                                 name='viewer_environment_voxelization', namespace=robot_name,
                                 parameters=[roi_params], output='screen'))
-        # 自己除去後のROIをGNG状態更新の占有・危険入力へ接続
+        # 選択された環境ボクセルをGNG状態更新の占有・危険入力へ接続
         actions.append(Node(package='gng_vlut_system', executable='voxel_to_vlut_node',
                             name='viewer_voxel_to_vlut', namespace=robot_name, output='screen',
                             parameters=[{

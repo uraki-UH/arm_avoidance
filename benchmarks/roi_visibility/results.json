@@ -1,0 +1,197 @@
+{
+  "target": "topo_dual_arm_max_long",
+  "scope": "MID-360 bag接続のMuJoCo・GNG/VLUTシミュレータ。実機出力なし",
+  "condition": {
+    "task_file": "benchmarks/shuttle_bag/task.json",
+    "task_policy": "avoidance_first",
+    "duration_sec": 60,
+    "repeats": 2,
+    "bag_rate": 1,
+    "max_velocity_rad_sec": 2,
+    "max_acceleration_rad_sec2": 8,
+    "ros_domain_id": 227
+  },
+  "states": {
+    "free": "有効な観測光線の通過セル",
+    "unknown": "未観測・遮蔽・不確定・失効",
+    "obstacle": "裏付けありの環境セル"
+  },
+  "validation": {
+    "num_visibility_checks": 35,
+    "num_existing_checks": 34,
+    "num_failed_checks": 0,
+    "num_replay_cases": 4,
+    "native_cli": {
+      "num_free_messages": 177,
+      "max_num_free_cells": 171358,
+      "num_visibility_updates": 170
+    },
+    "cpp_warning_flags": [
+      "-Wall",
+      "-Wextra",
+      "-Werror"
+    ]
+  },
+  "cost": {
+    "scope": "ROI更新1回。自己除去・分類と観測更新。ROS配信・物理・GNG学習・経路照会は除外",
+    "num_frames": 598,
+    "repeats": 3,
+    "last_num_input_points": 20064,
+    "voxel_size_m": 0.019999999552965164,
+    "map_bytes": 1815848,
+    "trials": [
+      {
+        "num_frames": 598,
+        "num_points_per_frame": 20064,
+        "num_free_mean": 147719.03177257525,
+        "num_unknown_mean": 1667065.22909699,
+        "num_ray_steps_mean": 495441.3545150502,
+        "map_bytes": 1815848,
+        "retained_free_ratio_mean": 0.9781451268472684,
+        "base_mean_ms": 7.372057319466526,
+        "base_p95_ms": 9.504471209947951,
+        "all_rays_mean_ms": 10.346850066680934,
+        "all_rays_p95_ms": 11.703700257930905,
+        "visibility_mean_ms": 9.22746032396706,
+        "visibility_p95_ms": 10.50920670168125,
+        "combined_mean_ms": 16.599517643433586,
+        "combined_p95_ms": 19.503110549703706
+      },
+      {
+        "num_frames": 598,
+        "num_points_per_frame": 20064,
+        "num_free_mean": 147719.03177257525,
+        "num_unknown_mean": 1667065.22909699,
+        "num_ray_steps_mean": 495441.3545150502,
+        "map_bytes": 1815848,
+        "retained_free_ratio_mean": 0.9781451268472684,
+        "base_mean_ms": 7.363043086812365,
+        "base_p95_ms": 9.456886510452023,
+        "all_rays_mean_ms": 10.292817697375366,
+        "all_rays_p95_ms": 11.625522302347235,
+        "visibility_mean_ms": 9.194287303225822,
+        "visibility_p95_ms": 10.310206661233678,
+        "combined_mean_ms": 16.557330390038185,
+        "combined_p95_ms": 19.3363450554898
+      },
+      {
+        "num_frames": 598,
+        "num_points_per_frame": 20064,
+        "num_free_mean": 147719.03177257525,
+        "num_unknown_mean": 1667065.22909699,
+        "num_ray_steps_mean": 495441.3545150502,
+        "map_bytes": 1815848,
+        "retained_free_ratio_mean": 0.9781451268472684,
+        "base_mean_ms": 7.335277000076354,
+        "base_p95_ms": 9.406048304663273,
+        "all_rays_mean_ms": 10.323281210779452,
+        "all_rays_p95_ms": 11.644937056553317,
+        "visibility_mean_ms": 9.239232503512351,
+        "visibility_p95_ms": 10.342622993630355,
+        "combined_mean_ms": 16.574509503588704,
+        "combined_p95_ms": 19.341962046019034
+      }
+    ]
+  },
+  "comparison": {
+    "legacy": [
+      {
+        "num_round_trips": 5,
+        "normal_sec": 7.149999999999977,
+        "avoiding_sec": 11.760000000003693,
+        "stopped_sec": 34.90000000001708,
+        "covered_sec": 59.299991607666016,
+        "num_contact_samples": 272,
+        "num_evaluation_samples": 2392,
+        "max_num_overlap_voxels": 54,
+        "visibility_rejected_unknown": 0,
+        "visibility_rejected_obstacle": 0,
+        "visibility_rejected_unavailable": 0
+      },
+      {
+        "num_round_trips": 7,
+        "normal_sec": 9.459999999998875,
+        "avoiding_sec": 10.160000000004024,
+        "stopped_sec": 34.33000000001805,
+        "covered_sec": 59.29977202415466,
+        "num_contact_samples": 324,
+        "num_evaluation_samples": 2392,
+        "max_num_overlap_voxels": 54,
+        "visibility_rejected_unknown": 0,
+        "visibility_rejected_obstacle": 0,
+        "visibility_rejected_unavailable": 0
+      }
+    ],
+    "strict": [
+      {
+        "num_round_trips": 0,
+        "normal_sec": 0,
+        "avoiding_sec": 0,
+        "stopped_sec": 47.580000000013165,
+        "covered_sec": 59.32031989097595,
+        "num_contact_samples": 433,
+        "num_evaluation_samples": 2392,
+        "max_num_overlap_voxels": 54,
+        "visibility_num_updates": 573,
+        "visibility_build_mean_ms": 9.35969339135809,
+        "visibility_query_mean_ms": 2.070249592119989,
+        "visibility_rejected_unknown": 808,
+        "visibility_rejected_obstacle": 70,
+        "visibility_rejected_unavailable": 52
+      },
+      {
+        "num_round_trips": 0,
+        "normal_sec": 0,
+        "avoiding_sec": 0,
+        "stopped_sec": 47.41000000001296,
+        "covered_sec": 59.309338331222534,
+        "num_contact_samples": 435,
+        "num_evaluation_samples": 2392,
+        "max_num_overlap_voxels": 54,
+        "visibility_num_updates": 575,
+        "visibility_build_mean_ms": 9.34038248733091,
+        "visibility_query_mean_ms": 2.1777287029073578,
+        "visibility_rejected_unknown": 806,
+        "visibility_rejected_obstacle": 71,
+        "visibility_rejected_unavailable": 51
+      }
+    ]
+  },
+  "evaluation": {
+    "has_achieved_collision_free_task": false,
+    "has_improved_contact_metric": false,
+    "has_proven_blind_spot_as_failure_cause": false,
+    "conclusion": "unknown進入の棄却は動作、strictの往復0回。保持中心で、回避性能改善・全身重なり解消は未達。",
+    "contact_scope": "記録自己一致部除去後の環境と実測全身ボクセルの重なり。実物の衝突回数ではない。",
+    "cost_tradeoff": "重複終端セルへの実光線を1本に限定。全光線版freeの約97.8%を保持、新規freeなし。",
+    "limits": [
+      "2 cm格子・URDF外接球による近似",
+      "開始身体の占有セルはunknownのみ免除、障害物の免除なし",
+      "点単位の走査歪み補正・動的障害物の予測・制動距離の保証なし",
+      "空ROI時の既存保持は継続",
+      "ROS freeトピックは可視化用、判定は内部スナップショットの鮮度で管理"
+    ]
+  },
+  "cleanup": {
+    "is_verified": true,
+    "num_owned_roots_stopped": 36,
+    "num_recorded_ros_children_stopped": 64,
+    "is_existing_viewer_preserved": true,
+    "is_container_state_preserved": true
+  },
+  "reports": {
+    "unit_final": "log/artifacts/roi_visibility/unit_final/report.json",
+    "replay_final": "log/artifacts/roi_visibility/replay_final/report.json",
+    "cost_final": "log/artifacts/roi_visibility/cost_final/report.json",
+    "launch": "log/artifacts/roi_visibility/launch/report.json"
+  },
+  "source_sha256": {
+    "gng_vlut_system/src/core/indexing/visibility_kernel.cpp": "e38f6574abe45e3edda67377445654634bca962e834df0a58e40d46e62430552",
+    "gng_vlut_system/scripts/gng_avoidance_planner.py": "15be94949fd5affb4c785ca79be5283aaae41b61a7eca19002e1979eefe22d4a",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_visibility.py": "3f84a34c2dd8eef4d165150c46ca43cdf42c5f65a1959fd7939bcedbfc6cbaf0",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_runtime.py": "fdce6b1d4ad8b773b18ca9ba86397497622b992d73a15736dce82cac86fc0394",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_avoidance.py": "1f225d603ec97cb3ea8225af1a6e68aefd47c35d6ed71b9dee8ab24760e82b56",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/simulate.py": "7ac276c8587a423d6d7a8df7a5617dc955e914d34a976d9f4b5a2f4abb88ee50",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/plugins/gng.json": "f25743b61559a62c3553494e13dc6d54e43905b0a4b6e3ac696e9ddf787abc44"
+  }
+}

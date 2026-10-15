@@ -1,0 +1,11 @@
+{
+  "cases": [
+    {
+      "name": "cover3_build",
+      "argv": ["/usr/bin/time", "-v", "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_review/vrm", "build", "cover3", "--budget", "304", "--floordepth", "0", "--tau", ".005", "--base", ".7", "--rmax", "100"],
+      "cwd": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_review/model_3d",
+      "env": {"OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "1"},
+      "timeout_sec": 360
+    }
+  ]
+}

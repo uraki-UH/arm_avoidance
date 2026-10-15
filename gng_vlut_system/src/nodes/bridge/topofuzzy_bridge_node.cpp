@@ -152,6 +152,7 @@ public:
 
     declare_parameter("urdf_path", "");
     declare_parameter("robot.arm_leaf_link_names", "");
+    declare_parameter("robot.arm_root_link_name", "");
 
     const std::string gng_path =
         resolveResultPath(get_parameter("gng_model_path").as_string(), false);
@@ -167,7 +168,7 @@ public:
           "topofuzzy_bridge: failed to load safety context");
     }
 
-    // 関節選択済みモデルでは学習時の可操作度を保持
+    // 対象の運動連鎖に基づく可操作度の再評価
     if (declare_parameter<bool>("enable_dynamic_manipulability", true)) {
       calculateManipulabilityEllipsoidsDynamically();
     }
@@ -1024,6 +1025,7 @@ private:
   void calculateManipulabilityEllipsoidsDynamically() {
     std::string urdf_path_raw = get_parameter("urdf_path").as_string();
     std::string leaf_link = get_parameter("robot.arm_leaf_link_names").as_string();
+    const std::string root_link = get_parameter("robot.arm_root_link_name").as_string();
 
     if (urdf_path_raw.empty() || leaf_link.empty()) {
       RCLCPP_WARN(get_logger(), "topofuzzy_bridge: urdf_path or arm_leaf_link_names parameter is empty. Dynamic manipulability calculation skipped.");
@@ -1039,8 +1041,8 @@ private:
     try {
       auto model_obj = simulation::loadRobotFromUrdf(urdf_file);
       simulation::RobotModel model(model_obj);
-      kinematics::KinematicChain arm = simulation::createKinematicChainFromModel(model, leaf_link);
-      arm.setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+      kinematics::KinematicChain arm = simulation::createKinematicChainFromModel(
+          model, leaf_link, Eigen::Vector3d::Zero(), root_link);
 
       RCLCPP_INFO(get_logger(), "topofuzzy_bridge: Dynamically calculating manipulability ellipsoids for GNG nodes (DOF=%d, leaf=%s)",
                   arm.getTotalDOF(), leaf_link.c_str());
@@ -1051,7 +1053,10 @@ private:
         auto &node = gng.getNodes()[i];
         if (node.id == -1) continue;
 
-        // Calculate FK & Jacobian
+        // 学習済み関節配列と選択運動連鎖の整合性
+        if (node.weight_angle.size() != arm.getTotalDOF() || !node.weight_angle.allFinite()) {
+          throw std::runtime_error("GNG関節配列と可操作度計算用の運動連鎖が不一致です");
+        }
         std::vector<double> joints(node.weight_angle.size());
         for (int j = 0; j < node.weight_angle.size(); ++j) {
           joints[j] = node.weight_angle(j);

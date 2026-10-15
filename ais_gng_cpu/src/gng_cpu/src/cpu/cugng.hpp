@@ -26,10 +26,12 @@ class CUGNG {
     int node_num = 0;
     int node_num_max = 0;
     vector<Node> nodes;
-    vector<uint8_t> edge_count;
+    // 有効な統計だけの連続配置。無効時のノード別領域なし
+    vector<node_moments> winner_stats, support_stats;
+    vector<uint32_t> edge_count;
     // 隣接配列と同順の共有エッジID。ID 0は未接続の読み出し専用領域。
     vector<array<uint32_t, NODE_MAX_EDGE>> edge_slots;
-    vector<array<uint32_t, NODE_GRID_NODE_NUM_NAX>> grid;
+    vector<array<uint16_t, NODE_GRID_NODE_NUM_NAX>> grid;
     // 使用セルを含む256セル単位の遅延確保。未使用ページの印はUINT32_MAX。
     static constexpr uint32_t grid_page_size = 256;
     vector<uint32_t> grid_page_offsets;
@@ -79,6 +81,7 @@ class CUGNG {
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
     void clear();
+    void set_statistics_enabled(bool enable_covariance, bool enable_support);
     // フレーム内の同期再利用・孤立候補確認・実在エッジ走査。単独呼出しは従来処理。
     void begin_update_frame(bool enable_search_reuse, bool enable_orphan_updates, bool enable_edge_updates);
     void end_update_frame();
@@ -170,7 +173,7 @@ class CUGNG {
     // 最小空きIDの探索開始位置。削除時に手前の空きを反映。
     uint32_t next_free_idx = 0;
 
-    array<uint32_t, NODE_GRID_NODE_NUM_NAX> &grid_cell(uint32_t idx) {
+    array<uint16_t, NODE_GRID_NODE_NUM_NAX> &grid_cell(uint32_t idx) {
         auto &offset = grid_page_offsets.data()[idx / grid_page_size];
         if (offset == UINT32_MAX) {
             offset = grid.size();

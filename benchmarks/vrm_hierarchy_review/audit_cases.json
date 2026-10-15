@@ -1,0 +1,12 @@
+{
+  "cases": [
+    {
+      "name": "cover3_audit",
+      "argv": ["/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_review/audit", "@seed@", "@case_dir@/metrics.json", "4"],
+      "cwd": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_review/model_3d",
+      "env": {"OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "1"},
+      "metrics": "metrics.json",
+      "timeout_sec": 180
+    }
+  ]
+}

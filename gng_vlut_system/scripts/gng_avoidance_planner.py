@@ -6,6 +6,7 @@ import copy
 import numpy as np
 
 from avoidance_motion import motion_flags, motion_input, motion_result, motion_components, select_motion
+from gng_edge_vlut import query_backend, query_backend_checks
 
 
 def graph_topology_hash(ids, edges):
@@ -37,7 +38,7 @@ def has_safe_node_neighbors(labels, adjacency, node_id):
 
 def has_stable_return_clearance(state, has_clear_return):
     """危険時の即時解除と、安全継続時間による復帰許可。実時間基準。"""
-    now = time.monotonic()
+    now = getattr(state, 'clock_sec', time.monotonic)()
     previous = getattr(state, 'return_check_sec', None)
     state.return_check_sec = now
     if not has_clear_return:
@@ -131,8 +132,20 @@ class gng_path_search:
         """実行系に対応する区間検査の距離下限。"""
         return max(min_gap, self.config['min_clearance_th'])
 
-    def can_bridge(self, first, second, min_gap):
+    def can_bridge(self, first, second, min_gap, *, target_node_id=None):
+        # 衝突ラベル付き代表姿勢そのものの即時棄却。領域内の別姿勢への伝播なし。
+        if (target_node_id is not None and self.labels.get(target_node_id) == 2
+                and np.array_equal(second, self.pose(target_node_id))):
+            self.num_representative_collision_rejections = getattr(
+                self, 'num_representative_collision_rejections', 0)+1
+            return False
+        visibility = getattr(self, 'visibility', None)
+        if visibility is not None and not visibility.can_bridge(self.geometry, first, second):
+            return False
         min_gap = self.bridge_clearance(first, min_gap)
+        checks = query_backend_checks(self, first, second, min_gap)
+        if checks.can_pass is not None:
+            return checks.can_pass
         count = max(2, int(np.ceil(np.max(np.abs(second-first))/self.config['max_bridge_step'])))
         ratios = np.linspace(0, 1, count+1)[1:]
         is_arm = self.geometry.is_arm
@@ -144,8 +157,12 @@ class gng_path_search:
             gaps = np.min(distances-self.geometry.radii[is_arm]-self.cell_radius, axis=1)
             cloud_rejections = np.flatnonzero(gaps < min_gap)
             end = int(cloud_rejections[0]) if len(cloud_rejections) else len(batch)
+            if end and checks.can_skip_internal:
+                backend = getattr(self, self.config['vlut_backend']+'_backend')
+                backend.stats['num_internal_checks_skipped'] += 1
+                backend.stats['num_internal_poses_skipped'] += end
             # 最初の点群棄却より前だけの一括自己干渉検査。従来の棄却順・理由を維持。
-            if end:
+            if end and not checks.can_skip_internal:
                 # 最初の姿勢での早期棄却。通過した区間だけ残りの姿勢を一括検査。
                 rejection_idx = None if self.has_planning_clearance(batch[0]) else 0
                 if rejection_idx is None and end > 1:
@@ -225,6 +242,9 @@ class gng_path_search:
                 if self.labels.get(adjacent) != 1 or adjacent not in self.angles:
                     continue
                 target = self.pose(adjacent)
+                # 追加索引の確定衝突だけの早期除外。要確認辺は従来の採用前検査。
+                if self.config.get('vlut_backend', 'node_vlut') != 'node_vlut' and query_backend(self, pose, target, min_gap) is False:
+                    continue
                 next_cost = cost+float(np.max(np.abs(target-pose)))
                 if next_cost < costs.get(adjacent, float('inf')):
                     costs[adjacent], previous[adjacent] = next_cost, idx

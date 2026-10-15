@@ -1,0 +1,58 @@
+{
+  "schema": "fov_shadow_evaluation_v1",
+  "model": "fov_shadow",
+  "default_enabled": true,
+  "min_elevation_deg": -7,
+  "max_elevation_deg": 52,
+  "horizontal_fov_deg": 360,
+  "min_sensor_dist_m": 0.1,
+  "roi_min_bounds_m": [
+    -1.2,
+    -1.2,
+    -1.2
+  ],
+  "roi_max_bounds_m": [
+    1.2,
+    1.2,
+    1.2
+  ],
+  "unit_report": "log/artifacts/vrm_predictive/unit_verified/report.json",
+  "cost_report": "log/artifacts/fov_shadow/cost_final/report.json",
+  "num_trials": 3,
+  "num_frames_per_trial": 598,
+  "num_input_points_mean": 19999.464882943143,
+  "comparison": {
+    "ray_mean_ms": 9.333531031794434,
+    "fov_shadow_mean_ms": 6.917344320471277,
+    "preprocessing_mean_ms": 7.390282275975164,
+    "preprocessing_plus_fov_mean_ms": 14.30762659644644,
+    "cold_fov_ms": [
+      43.2617819897132,
+      43.79366799548734,
+      43.19313100131694
+    ],
+    "ray_unknown_in_fov_pct": 77.08974001479072,
+    "fov_unknown_in_fov_pct": 59.63411310373754,
+    "map_bytes": 1815848,
+    "projection_bytes": 14526784,
+    "projection_builds_per_trial": 1
+  },
+  "timing_scope": "同一ROI更新1回あたり。初回以外の平均、GNG学習・計画・物理・配信を除外",
+  "behavior": {
+    "free": "視野内・非遮蔽の推定空間。未検出物体の不在証明なし",
+    "obstacle": "記録自己マスク除去後の制御用ROI。孤立・境界候補を含む",
+    "unknown": "物体・記録ロボットの背後、視野外、近距離死角",
+    "can_change_free_to_obstacle": true,
+    "has_past_free_accumulation": false,
+    "max_observation_age_sec": 0.3,
+    "has_voxel_reregistration": false
+  },
+  "efficacy": {
+    "status": "視野外・遮蔽による往復未達。予測型の最新比較は別集計",
+    "results": "benchmarks/vrm_predictive/results.json"
+  },
+  "cleanup": {
+    "is_complete": true,
+    "has_test_processes": false
+  }
+}

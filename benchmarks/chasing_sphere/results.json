@@ -1,0 +1,1497 @@
+{
+  "scope": "Long左腕の実URDF・MuJoCo。手先位置を因果的に追跡する球。解析的な球観測であり、点群認識・MID-360死角・標準VLUTバイナリ照会の一括性能試験ではない",
+  "protocol": "benchmarks/chasing_sphere/protocol.json",
+  "frozen": "benchmarks/chasing_sphere/frozen.json",
+  "duration_sec": 18,
+  "selected_before_holdout": "cv",
+  "has_post_holdout_tuning": false,
+  "has_hardware_output": false,
+  "num_regression_checks": 164,
+  "num_regression_errors": 0,
+  "holdout_wall_sec": 260.0927146019967,
+  "summary": {
+    "reactive": {
+      "num_cases": 4,
+      "num_completed": 0,
+      "num_failures": 4,
+      "mean_safe_sec": 4.0125,
+      "sum_arrivals": 0,
+      "sum_round_trips": 0,
+      "mean_case_propose_p95_ms": 10.81569589623541,
+      "mean_propose_ms": 8.54783400336884
+    },
+    "vrm": {
+      "num_cases": 4,
+      "num_completed": 0,
+      "num_failures": 4,
+      "mean_safe_sec": 3.8025,
+      "sum_arrivals": 0,
+      "sum_round_trips": 0,
+      "mean_case_propose_p95_ms": 19.67441859869723,
+      "mean_propose_ms": 17.47568079214321
+    },
+    "static": {
+      "num_cases": 4,
+      "num_completed": 1,
+      "num_failures": 3,
+      "mean_safe_sec": 8.1625,
+      "sum_arrivals": 5,
+      "sum_round_trips": 1,
+      "mean_case_propose_p95_ms": 19.220515362940205,
+      "mean_propose_ms": 18.02511952616213
+    },
+    "cv": {
+      "num_cases": 4,
+      "num_completed": 1,
+      "num_failures": 3,
+      "mean_safe_sec": 10.065,
+      "sum_arrivals": 2,
+      "sum_round_trips": 0,
+      "mean_case_propose_p95_ms": 19.178975899012585,
+      "mean_propose_ms": 17.82056416524386
+    },
+    "sequence": {
+      "num_cases": 4,
+      "num_completed": 0,
+      "num_failures": 4,
+      "mean_safe_sec": 10.1275,
+      "sum_arrivals": 3,
+      "sum_round_trips": 1,
+      "mean_case_propose_p95_ms": 20.08467276536976,
+      "mean_propose_ms": 18.78501659949058
+    },
+    "occupancy": {
+      "num_cases": 4,
+      "num_completed": 1,
+      "num_failures": 3,
+      "mean_safe_sec": 10.245000000000001,
+      "sum_arrivals": 5,
+      "sum_round_trips": 2,
+      "mean_case_propose_p95_ms": 19.549018424550013,
+      "mean_propose_ms": 18.056036376813882
+    }
+  },
+  "records": [
+    {
+      "method": "reactive",
+      "seed": 101,
+      "config": {
+        "duration_sec": 18,
+        "seed": 101,
+        "radius_m": 0.04,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "avoidance_first",
+        "initial_direction": [
+          1.0,
+          -0.4,
+          0.3
+        ]
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 4.13,
+        "evaluated_sec": 4.14,
+        "failure_penalty_sec": 13.86,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.338,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.0,
+        "min_proxy_gap_m": 0.10202024801084938,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.4199250845008381,
+        "max_eef_speed_mps": 1.545346285630517,
+        "max_joint_speed_radps": 2.279776508197088,
+        "propose_mean_ms": 8.439472011789814,
+        "propose_p95_ms": 10.668167896801602,
+        "num_proposals": 83,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_reactive_101",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": -3.2028866352034395,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "vrm",
+      "seed": 101,
+      "config": {
+        "duration_sec": 18,
+        "seed": 101,
+        "radius_m": 0.04,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "vrm_predictive",
+        "initial_direction": [
+          1.0,
+          -0.4,
+          0.3
+        ]
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 4.13,
+        "evaluated_sec": 4.14,
+        "failure_penalty_sec": 13.86,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.338,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.0,
+        "min_proxy_gap_m": 0.10202024801084938,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.4199250845008381,
+        "max_eef_speed_mps": 1.545346285630517,
+        "max_joint_speed_radps": 2.279776508197088,
+        "propose_mean_ms": 17.176458782674914,
+        "propose_p95_ms": 18.956151104066517,
+        "num_proposals": 83,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_vrm_101",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": -3.2028866352034395,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "static",
+      "seed": 101,
+      "config": {
+        "duration_sec": 18,
+        "seed": 101,
+        "radius_m": 0.04,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_reactive",
+        "initial_direction": [
+          1.0,
+          -0.4,
+          0.3
+        ]
+      },
+      "failure_reason": "physical_contact",
+      "metrics": {
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 6.18,
+        "evaluated_sec": 6.1899999999999995,
+        "failure_penalty_sec": 11.81,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.4063333333333333,
+        "proxy_contact_sec": 0.07,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.060000000000000005,
+        "min_proxy_gap_m": -0.018414916851374537,
+        "first_contact_sec": 6.1899999999999995,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.5079575333519234,
+        "max_eef_speed_mps": 1.7423833395911266,
+        "max_joint_speed_radps": 2.454878585270383,
+        "propose_mean_ms": 18.08589724239409,
+        "propose_p95_ms": 19.294638402061537,
+        "num_proposals": 124,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_static_101",
+      "cleanup_ok": true
+    },
+    {
+      "method": "cv",
+      "seed": 101,
+      "config": {
+        "duration_sec": 18,
+        "seed": 101,
+        "radius_m": 0.04,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          1.0,
+          -0.4,
+          0.3
+        ]
+      },
+      "failure_reason": "",
+      "metrics": {
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 18.0,
+        "evaluated_sec": 18.0,
+        "failure_penalty_sec": 0.0,
+        "is_failure": 0,
+        "first_failure_speed_ratio": 0.8,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.46000000000000024,
+        "min_proxy_gap_m": 0.04160880720853983,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.9022640184259686,
+        "max_eef_speed_mps": 1.4630407304776971,
+        "max_joint_speed_radps": 2.480658061597509,
+        "propose_mean_ms": 18.100428260893548,
+        "propose_p95_ms": 19.25588780286489,
+        "num_proposals": 360,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_cv_101",
+      "cleanup_ok": true
+    },
+    {
+      "method": "sequence",
+      "seed": 101,
+      "config": {
+        "duration_sec": 18,
+        "seed": 101,
+        "radius_m": 0.04,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_sequence",
+        "initial_direction": [
+          1.0,
+          -0.4,
+          0.3
+        ],
+        "memory_file": "/ros2_ws/src/benchmarks/chasing_sphere/memory.json"
+      },
+      "failure_reason": "internal_interference",
+      "metrics": {
+        "num_arrivals": 2,
+        "num_round_trips": 1,
+        "contact_sec": 0.0,
+        "safe_sec": 15.19,
+        "evaluated_sec": 15.2,
+        "failure_penalty_sec": 2.8000000000000007,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.7066666666666668,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.03,
+        "stopped_sec": 0.4300000000000002,
+        "min_proxy_gap_m": 0.03145379245248509,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.7829757391842083,
+        "max_eef_speed_mps": 1.6007175725084373,
+        "max_joint_speed_radps": 2.494951487331891,
+        "propose_mean_ms": 18.656026407466253,
+        "propose_p95_ms": 19.926197658787714,
+        "num_proposals": 304,
+        "num_memory_contexts": 66,
+        "num_memory_learning": 581,
+        "learned_pursuit_gain": 0.06944837392085584,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_sequence_101",
+      "cleanup_ok": true
+    },
+    {
+      "method": "occupancy",
+      "seed": 101,
+      "config": {
+        "duration_sec": 18,
+        "seed": 101,
+        "radius_m": 0.04,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "occupancy",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          1.0,
+          -0.4,
+          0.3
+        ]
+      },
+      "failure_reason": "physical_contact",
+      "metrics": {
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 12.49,
+        "evaluated_sec": 12.5,
+        "failure_penalty_sec": 5.5,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.6166666666666667,
+        "proxy_contact_sec": 0.02,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.35000000000000014,
+        "min_proxy_gap_m": -0.00895029767673593,
+        "first_contact_sec": 12.5,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.6573180882993845,
+        "max_eef_speed_mps": 1.5804444018628863,
+        "max_joint_speed_radps": 2.486603028537021,
+        "propose_mean_ms": 18.050730471964926,
+        "propose_p95_ms": 19.25903925439343,
+        "num_proposals": 250,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_occupancy_101",
+      "cleanup_ok": true
+    },
+    {
+      "method": "vrm",
+      "seed": 107,
+      "config": {
+        "duration_sec": 18,
+        "seed": 107,
+        "radius_m": 0.075,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "vrm_predictive",
+        "initial_direction": [
+          0.5,
+          1.0,
+          0.3
+        ],
+        "observation_delay_sec": 0.05,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "internal_interference",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 3.17,
+        "evaluated_sec": 3.1799999999999997,
+        "failure_penalty_sec": 14.82,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.306,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.03,
+        "stopped_sec": 0.45000000000000023,
+        "min_proxy_gap_m": 0.0900791383661282,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.38242779809828714,
+        "max_eef_speed_mps": 0.9607413825524338,
+        "max_joint_speed_radps": 2.279765080335522,
+        "propose_mean_ms": 18.130882999338652,
+        "propose_p95_ms": 20.33269039238803,
+        "num_proposals": 63,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_vrm_107",
+      "cleanup_ok": true
+    },
+    {
+      "method": "static",
+      "seed": 107,
+      "config": {
+        "duration_sec": 18,
+        "seed": 107,
+        "radius_m": 0.075,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_reactive",
+        "initial_direction": [
+          0.5,
+          1.0,
+          0.3
+        ],
+        "observation_delay_sec": 0.05,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "",
+      "metrics": {
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "contact_sec": 0.0,
+        "safe_sec": 18.0,
+        "evaluated_sec": 18.0,
+        "failure_penalty_sec": 0.0,
+        "is_failure": 0,
+        "first_failure_speed_ratio": 0.8,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.9500000000000006,
+        "min_proxy_gap_m": 0.010860032795271618,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.8978827827688557,
+        "max_eef_speed_mps": 1.6625052789145056,
+        "max_joint_speed_radps": 2.4795811384116493,
+        "propose_mean_ms": 18.21126812822698,
+        "propose_p95_ms": 19.419887999538332,
+        "num_proposals": 359,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_static_107",
+      "cleanup_ok": true
+    },
+    {
+      "method": "cv",
+      "seed": 107,
+      "config": {
+        "duration_sec": 18,
+        "seed": 107,
+        "radius_m": 0.075,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          0.5,
+          1.0,
+          0.3
+        ],
+        "observation_delay_sec": 0.05,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 5.25,
+        "evaluated_sec": 5.26,
+        "failure_penalty_sec": 12.74,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.3753333333333334,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.09999999999999999,
+        "min_proxy_gap_m": 0.10040176047277201,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.42816737393627635,
+        "max_eef_speed_mps": 1.6644372052619096,
+        "max_joint_speed_radps": 2.32748358978317,
+        "propose_mean_ms": 18.108946113941435,
+        "propose_p95_ms": 19.707094799377955,
+        "num_proposals": 105,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_cv_107",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": -3.192242529739536,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "sequence",
+      "seed": 107,
+      "config": {
+        "duration_sec": 18,
+        "seed": 107,
+        "radius_m": 0.075,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_sequence",
+        "initial_direction": [
+          0.5,
+          1.0,
+          0.3
+        ],
+        "observation_delay_sec": 0.05,
+        "observation_noise_m": 0.001,
+        "memory_file": "/ros2_ws/src/benchmarks/chasing_sphere/memory.json"
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 5.49,
+        "evaluated_sec": 5.5,
+        "failure_penalty_sec": 12.5,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.3833333333333334,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.17,
+        "min_proxy_gap_m": 0.1008594992563172,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.4558467201934026,
+        "max_eef_speed_mps": 1.4289229061448903,
+        "max_joint_speed_radps": 2.4001850003054437,
+        "propose_mean_ms": 19.339246384867835,
+        "propose_p95_ms": 20.577657999820076,
+        "num_proposals": 109,
+        "num_memory_contexts": 66,
+        "num_memory_learning": 581,
+        "learned_pursuit_gain": 0.06944837392085584,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_sequence_107",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": -3.203849217184999,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "occupancy",
+      "seed": 107,
+      "config": {
+        "duration_sec": 18,
+        "seed": 107,
+        "radius_m": 0.075,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "occupancy",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          0.5,
+          1.0,
+          0.3
+        ],
+        "observation_delay_sec": 0.05,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 5.8100000000000005,
+        "evaluated_sec": 5.82,
+        "failure_penalty_sec": 12.18,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.394,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.09999999999999999,
+        "min_proxy_gap_m": 0.09092184540800156,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.4634457265733495,
+        "max_eef_speed_mps": 1.5041932285890542,
+        "max_joint_speed_radps": 2.3974842674572554,
+        "propose_mean_ms": 18.527725543616068,
+        "propose_p95_ms": 20.31547924707411,
+        "num_proposals": 116,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_occupancy_107",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": -3.2040773581701814,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "reactive",
+      "seed": 107,
+      "config": {
+        "duration_sec": 18,
+        "seed": 107,
+        "radius_m": 0.075,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "avoidance_first",
+        "initial_direction": [
+          0.5,
+          1.0,
+          0.3
+        ],
+        "observation_delay_sec": 0.05,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "physical_contact",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 4.01,
+        "evaluated_sec": 4.02,
+        "failure_penalty_sec": 13.98,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.334,
+        "proxy_contact_sec": 0.07,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.9500000000000006,
+        "min_proxy_gap_m": -0.013712933138910095,
+        "first_contact_sec": 4.02,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.41745935212255775,
+        "max_eef_speed_mps": 0.9517261780315734,
+        "max_joint_speed_radps": 2.279765080335522,
+        "propose_mean_ms": 8.519216450440581,
+        "propose_p95_ms": 10.338577647780763,
+        "num_proposals": 80,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_reactive_107",
+      "cleanup_ok": true
+    },
+    {
+      "method": "static",
+      "seed": 131,
+      "config": {
+        "duration_sec": 18,
+        "seed": 131,
+        "radius_m": 0.055,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_reactive",
+        "initial_direction": [
+          1.0,
+          1.0,
+          0.4
+        ],
+        "goal_offset_deg": {
+          "L_joint3": -4,
+          "L_joint6": 5
+        },
+        "pursuit_delay_sec": 0.08,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "physical_contact",
+      "metrics": {
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 3.67,
+        "evaluated_sec": 3.6799999999999997,
+        "failure_penalty_sec": 14.32,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.32266666666666666,
+        "proxy_contact_sec": 0.07,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.12999999999999998,
+        "min_proxy_gap_m": -0.010614031672428768,
+        "first_contact_sec": 3.6799999999999997,
+        "reference_eef_speed_mps": 1.3006585238283501,
+        "max_ball_speed_mps": 0.4192455975140048,
+        "max_eef_speed_mps": 1.3985926423313821,
+        "max_joint_speed_radps": 2.2808969054750934,
+        "propose_mean_ms": 18.18258682367348,
+        "propose_p95_ms": 18.95202265077387,
+        "num_proposals": 74,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_static_131",
+      "cleanup_ok": true
+    },
+    {
+      "method": "cv",
+      "seed": 131,
+      "config": {
+        "duration_sec": 18,
+        "seed": 131,
+        "radius_m": 0.055,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          1.0,
+          1.0,
+          0.4
+        ],
+        "goal_offset_deg": {
+          "L_joint3": -4,
+          "L_joint6": 5
+        },
+        "pursuit_delay_sec": 0.08,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "physical_contact",
+      "metrics": {
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 12.33,
+        "evaluated_sec": 12.34,
+        "failure_penalty_sec": 5.66,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.6113333333333334,
+        "proxy_contact_sec": 0.02,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.20000000000000004,
+        "min_proxy_gap_m": -0.01728351370601313,
+        "first_contact_sec": 12.34,
+        "reference_eef_speed_mps": 1.3006585238283501,
+        "max_ball_speed_mps": 0.6934919371769181,
+        "max_eef_speed_mps": 1.7182128294003725,
+        "max_joint_speed_radps": 2.5002027644537543,
+        "propose_mean_ms": 17.749724586869906,
+        "propose_p95_ms": 19.006805194658227,
+        "num_proposals": 247,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_cv_131",
+      "cleanup_ok": true
+    },
+    {
+      "method": "sequence",
+      "seed": 131,
+      "config": {
+        "duration_sec": 18,
+        "seed": 131,
+        "radius_m": 0.055,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_sequence",
+        "initial_direction": [
+          1.0,
+          1.0,
+          0.4
+        ],
+        "goal_offset_deg": {
+          "L_joint3": -4,
+          "L_joint6": 5
+        },
+        "pursuit_delay_sec": 0.08,
+        "observation_noise_m": 0.001,
+        "memory_file": "/ros2_ws/src/benchmarks/chasing_sphere/memory.json"
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 15.36,
+        "evaluated_sec": 15.37,
+        "failure_penalty_sec": 2.630000000000001,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.7123333333333333,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.4300000000000002,
+        "min_proxy_gap_m": 0.04445778263483307,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.3006585238283501,
+        "max_ball_speed_mps": 0.8241422362337973,
+        "max_eef_speed_mps": 1.7093956740737979,
+        "max_joint_speed_radps": 2.5500345695994184,
+        "propose_mean_ms": 19.032490980779667,
+        "propose_p95_ms": 20.211411148920888,
+        "num_proposals": 308,
+        "num_memory_contexts": 66,
+        "num_memory_learning": 581,
+        "learned_pursuit_gain": 0.06944837392085584,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_sequence_131",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": -3.2018259133326024,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "occupancy",
+      "seed": 131,
+      "config": {
+        "duration_sec": 18,
+        "seed": 131,
+        "radius_m": 0.055,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "occupancy",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          1.0,
+          1.0,
+          0.4
+        ],
+        "goal_offset_deg": {
+          "L_joint3": -4,
+          "L_joint6": 5
+        },
+        "pursuit_delay_sec": 0.08,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "",
+      "metrics": {
+        "num_arrivals": 4,
+        "num_round_trips": 2,
+        "contact_sec": 0.0,
+        "safe_sec": 18.0,
+        "evaluated_sec": 18.0,
+        "failure_penalty_sec": 0.0,
+        "is_failure": 0,
+        "first_failure_speed_ratio": 0.8,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.5200000000000002,
+        "min_proxy_gap_m": 0.04334717998356825,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.3006585238283501,
+        "max_ball_speed_mps": 0.8328781189934464,
+        "max_eef_speed_mps": 1.6808583606466316,
+        "max_joint_speed_radps": 2.4418433672057183,
+        "propose_mean_ms": 18.23579691149967,
+        "propose_p95_ms": 19.40676635276759,
+        "num_proposals": 360,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_occupancy_131",
+      "cleanup_ok": true
+    },
+    {
+      "method": "reactive",
+      "seed": 131,
+      "config": {
+        "duration_sec": 18,
+        "seed": 131,
+        "radius_m": 0.055,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "avoidance_first",
+        "initial_direction": [
+          1.0,
+          1.0,
+          0.4
+        ],
+        "goal_offset_deg": {
+          "L_joint3": -4,
+          "L_joint6": 5
+        },
+        "pursuit_delay_sec": 0.08,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 3.96,
+        "evaluated_sec": 3.9699999999999998,
+        "failure_penalty_sec": 14.030000000000001,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.33233333333333337,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.38000000000000017,
+        "min_proxy_gap_m": 0.1199917960287136,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.3006585238283501,
+        "max_ball_speed_mps": 0.4284681749501131,
+        "max_eef_speed_mps": 1.272775567557826,
+        "max_joint_speed_radps": 2.249359744484517,
+        "propose_mean_ms": 8.912508937646635,
+        "propose_p95_ms": 11.446889143553562,
+        "num_proposals": 80,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_reactive_131",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": 3.194397785168467,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "vrm",
+      "seed": 131,
+      "config": {
+        "duration_sec": 18,
+        "seed": 131,
+        "radius_m": 0.055,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "vrm_predictive",
+        "initial_direction": [
+          1.0,
+          1.0,
+          0.4
+        ],
+        "goal_offset_deg": {
+          "L_joint3": -4,
+          "L_joint6": 5
+        },
+        "pursuit_delay_sec": 0.08,
+        "observation_noise_m": 0.001
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 3.96,
+        "evaluated_sec": 3.9699999999999998,
+        "failure_penalty_sec": 14.030000000000001,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.33233333333333337,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.38000000000000017,
+        "min_proxy_gap_m": 0.1199917960287136,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.3006585238283501,
+        "max_ball_speed_mps": 0.4284681749501131,
+        "max_eef_speed_mps": 1.272775567557826,
+        "max_joint_speed_radps": 2.249359744484517,
+        "propose_mean_ms": 17.86771586175746,
+        "propose_p95_ms": 20.06430719702621,
+        "num_proposals": 80,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_vrm_131",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": 3.194397785168467,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "cv",
+      "seed": 149,
+      "config": {
+        "duration_sec": 18,
+        "seed": 149,
+        "radius_m": 0.08,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          1.0,
+          -1.0,
+          0.5
+        ],
+        "observation_delay_sec": 0.1,
+        "observation_noise_m": 0.002,
+        "enable_sidestep": true
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 4.68,
+        "evaluated_sec": 4.6899999999999995,
+        "failure_penalty_sec": 13.31,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.3563333333333334,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.2900000000000001,
+        "min_proxy_gap_m": 0.06621243216271856,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.434690334509435,
+        "max_eef_speed_mps": 1.299968481463155,
+        "max_joint_speed_radps": 2.1904060251376314,
+        "propose_mean_ms": 16.586501087105084,
+        "propose_p95_ms": 18.746115799149266,
+        "num_proposals": 92,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_cv_149",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": 3.2019910261720574,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "sequence",
+      "seed": 149,
+      "config": {
+        "duration_sec": 18,
+        "seed": 149,
+        "radius_m": 0.08,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_sequence",
+        "initial_direction": [
+          1.0,
+          -1.0,
+          0.5
+        ],
+        "observation_delay_sec": 0.1,
+        "observation_noise_m": 0.002,
+        "enable_sidestep": true,
+        "memory_file": "/ros2_ws/src/benchmarks/chasing_sphere/memory.json"
+      },
+      "failure_reason": "internal_interference",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 4.47,
+        "evaluated_sec": 4.4799999999999995,
+        "failure_penalty_sec": 13.52,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.3493333333333334,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.03,
+        "stopped_sec": 0.21000000000000005,
+        "min_proxy_gap_m": 0.08102549000698576,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.4346325200094056,
+        "max_eef_speed_mps": 1.1681932253218192,
+        "max_joint_speed_radps": 2.366694611355599,
+        "propose_mean_ms": 17.677969580538708,
+        "propose_p95_ms": 19.62342425395036,
+        "num_proposals": 88,
+        "num_memory_contexts": 66,
+        "num_memory_learning": 581,
+        "learned_pursuit_gain": 0.06944837392085584,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_sequence_149",
+      "cleanup_ok": true
+    },
+    {
+      "method": "occupancy",
+      "seed": 149,
+      "config": {
+        "duration_sec": 18,
+        "seed": 149,
+        "radius_m": 0.08,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "occupancy",
+        "enable_learning": false,
+        "policy": "rollout_cv",
+        "initial_direction": [
+          1.0,
+          -1.0,
+          0.5
+        ],
+        "observation_delay_sec": 0.1,
+        "observation_noise_m": 0.002,
+        "enable_sidestep": true
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 4.68,
+        "evaluated_sec": 4.6899999999999995,
+        "failure_penalty_sec": 13.31,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.3563333333333334,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.2900000000000001,
+        "min_proxy_gap_m": 0.06621243216271856,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.434690334509435,
+        "max_eef_speed_mps": 1.299968481463155,
+        "max_joint_speed_radps": 2.1904060251376314,
+        "propose_mean_ms": 16.7723052939476,
+        "propose_p95_ms": 19.214788843964925,
+        "num_proposals": 92,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_occupancy_149",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": 3.2019910261720574,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    },
+    {
+      "method": "reactive",
+      "seed": 149,
+      "config": {
+        "duration_sec": 18,
+        "seed": 149,
+        "radius_m": 0.08,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "avoidance_first",
+        "initial_direction": [
+          1.0,
+          -1.0,
+          0.5
+        ],
+        "observation_delay_sec": 0.1,
+        "observation_noise_m": 0.002,
+        "enable_sidestep": true
+      },
+      "failure_reason": "physical_contact",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 3.95,
+        "evaluated_sec": 3.96,
+        "failure_penalty_sec": 14.04,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.3320000000000001,
+        "proxy_contact_sec": 0.20000000000000004,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 1.0900000000000007,
+        "min_proxy_gap_m": -0.011782479622000727,
+        "first_contact_sec": 3.96,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.41495709826368127,
+        "max_eef_speed_mps": 1.1834786311255128,
+        "max_joint_speed_radps": 2.3247876670796614,
+        "propose_mean_ms": 8.318468039177764,
+        "propose_p95_ms": 10.80914889680571,
+        "num_proposals": 78,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_reactive_149",
+      "cleanup_ok": true
+    },
+    {
+      "method": "vrm",
+      "seed": 149,
+      "config": {
+        "duration_sec": 18,
+        "seed": 149,
+        "radius_m": 0.08,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "vrm_predictive",
+        "initial_direction": [
+          1.0,
+          -1.0,
+          0.5
+        ],
+        "observation_delay_sec": 0.1,
+        "observation_noise_m": 0.002,
+        "enable_sidestep": true
+      },
+      "failure_reason": "physical_contact",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 3.95,
+        "evaluated_sec": 3.96,
+        "failure_penalty_sec": 14.04,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.3320000000000001,
+        "proxy_contact_sec": 0.20000000000000004,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 1.0900000000000007,
+        "min_proxy_gap_m": -0.011782479622000727,
+        "first_contact_sec": 3.96,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.41495709826368127,
+        "max_eef_speed_mps": 1.1834786311255128,
+        "max_joint_speed_radps": 2.3247876670796614,
+        "propose_mean_ms": 16.862794666033153,
+        "propose_p95_ms": 19.344525701308154,
+        "num_proposals": 78,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_vrm_149",
+      "cleanup_ok": true
+    },
+    {
+      "method": "static",
+      "seed": 149,
+      "config": {
+        "duration_sec": 18,
+        "seed": 149,
+        "radius_m": 0.08,
+        "speed_ratios": [
+          0.2,
+          0.8
+        ],
+        "start_dist_m": 0.45,
+        "candidate_metric": "joint",
+        "enable_learning": false,
+        "policy": "rollout_reactive",
+        "initial_direction": [
+          1.0,
+          -1.0,
+          0.5
+        ],
+        "observation_delay_sec": 0.1,
+        "observation_noise_m": 0.002,
+        "enable_sidestep": true
+      },
+      "failure_reason": "joint_limit",
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.0,
+        "safe_sec": 4.8,
+        "evaluated_sec": 4.81,
+        "failure_penalty_sec": 13.190000000000001,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.36033333333333334,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.3100000000000001,
+        "min_proxy_gap_m": 0.06472138230997086,
+        "first_contact_sec": 18.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.44527545012488357,
+        "max_eef_speed_mps": 1.1765501505498277,
+        "max_joint_speed_radps": 2.3844073794286684,
+        "propose_mean_ms": 17.119684105426515,
+        "propose_p95_ms": 19.21551239938708,
+        "num_proposals": 95,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 9988
+      },
+      "artifact_dir": "log/artifacts/chasing_sphere/holdout/001_holdout_static_149",
+      "cleanup_ok": true,
+      "angle_domain_exits": [
+        {
+          "joint": "L_joint1",
+          "angle_rad": 3.1953055659295253,
+          "lower_rad": -3.141592653589793,
+          "upper_rad": 3.141592653589793,
+          "is_continuous": true
+        }
+      ],
+      "interpreted_failure": "planning_angle_domain_exit"
+    }
+  ],
+  "evaluation_clarification": "評価後の名称訂正のみ。打切り条件・閾値・失敗数・測定値の変更なし。初版のURDF可動域という記述はcontinuous関節に不適切",
+  "interpretation": [
+    "既定GNG/VLUTを保持。追加方式は独立した実験オプション",
+    "固定評価のcvは4条件中1条件完走。平均失敗時刻の延長は確認、全条件成功・タスク往復の安定化は未達",
+    "時系列記憶は完全なHTMではない疎な文脈記憶＋追従係数同定。学習3条件のみで更新、評価中は重み固定",
+    "占有候補選択は既存代表姿勢の形状変化による再順位付け。GNGの連続領域再構築・最適性の実証は未実施",
+    "球速度の上限は同じ往復タスクを無障害で実行した手先最高速度の80%。腕停止時も球は追跡継続、瞬間的な腕速度との比較ではない",
+    "物理接触・代理形状の重なり・自己干渉余裕不足を別々に記録。MuJoCoのロボット自己接触はOFF、自己干渉検査は既存URDF外接球ペア",
+    "制御20 Hz、評価100 Hz、球の加速度制限あり。予測は有限候補・離散時刻での近似、連続安全保証なし",
+    "各条件p95の算術平均であり全提案を併合したp95ではない。計算時間による制御遅延は自動注入なし",
+    "評価は4条件のみ。統計的な一般化・実機安全性・完全回避の証明なし"
+  ],
+  "next_cycle": [
+    "continuous関節の周期同一視とGNGの周期接続・可動域境界での追従モデルの整合",
+    "計算遅延を含む実時間の頑健性、異なる加速度・新規保持条件での独立評価",
+    "疎な時系列予測の有益条件と不一致時フォールバックの検証、実点群との統合"
+  ]
+}

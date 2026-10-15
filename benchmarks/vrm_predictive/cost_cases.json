@@ -1,0 +1,21 @@
+{
+  "cases": [
+    {
+      "name": "prediction_cost",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "argv": [
+        "python3",
+        "log/artifacts/vrm_predictive/measure_prediction.py",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 60
+    }
+  ]
+}

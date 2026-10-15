@@ -2,6 +2,7 @@
 
 #include "utils.hpp"
 #include "vec3f.hpp"
+#include "bounded_uint.hpp"
 
 struct GridConfig {
     float unit;
@@ -44,7 +45,7 @@ struct NodeConfig{
 
 struct EdgeConfig{
     int num_max; // エッジ数の上限
-    uint32_t age_max;        // Edgeの年齢による切断の閾値
+    bounded_uint<UINT32_MAX - 1> age_max; // エッジ切断年齢の上限
     float distance_min2[4]; // エッジの距離の最小値
 };
 

@@ -1,0 +1,186 @@
+{
+  "cases": [
+    {
+      "name": "occupancy_cover_64",
+      "argv": [
+        "python3",
+        "-B",
+        "/home/uraki/uraki_ws/log/artifacts/gng_region_comparison/compare.py",
+        "measure",
+        "--method",
+        "occupancy_cover",
+        "--budget",
+        "64",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_cpp_review/libgng_region_kernel.so"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "quadratic_cover_64",
+      "argv": [
+        "python3",
+        "-B",
+        "/home/uraki/uraki_ws/log/artifacts/gng_region_comparison/compare.py",
+        "measure",
+        "--method",
+        "quadratic_cover",
+        "--budget",
+        "64",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_cpp_review/libgng_region_kernel.so"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "urdf_boxes_64",
+      "argv": [
+        "python3",
+        "-B",
+        "/home/uraki/uraki_ws/log/artifacts/gng_region_comparison/compare.py",
+        "measure",
+        "--method",
+        "urdf_boxes",
+        "--budget",
+        "64",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_cpp_review/libgng_region_kernel.so"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "occupancy_cover_128",
+      "argv": [
+        "python3",
+        "-B",
+        "/home/uraki/uraki_ws/log/artifacts/gng_region_comparison/compare.py",
+        "measure",
+        "--method",
+        "occupancy_cover",
+        "--budget",
+        "128",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_cpp_review/libgng_region_kernel.so"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "quadratic_cover_128",
+      "argv": [
+        "python3",
+        "-B",
+        "/home/uraki/uraki_ws/log/artifacts/gng_region_comparison/compare.py",
+        "measure",
+        "--method",
+        "quadratic_cover",
+        "--budget",
+        "128",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_cpp_review/libgng_region_kernel.so"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "urdf_boxes_128",
+      "argv": [
+        "python3",
+        "-B",
+        "/home/uraki/uraki_ws/log/artifacts/gng_region_comparison/compare.py",
+        "measure",
+        "--method",
+        "urdf_boxes",
+        "--budget",
+        "128",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_cpp_review/libgng_region_kernel.so"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "fallback_control",
+      "argv": [
+        "python3",
+        "-B",
+        "/home/uraki/uraki_ws/log/artifacts/gng_region_comparison/compare.py",
+        "measure",
+        "--method",
+        "fallback_control",
+        "--budget",
+        "0",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_cpp_review/libgng_region_kernel.so"
+      },
+      "metrics": "metrics.json"
+    }
+  ]
+}

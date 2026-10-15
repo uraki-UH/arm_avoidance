@@ -1,0 +1,144 @@
+--- a/build.hpp
++++ b/build.hpp
+@@ -22,6 +22,7 @@
+     std::vector<int> shell;
+     std::vector<u8> reg_static;       // 静的な障害物（床）で領域が危険か
+     std::vector<u16> leaf_static;     // 静的な障害物にかかる葉
++    std::vector<u8> core_static;      // 床と干渉する代表姿勢
+     // 辺
+     std::vector<std::array<int, 2>> edges;
+     std::vector<u64> ein_off, eout_off;
+@@ -425,6 +426,18 @@
+         std::vector<u64> pos(M.cp_off.begin(), M.cp_off.end() - 1);
+         for (int r = 0; r < n; r++) for (int i = 0; i < W; i++) for (u64 w = M.core[(size_t)r * W + i]; w; w &= w - 1) M.cp[pos[i * 64 + __builtin_ctzll(w)]++] = r;
+     }
++    M.core_static.assign(n, 0);
++    for (int region_idx = 0; region_idx < n; ++region_idx) {
++        V3 origins[MAXJ + 1], axes[MAXJ];
++        M.cfg.arm.fk(&M.nq[(size_t)region_idx * M.cg.d], origins, axes);
++        for (int joint_idx = 0; joint_idx < M.cfg.arm.d(); ++joint_idx) {
++            if (norm(M.cfg.arm.J[joint_idx].link) == 0) continue;
++            M.core_static[region_idx] |= std::min(origins[joint_idx].z, origins[joint_idx + 1].z) -
++                                         M.cfg.arm.rad(joint_idx) < M.cfg.grid.floor_z;
++        }
++        if (M.cfg.arm.tip_sphere > 0)
++            M.core_static[region_idx] |= origins[M.cfg.arm.d()].z - M.cfg.arm.tip_sphere < M.cfg.grid.floor_z;
++    }
+     M.t_index = now_s() - t0;
+ }
+ 
+--- a/cover.inc
++++ b/cover.inc
+@@ -136,7 +136,8 @@
+     bool grow_add = arg(argc, argv, "--grow", "add") == "add";
+     std::vector<KBox> pieces; CSR16 PV; std::vector<std::array<double, MAXJ>> PW; double tot_vol = 1, dropped_vol = 0; int dropped = 0;
+     for (int k = 0; k < d; k++) tot_vol *= lim_hi[k] - lim_lo[k];
+-    std::string basef = std::string(g_wvox ? "basew_" : "base_") + cfg.name + "_" + std::to_string(budget) + "_" + arg(argc, argv, "--base", "0.5") + "_" + std::to_string(floordepth) + "_t" + arg(argc, argv, "--tau", "0.02") + ".bin";
++    // 床境界の箱を破棄した旧キャッシュとの分離。
++    std::string basef = std::string(g_wvox ? "basew_v2_" : "base_v2_") + cfg.name + "_" + std::to_string(budget) + "_" + arg(argc, argv, "--base", "0.5") + "_" + std::to_string(floordepth) + "_t" + arg(argc, argv, "--tau", "0.02") + ".bin";
+     if (std::ifstream f{basef, std::ios::binary}) {
+         rvec(f, pieces); rvec(f, PV.off); rvec(f, PV.all); std::vector<double> dv; rvec(f, dv); dropped_vol = dv[0]; dropped = (int)dv[1]; rvec(f, PW);
+     } else {
+@@ -156,7 +157,7 @@
+                 double* c = fr[i].c.data();
+                 int am = 0; double mx = -1; for (int k = 0; k < d; k++) { double v = c[k] * 0.5 * (bx.hi[k] - bx.lo[k]); if (v > mx) { mx = v; am = k; } }
+                 if (mx > base * s) { act[i] = am; continue; }
+-                if (arm_hits(cfg.arm, g, q, zero.data())) { act[i] = fr[i].extra < floordepth ? am : -2; continue; }   // 中心が床と干渉
++                // 床境界の箱も保持し、後段の静的な葉フラグによる要確認判定。
+                 std::vector<u64> bits(W, 0); double tb = now_s();
+                 bool okb = box_voxels(cfg, bx, tau, bits);
+ #pragma omp atomic
+--- a/packed.hpp
++++ b/packed.hpp
+@@ -27,7 +27,11 @@
+     std::vector<ID> e_owner; std::vector<u8> e_bit;
+     std::vector<u64> ho, hi;
+     std::vector<u8> rs; std::vector<u16> ls;   // 静的な占有（床）で当たる領域・葉
+-    void apply_static(QueryOut& q) const { for (size_t r = 0; r < rs.size(); r++) { q.reg_hit[r] |= rs[r]; q.leaf_hit[r] |= ls[r]; } }
++    std::vector<u8> core_static;              // 床と干渉する代表姿勢
++    void apply_static(QueryOut& q) const {
++        for (size_t r = 0; r < rs.size(); r++) { q.reg_hit[r] |= rs[r]; q.leaf_hit[r] |= ls[r]; }
++        for (size_t r = 0; r < core_static.size(); r++) q.core_hit[r] |= core_static[r];
++    }
+     void build(const Model& M) {
+         n_reg = M.nreg; n_own = M.nown; n_edge = (int)M.edges.size();
+         int nv = M.cfg.grid.nvox();
+@@ -45,7 +49,7 @@
+         }
+         int E = (int)M.edges.size(); e_owner.resize(E); e_bit.resize(E);
+         for (int e = 0; e < E; e++) { e_owner[e] = (ID)M.owner[e]; e_bit[e] = (u8)M.lbit[e]; }
+-        rs = M.reg_static; ls = M.leaf_static;
++        rs = M.reg_static; ls = M.leaf_static; core_static = M.core_static;
+     }
+     void run(const Model& M, const Occ& o, QueryOut& q) override {
+         int n = M.nreg, E = (int)M.edges.size();
+@@ -78,16 +82,17 @@
+     void save(const std::string& p) const override {
+         std::ofstream f(p, std::ios::binary); std::vector<i64> h = {n_reg, n_own, n_edge, leaves}; wvec(f, h);
+         wvec(f, eoff); wvec(f, ioff); wvec(f, roff); wvec(f, coff); wvec(f, eown); wvec(f, iown); wvec(f, rid); wvec(f, cid);
+-        wvec(f, eb); wvec(f, ib); wvec(f, rleaf); wvec(f, e_owner); wvec(f, e_bit); wvec(f, rs); wvec(f, ls);
++        wvec(f, eb); wvec(f, ib); wvec(f, rleaf); wvec(f, e_owner); wvec(f, e_bit); wvec(f, rs); wvec(f, ls); wvec(f, core_static);
+     }
+     void load(const std::string& p) override {
+         std::ifstream f(p, std::ios::binary); std::vector<i64> h; rvec(f, h); n_reg = (int)h[0]; n_own = (int)h[1]; n_edge = (int)h[2]; leaves = h[3];
+         rvec(f, eoff); rvec(f, ioff); rvec(f, roff); rvec(f, coff); rvec(f, eown); rvec(f, iown); rvec(f, rid); rvec(f, cid);
+         rvec(f, eb); rvec(f, ib); rvec(f, rleaf); rvec(f, e_owner); rvec(f, e_bit); rvec(f, rs); rvec(f, ls);
++        if (f.peek() != EOF) rvec(f, core_static); else core_static.assign(n_reg, 0);
+     }
+     size_t bytes() const override {
+         return (eoff.size() + ioff.size() + roff.size() + coff.size()) * 4 + (eown.size() + iown.size() + rid.size() + cid.size()) * sizeof(ID) +
+-               (eb.size() + ib.size()) * sizeof(B) + rleaf.size() * 2 + e_owner.size() * (sizeof(ID) + 1) + rs.size() + ls.size() * 2;
++               (eb.size() + ib.size()) * sizeof(B) + rleaf.size() * 2 + e_owner.size() * (sizeof(ID) + 1) + rs.size() + ls.size() * 2 + core_static.size();
+     }
+     size_t bytes_edge() const { return (eoff.size() + ioff.size()) * 4 + (eown.size() + iown.size()) * sizeof(ID) + (eb.size() + ib.size()) * sizeof(B); }
+     std::string desc() const override { return "ID " + std::to_string(sizeof(ID) * 8) + "bit, edge bits " + std::to_string(sizeof(B) * 8) + "bit" + (leaves ? ", leaf bits 16" : ", no leaf bits"); }
+--- a/query.hpp
++++ b/query.hpp
+@@ -16,6 +16,17 @@
+     std::vector<u8> core_hit;   // 代表姿勢が衝突しているか
+ };
+ 
++// 全照会経路で共通の床・固定占有フラグ。
++inline void apply_static_hits(const Model& model, QueryOut& result) {
++    for (int region_idx = 0; region_idx < model.nreg; ++region_idx) {
++        if (!model.reg_static.empty()) {
++            result.reg_hit[region_idx] |= model.reg_static[region_idx];
++            result.leaf_hit[region_idx] |= model.leaf_static[region_idx];
++        }
++        if (!model.core_static.empty()) result.core_hit[region_idx] |= model.core_static[region_idx];
++    }
++}
++
+ // 方式 A: 疎な逆引き（占有ボクセル → 投稿リスト）。CPU 1 スレッド向き
+ struct SparseQuery {
+     std::vector<u64> ho, hi;
+@@ -32,7 +43,7 @@
+             u64 b = u64(1) << M.lbit[e]; int ow = M.owner[e];
+             q.edge[e] = (hi[ow] & b) ? 2 : (ho[ow] & b) ? 1 : 0;
+         }
+-        if (!M.reg_static.empty()) for (int r = 0; r < n; r++) { q.reg_hit[r] |= M.reg_static[r]; q.leaf_hit[r] |= M.leaf_static[r]; }
++        apply_static_hits(M, q);
+     }
+ };
+ 
+@@ -73,10 +84,11 @@
+                 else q.edge[e] = test(M.eout.data(), M.eout_off[e], M.eout_off[e + 1]) ? 1 : 0;
+             }
+         }
++        apply_static_hits(M, q);
+     }
+ };
+ 
+-// 方式 C: 密なビット列 AND（各要素が W 語を AND）。GPU で最も素直な形
++// 方式 C: 密なビット列 AND（各要素が W 語を AND）。GPU向けの共通形式。
+ struct DenseQuery {
+     int W = 0;
+     std::vector<u64> ein, eout;   // 辺ごとの密ビット列
+@@ -111,6 +123,7 @@
+                 for (u16 v : M.leafV[r][l]) if ((ob[v >> 6] >> (v & 63)) & 1) { lb |= u16(1u << l); break; }
+             q.leaf_hit[r] = lb;
+         }
++        apply_static_hits(M, q);
+     }
+ };
+ 

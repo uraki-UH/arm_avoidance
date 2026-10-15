@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "name": "build",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "221",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/ros2_ws/src/log/artifacts/hierarchy_bag/libgng_region_kernel.so",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/hierarchy_bag/ros_logs"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\ng++ -std=c++17 -O3 -shared -fPIC gng_vlut_system/src/core/collision/region_kernel.cpp -o log/artifacts/hierarchy_bag/libgng_region_kernel.so\nexec python3 log/artifacts/hierarchy_bag/prepare.py"
+      ],
+      "timeout_sec": 110
+    }
+  ]
+}

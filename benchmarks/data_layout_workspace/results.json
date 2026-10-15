@@ -1,0 +1,772 @@
+{
+  "conditions": {
+    "cpu": "Intel Core i7-14650HX",
+    "compiler": "GCC 11.4.0, C++17, -O3 -DNDEBUG",
+    "num_repeats": 7,
+    "num_cases": 15,
+    "ordering": "条件順の循環・別プロセス・同時測定なし",
+    "elapsed_sec": 78.9072712989946,
+    "initial_estimate_sec": 210,
+    "temporal": {
+      "num_voxels": 10000,
+      "num_frames": 64,
+      "history_window_size": 32,
+      "all_labels": {
+        "num_voxels": 1000,
+        "num_frames": 320,
+        "history_window_size": 300,
+        "num_input_labels": 256
+      },
+      "scope": "TemporalVoxelFilter::updateの全体。入力構築・出力整列・照合は時間測定外"
+    },
+    "depth": {
+      "width": 640,
+      "height": 480,
+      "num_frames": 24,
+      "bucket_size_m": 0.2,
+      "one_bucket_size_m": 1000,
+      "scope": "実索引の更新とAABB点抽出。入力生成と照合は時間測定外。現利用先は比較ノード"
+    },
+    "units": {
+      "*_ms": "ms",
+      "*_bytes": "B",
+      "peak_rss_kb": "KiB（Linux ru_maxrss、試験プロセス単位）"
+    },
+    "storage_scope": "main_storage_bytesはレコード本体、auxiliary_bytesは追加配列容量。アロケータ・deque等の領域は最大RSSへ算入"
+  },
+  "cases": {
+    "temporal_stable_before": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 19.344187375,
+        "num_items": 10000,
+        "record_bytes": 2392,
+        "sample_bytes": 3,
+        "main_storage_bytes": 23920000,
+        "auxiliary_bytes": 0,
+        "peak_rss_kb": 37588,
+        "checksum": 2786143221
+      },
+      "quartile_25": {
+        "frame_ms": 19.292282812499998,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37548.0,
+        "checksum": 2786143221.0
+      },
+      "quartile_75": {
+        "frame_ms": 19.417747953125,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37860.0,
+        "checksum": 2786143221.0
+      }
+    },
+    "temporal_stable_mask": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 16.0688361875,
+        "num_items": 10000,
+        "record_bytes": 400,
+        "sample_bytes": 3,
+        "main_storage_bytes": 4000000,
+        "auxiliary_bytes": 80000,
+        "peak_rss_kb": 18564,
+        "checksum": 2786143221
+      },
+      "quartile_25": {
+        "frame_ms": 15.984043039062499,
+        "num_items": 10000.0,
+        "record_bytes": 400.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 4000000.0,
+        "auxiliary_bytes": 80000.0,
+        "peak_rss_kb": 18536.0,
+        "checksum": 2786143221.0
+      },
+      "quartile_75": {
+        "frame_ms": 16.090913125,
+        "num_items": 10000.0,
+        "record_bytes": 400.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 4000000.0,
+        "auxiliary_bytes": 80000.0,
+        "peak_rss_kb": 18720.0,
+        "checksum": 2786143221.0
+      }
+    },
+    "temporal_stable_flags": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 19.538102953125,
+        "num_items": 10000,
+        "record_bytes": 2392,
+        "sample_bytes": 2,
+        "main_storage_bytes": 23920000,
+        "auxiliary_bytes": 0,
+        "peak_rss_kb": 37772,
+        "checksum": 2786143221
+      },
+      "quartile_25": {
+        "frame_ms": 19.50100471875,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 2.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37740.0,
+        "checksum": 2786143221.0
+      },
+      "quartile_75": {
+        "frame_ms": 19.6949836953125,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 2.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37898.0,
+        "checksum": 2786143221.0
+      }
+    },
+    "temporal_churn_before": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 19.191113171875,
+        "num_items": 10000,
+        "record_bytes": 2392,
+        "sample_bytes": 3,
+        "main_storage_bytes": 23920000,
+        "auxiliary_bytes": 0,
+        "peak_rss_kb": 37388,
+        "checksum": 1884615608
+      },
+      "quartile_25": {
+        "frame_ms": 19.1504910390625,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37344.0,
+        "checksum": 1658942982.0
+      },
+      "quartile_75": {
+        "frame_ms": 19.2283101640625,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37442.0,
+        "checksum": 2300518159.0
+      }
+    },
+    "temporal_churn_mask": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 17.23959659375,
+        "num_items": 10000,
+        "record_bytes": 400,
+        "sample_bytes": 3,
+        "main_storage_bytes": 4000000,
+        "auxiliary_bytes": 640000,
+        "peak_rss_kb": 20100,
+        "checksum": 1884615608
+      },
+      "quartile_25": {
+        "frame_ms": 17.1400621484375,
+        "num_items": 10000.0,
+        "record_bytes": 400.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 4000000.0,
+        "auxiliary_bytes": 640000.0,
+        "peak_rss_kb": 19892.0,
+        "checksum": 1658942982.0
+      },
+      "quartile_75": {
+        "frame_ms": 17.251382343750002,
+        "num_items": 10000.0,
+        "record_bytes": 400.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 4000000.0,
+        "auxiliary_bytes": 640000.0,
+        "peak_rss_kb": 20108.0,
+        "checksum": 2300518159.0
+      }
+    },
+    "temporal_churn_flags": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 19.340338765625,
+        "num_items": 10000,
+        "record_bytes": 2392,
+        "sample_bytes": 2,
+        "main_storage_bytes": 23920000,
+        "auxiliary_bytes": 0,
+        "peak_rss_kb": 37208,
+        "checksum": 1884615608
+      },
+      "quartile_25": {
+        "frame_ms": 19.262905164062502,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 2.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37168.0,
+        "checksum": 1658942982.0
+      },
+      "quartile_75": {
+        "frame_ms": 19.492765515625,
+        "num_items": 10000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 2.0,
+        "main_storage_bytes": 23920000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 37374.0,
+        "checksum": 2300518159.0
+      }
+    },
+    "temporal_all_labels_before": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 1.274047315625,
+        "num_items": 1000,
+        "record_bytes": 2392,
+        "sample_bytes": 3,
+        "main_storage_bytes": 2392000,
+        "auxiliary_bytes": 0,
+        "peak_rss_kb": 13072,
+        "checksum": 1538005521
+      },
+      "quartile_25": {
+        "frame_ms": 1.2715784593750001,
+        "num_items": 1000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 2392000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 13072.0,
+        "checksum": 1234639503.5
+      },
+      "quartile_75": {
+        "frame_ms": 1.2911665796875,
+        "num_items": 1000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 2392000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 13360.0,
+        "checksum": 3151515335.0
+      }
+    },
+    "temporal_all_labels_mask": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 1.408561365625,
+        "num_items": 1000,
+        "record_bytes": 400,
+        "sample_bytes": 3,
+        "main_storage_bytes": 400000,
+        "auxiliary_bytes": 2048000,
+        "peak_rss_kb": 13072,
+        "checksum": 1538005521
+      },
+      "quartile_25": {
+        "frame_ms": 1.39912796875,
+        "num_items": 1000.0,
+        "record_bytes": 400.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 400000.0,
+        "auxiliary_bytes": 2048000.0,
+        "peak_rss_kb": 13072.0,
+        "checksum": 1234639503.5
+      },
+      "quartile_75": {
+        "frame_ms": 1.4119064796875,
+        "num_items": 1000.0,
+        "record_bytes": 400.0,
+        "sample_bytes": 3.0,
+        "main_storage_bytes": 400000.0,
+        "auxiliary_bytes": 2048000.0,
+        "peak_rss_kb": 13456.0,
+        "checksum": 3151515335.0
+      }
+    },
+    "temporal_all_labels_flags": {
+      "num_runs": 7,
+      "median": {
+        "frame_ms": 1.299805340625,
+        "num_items": 1000,
+        "record_bytes": 2392,
+        "sample_bytes": 2,
+        "main_storage_bytes": 2392000,
+        "auxiliary_bytes": 0,
+        "peak_rss_kb": 13072,
+        "checksum": 1538005521
+      },
+      "quartile_25": {
+        "frame_ms": 1.29755228125,
+        "num_items": 1000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 2.0,
+        "main_storage_bytes": 2392000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 13072.0,
+        "checksum": 1234639503.5
+      },
+      "quartile_75": {
+        "frame_ms": 1.3079931984375,
+        "num_items": 1000.0,
+        "record_bytes": 2392.0,
+        "sample_bytes": 2.0,
+        "main_storage_bytes": 2392000.0,
+        "auxiliary_bytes": 0.0,
+        "peak_rss_kb": 13456.0,
+        "checksum": 3151515335.0
+      }
+    },
+    "depth_static_before": {
+      "num_runs": 7,
+      "median": {
+        "init_ms": 7.692694,
+        "update_ms": 2.38953441666667,
+        "query_ms": 2.77702108333333,
+        "frame_ms": 5.240314875,
+        "num_items": 307200,
+        "record_bytes": 40,
+        "main_storage_bytes": 12288000,
+        "auxiliary_bytes": 3570368,
+        "peak_rss_kb": 26192,
+        "checksum": 1536156332
+      },
+      "quartile_25": {
+        "init_ms": 7.429503,
+        "update_ms": 2.34034702083333,
+        "query_ms": 2.7242544375,
+        "frame_ms": 5.13283547916667,
+        "num_items": 307200.0,
+        "record_bytes": 40.0,
+        "main_storage_bytes": 12288000.0,
+        "auxiliary_bytes": 3566464.0,
+        "peak_rss_kb": 26164.0,
+        "checksum": 1034844148.0
+      },
+      "quartile_75": {
+        "init_ms": 8.1217815,
+        "update_ms": 2.4678379375,
+        "query_ms": 2.89657677083333,
+        "frame_ms": 5.284875583333335,
+        "num_items": 307200.0,
+        "record_bytes": 40.0,
+        "main_storage_bytes": 12288000.0,
+        "auxiliary_bytes": 3586860.0,
+        "peak_rss_kb": 26220.0,
+        "checksum": 2347668468.0
+      }
+    },
+    "depth_static_after": {
+      "num_runs": 7,
+      "median": {
+        "init_ms": 6.937763,
+        "update_ms": 2.27187329166667,
+        "query_ms": 2.57026833333333,
+        "frame_ms": 4.7874665,
+        "num_items": 307200,
+        "record_bytes": 32,
+        "main_storage_bytes": 9830400,
+        "auxiliary_bytes": 1785184,
+        "peak_rss_kb": 22280,
+        "checksum": 1536156332
+      },
+      "quartile_25": {
+        "init_ms": 6.319478999999999,
+        "update_ms": 2.232782375,
+        "query_ms": 2.492684895833335,
+        "frame_ms": 4.759788562500001,
+        "num_items": 307200.0,
+        "record_bytes": 32.0,
+        "main_storage_bytes": 9830400.0,
+        "auxiliary_bytes": 1783232.0,
+        "peak_rss_kb": 22224.0,
+        "checksum": 1034844148.0
+      },
+      "quartile_75": {
+        "init_ms": 9.1590565,
+        "update_ms": 2.293536916666665,
+        "query_ms": 2.624180125,
+        "frame_ms": 4.882306874999999,
+        "num_items": 307200.0,
+        "record_bytes": 32.0,
+        "main_storage_bytes": 9830400.0,
+        "auxiliary_bytes": 1793430.0,
+        "peak_rss_kb": 22358.0,
+        "checksum": 2347668468.0
+      }
+    },
+    "depth_dynamic_before": {
+      "num_runs": 7,
+      "median": {
+        "init_ms": 7.646688,
+        "update_ms": 7.36945975,
+        "query_ms": 2.754545875,
+        "frame_ms": 10.120640375,
+        "num_items": 288000,
+        "record_bytes": 40,
+        "main_storage_bytes": 12288000,
+        "auxiliary_bytes": 3712208,
+        "peak_rss_kb": 26452,
+        "checksum": 1594620031
+      },
+      "quartile_25": {
+        "init_ms": 7.396528,
+        "update_ms": 7.3416507708333345,
+        "query_ms": 2.652259895833335,
+        "frame_ms": 10.102839833333299,
+        "num_items": 288000.0,
+        "record_bytes": 40.0,
+        "main_storage_bytes": 12288000.0,
+        "auxiliary_bytes": 3711572.0,
+        "peak_rss_kb": 26380.0,
+        "checksum": 1075166619.5
+      },
+      "quartile_75": {
+        "init_ms": 9.5099555,
+        "update_ms": 7.500904770833335,
+        "query_ms": 2.805464416666665,
+        "frame_ms": 10.1487978125,
+        "num_items": 288000.0,
+        "record_bytes": 40.0,
+        "main_storage_bytes": 12288000.0,
+        "auxiliary_bytes": 3721376.0,
+        "peak_rss_kb": 26592.0,
+        "checksum": 2653023285.0
+      }
+    },
+    "depth_dynamic_after": {
+      "num_runs": 7,
+      "median": {
+        "init_ms": 6.322977,
+        "update_ms": 7.19979645833333,
+        "query_ms": 2.549122,
+        "frame_ms": 9.73478533333333,
+        "num_items": 288000,
+        "record_bytes": 32,
+        "main_storage_bytes": 9830400,
+        "auxiliary_bytes": 1856104,
+        "peak_rss_kb": 22164,
+        "checksum": 1594620031
+      },
+      "quartile_25": {
+        "init_ms": 6.206049999999999,
+        "update_ms": 7.122371645833335,
+        "query_ms": 2.48306552083333,
+        "frame_ms": 9.6919476875,
+        "num_items": 288000.0,
+        "record_bytes": 32.0,
+        "main_storage_bytes": 9830400.0,
+        "auxiliary_bytes": 1855786.0,
+        "peak_rss_kb": 22134.0,
+        "checksum": 1075166619.5
+      },
+      "quartile_75": {
+        "init_ms": 8.1495155,
+        "update_ms": 7.21638308333333,
+        "query_ms": 2.6320066874999997,
+        "frame_ms": 9.782723916666665,
+        "num_items": 288000.0,
+        "record_bytes": 32.0,
+        "main_storage_bytes": 9830400.0,
+        "auxiliary_bytes": 1860688.0,
+        "peak_rss_kb": 22220.0,
+        "checksum": 2653023285.0
+      }
+    },
+    "depth_one_bucket_before": {
+      "num_runs": 7,
+      "median": {
+        "init_ms": 9.148932,
+        "update_ms": 3.945892,
+        "query_ms": 1.40527583333333,
+        "frame_ms": 5.35278741666667,
+        "num_items": 288000,
+        "record_bytes": 40,
+        "main_storage_bytes": 12288000,
+        "auxiliary_bytes": 4194304,
+        "peak_rss_kb": 25776,
+        "checksum": 3177330743
+      },
+      "quartile_25": {
+        "init_ms": 8.249610500000001,
+        "update_ms": 3.923280770833335,
+        "query_ms": 1.3661166458333351,
+        "frame_ms": 5.2797353333333295,
+        "num_items": 288000.0,
+        "record_bytes": 40.0,
+        "main_storage_bytes": 12288000.0,
+        "auxiliary_bytes": 4194304.0,
+        "peak_rss_kb": 25738.0,
+        "checksum": 2495295765.0
+      },
+      "quartile_75": {
+        "init_ms": 10.371053,
+        "update_ms": 4.060635270833335,
+        "query_ms": 1.4727885625,
+        "frame_ms": 5.532614041666665,
+        "num_items": 288000.0,
+        "record_bytes": 40.0,
+        "main_storage_bytes": 12288000.0,
+        "auxiliary_bytes": 4194304.0,
+        "peak_rss_kb": 25800.0,
+        "checksum": 3477150723.5
+      }
+    },
+    "depth_one_bucket_after": {
+      "num_runs": 7,
+      "median": {
+        "init_ms": 6.611168,
+        "update_ms": 3.72204304166667,
+        "query_ms": 1.619623375,
+        "frame_ms": 5.34839320833333,
+        "num_items": 288000,
+        "record_bytes": 32,
+        "main_storage_bytes": 9830400,
+        "auxiliary_bytes": 2097152,
+        "peak_rss_kb": 23712,
+        "checksum": 3177330743
+      },
+      "quartile_25": {
+        "init_ms": 6.2225515,
+        "update_ms": 3.6967349791666653,
+        "query_ms": 1.5960834791666652,
+        "frame_ms": 5.296710375,
+        "num_items": 288000.0,
+        "record_bytes": 32.0,
+        "main_storage_bytes": 9830400.0,
+        "auxiliary_bytes": 2097152.0,
+        "peak_rss_kb": 23540.0,
+        "checksum": 2495295765.0
+      },
+      "quartile_75": {
+        "init_ms": 8.889997,
+        "update_ms": 3.7366520000000003,
+        "query_ms": 1.7298501875,
+        "frame_ms": 5.459246875,
+        "num_items": 288000.0,
+        "record_bytes": 32.0,
+        "main_storage_bytes": 9830400.0,
+        "auxiliary_bytes": 2097152.0,
+        "peak_rss_kb": 23722.0,
+        "checksum": 3477150723.5
+      }
+    }
+  },
+  "comparisons": [
+    {
+      "profile": "temporal_stable",
+      "variant": "mask",
+      "frame_time_change_percent": -16.93196578385604,
+      "peak_rss_change_percent": -50.611897414068316
+    },
+    {
+      "profile": "temporal_stable",
+      "variant": "flags",
+      "frame_time_change_percent": 1.002448820236368,
+      "peak_rss_change_percent": 0.48951793125464604
+    },
+    {
+      "profile": "temporal_churn",
+      "variant": "mask",
+      "frame_time_change_percent": -10.168855556461354,
+      "peak_rss_change_percent": -46.23943511287044
+    },
+    {
+      "profile": "temporal_churn",
+      "variant": "flags",
+      "frame_time_change_percent": 0.7775765397949552,
+      "peak_rss_change_percent": -0.4814378945116049
+    },
+    {
+      "profile": "temporal_all_labels",
+      "variant": "mask",
+      "frame_time_change_percent": 10.558010550339137,
+      "peak_rss_change_percent": 0.0
+    },
+    {
+      "profile": "temporal_all_labels",
+      "variant": "flags",
+      "frame_time_change_percent": 2.0217479118790793,
+      "peak_rss_change_percent": 0.0
+    },
+    {
+      "profile": "depth_static",
+      "variant": "after",
+      "frame_time_change_percent": -8.641625280198461,
+      "peak_rss_change_percent": -14.935858277336589
+    },
+    {
+      "profile": "depth_dynamic",
+      "variant": "after",
+      "frame_time_change_percent": -3.8125556029024676,
+      "peak_rss_change_percent": -16.21049448056858
+    },
+    {
+      "profile": "depth_one_bucket",
+      "variant": "after",
+      "frame_time_change_percent": -0.08209196426628429,
+      "peak_rss_change_percent": -8.007448789571692
+    }
+  ],
+  "layout_probe": {
+    "cpu_node_before_bytes": 128,
+    "cpu_node_narrow_edge_num_bytes": 128,
+    "grasp_entry_before_bytes": 216,
+    "grasp_entry_narrow_class_bytes": 216
+  },
+  "decisions": {
+    "temporal_label_bitmap": "採用。256bitの存在表と出現ラベル分のsize_t頻度。既定窓32では最大RSSと時間を削減。追加設定なし",
+    "temporal_label_bitmap_limit": "全256ラベル入力・窓300では時間約11%増、最大RSS差なし。多数ラベル混在時の時間削減保証なし",
+    "temporal_sample_bool_bitfields": "不採用。3 Bから2 Bでもdeque・履歴本体の確保量がほぼ同じ、処理時間も増加",
+    "depth_pixel_layout": "採用。深度0と登録状態を共用、画素番号・bucket内位置を32bitへ縮小。総画素数検査を追加",
+    "cpu_edge_num_uint8": "不採用。実ノード全体のサイズは128 Bのまま",
+    "grasp_contact_class_uint8": "不採用。実把持エントリ全体のサイズは216 Bのまま"
+  },
+  "range_audit": [
+    {
+      "area": "点群・ボクセル共有索引",
+      "finding": "ROI点と自己ラベル・セル番号と入力番号は既に64bitへ統合済み。今回の深度索引が追加対象"
+    },
+    {
+      "area": "時系列ボクセル履歴",
+      "finding": "ラベルはuint8。256種類の有無だけをビット化し、回数の精度と同数時の優先順を保持"
+    },
+    {
+      "area": "点群サンプリング",
+      "finding": "採否は既に1 B。タイル内有効点数は0〜256で8bitでは不足。タイル数分の小領域のため今回変更なし"
+    },
+    {
+      "area": "軌道探索",
+      "finding": "探索済み・目標は既にvector<bool>。汎用グラフの添字や親番号にはuint16上限の契約なし"
+    },
+    {
+      "area": "把持",
+      "finding": "接触状態の狭幅化は配置上の余白に吸収。座標・確率の量子化は精度仕様が別途必要"
+    },
+    {
+      "area": "Dynamixel・ToPoDualArm・fuzzbot",
+      "finding": "ID・レジスタ値は既に8/16bit。汎用レジスタや連続異常回数に固定の小値域の保証なし"
+    },
+    {
+      "area": "Viewer・ブラウザシミュレータ",
+      "finding": "接続・所属は16bit、色・反射率・状態は8bit配列。描画・外部形式に必要な表現を維持"
+    },
+    {
+      "area": "データ再生・MuJoCo・タスク計画",
+      "finding": "主な大配列は座標・姿勢・外部ライブラリの数値入力。値域だけを根拠にした精度削減は対象外"
+    }
+  ],
+  "quality": {
+    "num_completed_trials": 105,
+    "num_paired_output_checks": 63,
+    "is_output_equal": true,
+    "num_passed_tests": 59,
+    "is_trial_cleanup_complete": true,
+    "runtime_cleanup": {
+      "remaining_owned_processes": [],
+      "is_existing_viewer_launch_running": true,
+      "existing_viewer_pid": 21179
+    },
+    "normal_builds": [
+      {
+        "command": [
+          "cmake",
+          "--build",
+          "/ros2_ws/build/ais_gng",
+          "--target",
+          "topological_grid_node",
+          "--parallel",
+          "2"
+        ],
+        "code": 0,
+        "tail": [
+          "[ 66%] Building CXX object CMakeFiles/topological_grid_node.dir/src/topological_grid/topological_grid_assignment.cpp.o",
+          "[100%] Linking CXX executable topological_grid_node",
+          "[100%] Built target topological_grid_node"
+        ]
+      },
+      {
+        "command": [
+          "cmake",
+          "--build",
+          "/ros2_ws/build/gng_vlut_system",
+          "--target",
+          "depth_world_index_benchmark_node",
+          "--parallel",
+          "2"
+        ],
+        "code": 0,
+        "tail": [
+          "[100%] Building CXX object src/CMakeFiles/depth_world_index_benchmark_node.dir/nodes/bridge/depth_world_index_benchmark_node.cpp.o",
+          "[100%] Linking CXX executable depth_world_index_benchmark_node",
+          "[100%] Built target depth_world_index_benchmark_node"
+        ]
+      }
+    ],
+    "scope": "処理出力・境界値・通常ビルド。ROS実行ノードの再起動や実bagでの通し再生は対象外"
+  },
+  "sources": {
+    "before": [
+      {
+        "source": "gng_vlut_system/src/core/indexing/persistent_depth_world_index.hpp",
+        "snapshot": "log/artifacts/data_layout_workspace/before/gng_vlut_system/src/core/indexing/persistent_depth_world_index.hpp",
+        "sha256": "bd1633a85978ddd7f9258aa12e95743ab3028f8ad830a75a4dcdc5217021f980"
+      },
+      {
+        "source": "ais_gng_cpu/src/ais_gng/include/ais_gng/topological_grid/topological_grid_assignment.hpp",
+        "snapshot": "log/artifacts/data_layout_workspace/before/ais_gng_cpu/src/ais_gng/include/ais_gng/topological_grid/topological_grid_assignment.hpp",
+        "sha256": "5554f813df8ec2d8e88d91200963695b5003ab59cd8403c19b85555227b329eb"
+      },
+      {
+        "source": "ais_gng_cpu/src/ais_gng/src/topological_grid/topological_grid_assignment.cpp",
+        "snapshot": "log/artifacts/data_layout_workspace/before/ais_gng_cpu/src/ais_gng/src/topological_grid/topological_grid_assignment.cpp",
+        "sha256": "0ea7643356bacf712220cc00e2c93f14aef09737a8f225b93153ce6e1caf4510"
+      }
+    ],
+    "after": [
+      {
+        "path": "ais_gng_cpu/src/ais_gng/include/ais_gng/topological_grid/label_histogram.hpp",
+        "sha256": "9155a35fcd64e0907d049b6a6b819ea3d5aea67671701bc5c5129f9a274eeff6"
+      },
+      {
+        "path": "ais_gng_cpu/src/ais_gng/include/ais_gng/topological_grid/topological_grid_assignment.hpp",
+        "sha256": "e9625c3a3149d46b887e0e452249536a2ade4a3f6ff132cc2cb774af91bc99f1"
+      },
+      {
+        "path": "ais_gng_cpu/src/ais_gng/src/topological_grid/topological_grid_assignment.cpp",
+        "sha256": "c920f340e16ed850896bedc4db2e0455fe9681b86860d4bc67ac95efa9ce6a85"
+      },
+      {
+        "path": "gng_vlut_system/src/core/indexing/persistent_depth_world_index.hpp",
+        "sha256": "0e1868fe0ddb5d968d838e5c0ecc6e6d8f713f60d92e2df0545f25a645aa0558"
+      }
+    ]
+  },
+  "commands": {
+    "build": "docker exec gng_cpu_container python3 /ros2_ws/src/benchmarks/data_layout_workspace/build_comparison.py",
+    "benchmark": "docker exec gng_cpu_container python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/data_layout_workspace/cases.json --output /ros2_ws/src/log/artifacts/data_layout_workspace/verified --repeats 7 --timeout-sec 45 --max-total-sec 600 --estimate-sec 2",
+    "tests": [
+      "docker exec gng_cpu_container /ros2_ws/src/log/artifacts/data_layout_workspace/bin/check_temporal",
+      "docker exec gng_cpu_container /ros2_ws/src/log/artifacts/data_layout_workspace/bin/check_depth"
+    ],
+    "install": "docker exec gng_cpu_container cmake --install /ros2_ws/build/ais_gng",
+    "summarize": "python3 benchmarks/data_layout_workspace/summarize.py"
+  },
+  "raw_report": "log/artifacts/data_layout_workspace/verified/report.json",
+  "real_data_validation": "benchmarks/bag_pipeline/results.json"
+}

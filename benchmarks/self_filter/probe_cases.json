@@ -1,0 +1,10 @@
+{
+  "cases": [{
+    "name": "bag_probe",
+    "cwd": "/ros2_ws/src",
+    "env": {"PYTHONDONTWRITEBYTECODE": "1"},
+    "argv": ["bash", "-c", "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"", "self_probe", "log/artifacts/self_filter/probe.py", "--case-dir", "@case_dir@", "--duration", "60"],
+    "metrics": "metrics.json",
+    "timeout_sec": 60
+  }]
+}

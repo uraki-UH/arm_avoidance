@@ -1,0 +1,106 @@
+{
+  "cases": [
+    {
+      "name": "ray",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "229",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/vrm_predictive/ros_logs",
+        "ROI_VISIBILITY_MODE": "ray"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "shuttle_trial",
+        "log/artifacts/vrm_predictive/trial.py",
+        "--condition",
+        "avoidance_first",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "60",
+        "--max-velocity",
+        "2"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 125
+    },
+    {
+      "name": "fov_reactive",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "229",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/vrm_predictive/ros_logs",
+        "ROI_VISIBILITY_MODE": "fov_shadow"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "shuttle_trial",
+        "log/artifacts/vrm_predictive/trial.py",
+        "--condition",
+        "avoidance_first",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "60",
+        "--max-velocity",
+        "2"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 125
+    },
+    {
+      "name": "fov_predictive",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "229",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/vrm_predictive/ros_logs",
+        "ROI_VISIBILITY_MODE": "fov_shadow"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "shuttle_trial",
+        "log/artifacts/vrm_predictive/trial.py",
+        "--condition",
+        "vrm_predictive",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "60",
+        "--max-velocity",
+        "2"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 125
+    }
+  ]
+}

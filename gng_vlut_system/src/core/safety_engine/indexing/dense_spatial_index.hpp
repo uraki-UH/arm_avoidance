@@ -3,18 +3,18 @@
 #include "index_voxel_grid.hpp"
 #include "ispatial_index.hpp"
 #include <Eigen/Dense>
+#include <cmath>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 namespace robot_sim {
 namespace analysis {
 
-/**
- * @brief High-performance Dense Spatial Index using CSR (Compressed Sparse Row)
- * format. Optimized for cache-locality and O(1) grid access.
- */
+// 隣接セル間で終端オフセットを共有するCSR索引。セル参照時の展開処理なし
 class DenseSpatialIndex : public ISpatialIndex {
 public:
   struct Relation {
@@ -28,26 +28,15 @@ public:
     uint32_t count;
   };
 
-  /**
-   * @brief Construct Dense Index.
-   * @param res Resolution of the lookup table.
-   * @param min_bounds Minimum bounds of the workspace.
-   * @param max_bounds Maximum bounds of the workspace.
-   */
+  // 解像度と作業空間境界による索引初期化
   DenseSpatialIndex(double res, const Eigen::Vector3d &min_bounds,
                     const Eigen::Vector3d &max_bounds)
       : grid_(res), world_min_(min_bounds) {
 
-    dims_ = ((max_bounds - min_bounds) / res)
-                .array()
-                .ceil()
-                .cast<int>()
-                .cwiseMax(1);
-    headers_.assign(dims_.x() * dims_.y() * dims_.z(), {0, 0});
-    index_offset_ = (min_bounds.array() / res).floor().cast<int>();
+    configure_grid(res, min_bounds, max_bounds);
 
     std::cout << "[DenseSpatialIndex] Created grid: " << dims_.transpose()
-              << " (" << headers_.size() << " voxels)" << std::endl;
+              << " (" << (offsets_.size() - 1) << " voxels)" << std::endl;
   }
 
   double getVoxelSize() const override { return grid_.getVoxelSize(); }
@@ -61,48 +50,45 @@ public:
     if (!ifs.is_open())
       return false;
 
-    // --- Header Loading & Auto-Configuration ---
+    // 保存済み解像度と境界への設定追従
     uint32_t file_id = 0;
     uint32_t version = 0;
     float file_res = 0.0f;
 
     ifs.read(reinterpret_cast<char *>(&file_id), sizeof(uint32_t));
     
-    // Check if the file's binary identifier matches a 4-character string
+    // 4文字識別子の照合
     auto hasMatchingIdentifier = [](uint32_t val, const char* s) {
         uint32_t target = (uint32_t)(s[0] << 24 | s[1] << 16 | s[2] << 8 | s[3]);
         return val == target;
     };
 
     if (hasMatchingIdentifier(file_id, "VLUT")) {
-        ifs.read(reinterpret_cast<char *>(&version), sizeof(uint32_t));        ifs.read(reinterpret_cast<char *>(&file_res), sizeof(float));
-        
-        // Auto-adopt resolution from file
-        grid_.setVoxelSize((double)file_res);
+        ifs.read(reinterpret_cast<char *>(&version), sizeof(uint32_t));
+        ifs.read(reinterpret_cast<char *>(&file_res), sizeof(float));
+        if (!ifs || !std::isfinite(file_res) || file_res <= 0.0f) {return false;}
 
         if (version >= 2) {
             float min_b[3], max_b[3];
             ifs.read(reinterpret_cast<char *>(min_b), sizeof(float) * 3);
             ifs.read(reinterpret_cast<char *>(max_b), sizeof(float) * 3);
 
-            // FORCE adopt workspace bounds and resolution from file to ensure efficiency
-            world_min_ = Eigen::Vector3d((double)min_b[0], (double)min_b[1], (double)min_b[2]);
-            Eigen::Vector3d world_max((double)max_b[0], (double)max_b[1], (double)max_b[2]);
-            grid_.setVoxelSize((double)file_res);
-
-            // Re-calculate grid dimensions and offset based on file header
-            dims_ = ((world_max - world_min_) / grid_.getVoxelSize())
-                        .array().ceil().template cast<int>().cwiseMax(1);
-            index_offset_ = (world_min_.array() / grid_.getVoxelSize()).floor().template cast<int>();
-
-            // Re-allocate headers to match the optimal bounds from the file
-            headers_.assign(dims_.x() * dims_.y() * dims_.z(), {0, 0});
+            if (!ifs) {return false;}
+            try {
+              configure_grid(file_res, Eigen::Vector3d(min_b[0], min_b[1], min_b[2]),
+                Eigen::Vector3d(max_b[0], max_b[1], max_b[2]));
+            } catch (const std::invalid_argument &) {
+              return false;
+            } catch (const std::length_error &) {
+              return false;
+            }
             std::cout << "[DenseSpatialIndex] Adopted File Config: Res=" << grid_.getVoxelSize() << "m, Dims=" << dims_.transpose() << std::endl;
         } else {
+            grid_.setVoxelSize(file_res);
             std::cout << "[DenseSpatialIndex] Version 1 VLUT: Adopting resolution " << file_res << "m (using default bounds)" << std::endl;
         }
     } else {
-        // Old format: First bytes were part of size_t total_relations
+        // 識別子のない保存形式の既存読込経路
         ifs.seekg(0);
         std::cout << "[DenseSpatialIndex] Warning: Loading legacy format. Make sure config.txt matches the file data!" << std::endl;
     }
@@ -110,31 +96,47 @@ public:
     size_t total_relations = 0;
     ifs.read(reinterpret_cast<char *>(&total_relations), sizeof(size_t));
     
-    if (total_relations > 100000000) {
+    if (!ifs || total_relations > 100000000) {
         std::cerr << "[DenseSpatialIndex] ERROR: Suspiciously large relation count: " << total_relations << std::endl;
         return false;
     }
+    // 不完全な入力による過大な中間配列確保の防止
+    const auto data_pos = ifs.tellg();
+    ifs.seekg(0, std::ios::end);
+    const auto end_pos = ifs.tellg();
+    const std::size_t record_bytes = sizeof(long) + 2 * sizeof(int) + sizeof(float);
+    if (data_pos < 0 || end_pos < data_pos ||
+      total_relations > static_cast<std::uint64_t>(end_pos - data_pos) / record_bytes) {
+      return false;
+    }
+    ifs.seekg(data_pos);
     std::cout << "[DenseSpatialIndex] Loading " << total_relations << " relations..." << std::endl;
 
-    // Step 1: Read all relations into a flat temporary buffer first
-    struct RawRel { long vid; int nid; float dist; int lid; };
-    std::vector<RawRel> raw_buffer(total_relations);
+    // 復号済みセル番号と関係情報だけの16 byte中間表現
+    struct load_relation {std::uint32_t cell_idx; Relation relation;};
+    static_assert(sizeof(load_relation) == 16);
+    std::vector<load_relation> raw_buffer(total_relations);
     
-    // Counting occurrences for each voxel
-    std::vector<uint32_t> counts(headers_.size(), 0);
+    // 各セルの関係数の集計
+    std::vector<uint32_t> counts((offsets_.size() - 1), 0);
 
     for (size_t i = 0; i < total_relations; ++i) {
-      ifs.read(reinterpret_cast<char *>(&raw_buffer[i].vid), sizeof(long));
-      ifs.read(reinterpret_cast<char *>(&raw_buffer[i].nid), sizeof(int));
-      ifs.read(reinterpret_cast<char *>(&raw_buffer[i].dist), sizeof(float));
-      ifs.read(reinterpret_cast<char *>(&raw_buffer[i].lid), sizeof(int));
+      long vid = 0;
+      ifs.read(reinterpret_cast<char *>(&vid), sizeof(long));
+      ifs.read(reinterpret_cast<char *>(&raw_buffer[i].relation.node_id), sizeof(int));
+      ifs.read(reinterpret_cast<char *>(&raw_buffer[i].relation.distance), sizeof(float));
+      ifs.read(reinterpret_cast<char *>(&raw_buffer[i].relation.link_id), sizeof(int));
+      if (!ifs) {return false;}
 
-      Eigen::Vector3i v_idx = grid_.getIndexFromFlatId(raw_buffer[i].vid);
+      Eigen::Vector3i v_idx = grid_.getIndexFromFlatId(vid);
       Eigen::Vector3i g_idx = v_idx - index_offset_;
 
       if ((g_idx.array() >= 0).all() && (g_idx.array() < dims_.array()).all()) {
         int flat_g_idx = g_idx.x() + g_idx.y() * dims_.x() + g_idx.z() * dims_.x() * dims_.y();
+        raw_buffer[i].cell_idx = flat_g_idx;
         counts[flat_g_idx]++;
+      } else {
+        raw_buffer[i].cell_idx = UINT32_MAX;
       }
       if (i % 5000000 == 0 && i > 0) {
           std::cout << "  Reading file: " << (i*100/total_relations) << "%\r" << std::flush;
@@ -142,38 +144,34 @@ public:
     }
     std::cout << "  File read complete. Building index structure..." << std::endl;
 
-    // Step 2: Compute offsets in the final node_data_ vector
+    // 終端を含むセル数+1個の累積オフセット。集計配列の書込位置への再利用
     uint32_t current_offset = 0;
-    for (size_t i = 0; i < headers_.size(); ++i) {
-      headers_[i].offset = current_offset;
-      headers_[i].count = 0; // Will be used as a current-fill counter in next step
+    for (size_t i = 0; i < (offsets_.size() - 1); ++i) {
+      offsets_[i] = current_offset;
       current_offset += counts[i];
+      counts[i] = 0;
     }
 
+    offsets_.back() = current_offset;
     node_data_.assign(current_offset, {0, 0.0f, 0});
     
-    // Step 3: Populate node_data_ using the offsets
+    // 座標の再復号を省いた関係情報の配置
     for (size_t i = 0; i < total_relations; ++i) {
-      // Use the raw voxel index from the file
-      Eigen::Vector3i v_idx = grid_.getIndexFromFlatId(raw_buffer[i].vid);
-      
-      // Convert world-voxel-index to local-grid-index using the offset
-      Eigen::Vector3i g_idx = v_idx - index_offset_;
-
-      if ((g_idx.array() >= 0).all() && (g_idx.array() < dims_.array()).all()) {
-        int flat_g_idx = g_idx.x() + g_idx.y() * dims_.x() + g_idx.z() * dims_.x() * dims_.y();
-        uint32_t write_pos = headers_[flat_g_idx].offset + headers_[flat_g_idx].count;
-        node_data_[write_pos] = {raw_buffer[i].nid, raw_buffer[i].dist, raw_buffer[i].lid};
-        headers_[flat_g_idx].count++;
+      const auto flat_g_idx = raw_buffer[i].cell_idx;
+      if (flat_g_idx != UINT32_MAX) {
+        uint32_t write_pos = offsets_[flat_g_idx] + counts[flat_g_idx];
+        node_data_[write_pos] = raw_buffer[i].relation;
+        counts[flat_g_idx]++;
       }
     }
 
-    // Step 4: Sort only non-empty voxels by distance
+    // 空でないセルの距離順整列
     std::cout << "  Sorting active voxels..." << std::endl;
-    for (size_t i = 0; i < headers_.size(); ++i) {
-      if (headers_[i].count > 1) {
-        std::sort(node_data_.begin() + headers_[i].offset,
-                  node_data_.begin() + headers_[i].offset + headers_[i].count,
+    for (size_t i = 0; i < (offsets_.size() - 1); ++i) {
+      const auto h = header_at(i);
+      if (h.count > 1) {
+        std::sort(node_data_.begin() + h.offset,
+                  node_data_.begin() + h.offset + h.count,
                   [](const Relation &a, const Relation &b) {
                     return a.distance < b.distance;
                   });
@@ -211,9 +209,10 @@ public:
         int y_offset = z_offset + y * dims_.x();
         for (int x = start_idx.x(); x <= end_idx.x(); ++x) {
           int flat_idx = y_offset + x;
-          const auto &h = headers_[flat_idx];
+          const auto &h = header_at(flat_idx);
 
-          const Relation *rels = &node_data_[h.offset];
+          if (h.count == 0) {continue;}
+          const Relation *rels = node_data_.data() + h.offset;
           for (uint32_t i = 0; i < h.count; ++i) {
             const auto &rel = rels[i];
             if (rel.distance <= 1e-6) {
@@ -249,8 +248,9 @@ public:
 
       int flat_idx =
           g_idx.x() + g_idx.y() * dims_.x() + g_idx.z() * dims_.x() * dims_.y();
-      const VoxelHeader &h = headers_[flat_idx];
-      const Relation *rels = &node_data_[h.offset];
+      const VoxelHeader &h = header_at(flat_idx);
+      if (h.count == 0) {continue;}
+      const Relation *rels = node_data_.data() + h.offset;
       for (uint32_t i = 0; i < h.count; ++i) {
         if (threshold >= 0.0f && rels[i].distance > threshold) {
           break; // Relations are sorted by distance, early exit
@@ -281,10 +281,10 @@ public:
         g_idx.x() + g_idx.y() * dims_.x() + g_idx.z() * dims_.x() * dims_.y();
 
     // Bounds check for flat index
-    if (flat_idx < 0 || flat_idx >= (int)headers_.size())
+    if (flat_idx < 0 || flat_idx >= (int)(offsets_.size() - 1))
       return {};
 
-    const auto &h = headers_[flat_idx];
+    const auto &h = header_at(flat_idx);
     if (h.count == 0)
       return {};
 
@@ -308,10 +308,10 @@ public:
 
     int flat_idx =
         g_idx.x() + g_idx.y() * dims_.x() + g_idx.z() * dims_.x() * dims_.y();
-    if (flat_idx < 0 || flat_idx >= (int)headers_.size())
+    if (flat_idx < 0 || flat_idx >= (int)(offsets_.size() - 1))
       return {};
 
-    const auto &h = headers_[flat_idx];
+    const auto &h = header_at(flat_idx);
     if (h.count == 0)
       return {};
 
@@ -349,10 +349,10 @@ public:
       return {nullptr, 0};
 
     int flat_idx = g_idx.x() + dims_.x() * (g_idx.y() + dims_.y() * g_idx.z());
-    if (flat_idx < 0 || flat_idx >= (int)headers_.size())
+    if (flat_idx < 0 || flat_idx >= (int)(offsets_.size() - 1))
       return {nullptr, 0};
 
-    const auto &h = headers_[flat_idx];
+    const auto &h = header_at(flat_idx);
     if (h.count == 0)
       return {nullptr, 0};
 
@@ -376,7 +376,7 @@ public:
       return;
     }
     // Reset headers and data
-    std::fill(headers_.begin(), headers_.end(), VoxelHeader{0, 0});
+    std::fill(offsets_.begin(), offsets_.end(), 0);
     node_data_.clear();
     pending_updates_.clear();
   }
@@ -404,14 +404,16 @@ public:
   void build() override {
     if (is_static_) return;
     node_data_.clear();
-    // Rebuild from pending_updates_
-    for (int i = 0; i < (int)headers_.size(); ++i) {
+    // 追加待ちの関係情報による全セルの累積オフセット再構築
+    for (int i = 0; i < (int)(offsets_.size() - 1); ++i) {
+      offsets_[i] = static_cast<uint32_t>(node_data_.size());
       auto it = pending_updates_.find(i);
       if (it != pending_updates_.end()) {
-        headers_[i].offset = static_cast<uint32_t>(node_data_.size());
-        headers_[i].count = static_cast<uint32_t>(it->second.size());
+        if (it->second.size() > UINT32_MAX - node_data_.size()) {
+          throw std::length_error("spatial index relations exceed uint32 range");
+        }
 
-        // Sort
+        // セル内の距離順整列
         std::sort(it->second.begin(), it->second.end(),
                   [](const Relation &a, const Relation &b) {
                     return a.distance < b.distance;
@@ -419,20 +421,46 @@ public:
 
         node_data_.insert(node_data_.end(), it->second.begin(),
                           it->second.end());
-      } else {
-        headers_[i] = {0, 0};
       }
     }
+    offsets_.back() = static_cast<uint32_t>(node_data_.size());
   }
 
 private:
+  // 平坦添字のint範囲と、外部座標のint範囲を保つ格子設定
+  void configure_grid(double res, const Eigen::Vector3d &min_bounds,
+    const Eigen::Vector3d &max_bounds) {
+    if (!std::isfinite(res) || res <= 0 || !min_bounds.allFinite() ||
+      !max_bounds.allFinite() || (min_bounds.array() > max_bounds.array()).any()) {
+      throw std::invalid_argument("invalid spatial index bounds or resolution");
+    }
+    const Eigen::Array3d dims = ((max_bounds - min_bounds) / res).array().ceil().max(1.0);
+    const Eigen::Array3d offset = (min_bounds.array() / res).floor();
+    const double max_idx = std::numeric_limits<int>::max();
+    if (!dims.isFinite().all() || dims.prod() > max_idx || !offset.isFinite().all() ||
+      (offset < std::numeric_limits<int>::min()).any() || (offset > max_idx).any() ||
+      (offset + dims - 1.0 > max_idx).any()) {
+      throw std::length_error("spatial index grid exceeds int range");
+    }
+    dims_ = dims.cast<int>();
+    index_offset_ = offset.cast<int>();
+    world_min_ = min_bounds;
+    grid_.setVoxelSize(res);
+    offsets_.assign(static_cast<std::size_t>(dims_.prod()) + 1, 0);
+  }
+
+  // 隣接セルで共有する終端オフセットからの範囲参照
+  VoxelHeader header_at(std::size_t idx) const {
+    return {offsets_[idx], offsets_[idx + 1] - offsets_[idx]};
+  }
+
   ::GNG::Analysis::IndexVoxelGrid grid_;
   Eigen::Vector3d world_min_;
   Eigen::Vector3i dims_;
   Eigen::Vector3i index_offset_;
   bool is_static_ = false;
 
-  std::vector<VoxelHeader> headers_;
+  std::vector<uint32_t> offsets_;
   std::vector<Relation> node_data_;
   std::unordered_map<int, std::vector<Relation>>
       pending_updates_; // For dynamic updates

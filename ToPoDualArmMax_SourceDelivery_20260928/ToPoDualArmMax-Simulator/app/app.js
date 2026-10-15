@@ -299,6 +299,7 @@ async function init(){
   updateModelUI();robot=await loadRobotModel(model);scene.add(robot);robot.setPose(homePose());
   build_body_controls();bindUI();syncTargets();setSide('L');syncControls();
   initWorkspace();
+  await physics_panel.plugins.ready;
   $('loading-text').textContent='照明とマテリアルを準備中';$('load-progress').style.width='95%';
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
   $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');

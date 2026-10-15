@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {"name":"floor_fixture", "argv":["python3","/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/check.py","fixture","--seed","@seed@","--output","@case_dir@/metrics.json"],"cwd":"/home/uraki/uraki_ws","metrics":"metrics.json","timeout_sec":60,
+     "env":{"PYTHONDONTWRITEBYTECODE":"1","GNG_REGION_KERNEL":"cpp","GNG_REGION_NATIVE_LIBRARY":"/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so","OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1"}},
+    {"name":"long_seven_axes", "argv":["python3","/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/check.py","long","--seed","@seed@","--output","@case_dir@/metrics.json"],"cwd":"/home/uraki/uraki_ws","metrics":"metrics.json","timeout_sec":90,
+     "env":{"PYTHONDONTWRITEBYTECODE":"1","GNG_REGION_KERNEL":"cpp","GNG_REGION_NATIVE_LIBRARY":"/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so","OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1"}},
+    {"name":"old_formats", "argv":["python3","/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/check.py","old_formats","--seed","@seed@","--output","@case_dir@/metrics.json"],"cwd":"/home/uraki/uraki_ws","metrics":"metrics.json","timeout_sec":60,
+     "env":{"PYTHONDONTWRITEBYTECODE":"1","GNG_REGION_KERNEL":"cpp","GNG_REGION_NATIVE_LIBRARY":"/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so","OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1"}}
+  ]
+}

@@ -2,6 +2,7 @@
 import math
 import xml.etree.ElementTree as et
 from physics_robot import PhysicsRobot, text
+from ros_plugins import physics_adapter
 
 
 def vector(value, length, bound=100):
@@ -60,22 +61,23 @@ class PhysicsScene:
             if type(mass) not in (int, float) or not math.isfinite(mass) or not .001 <= mass <= 1000:
                 raise ValueError('質量は0.001～1000 kgです')
             for geom in geoms:
-                size = vector(geom['size'], 3, 10)
-                if min(size) <= 0:
-                    raise ValueError('衝突形状の寸法が不正です')
-                et.SubElement(body, 'geom', type='box', pos=text(vector(geom['position'], 3)), quat=text(quaternion(geom['quaternion'])), size=text(size), mass=str(mass/len(geoms)), friction='.8 .005 .0001', contype='1', conaffinity='1')
+                kind = geom.get('type', 'box')
+                if kind == 'sphere':
+                    radius = geom.get('radius')
+                    if type(radius) not in (int, float) or not math.isfinite(radius) or not 0 < radius <= 10:
+                        raise ValueError('球の半径が不正です')
+                    size = [radius]
+                elif kind == 'box':
+                    size = vector(geom['size'], 3, 10)
+                    if min(size) <= 0:
+                        raise ValueError('衝突形状の寸法が不正です')
+                else:
+                    raise ValueError('未対応の衝突形状: '+str(kind))
+                et.SubElement(body, 'geom', type=kind, pos=text(vector(geom['position'], 3)), quat=text(quaternion(geom['quaternion'])), size=text(size), mass=str(mass/len(geoms)), friction='.8 .005 .0001', contype='1', conaffinity='1')
         self.robot = None
-        learned_models = None
+        adapter, avoidance, prepared = physics_adapter(avoidance, robot)
         if robot is not None:
-            fixed_joint_names = ()
-            if avoidance and avoidance.get('mode') == 'gng':
-                from gng_inputs import load_models, workspace
-                learned_models = load_models(avoidance.get('params_file') or str(
-                    workspace / 'gng_vlut_system/config/topo_dual_arm_max_long.yaml'))
-                models = learned_models[1]
-                active_names = {name for model in models.values() for name in model['joint_names']}
-                # 学習の固定関節条件とMuJoCo拘束の一致。既存の関節固定機能の使用。
-                fixed_joint_names = {name for model in models.values() for name in model['fixed_joints']} - active_names
+            fixed_joint_names = prepared['fixed_joint_names'] if prepared else ()
             base = et.SubElement(world, 'body', name='robot_base', pos=text(vector(robot['position'], 3)),
                                  quat=text(quaternion(robot['quaternion'])))
             self.robot = PhysicsRobot(root, base, robot, mujoco, fixed_joint_names)
@@ -86,17 +88,8 @@ class PhysicsScene:
         self.body_ids = {name: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in ids}
         mujoco.mj_forward(self.model, self.data)
         self.avoidance = None
-        if avoidance and avoidance.get('mode', 'none') != 'none':
-            if not self.robot:
-                raise ValueError('回避には関節動力学ロボットが必要です')
-            if avoidance.get('mode') == 'oscbf':
-                from oscbf_avoidance import create_filter
-                self.avoidance = create_filter(self, avoidance)
-            elif avoidance.get('mode') == 'gng':
-                from gng_avoidance import gng_filter
-                self.avoidance = gng_filter(self, avoidance, ros_node, robot, learned_models)
-            else:
-                raise ValueError('未登録の回避方式です')
+        if adapter is not None:
+            self.avoidance = adapter.create(self, avoidance, ros_node, robot, prepared)
 
     def move(self, poses):
         if not isinstance(poses, list) or len(poses) > 512:

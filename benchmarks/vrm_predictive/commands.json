@@ -1,0 +1,29 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "container": "gng_cpu_container",
+  "has_hardware_output": false,
+  "usage": "bash scripts/run_dual_arm_simulation.sh --gng-strategy vrm_predictive --duration 30",
+  "executed": [
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && c++ -std=c++17 -Wall -Wextra -Werror -fsyntax-only gng_vlut_system/src/core/indexing/visibility_kernel.cpp && cmake --build log/artifacts/roi_visibility/build --target gng_visibility_kernel -j2'",
+    "docker exec gng_cpu_container cmake --install /ros2_ws/src/log/artifacts/roi_visibility/build --component visibility_kernel --prefix /ros2_ws/install/gng_vlut_system",
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vrm_predictive/unit_cases.json --output log/artifacts/vrm_predictive/unit_verified --repeats 1 --max-total-sec 150 --estimate-sec 2'",
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vrm_predictive/aligned_cases.json --output log/artifacts/vrm_predictive/replay_aligned --repeats 2 --max-total-sec 450 --estimate-sec 47'",
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vrm_predictive/launch_cases.json --output log/artifacts/vrm_predictive/launch_aligned --repeats 1 --max-total-sec 100 --estimate-sec 30'",
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/fov_shadow/cost_cases.json --output log/artifacts/fov_shadow/cost_final --repeats 3 --max-total-sec 180 --estimate-sec 20'",
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vrm_predictive/cost_cases.json --output log/artifacts/vrm_predictive/cost_gated --repeats 3 --max-total-sec 180 --estimate-sec 5'"
+  ],
+  "replay_process_commands": [
+    "log/artifacts/vrm_predictive/replay_aligned/001_fov_predictive/owned_commands.json",
+    "log/artifacts/vrm_predictive/replay_aligned/001_legacy_reactive/owned_commands.json",
+    "log/artifacts/vrm_predictive/replay_aligned/001_legacy_predictive/owned_commands.json",
+    "log/artifacts/vrm_predictive/replay_aligned/002_legacy_reactive/owned_commands.json",
+    "log/artifacts/vrm_predictive/replay_aligned/002_legacy_predictive/owned_commands.json",
+    "log/artifacts/vrm_predictive/replay_aligned/002_fov_predictive/owned_commands.json"
+  ],
+  "native_process_commands": "log/artifacts/vrm_predictive/launch_aligned/001_native_predictive/owned_commands.json",
+  "cleanup": {
+    "is_complete": true,
+    "has_test_processes": false,
+    "existing_viewer_pgid": 21179
+  }
+}

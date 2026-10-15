@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "name": "default_long",
+      "argv": [
+        "python3",
+        "log/artifacts/hierarchy_backend/check.py",
+        "default_long",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "metrics": "metrics.json",
+      "timeout_sec": 75,
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so"
+      }
+    },
+    {
+      "name": "default_standard",
+      "argv": [
+        "python3",
+        "log/artifacts/hierarchy_backend/check.py",
+        "default_standard",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "metrics": "metrics.json",
+      "timeout_sec": 75,
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so"
+      }
+    }
+  ]
+}

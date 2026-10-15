@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "name": "native_cli",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "224",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/avoidance_first/ros_logs"
+      },
+      "argv": [
+        "bash", "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "native_cli_check", "log/artifacts/avoidance_first/launch_check.py",
+        "--gng-strategy", "avoidance_first", "--domain-id", "224",
+        "--duration", "30", "--report-sec", "0.5",
+        "--bag", "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+        "--output", "@case_dir@/state.jsonl"
+      ],
+      "timeout_sec": 100
+    }
+  ]
+}

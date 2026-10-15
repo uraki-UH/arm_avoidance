@@ -1,0 +1,148 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "manual_command": "bash scripts/run_dual_arm_simulation.sh --scenario chasing_sphere",
+  "manual_result_dir": "log/artifacts/chasing_sphere/manual_20261016_054709",
+  "manual_metrics": {
+    "num_arrivals": 3,
+    "num_round_trips": 1,
+    "contact_sec": 0.0,
+    "safe_sec": 20.0,
+    "evaluated_sec": 20.0,
+    "failure_penalty_sec": 0.0,
+    "is_failure": 0,
+    "first_failure_speed_ratio": 0.8,
+    "proxy_contact_sec": 0.0,
+    "internal_failure_sec": 0.01,
+    "stopped_sec": 0.4400000000000002,
+    "min_proxy_gap_m": 0.011695857556084183,
+    "first_contact_sec": 20.0,
+    "reference_eef_speed_mps": 1.251126929438235,
+    "max_ball_speed_mps": 0.8809702964617887,
+    "max_eef_speed_mps": 1.591920560377739,
+    "max_joint_speed_radps": 2.5135881808738794,
+    "propose_mean_ms": 18.448957907203294,
+    "propose_p95_ms": 19.709230506123276,
+    "num_proposals": 400,
+    "num_memory_contexts": 0,
+    "num_memory_learning": 0,
+    "learned_pursuit_gain": 0.0,
+    "num_gng_nodes": 9988
+  },
+  "build_commands": [
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && cmake -S gng_vlut_system -B log/artifacts/chasing_sphere/build -Denable_region_kernel_only=ON -DCMAKE_BUILD_TYPE=Release && cmake --build log/artifacts/chasing_sphere/build --target gng_dynamic_kernel -j2'",
+    "docker exec gng_cpu_container cmake --install /ros2_ws/src/log/artifacts/chasing_sphere/build --component dynamic_kernel --prefix /ros2_ws/install/gng_vlut_system"
+  ],
+  "runs": [
+    {
+      "output": "log/artifacts/chasing_sphere/smoke",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/smoke/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/smoke_cases.json --output log/artifacts/chasing_sphere/reproduce_smoke --repeats 1 --max-total-sec 120'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/smoke/report.json の records[].argv",
+      "num_executed_cases": 1
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/train",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/train/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/train_cases.json --output log/artifacts/chasing_sphere/reproduce_train --repeats 1 --max-total-sec 450'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/train/report.json の records[].argv",
+      "num_executed_cases": 3
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/unit",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/unit/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/unit_cases.json --output log/artifacts/chasing_sphere/reproduce_unit --repeats 1 --max-total-sec 120'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/unit/report.json の records[].argv",
+      "num_executed_cases": 6
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/development",
+      "status": "cancelled",
+      "report": "log/artifacts/chasing_sphere/development/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/dev_cases.json --output log/artifacts/chasing_sphere/reproduce_development --repeats 1 --max-total-sec 900'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/development/report.json の records[].argv",
+      "num_executed_cases": 5
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/train_stopped",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/train_stopped/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/train_cases.json --output log/artifacts/chasing_sphere/reproduce_train_stopped --repeats 1 --max-total-sec 450'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/train_stopped/report.json の records[].argv",
+      "num_executed_cases": 3
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/development_stopped",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/development_stopped/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/dev_cases.json --output log/artifacts/chasing_sphere/reproduce_development_stopped --repeats 1 --max-total-sec 900'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/development_stopped/report.json の records[].argv",
+      "num_executed_cases": 12
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/tuning",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/tuning/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/tune_cases.json --output log/artifacts/chasing_sphere/reproduce_tuning --repeats 1 --max-total-sec 600'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/tuning/report.json の records[].argv",
+      "num_executed_cases": 8
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/unit_final",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/unit_final/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/unit_cases.json --output log/artifacts/chasing_sphere/reproduce_unit_final --repeats 1 --max-total-sec 120'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/unit_final/report.json の records[].argv",
+      "num_executed_cases": 6
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/holdout",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/holdout/report.json",
+      "cleanup_ok": true,
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/holdout_cases.json --output log/artifacts/chasing_sphere/reproduce_holdout --repeats 1 --max-total-sec 900'",
+      "case_start_commands_source": "log/artifacts/chasing_sphere/holdout/report.json の records[].argv",
+      "num_executed_cases": 24
+    },
+    {
+      "output": "log/artifacts/chasing_sphere/unit_release",
+      "status": "completed",
+      "report": "log/artifacts/chasing_sphere/unit_release/report.json",
+      "cleanup_ok": true,
+      "num_executed_cases": 6,
+      "case_start_commands_source": "log/artifacts/chasing_sphere/unit_release/report.json の records[].argv",
+      "reproduce_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/chasing_sphere/unit_cases.json --output log/artifacts/chasing_sphere/reproduce_unit_release --repeats 1 --max-total-sec 120 --estimate-sec 1'"
+    }
+  ],
+  "preliminary_rule": "train・smoke・developmentは評価修正前の参考データ。採用比較はdevelopment_stopped・tuning・holdout。取消・失敗データの削除なし",
+  "process_scope": "新規ROSノード・bag・実機通信なし。試験所有プロセスだけの終了。既存Viewer・コンテナは維持",
+  "has_manual_process_exited": true,
+  "is_runtime_restored": true,
+  "preserved_viewer_pids": [
+    21179,
+    21180,
+    21182,
+    21184,
+    21186,
+    21188,
+    21190,
+    21192
+  ],
+  "preserved_containers": [
+    "gng-harmonic-launcher-launcher-1",
+    "gng_cpu_container",
+    "rosbridge_container",
+    "frontend"
+  ],
+  "num_owned_remaining_processes": 0
+}

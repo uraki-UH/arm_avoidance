@@ -1,0 +1,64 @@
+{
+  "cases": [
+    {
+      "name": "fov_shadow",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "self_measure",
+        "log/artifacts/fov_shadow/check_shadow.py"
+      ],
+      "timeout_sec": 30
+    },
+    {
+      "name": "visibility",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "self_measure",
+        "log/artifacts/roi_visibility/check_visibility.py"
+      ],
+      "timeout_sec": 30
+    },
+    {
+      "name": "self_filter",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "self_measure",
+        "log/artifacts/self_filter/check_filter.py"
+      ],
+      "timeout_sec": 30
+    },
+    {
+      "name": "retreat",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "self_measure",
+        "log/artifacts/avoidance_first/check_policy.py"
+      ],
+      "timeout_sec": 30
+    }
+  ]
+}

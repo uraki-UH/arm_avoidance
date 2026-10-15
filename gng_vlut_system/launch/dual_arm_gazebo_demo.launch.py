@@ -241,6 +241,14 @@ def launch_setup(context):
                     namespace=namespace, output='screen', parameters=[{
                         'use_sim_time': True, 'avoidance_config': avoidance_path,
                         'urdf_path': str(urdf_path),
+                        'vlut_backend': (LaunchConfiguration('vlut_backend').perform(context)
+                                         or avoidance_config.get('vlut_backend', 'node_vlut')),
+                        'edge_vlut_file': (LaunchConfiguration('edge_vlut_file').perform(context)
+                                           or avoidance_config.get('edge_vlut_file', '')),
+                        'region_vlut_file': (LaunchConfiguration('region_vlut_file').perform(context)
+                                             or avoidance_config.get('region_vlut_file', '')),
+                        'hierarchy_vlut_file': (LaunchConfiguration('hierarchy_vlut_file').perform(context)
+                                                or avoidance_config.get('hierarchy_vlut_file', '')),
                         'enable_auto_start': False if enable_integrated_control else enable_auto_start,
                         'enable_stamped_commands': enable_integrated_control}],
                     remappings=[('lidar_points', point_cloud_topic)] +
@@ -326,6 +334,10 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file', default_value=str(package_share/'config/topo_dual_arm_max.yaml')),
         DeclareLaunchArgument('demo_config', default_value=str(package_share/'config/dual_arm_gazebo_demo.yaml')),
         DeclareLaunchArgument('avoidance_config', default_value=''),
+        DeclareLaunchArgument('vlut_backend', default_value='', choices=['', 'node_vlut', 'edge_vlut', 'region_vlut', 'hierarchy_vlut']),
+        DeclareLaunchArgument('edge_vlut_file', default_value=''),
+        DeclareLaunchArgument('region_vlut_file', default_value=''),
+        DeclareLaunchArgument('hierarchy_vlut_file', default_value=''),
         DeclareLaunchArgument('point_cloud_source', default_value='external_lidar'),
         DeclareLaunchArgument('depth_camera_config', default_value=str(package_share/'config/dual_arm_depth_camera.yaml')),
         DeclareLaunchArgument('enable_external_control', default_value='false'),

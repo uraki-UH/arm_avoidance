@@ -1,0 +1,169 @@
+{
+  "cases": [
+    {
+      "name": "temporal_stable_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_before",
+        "stable",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_stable_mask",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_mask",
+        "stable",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_stable_flags",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_flags",
+        "stable",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_churn_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_before",
+        "churn",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_churn_mask",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_mask",
+        "churn",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_churn_flags",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_flags",
+        "churn",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_all_labels_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_before",
+        "all_labels",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_all_labels_mask",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_mask",
+        "all_labels",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "temporal_all_labels_flags",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/temporal_flags",
+        "all_labels",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "depth_static_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/depth_before",
+        "static",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "depth_static_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/depth_after",
+        "static",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "depth_dynamic_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/depth_before",
+        "dynamic",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "depth_dynamic_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/depth_after",
+        "dynamic",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "depth_one_bucket_before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/depth_before",
+        "one_bucket",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    },
+    {
+      "name": "depth_one_bucket_after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/data_layout_workspace/bin/depth_after",
+        "one_bucket",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/data_layout_workspace"
+    }
+  ]
+}

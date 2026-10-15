@@ -1,0 +1,8 @@
+{
+  "cases": [
+    {"name":"hierarchy_cli", "argv":["python3","gng_vlut_system/scripts/urdf_vrm.py","--urdf","log/artifacts/vrm_hierarchy_impl/floor_fixture.urdf","--joint-names","x_joint","y_joint","z_joint","--floor-z","0","--max-num-regions","16","--max-num-leaves-per-parent","8","--max-build-sec","5","--output","log/artifacts/vrm_hierarchy_impl/cli_model.npz"],
+     "cwd":"/home/uraki/uraki_ws", "timeout_sec":30,"env":{"PYTHONDONTWRITEBYTECODE":"1","GNG_REGION_KERNEL":"cpp","GNG_REGION_NATIVE_LIBRARY":"/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so","OPENBLAS_NUM_THREADS":"1"}},
+    {"name":"viewer_export", "argv":["python3","tools/gng_region_viewer/viewer.py","log/artifacts/vrm_hierarchy_impl/cli_model.npz","--max-num-pose-samples","3","--export-json","log/artifacts/vrm_hierarchy_impl/cli_model.json"],
+     "cwd":"/home/uraki/uraki_ws", "timeout_sec":30,"env":{"PYTHONDONTWRITEBYTECODE":"1","OPENBLAS_NUM_THREADS":"1"}}
+  ]
+}

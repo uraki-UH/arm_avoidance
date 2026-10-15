@@ -621,7 +621,7 @@ function App({ host }: { host?: viewer_host } = {}) {
         if (!graph || !nodeHasManipulabilityData(node)) return;
         setSelectedManipSnapshot({
             graphTag,
-            graph: JSON.parse(JSON.stringify(graph)),
+            graph: structuredClone(graph),
             node: JSON.parse(JSON.stringify(node)),
         });
     };

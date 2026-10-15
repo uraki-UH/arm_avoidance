@@ -1,0 +1,27 @@
+# Ubuntu向けのCPU計算環境。ブラウザ描画はホスト側の通常ブラウザ
+name: topo-dual-arm-cpu
+services:
+  simulator:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: simulator_cpu
+    image: topo-dual-arm-cpu:humble
+    init: true
+    network_mode: host
+    ipc: host
+    stop_grace_period: 30s
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+      ROS_LOG_DIR: /tmp/roslog
+      CMAKE_BUILD_PARALLEL_LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL:-1}
+      FASTRTPS_DEFAULT_PROFILES_FILE: /ros2_ws/src/docker/fastdds_shm_large_pointcloud.xml
+    volumes:
+      - ..:/ros2_ws/src
+      - cpu_build:/ros2_ws/build
+      - cpu_install:/ros2_ws/install
+    working_dir: /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator
+    command: ["bash", "start_ros.sh"]
+volumes:
+  cpu_build:
+  cpu_install:

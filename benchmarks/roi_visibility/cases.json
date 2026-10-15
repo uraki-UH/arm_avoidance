@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "name": "legacy",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "227",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/ros2_ws/src/log/artifacts/hierarchy_bag/libgng_region_kernel.so",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/roi_visibility/ros_logs",
+        "ROI_VISIBILITY_MODE": "legacy"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "shuttle_trial",
+        "log/artifacts/roi_visibility/trial.py",
+        "--condition",
+        "avoidance_first",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "60",
+        "--max-velocity",
+        "2"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 120
+    },
+    {
+      "name": "strict",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "ROS_DOMAIN_ID": "227",
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS2CLI_NO_DAEMON": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/ros2_ws/src/log/artifacts/hierarchy_bag/libgng_region_kernel.so",
+        "ROS_LOG_DIR": "/ros2_ws/src/log/artifacts/roi_visibility/ros_logs",
+        "ROI_VISIBILITY_MODE": "strict"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "shuttle_trial",
+        "log/artifacts/roi_visibility/trial.py",
+        "--condition",
+        "avoidance_first",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "60",
+        "--max-velocity",
+        "2"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 120
+    }
+  ]
+}

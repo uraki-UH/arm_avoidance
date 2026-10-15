@@ -1,0 +1,83 @@
+{
+  "protocol_sha256": "35cae87e6d477e813a065e992194c3a8337d355c4c75d67d07ad1d9fc29a4720",
+  "num_models_verified": 6,
+  "num_trials_verified": 35,
+  "num_registered_environments": 720,
+  "changed_input_cells_per_trial": [
+    335,
+    339,
+    328,
+    332,
+    333
+  ],
+  "mean_visited_postings_per_changed_cell": {
+    "occupancy_cover_64": [
+      11.492537313432836,
+      9.669616519174042,
+      11.140243902439025,
+      10.626506024096386,
+      8.726726726726726
+    ],
+    "quadratic_cover_64": [
+      8.441791044776119,
+      7.380530973451328,
+      8.445121951219512,
+      8.150602409638553,
+      6.6006006006006
+    ],
+    "urdf_boxes_64": [
+      0.7402985074626866,
+      0.5899705014749262,
+      0.6219512195121951,
+      0.6626506024096386,
+      0.5045045045045045
+    ],
+    "occupancy_cover_128": [
+      19.008955223880598,
+      16.265486725663717,
+      18.29268292682927,
+      17.843373493975903,
+      14.936936936936936
+    ],
+    "quadratic_cover_128": [
+      8.907462686567165,
+      7.710914454277286,
+      8.859756097560975,
+      8.524096385542169,
+      6.918918918918919
+    ],
+    "urdf_boxes_128": [
+      1.3671641791044775,
+      1.2448377581120944,
+      1.2439024390243902,
+      1.3012048192771084,
+      1.0810810810810811
+    ],
+    "fallback_control": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "num_invariant_overlapping_pairs": 10,
+  "worst_invariant_pair": {
+    "gap_m": -0.02864680192306135,
+    "links": [
+      "R_finger_left",
+      "R_joint7_cover_link"
+    ]
+  },
+  "input_sha256": {
+    "dataset.npz": "78ad213a590374a893ae6cfb4971bd963665e478d4459026954e31be8963b809",
+    "trial_1.npz": "338d22195c97d2b1771bff728852ab3edb6a6da8ccf5db1f16cea0a5bd051cc2",
+    "trial_2.npz": "ae9d0e48f8d177eb7f4dec014ac66998e60b139bc7b05b18ae2500afdb856a69",
+    "trial_3.npz": "e386c75c32b295d917f5955a06ce4d6e94d85f17ccbd9a7ecf6d4f120fc4ef0b",
+    "trial_4.npz": "7c3afe4d391ec96c5deb9e5ddb300836030aa2a2e206846e4550b72d3e124a1f",
+    "trial_5.npz": "6f5461640848561e65a9a21a63f2a68c9fecf762fcfa543aad0385d6c73f69d4"
+  },
+  "has_owned_test_processes": false,
+  "has_ros_or_docker_calls": false,
+  "all_cleanup_ok": true
+}

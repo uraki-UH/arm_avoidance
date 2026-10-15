@@ -1,0 +1,240 @@
+{
+  "conditions": {
+    "cpu": {
+      "num_node_capacity": 20000,
+      "num_input_points": 16000,
+      "num_learning_per_frame": 4000,
+      "num_frames": 50,
+      "random_choice_seed": "frame_number（試験用コピーのみ）",
+      "edge_counter_bits": 32,
+      "compatibility": "既存のedge.age_max: 300を含む32bit寿命設定の保持"
+    },
+    "links": {
+      "num_links": 200000,
+      "sort_passes": 1,
+      "sequential_update_passes": 1,
+      "scan_passes_measured": 32,
+      "scan_ms": "1走査への正規化",
+      "num_random_updates": 2000000
+    },
+    "values": {
+      "num_values": 1000000,
+      "range": [
+        0,
+        1000
+      ],
+      "num_scan_passes": 32,
+      "num_random_updates": 2000000,
+      "scope": "例示値域による合成試験。実コードの対象フィールドなし。対象ごとのアクセス条件を伴わない一般化は対象外",
+      "can_determine_production_adoption": false
+    },
+    "flags": {
+      "num_records": 100000,
+      "num_passes": 16,
+      "scope": "5フラグの保存処理のみ"
+    },
+    "graph": {
+      "num_nodes": 20000,
+      "num_edge_values": 200000,
+      "num_clusters": 200,
+      "num_warmup_decodes": 5,
+      "num_decodes": 30,
+      "memory": "GC後の保持グラフに伴うheapUsedとarrayBuffersの増分合計"
+    },
+    "units": {
+      "*_ms": "ms",
+      "*_bytes": "B",
+      "*_rss_kb": "KiB（Linux ru_maxrss）"
+    }
+  },
+  "cpu": {
+    "stats_off_before": {
+      "num_runs": 5,
+      "median": {
+        "total_ms": 1236.439985,
+        "frame_ms": 24.7287997,
+        "init_rss_kb": 15624,
+        "peak_rss_kb": 18088,
+        "node_bytes": 360,
+        "num_nodes": 12564,
+        "geometry_hash": 3516425816,
+        "statistics_hash": 1420627397
+      }
+    },
+    "stats_off_after": {
+      "num_runs": 5,
+      "median": {
+        "total_ms": 1199.015335,
+        "frame_ms": 23.9803067,
+        "init_rss_kb": 12976,
+        "peak_rss_kb": 13156,
+        "node_bytes": 128,
+        "num_nodes": 12564,
+        "geometry_hash": 3516425816,
+        "statistics_hash": 1420627397
+      }
+    },
+    "stats_on_before": {
+      "num_runs": 5,
+      "median": {
+        "total_ms": 1247.770722,
+        "frame_ms": 24.95541444,
+        "init_rss_kb": 15528,
+        "peak_rss_kb": 18124,
+        "node_bytes": 360,
+        "num_nodes": 12564,
+        "geometry_hash": 3516425816,
+        "statistics_hash": 1285645321
+      }
+    },
+    "stats_on_after": {
+      "num_runs": 5,
+      "median": {
+        "total_ms": 1211.1463,
+        "frame_ms": 24.222926,
+        "init_rss_kb": 14932,
+        "peak_rss_kb": 17228,
+        "node_bytes": 128,
+        "num_nodes": 12564,
+        "geometry_hash": 3516425816,
+        "statistics_hash": 1285645321
+      }
+    },
+    "links_before": {
+      "num_runs": 5,
+      "median": {
+        "sort_ms": 20.835824,
+        "scan_ms": 0.1494714375,
+        "update_ms": 0.234297,
+        "random_update_ms": 7.3044,
+        "total_ms": 21.23105784375,
+        "bytes": 3200000,
+        "checksum": 4120017151799744
+      }
+    },
+    "links_bitfield": {
+      "num_runs": 5,
+      "median": {
+        "sort_ms": 23.67381,
+        "scan_ms": 0.1246760625,
+        "update_ms": 0.176211,
+        "random_update_ms": 4.223293,
+        "total_ms": 23.9766708125,
+        "bytes": 1600000,
+        "checksum": 4120017151799744
+      }
+    },
+    "links_packed": {
+      "num_runs": 5,
+      "median": {
+        "sort_ms": 18.884523,
+        "scan_ms": 0.06666646875,
+        "update_ms": 0.104129,
+        "random_update_ms": 4.289347,
+        "total_ms": 19.06105,
+        "bytes": 1600000,
+        "checksum": 4120017151799744
+      }
+    },
+    "values_u16": {
+      "num_runs": 5,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 6.537026,
+        "update_ms": 5.647354,
+        "random_update_ms": 0,
+        "total_ms": 12.205338,
+        "bytes": 2000000,
+        "checksum": 16009008096
+      }
+    },
+    "values_10bit": {
+      "num_runs": 5,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 78.333886,
+        "update_ms": 10.602249,
+        "random_update_ms": 0,
+        "total_ms": 88.363264,
+        "bytes": 1250000,
+        "checksum": 16009008096
+      }
+    },
+    "flags_before": {
+      "num_runs": 5,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 0,
+        "update_ms": 121.453827,
+        "random_update_ms": 0,
+        "total_ms": 121.453827,
+        "bytes": 8000000,
+        "checksum": 24793472
+      }
+    },
+    "flags_packed": {
+      "num_runs": 5,
+      "median": {
+        "sort_ms": 0,
+        "scan_ms": 0,
+        "update_ms": 31.525566,
+        "random_update_ms": 0,
+        "total_ms": 31.525566,
+        "bytes": 1600000,
+        "checksum": 24793472
+      }
+    }
+  },
+  "graph": {
+    "graph_before": {
+      "num_runs": 5,
+      "median": {
+        "total_ms": 788.0550089999999,
+        "decode_ms": 26.268500299999996,
+        "heap_bytes": 9706632,
+        "array_bytes": 0,
+        "retained_bytes": 9706632,
+        "checksum": 2599870000
+      }
+    },
+    "graph_after": {
+      "num_runs": 5,
+      "median": {
+        "total_ms": 725.702868,
+        "decode_ms": 24.1900956,
+        "heap_bytes": 7700464,
+        "array_bytes": 400000,
+        "retained_bytes": 8100464,
+        "checksum": 2599870000
+      }
+    }
+  },
+  "quality": {
+    "num_completed_trials": 85,
+    "all_outputs_match": true,
+    "all_trial_processes_stopped": true
+  },
+  "decisions": {
+    "gng_compact_nodes_and_optional_statistics": "採用：メモリ削減と同一出力。既存寿命設定の互換性を優先した32bitカウンタ",
+    "links_bitfield": "不採用：並替えを含む処理時間の増加",
+    "links_packed": "採用：64bit整数への明示的ビット詰め、容量半減、処理時間の減少",
+    "values_10bit": "参考測定・実コードの採否対象外：例示値域による合成試験。この走査・更新条件だけの結果。実フィールドのビット幅最適化への一般化なし",
+    "flags_packed": "採用：明示的な保存ビット定義、フラグ部分の容量・保存時間の減少",
+    "graph_uint16_arrays": "採用：保持メモリと受信時間の減少。JSON境界では通常配列へ変換"
+  },
+  "format": {
+    "gng_version": 10,
+    "status_flags_bytes": 1,
+    "num_status_flags": 5,
+    "manipulability_scalar_bytes": 8,
+    "num_manipulability_scalars": 2,
+    "gng_bytes_delta_per_node_from_v9": 4,
+    "legacy_metrics": "旧形式は専用ツールで一度だけ移行。可操作性値は再評価待ち。通常処理はv10のみ"
+  },
+  "commands": {
+    "cpu_compatibility": "python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/data_layout/cpu_compatibility_cases.json --output /ros2_ws/src/log/artifacts/data_layout/cpu_compatibility_verified --repeats 5 --timeout-sec 40 --max-total-sec 180 --estimate-sec 1.3",
+    "cpu": "python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/data_layout/cpu_cases.json --output /ros2_ws/src/log/artifacts/data_layout/cpu_verified --repeats 5 --timeout-sec 40 --max-total-sec 300 --estimate-sec 1",
+    "graph": "python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/data_layout/graph_cases.json --output log/artifacts/data_layout/graph_verified --repeats 5 --timeout-sec 40 --max-total-sec 120 --estimate-sec 1",
+    "robot": "ROS_DOMAIN_ID=187 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=/ros2_ws/src/gng_vlut_system/config/topo_dual_arm_max_long.yaml joint_control_backend:=viewer enable_dynamixel_joint_state_input:=false enable_dynamixel_current_pose:=false enable_dynamixel_input:=false"
+  }
+}

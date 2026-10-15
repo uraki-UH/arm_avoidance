@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "id": "robot_tf",
+  "category": "launch",
+  "label": "ロボットTF（表示確認）",
+  "description": "独立した名前空間でrobot_state_publisherを起動。関節指令の出力なし。",
+  "parameters": {
+    "namespace": {
+      "type": "string",
+      "label": "名前空間",
+      "default": "browser_preview",
+      "max_length": 80
+    },
+    "model": {
+      "type": "string",
+      "label": "モデル",
+      "default": "long",
+      "choices": [
+        "long",
+        "standard"
+      ]
+    }
+  },
+  "launch": {
+    "path": "plugins/launch/robot_tf.launch.py",
+    "arguments": {
+      "namespace": {
+        "parameter": "namespace"
+      },
+      "model": {
+        "parameter": "model"
+      }
+    },
+    "ready": {
+      "kind": "topic",
+      "name": "/{namespace}/robot_description",
+      "max_wait_sec": 15,
+      "message_type": "std_msgs/msg/String"
+    }
+  },
+  "interfaces": {
+    "inputs": [
+      {
+        "name": "関節状態",
+        "topic": "/{namespace}/joint_states",
+        "message_type": "sensor_msgs/msg/JointState"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "TF",
+        "topic": "/tf_static",
+        "message_type": "tf2_msgs/msg/TFMessage"
+      },
+      {
+        "name": "モデル",
+        "topic": "/{namespace}/robot_description",
+        "message_type": "std_msgs/msg/String"
+      }
+    ]
+  }
+}

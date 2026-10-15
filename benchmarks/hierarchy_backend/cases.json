@@ -1,0 +1,78 @@
+{
+  "cases": [
+    {
+      "name": "selector",
+      "argv": [
+        "python3",
+        "log/artifacts/hierarchy_backend/check.py",
+        "selector",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "metrics": "metrics.json",
+      "timeout_sec": 45,
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so"
+      }
+    },
+    {
+      "name": "standard",
+      "argv": [
+        "python3",
+        "log/artifacts/hierarchy_backend/check.py",
+        "standard",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "metrics": "metrics.json",
+      "timeout_sec": 45,
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so"
+      }
+    },
+    {
+      "name": "long",
+      "argv": [
+        "python3",
+        "log/artifacts/hierarchy_backend/check.py",
+        "long",
+        "--seed",
+        "@seed@",
+        "--output",
+        "@case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "metrics": "metrics.json",
+      "timeout_sec": 45,
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "GNG_REGION_KERNEL": "cpp",
+        "GNG_REGION_NATIVE_LIBRARY": "/home/uraki/uraki_ws/log/artifacts/vrm_hierarchy_impl/libgng_region_kernel.so"
+      }
+    },
+    {
+      "name": "launch",
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nexec /usr/bin/python3.10 log/artifacts/hierarchy_backend/launch_check.py --seed @seed@ --output @case_dir@/metrics.json"
+      ],
+      "cwd": "/home/uraki/uraki_ws",
+      "metrics": "metrics.json",
+      "timeout_sec": 30,
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      }
+    }
+  ]
+}

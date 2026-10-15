@@ -92,10 +92,14 @@ overrides:
 | --- | --- |
 | `scripts/avoidance_motion.py` | `motion_kind`列挙型、`motion_flags`、`select_motion`による優先順位、`motion_components`による動作差替え |
 | `scripts/gng_avoidance_planner.py` | GNG探索、対象腕選択、復帰継続時間、速度制限・区間安全検査 |
+| `scripts/gng_edge_vlut.py` | 任意の辺掃引逆引き索引、3状態判定、条件不一致時の従来検査への委任 |
+| `scripts/gng_region_vlut.py` | 3D占有領域、連動一次／二次制約、姿勢保護、被覆付き遷移、任意のPareto構築選択 |
 | `scripts/dual_arm_gng_lidar_demo.py` | ROS入力・鮮度管理・探索プロセス・軌道出力・診断 |
 | `scripts/dual_arm_avoidance_demo.py` | 開始・停止ラッチ・異常停止・接近待機・実行監視 |
 
 判定フラグは毎回の観測から生成する読み取り専用値。設定ON/OFFの追加なし。
+辺索引の選択・構築・条件照合は[任意の辺掃引バックエンド](../README.md#任意の辺掃引バックエンド)を参照。既定のノードVLUTは維持。
+辺占有索引なしの別方式・姿勢包含・接続保持の評価は[3D占有に基づく領域ノード](../README.md#3d占有に基づく領域ノード)を参照。外部GNGの安全ラベルと入力鮮度は継続。領域側の`graph_states()`による遷移保証用ラベルとは別の状態。
 `select_motion`は停止要求 → 入力不成立 → 対象関節なしの保持 → 退避 → 復帰待ち → 復帰／初期姿勢保持の順で選択。
 `motion_phase`は障害物シナリオの表示状態とは独立。診断トピック`avoidance/gng_status`に動作と判定フラグを出力。
 動作の語彙は`motion_kind`、実装の対応は`motion_components`に集約。文字列・JSONの動作名は従来と共通、未登録動作と呼出し不能な部品は実行前に拒否。

@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "id": "gng",
+  "category": "physics",
+  "label": "GNG-VLUT（ROS launch）",
+  "description": "MuJoCo実測とGNG/VLUTの接続。物理タブから開始。",
+  "models": [
+    "long"
+  ],
+  "adapter": "gng_avoidance:gng_adapter",
+  "settings_id": "physics-gng-settings",
+  "capabilities": {
+    "pose_sources": [
+      "simulator"
+    ],
+    "can_set_goal_pose": true
+  },
+  "parameters": {
+    "enable_roi_visibility": {
+      "type": "bool",
+      "label": "遮蔽・視野外への進入制限",
+      "default": true
+    },
+    "visibility_model": {
+      "type": "string",
+      "default": "fov_shadow",
+      "choices": ["fov_shadow", "ray"],
+      "is_hidden": true
+    },
+    "recorded_self_padding": {
+      "type": "number",
+      "label": "記録自己境界余裕 m",
+      "default": 0.02,
+      "min": 0,
+      "max": 0.05,
+      "is_hidden": true
+    },
+    "max_recorded_pair_age_sec": {
+      "type": "number",
+      "label": "記録自己マスク時刻差 s",
+      "default": 0.05,
+      "min": 0,
+      "max": 0.2,
+      "is_hidden": true
+    },
+    "gng_strategy": {
+      "type": "string",
+      "label": "回避方策",
+      "default": "graph",
+      "choices": ["graph", "avoidance_first", "vrm_predictive"]
+    },
+    "roi_topic": {
+      "type": "topic",
+      "label": "ROIトピック",
+      "default": "/topo_dual_arm_max_long/roi_voxels",
+      "ui_id": "physics-gng-roi"
+    },
+    "points_topic": {
+      "type": "topic",
+      "label": "点群トピック",
+      "default": "/livox/lidar",
+      "ui_id": "physics-gng-points"
+    },
+    "params_file": {
+      "type": "string",
+      "label": "モデル設定ファイル",
+      "is_hidden": true
+    },
+    "source_frame": {
+      "type": "string",
+      "is_hidden": true
+    },
+    "recorded_self_topic": {
+      "type": "topic",
+      "is_hidden": true
+    },
+    "enable_recorded_self_filter": {
+      "type": "bool",
+      "is_hidden": true
+    },
+    "recorded_tf_topic": {
+      "type": "topic",
+      "is_hidden": true
+    },
+    "recorded_static_tf_topic": {
+      "type": "topic",
+      "is_hidden": true
+    }
+  },
+  "launch": {
+    "package": "gng_vlut_system",
+    "file": "gng_viewer_bridge.launch.py",
+    "arguments": {
+      "params_file": {
+        "context": "params_file"
+      },
+      "state_topic": {
+        "context": "state_topic"
+      },
+      "joint_control_backend": "external",
+      "edge_mode": 0,
+      "enable_joint_state_publisher": false,
+      "enable_environment_voxelization": true,
+      "enable_dynamixel_joint_state_input": false,
+      "enable_dynamixel_current_pose": false,
+      "enable_realsense_mount_tf": false
+    },
+    "ready": {
+      "kind": "service",
+      "name": "/{namespace}/check_arm_pair",
+      "max_wait_sec": 30,
+      "message_type": "gng_control_msgs/srv/CheckArmPair"
+    }
+  },
+  "display": {
+    "label": "GNG-VLUT",
+    "phases": {
+      "waiting": "入力待ち",
+      "monitoring": "監視中",
+      "avoiding": {
+        "moving": "退避中",
+        "holding": "退避候補待ち"
+      },
+      "returning": {
+        "moving": "復帰中",
+        "holding": "復帰待ち"
+      },
+      "replanning": "経路再検査",
+      "blocked": "経路なし",
+      "blocked_clearance": "姿勢保持",
+      "waiting_for_clearance": "余裕回復待ち",
+      "local_retreat": "回避優先・退避中",
+      "task_following": "回避優先・タスク実行",
+      "predictive_task": "予測・タスク実行",
+      "predictive_detour": "予測・迂回中",
+      "predictive_fallback": "予測除外・再計画"
+    },
+    "enable_motion_status": true,
+    "velocity_pattern": "^[LR]_joint[1-7]$",
+    "fields": [
+      {
+        "name": "clearance_m",
+        "label": "余裕",
+        "unit": "m",
+        "decimals": 3
+      }
+    ]
+  },
+  "interfaces": {
+    "inputs": [
+      {
+        "name": "点群",
+        "parameter": "points_topic",
+        "message_type": "sensor_msgs/msg/PointCloud2"
+      },
+      {
+        "name": "ROI",
+        "parameter": "roi_topic",
+        "message_type": "voxel_msgs/msg/Voxel"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "衝突確認",
+        "kind": "service",
+        "topic": "/{namespace}/check_arm_pair",
+        "message_type": "gng_control_msgs/srv/CheckArmPair"
+      }
+    ]
+  }
+}

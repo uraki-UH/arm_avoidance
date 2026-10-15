@@ -5,16 +5,17 @@ import os
 import sys
 
 def read_eigen_matrix(f):
-    rows = struct.unpack('l', f.read(8))[0]
-    cols = struct.unpack('l', f.read(8))[0]
-    data = f.read(rows * cols * 4) # float32
+    rows, cols = struct.unpack('<qq', f.read(16))
+    if not 0 <= rows <= 4096 or not 0 <= cols <= 4096 or rows * cols > 4096:
+        raise ValueError('invalid Eigen dimensions')
+    data = f.read(rows * cols * 4) # float32配列
     return np.frombuffer(data, dtype=np.float32).reshape(rows, cols)
 
 def main():
     if len(sys.argv) > 1:
         filepath = sys.argv[1]
     else:
-        # Default path
+        # 既定の入力パス
         filepath = "../gng_online.bin"
         
     if not os.path.exists(filepath):
@@ -26,11 +27,18 @@ def main():
     with open(filepath, 'rb') as f:
         version = struct.unpack('I', f.read(4))[0]
         print(f"GNG Version: {version}")
+        if version != 10:
+            raise ValueError('unsupported GNG version')
+        num_coord_layers, = struct.unpack('<i', f.read(4))
+        if not 1 <= num_coord_layers <= 16:
+            raise ValueError('invalid coordinate layer count')
         
         node_count = struct.unpack('i', f.read(4))[0]
+        if not 0 <= node_count <= 1000000:
+            raise ValueError('invalid node count')
         print(f"Node Count: {node_count}")
         
-        nodes = {} # id -> {angle, coord}
+        nodes = {} # ノードIDごとの角度・座標
         
         for _ in range(node_count):
             node_id = struct.unpack('i', f.read(4))[0]
@@ -39,36 +47,29 @@ def main():
             
             weight_angle = read_eigen_matrix(f)
             weight_coord = read_eigen_matrix(f)
+            coord_num, = struct.unpack('<i', f.read(4))
+            if not 0 <= coord_num <= num_coord_layers:
+                raise ValueError('invalid coordinate count')
+            for _ in range(coord_num):
+                read_eigen_matrix(f)
             
-            # Status fields
+            # 状態ビットの読込み
             level = struct.unpack('i', f.read(4))[0]
-            is_surface = struct.unpack('?', f.read(1))[0]
-            is_active_surface = struct.unpack('?', f.read(1))[0]
-            valid = struct.unpack('?', f.read(1))[0]
-            active = struct.unpack('?', f.read(1))[0]
-            is_boundary = struct.unpack('?', f.read(1))[0]
+            flags, = struct.unpack('B', f.read(1))
+            if flags & 0xE0:
+                raise ValueError('invalid GNG status flags')
             
             ee_direction = read_eigen_matrix(f)
             
-            # Manipulability Info
-            manipulability = struct.unpack('f', f.read(4))[0]
-            min_singular_value = struct.unpack('f', f.read(4))[0]
-            joint_limit_score = struct.unpack('f', f.read(4))[0]
-            if 4 <= version <= 8:
-                f.read(4)  # Removed legacy field
-            manip_valid = struct.unpack('?', f.read(1))[0]
-            dynamic_manipulability = struct.unpack('f', f.read(4))[0]
-            
-            jp_size = struct.unpack('i', f.read(4))[0]
-            for _ in range(jp_size):
-                read_eigen_matrix(f)
+            # double可操作性と付随評価値
+            struct.unpack('<dff?fd?', f.read(30))
                 
             nodes[node_id] = {
                 'angle': weight_angle.flatten(),
                 'coord': weight_coord.flatten()
             }
 
-        # Angle Edges
+        # 関節空間のエッジ
         edge_count = struct.unpack('i', f.read(4))[0]
         print(f"Angle Edges: {edge_count}")
         
@@ -83,23 +84,21 @@ def main():
                 dist = np.linalg.norm(nodes[n1]['angle'] - nodes[n2]['angle'])
                 angle_edge_lengths.append(dist)
 
-        # Coord Edges (Optional read, just ensuring file pointer is correct)
-        # We can also plot these if needed
-        try:
-             coord_edge_count = struct.unpack('i', f.read(4))[0]
-             print(f"Coord Edges: {coord_edge_count}")
-             coord_edge_lengths = []
-             for _ in range(coord_edge_count):
-                n1 = struct.unpack('i', f.read(4))[0]
-                n2 = struct.unpack('i', f.read(4))[0]
-                age = struct.unpack('i', f.read(4))[0]
-                active = struct.unpack('?', f.read(1))[0]
-                
-                if active and n1 in nodes and n2 in nodes:
+        # 全座標層の読込み検証と、先頭層の分布集計
+        coord_edge_lengths = []
+        for layer in range(num_coord_layers):
+            coord_edge_count, = struct.unpack('<i', f.read(4))
+            if coord_edge_count < 0:
+                raise ValueError('invalid edge count')
+            if layer == 0:
+                print(f"Coord Edges: {coord_edge_count}")
+            for _ in range(coord_edge_count):
+                n1, n2, age, active = struct.unpack('<iii?', f.read(13))
+                if layer == 0 and active and n1 in nodes and n2 in nodes:
                     dist = np.linalg.norm(nodes[n1]['coord'] - nodes[n2]['coord'])
                     coord_edge_lengths.append(dist)
-        except:
-            print("End of file reached or error reading coord edges.")
+        if f.read(1):
+            raise ValueError('unexpected GNG trailing data')
 
     # Convert to numpy arrays
     angle_dists = np.array(angle_edge_lengths)

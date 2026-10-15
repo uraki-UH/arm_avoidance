@@ -101,8 +101,12 @@ def restart_existing(port, bridge_port):
 
 
 def bridge_revision():
-    names = ('../../start_ros.sh', 'pointcloud_bridge.py', 'lazy_output.py', 'follow_bridge.py', 'robot_exchange.py', 'depth_output.py', 'native_points.py', 'pointcloud_native.cpp', 'joint_stream.py', 'physics_scene.py', 'physics_stream.py', 'physics_robot.py', 'gng_inputs.py', 'gng_avoidance.py', 'gng_runtime.py', 'oscbf_avoidance/__init__.py', 'oscbf_avoidance/filter.py', 'oscbf_avoidance/defaults.json')
-    return tuple((Path(__file__).parent / name).stat().st_mtime_ns for name in names)
+    names = ('../../start_ros.sh', 'pointcloud_bridge.py', 'lazy_output.py', 'follow_bridge.py', 'robot_exchange.py', 'depth_output.py', 'native_points.py', 'pointcloud_native.cpp', 'joint_stream.py', 'physics_scene.py', 'physics_stream.py', 'physics_robot.py', 'gng_inputs.py', 'gng_avoidance.py', 'gng_prediction.py', 'gng_visibility.py', 'gng_runtime.py', 'ros_plugins.py', 'oscbf_avoidance/__init__.py', 'oscbf_avoidance/filter.py', 'oscbf_avoidance/defaults.json')
+    paths = [Path(__file__).parent / name for name in names]
+    # launch初回実行時のPythonキャッシュ生成による再起動の抑止
+    paths += sorted(path for path in (Path(__file__).parent/'plugins').rglob('*')
+                    if '__pycache__' not in path.parts and path.suffix != '.pyc')
+    return tuple(path.stat().st_mtime_ns for path in paths if path.is_file())
 
 
 def ensure_services(args):

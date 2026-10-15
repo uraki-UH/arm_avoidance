@@ -1,0 +1,418 @@
+{
+  "runner_commands": [
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src\nPYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_first/smoke_cases.json --output log/artifacts/avoidance_first/smoke --repeats 1 --timeout-sec 115 --max-total-sec 140 --estimate-sec 32'",
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src\nPYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_first/cases.json --output log/artifacts/avoidance_first/comparison --repeats 2 --timeout-sec 115 --max-total-sec 450 --estimate-sec 78'",
+    "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src\nPYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_first/launch_cases.json --output log/artifacts/avoidance_first/native --repeats 1 --timeout-sec 100 --max-total-sec 110 --estimate-sec 48'"
+  ],
+  "unit_command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\ncd /ros2_ws/src\nPYTHONDONTWRITEBYTECODE=1 python3 log/artifacts/avoidance_first/check_policy.py'",
+  "owned_child_commands": [
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_avoidance_first/owned_commands.json",
+      "pid": 43255,
+      "command": [
+        "bash",
+        "/ros2_ws/src/scripts/play_bag.sh",
+        "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+        "--topics-file",
+        "/dev/null",
+        "--topic",
+        "/livox/lidar",
+        "--topic",
+        "/topo_dual_arm_max_long/roi_voxels",
+        "--topic",
+        "/topo_dual_arm_max_long/self_voxel",
+        "--topic",
+        "/tf",
+        "--topic",
+        "/tf_static",
+        "--remap",
+        "/tf:=/recorded_topo_dual_arm_max_long/tf",
+        "/tf_static:=/recorded_topo_dual_arm_max_long/tf_static",
+        "--start-offset",
+        "0.0",
+        "--rate",
+        "1.0",
+        "--start-paused",
+        "--disable-keyboard-controls"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_avoidance_first/owned_commands.json",
+      "pid": 43260,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_avoidance_first/owned_commands.json",
+      "pid": 43261,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_avoidance_first/owned_commands.json",
+      "pid": 43275,
+      "command": [
+        "ros2",
+        "launch",
+        "--noninteractive",
+        "gng_vlut_system",
+        "gng_viewer_bridge.launch.py",
+        "params_file:=/ros2_ws/src/log/artifacts/avoidance_first/comparison/001_avoidance_first/tmp/topo-gng-simulation-2v9q0xnn/params.yaml",
+        "state_topic:=/sim_topo_dual_arm_max_long/joint_states",
+        "joint_control_backend:=external",
+        "edge_mode:=0",
+        "enable_joint_state_publisher:=false",
+        "enable_environment_voxelization:=true",
+        "enable_dynamixel_joint_state_input:=false",
+        "enable_dynamixel_current_pose:=false",
+        "enable_realsense_mount_tf:=false"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_detailed/owned_commands.json",
+      "pid": 43048,
+      "command": [
+        "bash",
+        "/ros2_ws/src/scripts/play_bag.sh",
+        "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+        "--topics-file",
+        "/dev/null",
+        "--topic",
+        "/livox/lidar",
+        "--topic",
+        "/topo_dual_arm_max_long/roi_voxels",
+        "--topic",
+        "/topo_dual_arm_max_long/self_voxel",
+        "--topic",
+        "/tf",
+        "--topic",
+        "/tf_static",
+        "--remap",
+        "/tf:=/recorded_topo_dual_arm_max_long/tf",
+        "/tf_static:=/recorded_topo_dual_arm_max_long/tf_static",
+        "--start-offset",
+        "0.0",
+        "--rate",
+        "1.0",
+        "--start-paused",
+        "--disable-keyboard-controls"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_detailed/owned_commands.json",
+      "pid": 43053,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_detailed/owned_commands.json",
+      "pid": 43054,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/001_detailed/owned_commands.json",
+      "pid": 43068,
+      "command": [
+        "ros2",
+        "launch",
+        "--noninteractive",
+        "gng_vlut_system",
+        "gng_viewer_bridge.launch.py",
+        "params_file:=/ros2_ws/src/log/artifacts/avoidance_first/comparison/001_detailed/tmp/topo-gng-simulation-3wdb06p2/params.yaml",
+        "state_topic:=/sim_topo_dual_arm_max_long/joint_states",
+        "joint_control_backend:=external",
+        "edge_mode:=0",
+        "enable_joint_state_publisher:=false",
+        "enable_environment_voxelization:=true",
+        "enable_dynamixel_joint_state_input:=false",
+        "enable_dynamixel_current_pose:=false",
+        "enable_realsense_mount_tf:=false"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_avoidance_first/owned_commands.json",
+      "pid": 43464,
+      "command": [
+        "bash",
+        "/ros2_ws/src/scripts/play_bag.sh",
+        "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+        "--topics-file",
+        "/dev/null",
+        "--topic",
+        "/livox/lidar",
+        "--topic",
+        "/topo_dual_arm_max_long/roi_voxels",
+        "--topic",
+        "/topo_dual_arm_max_long/self_voxel",
+        "--topic",
+        "/tf",
+        "--topic",
+        "/tf_static",
+        "--remap",
+        "/tf:=/recorded_topo_dual_arm_max_long/tf",
+        "/tf_static:=/recorded_topo_dual_arm_max_long/tf_static",
+        "--start-offset",
+        "0.0",
+        "--rate",
+        "1.0",
+        "--start-paused",
+        "--disable-keyboard-controls"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_avoidance_first/owned_commands.json",
+      "pid": 43469,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_avoidance_first/owned_commands.json",
+      "pid": 43470,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_avoidance_first/owned_commands.json",
+      "pid": 43484,
+      "command": [
+        "ros2",
+        "launch",
+        "--noninteractive",
+        "gng_vlut_system",
+        "gng_viewer_bridge.launch.py",
+        "params_file:=/ros2_ws/src/log/artifacts/avoidance_first/comparison/002_avoidance_first/tmp/topo-gng-simulation-by_bmaeu/params.yaml",
+        "state_topic:=/sim_topo_dual_arm_max_long/joint_states",
+        "joint_control_backend:=external",
+        "edge_mode:=0",
+        "enable_joint_state_publisher:=false",
+        "enable_environment_voxelization:=true",
+        "enable_dynamixel_joint_state_input:=false",
+        "enable_dynamixel_current_pose:=false",
+        "enable_realsense_mount_tf:=false"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_detailed/owned_commands.json",
+      "pid": 43671,
+      "command": [
+        "bash",
+        "/ros2_ws/src/scripts/play_bag.sh",
+        "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+        "--topics-file",
+        "/dev/null",
+        "--topic",
+        "/livox/lidar",
+        "--topic",
+        "/topo_dual_arm_max_long/roi_voxels",
+        "--topic",
+        "/topo_dual_arm_max_long/self_voxel",
+        "--topic",
+        "/tf",
+        "--topic",
+        "/tf_static",
+        "--remap",
+        "/tf:=/recorded_topo_dual_arm_max_long/tf",
+        "/tf_static:=/recorded_topo_dual_arm_max_long/tf_static",
+        "--start-offset",
+        "0.0",
+        "--rate",
+        "1.0",
+        "--start-paused",
+        "--disable-keyboard-controls"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_detailed/owned_commands.json",
+      "pid": 43676,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_detailed/owned_commands.json",
+      "pid": 43677,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/comparison/002_detailed/owned_commands.json",
+      "pid": 43691,
+      "command": [
+        "ros2",
+        "launch",
+        "--noninteractive",
+        "gng_vlut_system",
+        "gng_viewer_bridge.launch.py",
+        "params_file:=/ros2_ws/src/log/artifacts/avoidance_first/comparison/002_detailed/tmp/topo-gng-simulation-s8bxgfkx/params.yaml",
+        "state_topic:=/sim_topo_dual_arm_max_long/joint_states",
+        "joint_control_backend:=external",
+        "edge_mode:=0",
+        "enable_joint_state_publisher:=false",
+        "enable_environment_voxelization:=true",
+        "enable_dynamixel_joint_state_input:=false",
+        "enable_dynamixel_current_pose:=false",
+        "enable_realsense_mount_tf:=false"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/native/001_native_cli/owned_commands.json",
+      "pid": 43902,
+      "command": [
+        "bash",
+        "/ros2_ws/src/scripts/play_bag.sh",
+        "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+        "--topics-file",
+        "/dev/null",
+        "--topic",
+        "/livox/lidar",
+        "--topic",
+        "/topo_dual_arm_max_long/roi_voxels",
+        "--topic",
+        "/topo_dual_arm_max_long/self_voxel",
+        "--topic",
+        "/tf",
+        "--topic",
+        "/tf_static",
+        "--remap",
+        "/tf:=/recorded_topo_dual_arm_max_long/tf",
+        "/tf_static:=/recorded_topo_dual_arm_max_long/tf_static",
+        "--loop",
+        "--start-offset",
+        "0.0",
+        "--rate",
+        "1.0"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/native/001_native_cli/owned_commands.json",
+      "pid": 43907,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/native/001_native_cli/owned_commands.json",
+      "pid": 43908,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/native/001_native_cli/owned_commands.json",
+      "pid": 43945,
+      "command": [
+        "ros2",
+        "launch",
+        "--noninteractive",
+        "gng_vlut_system",
+        "gng_viewer_bridge.launch.py",
+        "params_file:=/ros2_ws/src/log/artifacts/avoidance_first/native/001_native_cli/tmp/topo-gng-simulation-1izg_t54/params.yaml",
+        "state_topic:=/sim_topo_dual_arm_max_long/joint_states",
+        "joint_control_backend:=external",
+        "edge_mode:=0",
+        "enable_joint_state_publisher:=false",
+        "enable_environment_voxelization:=true",
+        "enable_dynamixel_joint_state_input:=false",
+        "enable_dynamixel_current_pose:=false",
+        "enable_realsense_mount_tf:=false"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/smoke/001_avoidance_first/owned_commands.json",
+      "pid": 42835,
+      "command": [
+        "bash",
+        "/ros2_ws/src/scripts/play_bag.sh",
+        "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23",
+        "--topics-file",
+        "/dev/null",
+        "--topic",
+        "/livox/lidar",
+        "--topic",
+        "/topo_dual_arm_max_long/roi_voxels",
+        "--topic",
+        "/topo_dual_arm_max_long/self_voxel",
+        "--topic",
+        "/tf",
+        "--topic",
+        "/tf_static",
+        "--remap",
+        "/tf:=/recorded_topo_dual_arm_max_long/tf",
+        "/tf_static:=/recorded_topo_dual_arm_max_long/tf_static",
+        "--start-offset",
+        "0.0",
+        "--rate",
+        "1.0",
+        "--start-paused",
+        "--disable-keyboard-controls"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/smoke/001_avoidance_first/owned_commands.json",
+      "pid": 42840,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/smoke/001_avoidance_first/owned_commands.json",
+      "pid": 42841,
+      "command": [
+        "/usr/bin/python3",
+        "-c",
+        "\nimport sys\nimport ctypes\n\ndef get_version(library_handle):\n    \"\"\"\n    Queries and returns the library version tuple or None.\n    \"\"\"\n    major_value = ctypes.c_int(0)\n    major = ctypes.pointer(major_value)\n    minor_value = ctypes.c_int(0)\n    minor = ctypes.pointer(minor_value)\n    rev_value = ctypes.c_int(0)\n    rev = ctypes.pointer(rev_value)\n    if hasattr(library_handle, 'glfwGetVersion'):\n        library_handle.glfwGetVersion(major, minor, rev)\n        version = (major_value.value,\n                   minor_value.value,\n                   rev_value.value)\n        return version\n    else:\n        return None\n\nif sys.version_info[0] == 2:\n    input_func = raw_input\nelse:\n    input_func = input\nfilename = input_func().strip()\n\ntry:\n    library_handle = ctypes.CDLL(filename)\nexcept OSError:\n    pass\nelse:\n    version = get_version(library_handle)\n    print(version)\n"
+      ]
+    },
+    {
+      "record": "log/artifacts/avoidance_first/smoke/001_avoidance_first/owned_commands.json",
+      "pid": 42855,
+      "command": [
+        "ros2",
+        "launch",
+        "--noninteractive",
+        "gng_vlut_system",
+        "gng_viewer_bridge.launch.py",
+        "params_file:=/ros2_ws/src/log/artifacts/avoidance_first/smoke/001_avoidance_first/tmp/topo-gng-simulation-sw6qk0wi/params.yaml",
+        "state_topic:=/sim_topo_dual_arm_max_long/joint_states",
+        "joint_control_backend:=external",
+        "edge_mode:=0",
+        "enable_joint_state_publisher:=false",
+        "enable_environment_voxelization:=true",
+        "enable_dynamixel_joint_state_input:=false",
+        "enable_dynamixel_current_pose:=false",
+        "enable_realsense_mount_tf:=false"
+      ]
+    }
+  ],
+  "has_stopped_all_owned_processes": true
+}

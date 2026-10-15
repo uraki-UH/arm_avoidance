@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "name": "before",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/load_before",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/gng.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "after",
+      "argv": [
+        "/ros2_ws/src/log/artifacts/manipulability_layout/load_after",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin",
+        "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/right_arm/gng.bin",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

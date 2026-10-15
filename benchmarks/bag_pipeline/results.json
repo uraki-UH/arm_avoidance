@@ -1,0 +1,1525 @@
+{
+  "conditions": {
+    "model": "topo_dual_arm_max_long",
+    "cpu": "Intel Core i7-14650HX",
+    "runtime": "Docker内ROS 2 Humble・MuJoCo、ROS_DOMAIN_ID=219・localhostのみ",
+    "bag": "/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_07_41-20261012T020402Z-1-001/rosbag2_2026_10_09-22_07_41",
+    "runtime_duration_sec": 24,
+    "ordering": "別プロセス、条件順の循環、同時測定なし、初期化中のbag一時停止",
+    "runtime_scope": "記録ROI・記録自己ボクセルの差集合 → 保存済み左右GNG/VLUT → 計画 → MuJoCo → 任意のブラウザ表示",
+    "runtime_exclusions": "オンラインAIS-GNG・TemporalVoxelFilter・深度索引の処理なし。bagの環境ボクセルをMuJoCoの接触物体へ変換する試験ではない",
+    "steady_start": "GNG入力の準備完了から2秒経過後。物理処理・受信コールバック・自己除去の品質照合とリソース観測を両条件へ同じ方法で付加",
+    "memory_scope": "所有バックエンドプロセスの同時点RSS合計。共有ページの重複を含み、専用Chrome・HTTPサーバーは含まない。固有物理メモリではない",
+    "cpu_scope": "定常区間の所有プロセス累積CPU時間差÷経過時間。1.0は1コア相当",
+    "state_latency_scope": "ノード状態の配信時刻からPython購読まで。センサ入力からの端末間遅延ではない",
+    "real_time_ratio_limit": "全24秒区間の値。表示準備中のGNG読込み進行差を含むため、表示ありの値を高速化効果と解釈不可",
+    "browser_scope": "実Chrome・1440×1000・既定シーン/照明/センサ表示。/livox/lidarと左右Tmapを追加購読。rAF間隔と描画コマンド投入時間、GPU完了時間ではない",
+    "units": {
+      "*_ms": "ms",
+      "*_bytes": "B",
+      "peak_rss_kb": "KiB（Linux ru_maxrss）"
+    }
+  },
+  "runtime": {
+    "headless": {
+      "num_trials": 3,
+      "metrics": {
+        "frame_p50_ms": {
+          "median": 2.020234998781234,
+          "min": 1.981301000341773,
+          "max": 2.0534404975478537
+        },
+        "frame_p95_ms": {
+          "median": 10.872710001422092,
+          "min": 10.776231996715069,
+          "max": 11.203260990441777
+        },
+        "peak_backend_rss_bytes": {
+          "median": 3664404480,
+          "min": 3662970880,
+          "max": 3715346432
+        },
+        "steady_cpu_cores": {
+          "median": 1.2777609027767376,
+          "min": 1.2744069105477305,
+          "max": 1.2818688976580104
+        },
+        "real_time_ratio": {
+          "median": 0.8822858371706169,
+          "min": 0.8822378833022022,
+          "max": 0.8841264795046063
+        },
+        "motion_deg": {
+          "median": 78.35585472749356,
+          "min": 78.26441019011212,
+          "max": 78.39384415411935
+        },
+        "max_effort_ratio": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      },
+      "timings": {
+        "avoidance_update_ms": {
+          "num": {
+            "median": 1758,
+            "min": 1754,
+            "max": 1772
+          },
+          "p50_ms": {
+            "median": 0.49204350216314197,
+            "min": 0.49188549746759236,
+            "max": 0.4997494979761541
+          },
+          "p95_ms": {
+            "median": 8.044196001719683,
+            "min": 7.971245999215171,
+            "max": 8.149850007612258
+          },
+          "max_ms": {
+            "median": 14.868265992845409,
+            "min": 14.156762001221068,
+            "max": 19.094860996119678
+          }
+        },
+        "motor_control_ms": {
+          "num": {
+            "median": 8790,
+            "min": 8770,
+            "max": 8860
+          },
+          "p50_ms": {
+            "median": 0.054630501836072654,
+            "min": 0.05443500413093716,
+            "max": 0.055217496992554516
+          },
+          "p95_ms": {
+            "median": 0.09107300138566643,
+            "min": 0.0910399976419285,
+            "max": 0.0954020069912076
+          },
+          "max_ms": {
+            "median": 0.6648470007348806,
+            "min": 0.33724000968504697,
+            "max": 0.9847670007729903
+          }
+        },
+        "path_search_ms": {
+          "num": {
+            "median": 26,
+            "min": 23,
+            "max": 26
+          },
+          "p50_ms": {
+            "median": 0.06386399763869122,
+            "min": 0.05145900649949908,
+            "max": 0.06453700189013034
+          },
+          "p95_ms": {
+            "median": 0.40975499723572284,
+            "min": 0.3400029963813722,
+            "max": 0.5362350057112053
+          },
+          "max_ms": {
+            "median": 0.5451829929370433,
+            "min": 0.41421900095883757,
+            "max": 0.9569969988660887
+          }
+        },
+        "physics_frame_ms": {
+          "num": {
+            "median": 1758,
+            "min": 1754,
+            "max": 1772
+          },
+          "p50_ms": {
+            "median": 2.020234998781234,
+            "min": 1.981301000341773,
+            "max": 2.0534404975478537
+          },
+          "p95_ms": {
+            "median": 10.872710001422092,
+            "min": 10.776231996715069,
+            "max": 11.203260990441777
+          },
+          "max_ms": {
+            "median": 21.552514008362778,
+            "min": 18.547956002294086,
+            "max": 22.18231398728676
+          }
+        },
+        "planner_propose_ms": {
+          "num": {
+            "median": 176,
+            "min": 176,
+            "max": 177
+          },
+          "p50_ms": {
+            "median": 2.8273000061744824,
+            "min": 2.6260090016876347,
+            "max": 3.126569004962221
+          },
+          "p95_ms": {
+            "median": 8.573882994824089,
+            "min": 7.275042007677257,
+            "max": 11.686832003761083
+          },
+          "max_ms": {
+            "median": 13.213134996476583,
+            "min": 12.55589400534518,
+            "max": 15.278961989679374
+          }
+        },
+        "receive_node_states_ms": {
+          "num": {
+            "median": 370,
+            "min": 370,
+            "max": 371
+          },
+          "p50_ms": {
+            "median": 1.289463005377911,
+            "min": 1.2670075011556037,
+            "max": 1.307730002736207
+          },
+          "p95_ms": {
+            "median": 1.668202006840147,
+            "min": 1.5519099979428574,
+            "max": 1.6959180065896362
+          },
+          "max_ms": {
+            "median": 2.525210991734639,
+            "min": 2.4439959961455315,
+            "max": 3.3313129970338196
+          }
+        },
+        "recorded_self_filter_ms": {
+          "num": {
+            "median": 185,
+            "min": 185,
+            "max": 186
+          },
+          "p50_ms": {
+            "median": 1.0814190027303994,
+            "min": 1.0753325041150674,
+            "max": 1.0885939991567284
+          },
+          "p95_ms": {
+            "median": 1.3032470014877617,
+            "min": 1.288478000788018,
+            "max": 1.3262919965200126
+          },
+          "max_ms": {
+            "median": 1.9975050090579316,
+            "min": 1.8961750029120594,
+            "max": 2.0110790064791217
+          }
+        },
+        "runtime_update_ms": {
+          "num": {
+            "median": 1758,
+            "min": 1754,
+            "max": 1772
+          },
+          "p50_ms": {
+            "median": 0.25189599546138197,
+            "min": 0.2491549967089668,
+            "max": 0.25238850503228605
+          },
+          "p95_ms": {
+            "median": 7.280994002940133,
+            "min": 7.249665999552235,
+            "max": 7.302559999516234
+          },
+          "max_ms": {
+            "median": 12.210601009428501,
+            "min": 10.741169011453167,
+            "max": 15.50634099112358
+          }
+        },
+        "state_publish_to_receive_ms": {
+          "num": {
+            "median": 370,
+            "min": 370,
+            "max": 371
+          },
+          "p50_ms": {
+            "median": 12.7889404296875,
+            "min": 12.710693359375,
+            "max": 12.8741455078125
+          },
+          "p95_ms": {
+            "median": 15.989013671875,
+            "min": 15.28173828125,
+            "max": 16.526611328125
+          },
+          "max_ms": {
+            "median": 20.798095703125,
+            "min": 19.16943359375,
+            "max": 22.8701171875
+          }
+        }
+      },
+      "quality": {
+        "num_verified_physics_frames": 6359,
+        "num_verified_state_messages": 1246,
+        "num_verified_self_filters": 625
+      },
+      "max_actual_velocity_ratio": 1.2204699763333215,
+      "observations": [
+        {
+          "state": "clear",
+          "is_valid": true,
+          "message": "",
+          "num_environment_voxels": 1067,
+          "num_uncertain_voxels": 11,
+          "num_overlap_voxels": 0,
+          "num_uncertain_overlap_voxels": 0,
+          "num_raw_overlap_voxels": 0,
+          "pair_age_ms": 15.547513961791992,
+          "environment_stamp_sec": 1792051422.0897539,
+          "self_stamp_sec": 1792051422.0742064,
+          "num_samples": 835,
+          "num_contact_samples": 206,
+          "num_uncertain_samples": 0,
+          "covered_sec": 20.65098214149475,
+          "source_stamp_sec": 1791551286.0967343,
+          "history_state": "contact",
+          "max_num_overlap_voxels": 52,
+          "max_num_raw_overlap_voxels": 52
+        },
+        {
+          "state": "clear",
+          "is_valid": true,
+          "message": "",
+          "num_environment_voxels": 1067,
+          "num_uncertain_voxels": 11,
+          "num_overlap_voxels": 0,
+          "num_uncertain_overlap_voxels": 0,
+          "num_raw_overlap_voxels": 0,
+          "pair_age_ms": 17.502307891845703,
+          "environment_stamp_sec": 1792051522.3520925,
+          "self_stamp_sec": 1792051522.3345902,
+          "num_samples": 832,
+          "num_contact_samples": 203,
+          "num_uncertain_samples": 0,
+          "covered_sec": 20.575661182403564,
+          "source_stamp_sec": 1791551286.0967343,
+          "history_state": "contact",
+          "max_num_overlap_voxels": 52,
+          "max_num_raw_overlap_voxels": 52
+        },
+        {
+          "state": "clear",
+          "is_valid": true,
+          "message": "",
+          "num_environment_voxels": 1067,
+          "num_uncertain_voxels": 11,
+          "num_overlap_voxels": 0,
+          "num_uncertain_overlap_voxels": 0,
+          "num_raw_overlap_voxels": 0,
+          "pair_age_ms": 4.939794540405273,
+          "environment_stamp_sec": 1792051552.1967854,
+          "self_stamp_sec": 1792051552.1918457,
+          "num_samples": 832,
+          "num_contact_samples": 220,
+          "num_uncertain_samples": 0,
+          "covered_sec": 20.56653618812561,
+          "source_stamp_sec": 1791551286.0967343,
+          "history_state": "contact",
+          "max_num_overlap_voxels": 64,
+          "max_num_raw_overlap_voxels": 64
+        }
+      ],
+      "phases": [
+        {
+          "waiting": 157,
+          "monitoring": 1031,
+          "blocked": 410,
+          "avoiding": 111,
+          "waiting_for_clearance": 189,
+          "returning": 198,
+          "replanning": 27
+        },
+        {
+          "waiting": 171,
+          "monitoring": 1006,
+          "blocked": 420,
+          "avoiding": 125,
+          "waiting_for_clearance": 186,
+          "returning": 197,
+          "replanning": 13
+        },
+        {
+          "waiting": 173,
+          "monitoring": 1051,
+          "blocked": 408,
+          "avoiding": 109,
+          "waiting_for_clearance": 201,
+          "returning": 168,
+          "replanning": 8
+        }
+      ],
+      "max_backend_rss_processes": [
+        [
+          {
+            "pid": 32035,
+            "name": "python3",
+            "rss_bytes": 1682489344,
+            "cpu_sec": 27.299999999999997
+          },
+          {
+            "pid": 32108,
+            "name": "ros2",
+            "rss_bytes": 96780288,
+            "cpu_sec": 0.78
+          },
+          {
+            "pid": 32128,
+            "name": "ros2",
+            "rss_bytes": 36442112,
+            "cpu_sec": 0.44
+          },
+          {
+            "pid": 32130,
+            "name": "robot_state_publisher",
+            "rss_bytes": 64364544,
+            "cpu_sec": 0.31
+          },
+          {
+            "pid": 32132,
+            "name": "robot_description_player_node",
+            "rss_bytes": 59179008,
+            "cpu_sec": 0.14
+          },
+          {
+            "pid": 32134,
+            "name": "robot_viewer_bridge_node",
+            "rss_bytes": 63639552,
+            "cpu_sec": 0.38
+          },
+          {
+            "pid": 32136,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 155893760,
+            "cpu_sec": 2.13
+          },
+          {
+            "pid": 32138,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 155799552,
+            "cpu_sec": 2.13
+          },
+          {
+            "pid": 32140,
+            "name": "independent_arm_pair_node",
+            "rss_bytes": 1069826048,
+            "cpu_sec": 10.680000000000001
+          },
+          {
+            "pid": 32142,
+            "name": "self_recognition_viz_node",
+            "rss_bytes": 266678272,
+            "cpu_sec": 2.0300000000000002
+          },
+          {
+            "pid": 32144,
+            "name": "voxel_to_vlut_node",
+            "rss_bytes": 64253952,
+            "cpu_sec": 0.9299999999999999
+          }
+        ],
+        [
+          {
+            "pid": 32841,
+            "name": "python3",
+            "rss_bytes": 1633685504,
+            "cpu_sec": 32.47
+          },
+          {
+            "pid": 32914,
+            "name": "ros2",
+            "rss_bytes": 96329728,
+            "cpu_sec": 1.02
+          },
+          {
+            "pid": 32934,
+            "name": "ros2",
+            "rss_bytes": 36753408,
+            "cpu_sec": 0.45999999999999996
+          },
+          {
+            "pid": 32936,
+            "name": "robot_state_publisher",
+            "rss_bytes": 64237568,
+            "cpu_sec": 0.44
+          },
+          {
+            "pid": 32938,
+            "name": "robot_description_player_node",
+            "rss_bytes": 59068416,
+            "cpu_sec": 0.15
+          },
+          {
+            "pid": 32940,
+            "name": "robot_viewer_bridge_node",
+            "rss_bytes": 63389696,
+            "cpu_sec": 0.5599999999999999
+          },
+          {
+            "pid": 32942,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 156057600,
+            "cpu_sec": 3.41
+          },
+          {
+            "pid": 32944,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 155840512,
+            "cpu_sec": 3.33
+          },
+          {
+            "pid": 32946,
+            "name": "independent_arm_pair_node",
+            "rss_bytes": 1068949504,
+            "cpu_sec": 10.780000000000001
+          },
+          {
+            "pid": 32948,
+            "name": "self_recognition_viz_node",
+            "rss_bytes": 265601024,
+            "cpu_sec": 2.51
+          },
+          {
+            "pid": 32950,
+            "name": "voxel_to_vlut_node",
+            "rss_bytes": 64491520,
+            "cpu_sec": 1.75
+          }
+        ],
+        [
+          {
+            "pid": 33046,
+            "name": "python3",
+            "rss_bytes": 1634283520,
+            "cpu_sec": 33.44
+          },
+          {
+            "pid": 33119,
+            "name": "ros2",
+            "rss_bytes": 95703040,
+            "cpu_sec": 1.07
+          },
+          {
+            "pid": 33139,
+            "name": "ros2",
+            "rss_bytes": 36593664,
+            "cpu_sec": 0.44999999999999996
+          },
+          {
+            "pid": 33141,
+            "name": "robot_state_publisher",
+            "rss_bytes": 64229376,
+            "cpu_sec": 0.44
+          },
+          {
+            "pid": 33143,
+            "name": "robot_description_player_node",
+            "rss_bytes": 59240448,
+            "cpu_sec": 0.14
+          },
+          {
+            "pid": 33145,
+            "name": "robot_viewer_bridge_node",
+            "rss_bytes": 63475712,
+            "cpu_sec": 0.55
+          },
+          {
+            "pid": 33147,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 155926528,
+            "cpu_sec": 3.49
+          },
+          {
+            "pid": 33149,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 155873280,
+            "cpu_sec": 3.48
+          },
+          {
+            "pid": 33151,
+            "name": "independent_arm_pair_node",
+            "rss_bytes": 1066991616,
+            "cpu_sec": 10.68
+          },
+          {
+            "pid": 33153,
+            "name": "self_recognition_viz_node",
+            "rss_bytes": 266358784,
+            "cpu_sec": 2.59
+          },
+          {
+            "pid": 33155,
+            "name": "voxel_to_vlut_node",
+            "rss_bytes": 64294912,
+            "cpu_sec": 1.85
+          }
+        ]
+      ]
+    },
+    "viewer": {
+      "num_trials": 3,
+      "metrics": {
+        "frame_p50_ms": {
+          "median": 2.385612009675242,
+          "min": 2.336685502086766,
+          "max": 2.433402005408425
+        },
+        "frame_p95_ms": {
+          "median": 11.333194997860119,
+          "min": 11.198669992154464,
+          "max": 11.634534996119328
+        },
+        "peak_backend_rss_bytes": {
+          "median": 3888295936,
+          "min": 3887255552,
+          "max": 3924238336
+        },
+        "steady_cpu_cores": {
+          "median": 1.3645639812638024,
+          "min": 1.3395645946439143,
+          "max": 1.380954933370849
+        },
+        "real_time_ratio": {
+          "median": 0.9420141122607893,
+          "min": 0.941106526689263,
+          "max": 0.9461815838903079
+        },
+        "motion_deg": {
+          "median": 78.2306116776797,
+          "min": 78.00474853308391,
+          "max": 78.36409296952462
+        },
+        "max_effort_ratio": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      },
+      "timings": {
+        "avoidance_update_ms": {
+          "num": {
+            "median": 1809,
+            "min": 1806,
+            "max": 1818
+          },
+          "p50_ms": {
+            "median": 0.5352035004762001,
+            "min": 0.5348129925550893,
+            "max": 0.5410500089055859
+          },
+          "p95_ms": {
+            "median": 8.440368008450605,
+            "min": 8.363567991182208,
+            "max": 8.672302006743848
+          },
+          "max_ms": {
+            "median": 18.06578299147077,
+            "min": 17.744622004101984,
+            "max": 20.199164006044157
+          }
+        },
+        "motor_control_ms": {
+          "num": {
+            "median": 9045,
+            "min": 9030,
+            "max": 9090
+          },
+          "p50_ms": {
+            "median": 0.05606201011687517,
+            "min": 0.05596549453912303,
+            "max": 0.0568899922654964
+          },
+          "p95_ms": {
+            "median": 0.11937499220948666,
+            "min": 0.11643400648608804,
+            "max": 0.12387298920657486
+          },
+          "max_ms": {
+            "median": 0.3071490064030513,
+            "min": 0.28336700052022934,
+            "max": 0.33731499570421875
+          }
+        },
+        "path_search_ms": {
+          "num": {
+            "median": 26,
+            "min": 11,
+            "max": 26
+          },
+          "p50_ms": {
+            "median": 0.08105699089355767,
+            "min": 0.06044050678610802,
+            "max": 0.08964249718701467
+          },
+          "p95_ms": {
+            "median": 0.3772729978663847,
+            "min": 0.3672410093713552,
+            "max": 0.3849689965136349
+          },
+          "max_ms": {
+            "median": 0.39535199175588787,
+            "min": 0.3772729978663847,
+            "max": 2.188593993196264
+          }
+        },
+        "physics_frame_ms": {
+          "num": {
+            "median": 1809,
+            "min": 1806,
+            "max": 1818
+          },
+          "p50_ms": {
+            "median": 2.385612009675242,
+            "min": 2.336685502086766,
+            "max": 2.433402005408425
+          },
+          "p95_ms": {
+            "median": 11.333194997860119,
+            "min": 11.198669992154464,
+            "max": 11.634534996119328
+          },
+          "max_ms": {
+            "median": 23.615953003172763,
+            "min": 22.785925000789575,
+            "max": 24.858862001565285
+          }
+        },
+        "planner_propose_ms": {
+          "num": {
+            "median": 182,
+            "min": 182,
+            "max": 183
+          },
+          "p50_ms": {
+            "median": 3.4269914976903237,
+            "min": 2.9219879943411797,
+            "max": 3.6798910005018115
+          },
+          "p95_ms": {
+            "median": 9.263875996111892,
+            "min": 8.845738993841223,
+            "max": 9.559024998452514
+          },
+          "max_ms": {
+            "median": 17.559600993990898,
+            "min": 15.316955003072508,
+            "max": 17.790747006074525
+          }
+        },
+        "receive_node_states_ms": {
+          "num": {
+            "median": 386,
+            "min": 384,
+            "max": 423
+          },
+          "p50_ms": {
+            "median": 1.277847506571561,
+            "min": 1.2773085036315024,
+            "max": 1.2965490022907034
+          },
+          "p95_ms": {
+            "median": 2.279987995279953,
+            "min": 2.1725949918618426,
+            "max": 2.2865539940539747
+          },
+          "max_ms": {
+            "median": 2.5773789966478944,
+            "min": 2.4558369914302602,
+            "max": 2.6456719933776185
+          }
+        },
+        "recorded_self_filter_ms": {
+          "num": {
+            "median": 192,
+            "min": 192,
+            "max": 192
+          },
+          "p50_ms": {
+            "median": 1.0936339967884123,
+            "min": 1.086087999283336,
+            "max": 1.1067400046158582
+          },
+          "p95_ms": {
+            "median": 1.7835400067269802,
+            "min": 1.7439100047340617,
+            "max": 1.811816997360438
+          },
+          "max_ms": {
+            "median": 2.0647899946197867,
+            "min": 1.9709549960680306,
+            "max": 2.356311000767164
+          }
+        },
+        "runtime_update_ms": {
+          "num": {
+            "median": 1809,
+            "min": 1806,
+            "max": 1818
+          },
+          "p50_ms": {
+            "median": 0.25889999233186245,
+            "min": 0.25675199867691845,
+            "max": 0.26224299654131755
+          },
+          "p95_ms": {
+            "median": 7.494427001802251,
+            "min": 7.477842009393498,
+            "max": 7.58357800077647
+          },
+          "max_ms": {
+            "median": 14.529434993164614,
+            "min": 14.13844600028824,
+            "max": 16.183429994271137
+          }
+        },
+        "state_publish_to_receive_ms": {
+          "num": {
+            "median": 386,
+            "min": 384,
+            "max": 423
+          },
+          "p50_ms": {
+            "median": 14.630859375,
+            "min": 14.435302734375,
+            "max": 14.700439453125
+          },
+          "p95_ms": {
+            "median": 19.894775390625,
+            "min": 17.564697265625,
+            "max": 21.4560546875
+          },
+          "max_ms": {
+            "median": 24.85888671875,
+            "min": 23.33203125,
+            "max": 31.232421875
+          }
+        },
+        "vlut_emap_ms": {
+          "num": {
+            "median": 135,
+            "min": 132,
+            "max": 135
+          },
+          "p50_ms": {
+            "median": 0.559401,
+            "min": 0.549349,
+            "max": 0.564932
+          },
+          "p95_ms": {
+            "median": 0.78573,
+            "min": 0.777884,
+            "max": 0.798609
+          },
+          "max_ms": {
+            "median": 0.962184,
+            "min": 0.948866,
+            "max": 0.982855
+          }
+        }
+      },
+      "quality": {
+        "num_verified_state_messages": 1330,
+        "num_verified_physics_frames": 6794,
+        "num_verified_self_filters": 642
+      },
+      "max_actual_velocity_ratio": 1.2143176774385396,
+      "observations": [
+        {
+          "state": "clear",
+          "is_valid": true,
+          "message": "",
+          "num_environment_voxels": 1067,
+          "num_uncertain_voxels": 11,
+          "num_overlap_voxels": 0,
+          "num_uncertain_overlap_voxels": 0,
+          "num_raw_overlap_voxels": 0,
+          "pair_age_ms": 36.86380386352539,
+          "environment_stamp_sec": 1792051456.4635313,
+          "self_stamp_sec": 1792051456.4266675,
+          "num_samples": 857,
+          "num_contact_samples": 101,
+          "num_uncertain_samples": 0,
+          "covered_sec": 21.23627233505249,
+          "source_stamp_sec": 1791551286.0967343,
+          "history_state": "contact",
+          "max_num_overlap_voxels": 51,
+          "max_num_raw_overlap_voxels": 51
+        },
+        {
+          "state": "clear",
+          "is_valid": true,
+          "message": "",
+          "num_environment_voxels": 1067,
+          "num_uncertain_voxels": 11,
+          "num_overlap_voxels": 0,
+          "num_uncertain_overlap_voxels": 0,
+          "num_raw_overlap_voxels": 0,
+          "pair_age_ms": 3.632068634033203,
+          "environment_stamp_sec": 1792051491.1797626,
+          "self_stamp_sec": 1792051491.1761305,
+          "num_samples": 858,
+          "num_contact_samples": 181,
+          "num_uncertain_samples": 7,
+          "covered_sec": 21.238455295562744,
+          "source_stamp_sec": 1791551286.0967343,
+          "history_state": "contact",
+          "max_num_overlap_voxels": 41,
+          "max_num_raw_overlap_voxels": 41
+        },
+        {
+          "state": "clear",
+          "is_valid": true,
+          "message": "",
+          "num_environment_voxels": 1067,
+          "num_uncertain_voxels": 11,
+          "num_overlap_voxels": 0,
+          "num_uncertain_overlap_voxels": 0,
+          "num_raw_overlap_voxels": 0,
+          "pair_age_ms": 22.216320037841797,
+          "environment_stamp_sec": 1792051585.3155968,
+          "self_stamp_sec": 1792051585.2933805,
+          "num_samples": 858,
+          "num_contact_samples": 184,
+          "num_uncertain_samples": 3,
+          "covered_sec": 21.240671396255493,
+          "source_stamp_sec": 1791551286.0967343,
+          "history_state": "contact",
+          "max_num_overlap_voxels": 41,
+          "max_num_raw_overlap_voxels": 41
+        }
+      ],
+      "phases": [
+        {
+          "waiting": 270,
+          "monitoring": 1075,
+          "blocked": 21,
+          "avoiding": 180,
+          "replanning": 15,
+          "waiting_for_clearance": 516,
+          "returning": 195
+        },
+        {
+          "waiting": 252,
+          "monitoring": 1067,
+          "blocked": 242,
+          "avoiding": 112,
+          "waiting_for_clearance": 361,
+          "returning": 201,
+          "replanning": 27
+        },
+        {
+          "waiting": 263,
+          "monitoring": 1060,
+          "blocked": 231,
+          "avoiding": 108,
+          "waiting_for_clearance": 371,
+          "returning": 203,
+          "replanning": 24
+        }
+      ],
+      "max_backend_rss_processes": [
+        [
+          {
+            "pid": 32238,
+            "name": "python3",
+            "rss_bytes": 1634381824,
+            "cpu_sec": 29.05
+          },
+          {
+            "pid": 32311,
+            "name": "ros2",
+            "rss_bytes": 96223232,
+            "cpu_sec": 0.8800000000000001
+          },
+          {
+            "pid": 32331,
+            "name": "ros2",
+            "rss_bytes": 36818944,
+            "cpu_sec": 0.51
+          },
+          {
+            "pid": 32332,
+            "name": "python3",
+            "rss_bytes": 108777472,
+            "cpu_sec": 3.9299999999999997
+          },
+          {
+            "pid": 32494,
+            "name": "ros2",
+            "rss_bytes": 24440832,
+            "cpu_sec": 0.15
+          },
+          {
+            "pid": 32495,
+            "name": "viewer_ws_gateway_node",
+            "rss_bytes": 79761408,
+            "cpu_sec": 1.4
+          },
+          {
+            "pid": 32369,
+            "name": "robot_state_publisher",
+            "rss_bytes": 64843776,
+            "cpu_sec": 0.36
+          },
+          {
+            "pid": 32371,
+            "name": "robot_description_player_node",
+            "rss_bytes": 59621376,
+            "cpu_sec": 0.19
+          },
+          {
+            "pid": 32373,
+            "name": "robot_viewer_bridge_node",
+            "rss_bytes": 64700416,
+            "cpu_sec": 0.8099999999999999
+          },
+          {
+            "pid": 32375,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 157839360,
+            "cpu_sec": 2.4400000000000004
+          },
+          {
+            "pid": 32377,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 158265344,
+            "cpu_sec": 2.72
+          },
+          {
+            "pid": 32379,
+            "name": "independent_arm_pair_node",
+            "rss_bytes": 1069948928,
+            "cpu_sec": 10.8
+          },
+          {
+            "pid": 32381,
+            "name": "self_recognition_viz_node",
+            "rss_bytes": 266969088,
+            "cpu_sec": 2.2199999999999998
+          },
+          {
+            "pid": 32383,
+            "name": "voxel_to_vlut_node",
+            "rss_bytes": 64663552,
+            "cpu_sec": 1.03
+          }
+        ],
+        [
+          {
+            "pid": 32541,
+            "name": "python3",
+            "rss_bytes": 1671532544,
+            "cpu_sec": 34.08
+          },
+          {
+            "pid": 32614,
+            "name": "ros2",
+            "rss_bytes": 96870400,
+            "cpu_sec": 1.3
+          },
+          {
+            "pid": 32634,
+            "name": "ros2",
+            "rss_bytes": 36737024,
+            "cpu_sec": 0.51
+          },
+          {
+            "pid": 32635,
+            "name": "python3",
+            "rss_bytes": 108822528,
+            "cpu_sec": 4.74
+          },
+          {
+            "pid": 32797,
+            "name": "ros2",
+            "rss_bytes": 24440832,
+            "cpu_sec": 0.13
+          },
+          {
+            "pid": 32798,
+            "name": "viewer_ws_gateway_node",
+            "rss_bytes": 79130624,
+            "cpu_sec": 2.27
+          },
+          {
+            "pid": 32672,
+            "name": "robot_state_publisher",
+            "rss_bytes": 65040384,
+            "cpu_sec": 0.55
+          },
+          {
+            "pid": 32674,
+            "name": "robot_description_player_node",
+            "rss_bytes": 59768832,
+            "cpu_sec": 0.22999999999999998
+          },
+          {
+            "pid": 32676,
+            "name": "robot_viewer_bridge_node",
+            "rss_bytes": 64552960,
+            "cpu_sec": 1.28
+          },
+          {
+            "pid": 32678,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 157863936,
+            "cpu_sec": 4.09
+          },
+          {
+            "pid": 32681,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 157954048,
+            "cpu_sec": 3.96
+          },
+          {
+            "pid": 32683,
+            "name": "independent_arm_pair_node",
+            "rss_bytes": 1069592576,
+            "cpu_sec": 10.879999999999999
+          },
+          {
+            "pid": 32686,
+            "name": "self_recognition_viz_node",
+            "rss_bytes": 267030528,
+            "cpu_sec": 2.79
+          },
+          {
+            "pid": 32688,
+            "name": "voxel_to_vlut_node",
+            "rss_bytes": 64901120,
+            "cpu_sec": 1.94
+          }
+        ],
+        [
+          {
+            "pid": 33249,
+            "name": "python3",
+            "rss_bytes": 1634344960,
+            "cpu_sec": 31.369999999999997
+          },
+          {
+            "pid": 33322,
+            "name": "ros2",
+            "rss_bytes": 96784384,
+            "cpu_sec": 1.1
+          },
+          {
+            "pid": 33342,
+            "name": "ros2",
+            "rss_bytes": 36802560,
+            "cpu_sec": 0.5
+          },
+          {
+            "pid": 33343,
+            "name": "python3",
+            "rss_bytes": 109023232,
+            "cpu_sec": 4.13
+          },
+          {
+            "pid": 33505,
+            "name": "ros2",
+            "rss_bytes": 24416256,
+            "cpu_sec": 0.15
+          },
+          {
+            "pid": 33506,
+            "name": "viewer_ws_gateway_node",
+            "rss_bytes": 79618048,
+            "cpu_sec": 1.6400000000000001
+          },
+          {
+            "pid": 33382,
+            "name": "robot_state_publisher",
+            "rss_bytes": 64618496,
+            "cpu_sec": 0.45999999999999996
+          },
+          {
+            "pid": 33384,
+            "name": "robot_description_player_node",
+            "rss_bytes": 59891712,
+            "cpu_sec": 0.22
+          },
+          {
+            "pid": 33386,
+            "name": "robot_viewer_bridge_node",
+            "rss_bytes": 64548864,
+            "cpu_sec": 0.9600000000000001
+          },
+          {
+            "pid": 33388,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 157782016,
+            "cpu_sec": 3.04
+          },
+          {
+            "pid": 33390,
+            "name": "topofuzzy_bridge_node",
+            "rss_bytes": 158081024,
+            "cpu_sec": 2.9600000000000004
+          },
+          {
+            "pid": 33392,
+            "name": "independent_arm_pair_node",
+            "rss_bytes": 1070563328,
+            "cpu_sec": 10.93
+          },
+          {
+            "pid": 33394,
+            "name": "self_recognition_viz_node",
+            "rss_bytes": 267042816,
+            "cpu_sec": 2.43
+          },
+          {
+            "pid": 33396,
+            "name": "voxel_to_vlut_node",
+            "rss_bytes": 64778240,
+            "cpu_sec": 1.3599999999999999
+          }
+        ]
+      ],
+      "browser": [
+        {
+          "renderer": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL ES 3.2)",
+          "graphs": {
+            "/sim_topo_dual_arm_max_long/Tmap_left_arm": {
+              "num_nodes": 9988,
+              "num_edge_values": 75936
+            },
+            "/sim_topo_dual_arm_max_long/Tmap_right_arm": {
+              "num_nodes": 9988,
+              "num_edge_values": 75952
+            }
+          },
+          "point_topics": [
+            "/livox/lidar"
+          ],
+          "num_visible_instances": 19976,
+          "num_visible_points": 29952,
+          "errors": [],
+          "api_error": null,
+          "geometry_count": 84,
+          "frame": {
+            "num": 415,
+            "p50_ms": 50.10000000000218,
+            "p95_ms": 66.70000000000073,
+            "max_ms": 150
+          },
+          "render_submit": {
+            "num": 832,
+            "p50_ms": 1.0999999940395355,
+            "p95_ms": 2.5,
+            "max_ms": 142.90000000596046
+          },
+          "main_thread_cpu_ms": 8843.13,
+          "wall_ms": 24167,
+          "heap": {
+            "usedSize": 35354024,
+            "totalSize": 38690816,
+            "embedderHeapUsedSize": 4390336,
+            "backingStorageSize": 98494696
+          }
+        },
+        {
+          "renderer": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL ES 3.2)",
+          "graphs": {
+            "/sim_topo_dual_arm_max_long/Tmap_left_arm": {
+              "num_nodes": 9988,
+              "num_edge_values": 75936
+            },
+            "/sim_topo_dual_arm_max_long/Tmap_right_arm": {
+              "num_nodes": 9988,
+              "num_edge_values": 75952
+            }
+          },
+          "point_topics": [
+            "/livox/lidar"
+          ],
+          "num_visible_instances": 19976,
+          "num_visible_points": 29952,
+          "errors": [],
+          "api_error": null,
+          "geometry_count": 84,
+          "frame": {
+            "num": 445,
+            "p50_ms": 50.09999999999991,
+            "p95_ms": 66.70000000000073,
+            "max_ms": 150.10000000000036
+          },
+          "render_submit": {
+            "num": 892,
+            "p50_ms": 0.9000000059604645,
+            "p95_ms": 2.2000000029802322,
+            "max_ms": 139.6000000089407
+          },
+          "main_thread_cpu_ms": 9151.871,
+          "wall_ms": 24796,
+          "heap": {
+            "usedSize": 31089020,
+            "totalSize": 34758656,
+            "embedderHeapUsedSize": 3969304,
+            "backingStorageSize": 98678696
+          }
+        },
+        {
+          "renderer": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL ES 3.2)",
+          "graphs": {
+            "/sim_topo_dual_arm_max_long/Tmap_left_arm": {
+              "num_nodes": 9988,
+              "num_edge_values": 75936
+            },
+            "/sim_topo_dual_arm_max_long/Tmap_right_arm": {
+              "num_nodes": 9988,
+              "num_edge_values": 75952
+            }
+          },
+          "point_topics": [
+            "/livox/lidar"
+          ],
+          "num_visible_instances": 19976,
+          "num_visible_points": 29952,
+          "errors": [],
+          "api_error": null,
+          "geometry_count": 84,
+          "frame": {
+            "num": 416,
+            "p50_ms": 66.59999999999854,
+            "p95_ms": 66.70000000000073,
+            "max_ms": 150
+          },
+          "render_submit": {
+            "num": 834,
+            "p50_ms": 1.0999999940395355,
+            "p95_ms": 2.5,
+            "max_ms": 141.59999999403954
+          },
+          "main_thread_cpu_ms": 8720.562999999998,
+          "wall_ms": 24239,
+          "heap": {
+            "usedSize": 35143476,
+            "totalSize": 37117952,
+            "embedderHeapUsedSize": 4044488,
+            "backingStorageSize": 98512045
+          }
+        }
+      ]
+    }
+  },
+  "temporal": {
+    "num_trials_each": 7,
+    "input_sha256": "ede84f2e41ca5bcef8f1176065a5ea9f6e04a7bca921b9baa70a4f6a4b21edab",
+    "input_bytes": 35910460,
+    "num_frames": 120,
+    "num_points": 2400096,
+    "frame_id": [
+      "mid360_link"
+    ],
+    "source_labels": {
+      "3": 127424,
+      "0": 26913,
+      "2": 9696,
+      "1": 2079
+    },
+    "input_generation": "実点群のセンサ座標。GNGカーネルのみ、ROSラッパーの間引き・外部分類・平面処理なし。",
+    "gng_config": "/ros2_ws/src/ais_gng_cpu/src/ais_gng/config/gng_cpu/at128.yaml",
+    "filter_config": {
+      "cell_size_m": 0.02,
+      "history_window_size": 32,
+      "time_constant_sec": 0.3,
+      "point_support_mode": "auto",
+      "require_input_points": true
+    },
+    "scope": "固定した同一GNG・元点群からvoxelizeNodesの出力を生成し、TemporalVoxelFilter::update全体だけを計測。入力生成・集計・出力整列は計測外",
+    "limitations": "単一bagの先頭120フレーム。深度FREE判定・ROSノードの局所運動推定・更新スケジューラを含まない部品比較",
+    "metrics": {
+      "before": {
+        "num_frames": {
+          "median": 120,
+          "min": 120,
+          "max": 120
+        },
+        "frame_p50_ms": {
+          "median": 2.518508,
+          "min": 2.501384,
+          "max": 2.557157
+        },
+        "frame_p95_ms": {
+          "median": 2.667792,
+          "min": 2.633737,
+          "max": 2.743177
+        },
+        "max_num_tracked": {
+          "median": 4781,
+          "min": 4781,
+          "max": 4781
+        },
+        "max_history_bytes": {
+          "median": 11436152,
+          "min": 11436152,
+          "max": 11436152
+        },
+        "max_num_labels": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        },
+        "peak_rss_kb": {
+          "median": 23312,
+          "min": 23060,
+          "max": 23568
+        },
+        "num_output_voxels": {
+          "median": 1443,
+          "min": 1443,
+          "max": 1443
+        },
+        "num_input_points": {
+          "median": 2400096,
+          "min": 2400096,
+          "max": 2400096
+        },
+        "checksum": {
+          "median": 2112525318,
+          "min": 2112525318,
+          "max": 2112525318
+        }
+      },
+      "after": {
+        "num_frames": {
+          "median": 120,
+          "min": 120,
+          "max": 120
+        },
+        "frame_p50_ms": {
+          "median": 2.418925,
+          "min": 2.41251,
+          "max": 2.461897
+        },
+        "frame_p95_ms": {
+          "median": 2.539671,
+          "min": 2.52382,
+          "max": 2.659543
+        },
+        "max_num_tracked": {
+          "median": 4781,
+          "min": 4781,
+          "max": 4781
+        },
+        "max_history_bytes": {
+          "median": 1951280,
+          "min": 1951280,
+          "max": 1951280
+        },
+        "max_num_labels": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        },
+        "peak_rss_kb": {
+          "median": 14128,
+          "min": 13872,
+          "max": 14540
+        },
+        "num_output_voxels": {
+          "median": 1443,
+          "min": 1443,
+          "max": 1443
+        },
+        "num_input_points": {
+          "median": 2400096,
+          "min": 2400096,
+          "max": 2400096
+        },
+        "checksum": {
+          "median": 2112525318,
+          "min": 2112525318,
+          "max": 2112525318
+        }
+      }
+    },
+    "change_percent": {
+      "frame_p50_ms": -3.9540473963155964,
+      "frame_p95_ms": -4.802510840425345,
+      "peak_rss_kb": -39.396019217570355,
+      "max_history_bytes": -82.93761747832662
+    },
+    "quality": "全14試行で出力セル・ラベル・履歴・スコア・全NodeObservation項目の32bitチェックサム一致。入力点数・追跡セル数・出力数も一致",
+    "decision": "時系列ラベルの256bit存在表＋size_t頻度配列を継続採用。実点群でもRSS減少、処理時間の悪化なし。全256ラベル混在時の既知の約11%遅延は別条件として維持"
+  },
+  "memory_probe": [
+    {
+      "stage": "imports",
+      "rss_bytes": 38506496
+    },
+    {
+      "stage": "mujoco",
+      "rss_bytes": 1478070272,
+      "num_mesh_vertices": 665326,
+      "num_mesh_faces": 1337111,
+      "model_buffer_bytes": 243622208,
+      "data_buffer_bytes": 2724944,
+      "data_arena_bytes": 14680064
+    },
+    {
+      "stage": "collision_geometry",
+      "rss_bytes": 1511256064,
+      "num_spheres": 115
+    }
+  ],
+  "limitations": [
+    "全6試行で環境ボクセルとの重なりを検出。ready・腕の動作・正常終了を衝突回避の成功と同一視不可",
+    "全試行でアクチュエータ駆動力はURDFのeffort上限内。実関節速度にはURDF設定の最大約1.22倍を観測。速度指令の制限と実速度の一致保証は別",
+    "左右GNGノードID・接続・学習角・Stamped状態の内蔵照合を有効にし、全受信を通過。壁時計と非同期計画を含むため試行間の同一軌道は保証対象外",
+    "VLUTの既存処理時間トピックは表示ありの初期化後に検出。表示なしの採取欠落を0 msとして補完していない",
+    "MuJoCoモデル構築直後のRSSは約1.38 GiB。モデル本体bufferは約232 MiBであり、差額を全て有効モデルデータと断定不可"
+  ],
+  "followups": {
+    "physics_initial_memory": "MuJoCoの衝突メッシュ133万面と構築時メモリの内訳を優先調査。形状近似の採用には接触結果の比較が必要",
+    "pointcloud_copies": "受信時のpayload slice・XYZ/色の複製・色のfloat展開を確認。現測定だけでは支配コストと断定できず変更保留",
+    "depth_index": "現利用先は比較ノード。通常world_index_to_voxel_nodeへの統合は別の計測と出力整合検証が必要"
+  },
+  "commands": {
+    "browser": "node benchmarks/bag_pipeline/viewer_probe.mjs",
+    "runtime": "docker exec gng_cpu_container python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/bag_pipeline/cases.json --output /ros2_ws/src/log/artifacts/bag_pipeline/runtime_verified --repeats 3 --timeout-sec 120 --max-total-sec 900 --estimate-sec 36",
+    "capture": "docker exec gng_cpu_container bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/local_setup.bash && timeout -k 5s 150s python3 /ros2_ws/src/benchmarks/bag_pipeline/capture_temporal_input.py'",
+    "build": "docker exec gng_cpu_container bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/local_setup.bash && timeout -k 5s 330s python3 /ros2_ws/src/benchmarks/bag_pipeline/build_temporal.py'",
+    "temporal": "docker exec gng_cpu_container python3 /ros2_ws/src/skills/run-benchmark-batch/scripts/run_batch.py /ros2_ws/src/benchmarks/bag_pipeline/temporal_cases.json --output /ros2_ws/src/log/artifacts/bag_pipeline/temporal_verified --repeats 7 --timeout-sec 60 --max-total-sec 840 --estimate-sec 4",
+    "memory_probe": "docker exec gng_cpu_container bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/local_setup.bash && timeout -k 5s 100s python3 /ros2_ws/src/log/artifacts/bag_pipeline/memory_probe.py'"
+  },
+  "artifacts": {
+    "runtime": "log/artifacts/bag_pipeline/runtime_verified/report.json",
+    "temporal": "log/artifacts/bag_pipeline/temporal_verified/report.json",
+    "screenshot": "log/artifacts/bag_pipeline/runtime_verified/003_viewer/viewer.png"
+  },
+  "cleanup": {
+    "num_owned_backend_pids": 135,
+    "remaining_owned_backend_processes": [],
+    "test_ports_listening": {
+      "8877": false,
+      "8879": false,
+      "8880": false,
+      "9002": false,
+      "18889": false,
+      "18890": false,
+      "19002": false
+    },
+    "has_existing_viewer_launch": true,
+    "baseline_containers": [
+      "gng-harmonic-launcher-launcher-1",
+      "gng_cpu_container",
+      "rosbridge_container",
+      "frontend"
+    ],
+    "is_stopped": true
+  }
+}

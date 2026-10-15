@@ -1,0 +1,508 @@
+{
+  "cases": [
+    {
+      "name": "holdout_reactive_101",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_reactive_101.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_vrm_101",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_vrm_101.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_static_101",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_static_101.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_cv_101",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_cv_101.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_sequence_101",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_sequence_101.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_occupancy_101",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_occupancy_101.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_vrm_107",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_vrm_107.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_static_107",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_static_107.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_cv_107",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_cv_107.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_sequence_107",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_sequence_107.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_occupancy_107",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_occupancy_107.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_reactive_107",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_reactive_107.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_static_131",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_static_131.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_cv_131",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_cv_131.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_sequence_131",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_sequence_131.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_occupancy_131",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_occupancy_131.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_reactive_131",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_reactive_131.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_vrm_131",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_vrm_131.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_cv_149",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_cv_149.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_sequence_149",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_sequence_149.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_occupancy_149",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_occupancy_149.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_reactive_149",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_reactive_149.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_vrm_149",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_vrm_149.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    },
+    {
+      "name": "holdout_static_149",
+      "cwd": "/ros2_ws/src",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "argv": [
+        "bash",
+        "-c",
+        "source /opt/ros/humble/setup.bash\nsource /ros2_ws/install/setup.bash\nexec python3 \"$@\"",
+        "sphere_trial",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/chasing_sphere/holdout_static_149.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "timeout_sec": 150
+    }
+  ]
+}

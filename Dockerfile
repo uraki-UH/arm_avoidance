@@ -1,4 +1,4 @@
-FROM osrf/ros:humble-desktop-full
+FROM osrf/ros:humble-desktop-full AS simulator_cpu
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Tokyo
@@ -28,6 +28,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-rosdep \
     ros-dev-tools \
     python3-pip \
+    python3-dev \
+    python3-numpy \
+    python3-scipy \
+    python3-yaml \
+    libfcl-dev \
+    liboctomap-dev \
+    libssl-dev \
+    ros-humble-ament-cmake-auto \
+    ros-humble-vision-msgs \
     python3-tornado \
     zip \
     unzip \
@@ -57,6 +66,18 @@ RUN mkdir -p /etc/apt/keyrings \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*
 
+# CPU版の局所回避ソルバー・物理計算と、初回UIビルド用の依存キャッシュ
+RUN pip3 install --no-cache-dir "numpy<2" "osqp==1.0.4" "mujoco==3.3.7"
+WORKDIR /opt/topo-simulator-ui
+COPY ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/package*.json ./
+RUN npm ci --no-audit --no-fund \
+ && rm -rf node_modules
+WORKDIR /ros2_ws/src
+CMD ["/bin/bash"]
+
+# 既存の開発環境。CPU版から独立した追加の学習・解析用依存
+FROM simulator_cpu AS development
+
 # Emscripten (WASM build for gng_wasm_core)
 RUN cd /opt && git clone https://github.com/emscripten-core/emsdk.git \
  && cd emsdk && ./emsdk install latest && ./emsdk activate latest
@@ -67,9 +88,6 @@ RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.o
 
 # YOLO人物検出
 RUN pip3 install --no-cache-dir "numpy<2" "ultralytics>=8.3,<9"
-
-# 局所回避の二次計画ソルバーとブラウザ物理シミュレーション
-RUN pip3 install --no-cache-dir "osqp==1.0.4" "mujoco==3.3.7"
 
 # Isaac向けUSD形状・物理属性の構造検証
 RUN pip3 install --no-cache-dir "usd-core==25.5.1"
@@ -108,12 +126,6 @@ WORKDIR /ros2_ws
 WORKDIR /ros2_ws/src/ToPoFuzzy-Viewer/frontend
 COPY ToPoFuzzy-Viewer/frontend/package*.json /ros2_ws/src/ToPoFuzzy-Viewer/frontend/
 RUN npm ci
-
-# ホストのソースマウントに隠れない、双腕UI依存の取得キャッシュ
-WORKDIR /opt/topo-simulator-ui
-COPY ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/package*.json ./
-RUN npm ci --no-audit --no-fund \
- && rm -rf node_modules
 
 WORKDIR /ros2_ws/src
 

@@ -24,9 +24,9 @@ def gng_angle_num(path):
     if len(data) < 32:
         raise ValueError('GNGヘッダーの欠損')
     version = struct.unpack_from('<I', data)[0]
-    if version not in range(1, 10):
+    if version != 10:
         raise ValueError(f'未対応のGNGバージョン: {version}')
-    offset = 8 if version >= 6 else 4
+    offset = 8
     if len(data) < offset + 32:
         raise ValueError('GNG角度配列ヘッダーの欠損')
     if struct.unpack_from('<i', data, offset)[0] <= 0:

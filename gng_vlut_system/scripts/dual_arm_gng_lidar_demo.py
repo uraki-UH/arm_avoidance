@@ -20,6 +20,7 @@ from ais_gng_msgs.msg import TopologicalMap, TopologicalNodeStates
 from ais_gng_feature_msgs.msg import TopologicalNodeFeatureArray
 
 from dual_arm_avoidance_demo import avoidance_demo
+from gng_edge_vlut import get_query_backend, validate_backend_config
 from gng_avoidance_planner import (
     gng_avoidance_policy, has_stable_return_clearance, graph_topology_hash, voxel_centers)
 
@@ -67,6 +68,15 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
         self.return_check_sec = None
         self.motion_phase = 'monitoring'
         super().__init__()
+        vlut_backend = self.declare_parameter('vlut_backend', self.config.get('vlut_backend', 'node_vlut')).value
+        self.config['vlut_backend'] = vlut_backend
+        for name in ('edge_vlut_file', 'region_vlut_file', 'hierarchy_vlut_file'):
+            self.config[name] = self.declare_parameter(name, self.config.get(name, '')).value
+        validate_backend_config(self.config)
+        if vlut_backend == 'hierarchy_vlut':
+            backend = get_query_backend(self)
+            if not np.any(backend.arrays['has_index']):
+                self.get_logger().warning('階層VLUTの索引葉0件。全区間で従来の詳細検査を使用します')
         return_clear_sec = self.config.get('return_clear_sec', .5)
         if (isinstance(return_clear_sec, bool) or not isinstance(return_clear_sec, (int, float))
                 or not np.isfinite(return_clear_sec) or return_clear_sec < 0):
@@ -328,6 +338,10 @@ class gng_lidar_demo(gng_avoidance_policy, avoidance_demo):
             'num_cloud': self.num_cloud, 'num_voxels': self.num_voxels,
             'local_qp': self.qp.report if self.qp is not None else None,
             'planner_backend': 'gng_avoidance_policy',
+            'vlut_backend': self.config.get('vlut_backend', 'node_vlut'),
+            'edge_vlut': getattr(getattr(self, 'edge_vlut_backend', None), 'stats', None),
+            'region_vlut': getattr(getattr(self, 'region_vlut_backend', None), 'stats', None),
+            'hierarchy_vlut': getattr(getattr(self, 'hierarchy_vlut_backend', None), 'stats', None),
             'motion_phase': self.motion_phase,
             'motion_flags': asdict(self.motion_flags) if hasattr(self, 'motion_flags') else None,
             'current_node_id': self.current_node_id, 'has_safe_first_neighbors': self.has_safe_neighbors,

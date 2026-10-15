@@ -1,0 +1,73 @@
+{
+  "selected_method": "cv",
+  "selected_settings": {
+    "horizon_sec": 0.4,
+    "margin_m": 0.08,
+    "task_weight": 0.12,
+    "candidate_metric": "joint",
+    "enable_learning": false
+  },
+  "development_rounds": 2,
+  "selection_reason": "調整用2条件の双方で18 sec完走。高速・タスク優先・長時間予測の3設定は失敗数増加。時系列記憶は往復数減少、占有候補選択は失敗数増加のため既定採用なし",
+  "development_reports": [
+    "log/artifacts/chasing_sphere/development_stopped/report.json",
+    "log/artifacts/chasing_sphere/tuning/report.json"
+  ],
+  "has_evaluated_holdout": false,
+  "source_sha256": {
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py": "aae4cf4b01f7c57237e71505915b40e91d1099d8a11c558628dfce8d96f25dcf",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_sphere_avoidance.py": "0ed26351845e7ee885dfb9beedb91a4af658bdb15295379a89c4a2014fbf642f",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_inputs.py": "39bf6818aab6dd65db3d76d6160b1d51a4a231a8aa88d8a5edcb0b177628af65",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/physics_scene.py": "34c5e05b2cfbfc8deee05513db68f6cc2b8c98fdc9db80eba42d6b8a49c56d32",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/physics_robot.py": "c72f76562ac7af45963f2e9bf1eb660720c558df049818deed5ea24a45091fba",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/simulate.py": "f3afb0f9cb16aa511cdc0acf11a08c671827fbe9602a637906677af254eefdba",
+    "gng_vlut_system/scripts/gng_avoidance_planner.py": "ce06e439581b322c3610aa16ad13102df5f6d8c46c43b1561717906c87025966",
+    "gng_vlut_system/scripts/dual_arm_avoidance_geometry.py": "b7dd600aa9bb351e5a5c47dbb8e4cc0adcdfa97a4b51c6e5c7e7f245bd3b7b35",
+    "gng_vlut_system/src/core/planning/dynamic_avoidance_kernel.cpp": "c48275e37dea7b1529da0fbed49cf6f212655ccfd199a9aab30ffaf20dfbc9e6",
+    "benchmarks/chasing_sphere/memory.json": "c4ca7c64ddc1f119e38ba4dff52c1806f2f3c6f254b9a9b71eb045e270ce32a3",
+    "benchmarks/chasing_sphere/protocol.json": "f01f5ff33847b097896e3e75122719500cf750fa95dadc0754546485bfcd0992"
+  },
+  "holdout_config_sha256": {
+    "benchmarks/chasing_sphere/holdout_reactive_101.json": "eb1a45c8fc8fd5eeb41f6e4a6d3d8105dbbc6b1c3f313378ee0e5053e3092bb2",
+    "benchmarks/chasing_sphere/holdout_vrm_101.json": "d863e6fd0b45156a5228727dec7923ab10fb50403ba8676f56058221d4fa84e7",
+    "benchmarks/chasing_sphere/holdout_static_101.json": "a7eb399aa4efbfd0ac98239dd653c0f9eced2ea9786fc08a67baad947e18943f",
+    "benchmarks/chasing_sphere/holdout_cv_101.json": "d2d822b310b7f9d13c044ccb7c39b2897e034f8ab6272f1cd77943de8dfaf2b1",
+    "benchmarks/chasing_sphere/holdout_sequence_101.json": "5f82de7d328509e400e1501b3e25d95b57527bde44817ee9b0b44076a42d4dc1",
+    "benchmarks/chasing_sphere/holdout_occupancy_101.json": "9cd9db63a005a6a4caca35b239d798337d633bb3facc1f374ec1449dd71a0f02",
+    "benchmarks/chasing_sphere/holdout_vrm_107.json": "e1682d1f7f5a5604ce97fe9356fdd916d3139a4d2ce7fabf9096d52a70dad70b",
+    "benchmarks/chasing_sphere/holdout_static_107.json": "e9f6c2602039bf8e8340dd7cca37f8f5bd81197767a34e0826a95f19c8cb6de8",
+    "benchmarks/chasing_sphere/holdout_cv_107.json": "33d49d2146d49160027a1220b36fe4d310c1dcbfe32ce9f1c4f530a43f478db6",
+    "benchmarks/chasing_sphere/holdout_sequence_107.json": "09fd54c206ad7287ca67f1f76c756138b1bef6faab85a44a77227fa3ad87a8c6",
+    "benchmarks/chasing_sphere/holdout_occupancy_107.json": "afa416c05fce38c1e56506d14e579c2b83a339ad3bd41d46a06e46f1a943aba0",
+    "benchmarks/chasing_sphere/holdout_reactive_107.json": "bf4748dfbcc694bb391bf096d3c6495aaf6f04ce4104cf685b3937747a975f9d",
+    "benchmarks/chasing_sphere/holdout_static_131.json": "d1aa471528ab1537afb3b4d1d7089ce940d7ecee64aeb019d66cc52b312a7780",
+    "benchmarks/chasing_sphere/holdout_cv_131.json": "9ab3888b838a38bd38ac86b96145586017dac935dcdb42e6a1809a8e339d9023",
+    "benchmarks/chasing_sphere/holdout_sequence_131.json": "ba001b4c8daeff52df99401c354314a7e64814bdc172a029d6947282312869f9",
+    "benchmarks/chasing_sphere/holdout_occupancy_131.json": "a451d98a6c7b3d2a314cda8e95d649bd3be350eae71a713ed299e2ec2c0ca065",
+    "benchmarks/chasing_sphere/holdout_reactive_131.json": "6cb0a1a5b2ca5ec8d2e2cf15fe6bef67833459fd0c9c14635903af69ebe8a619",
+    "benchmarks/chasing_sphere/holdout_vrm_131.json": "064070b7a3f7683c2ae2276188a5e64b9411a52a085db1c4b76c958ee209913c",
+    "benchmarks/chasing_sphere/holdout_cv_149.json": "529a19410b52bedc388919ec75a4777ce7e79de7807bc8cfd095493de85df87f",
+    "benchmarks/chasing_sphere/holdout_sequence_149.json": "094df4ef02d7249ebc60a67aef35c3d6d278a1be3a499101e4c08e76595501d1",
+    "benchmarks/chasing_sphere/holdout_occupancy_149.json": "2891de5b1e6229fbb39afc572909a8f17ba68d523bf9b49f3b98279221d8e94c",
+    "benchmarks/chasing_sphere/holdout_reactive_149.json": "a642d4f6a0c74211457e642da502b3cf8b6258762c9895115a120d7390ff7310",
+    "benchmarks/chasing_sphere/holdout_vrm_149.json": "3a8117c02016d064a2142a98000410cf1aea3c5ccbf317c8ecc3b0ff8b3a5901",
+    "benchmarks/chasing_sphere/holdout_static_149.json": "5da89e659e49d7018c5265f1a684c5371b973bf1d88414058692324314303d60",
+    "benchmarks/chasing_sphere/holdout_cases.json": "8cafdac6fb3ff32e6363c1f6f78452a1e7282e9f985269f6aded202fbc379f69"
+  },
+  "post_evaluation_metadata_corrections": [
+    {
+      "path": "benchmarks/chasing_sphere/protocol.json",
+      "original_sha256": "f01f5ff33847b097896e3e75122719500cf750fa95dadc0754546485bfcd0992",
+      "corrected_sha256": "f81effa9c9a983e764782b36d379f1a42a85de1f92750757376a46dc03813c1f",
+      "reason": "評価後の名称訂正のみ。打切り条件・閾値・失敗数・測定値の変更なし。初版のURDF可動域という記述はcontinuous関節に不適切"
+    },
+    {
+      "path": "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+      "original_sha256": "aae4cf4b01f7c57237e71505915b40e91d1099d8a11c558628dfce8d96f25dcf",
+      "corrected_sha256": "33a5f3624a81ec1bacedd407b16c95992cbccf680b7047857eb16fc088b0b943",
+      "reason": "真偽値の出力キーをsphere_is_fully_observedからis_sphere_fully_observedへ訂正。アルゴリズム・判定条件・数値の変更なし"
+    }
+  ]
+}

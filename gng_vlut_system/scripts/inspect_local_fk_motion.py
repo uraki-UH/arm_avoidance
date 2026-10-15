@@ -18,7 +18,7 @@ from scipy.spatial.transform import Rotation
 
 
 def load_node(path, node_id):
-    # 現行GNG version 9、little-endian、64 bit Eigen::Index、float配列の読み込み
+    # GNG v10、little-endian、64bit Eigen::Index、float配列の読込み
     with path.open('rb') as stream:
         def read(fmt):
             return struct.unpack(fmt, stream.read(struct.calcsize(fmt)))
@@ -30,8 +30,8 @@ def load_node(path, node_id):
             return np.frombuffer(stream.read(4*rows*cols), dtype='<f4').astype(float)
 
         version, layer_num, node_num = read('<Iii')
-        if version != 9 or layer_num != 1 or not 0 < node_num <= 1000000:
-            raise ValueError('expected version 9 GNG with one coordinate layer')
+        if version != 10 or layer_num != 1 or not 0 < node_num <= 1000000:
+            raise ValueError('expected version 10 GNG with one coordinate layer')
         for _ in range(node_num):
             current_id, _, _ = read('<iff')
             joints, stored_position = eigen(), eigen()
@@ -41,9 +41,12 @@ def load_node(path, node_id):
             for _ in range(coord_num):
                 eigen()
             read('<i')
-            states = read('<5?')
+            flags, = read('<B')
+            if flags & 0xE0:
+                raise ValueError('invalid GNG status flags')
+            states = tuple(bool(flags & (1 << bit)) for bit in range(5))
             direction = eigen()
-            read('<fff?ff?')
+            read('<dff?fd?')
             if current_id == node_id:
                 if not states[3] or not np.isfinite(joints).all():
                     raise ValueError('seed node is inactive or invalid')

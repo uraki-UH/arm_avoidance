@@ -1,0 +1,56 @@
+{
+  "cases": [
+    {
+      "name": "headless",
+      "argv": [
+        "bash",
+        "-lc",
+        "source /opt/ros/humble/setup.bash && source /ros2_ws/install/local_setup.bash && exec python3 \"$@\"",
+        "pipeline_trial",
+        "/ros2_ws/src/benchmarks/bag_pipeline/run_trial.py",
+        "--condition",
+        "headless",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "24"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/bag_pipeline",
+      "env": {
+        "ROS_DOMAIN_ID": "219",
+        "ROS_LOCALHOST_ONLY": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "viewer",
+      "argv": [
+        "bash",
+        "-lc",
+        "source /opt/ros/humble/setup.bash && source /ros2_ws/install/local_setup.bash && exec python3 \"$@\"",
+        "pipeline_trial",
+        "/ros2_ws/src/benchmarks/bag_pipeline/run_trial.py",
+        "--condition",
+        "viewer",
+        "--case-dir",
+        "@case_dir@",
+        "--seed",
+        "@seed@",
+        "--duration",
+        "24"
+      ],
+      "metrics": "metrics.json",
+      "cwd": "/ros2_ws/src/log/artifacts/bag_pipeline",
+      "env": {
+        "ROS_DOMAIN_ID": "219",
+        "ROS_LOCALHOST_ONLY": "1",
+        "TOPO_ROS_SETUP_READY": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  ]
+}

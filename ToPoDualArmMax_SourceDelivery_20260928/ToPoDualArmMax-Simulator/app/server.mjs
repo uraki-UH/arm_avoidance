@@ -14,6 +14,17 @@ const instance=createHash('sha256').update(process.platform==='win32'?root.toLow
 const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.urdf':'application/xml; charset=utf-8','.wasm':'application/wasm','.glb':'model/gltf-binary','.bin':'application/octet-stream','.stl':'application/octet-stream','.png':'image/png','.md':'text/plain; charset=utf-8','.zip':'application/zip'};
 const server=http.createServer((req,res)=>{
  let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);}catch{res.writeHead(400);res.end();return;}
+ // 登録定義の公開部分。起動コマンド・Python接続先は実行側で管理
+ if(pathname==='/api/plugins'){
+  try{
+   const directory=path.join(root,'../integrations/ros2/plugins'),keys=['version','id','category','label','description','models','parameters','capabilities','settings_id','display','interfaces'];
+   const plugins=fs.readdirSync(directory).filter(name=>name.endsWith('.json')).sort().map(name=>{
+    const spec=JSON.parse(fs.readFileSync(path.join(directory,name),'utf8'));
+    return Object.fromEntries(keys.filter(key=>key in spec).map(key=>[key,spec[key]]));
+   });
+   const body=JSON.stringify({version:1,plugins});res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(body);
+  }catch{res.writeHead(500);res.end('プラグイン定義の読込エラー');}return;
+ }
  if(pathname==='/api/health'){
   res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
   res.end(JSON.stringify({app:'topo-motion-studio',pid:process.pid,port,instance,startedAt,delivery:'source-1.0.0'}));return;

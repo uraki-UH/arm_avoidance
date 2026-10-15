@@ -20,6 +20,10 @@ def generate_launch_description():
         'enable_dynamixel_leader': 'false',
         'dynamixel_input_topic': '/dynamixel/state/present',
         'enable_auto_start': '',
+        'vlut_backend': '',
+        'edge_vlut_file': '',
+        'region_vlut_file': '',
+        'hierarchy_vlut_file': '',
         'gazebo_master_uri': 'http://127.0.0.1:11355',
     }
     return LaunchDescription([

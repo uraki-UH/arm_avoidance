@@ -73,3 +73,9 @@ button.physics-scene-name:hover{color:#568622}
 .physics-scene-description{grid-column:1/-1;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
 .physics-scene-toggle{grid-column:2;grid-row:1;font-size:11px;white-space:nowrap;padding:4px 6px;background:var(--panel);color:var(--text)}
 .physics-scene-toggle[aria-pressed=true]{background:#edf7e2;border-color:#79bb35;color:#345714}
+
+/* 定義から生成したROSプラグイン設定とログ */
+.plugin-fields label,.ros-launch-plugins>label{display:flex;flex-direction:column;gap:5px;margin:10px 0;font-size:12px}
+.plugin-fields input:not([type=checkbox]),.plugin-fields select,.ros-launch-plugins select{width:100%;min-width:0;padding:6px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:5px}
+.ros-launch-plugins{border-top:1px solid var(--line);margin-top:18px;padding-top:10px}
+.ros-launch-plugins pre{max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 monospace}

@@ -57,6 +57,8 @@
 `world_point_bucket_index.hpp`は共有点群ストアの転送だけだったため削除。利用元は`point_cloud_store.hpp`と`voxel_idx`を直接参照。
 旧ヘッダー・型別名は保持せず、移動対象の計算処理はinclude・名前空間以外の変更なし。
 
+`persistent_depth_world_index`の画素番号とbucket内位置は32bit。画像の総画素数を入力時に検査し、上限は4,294,967,295画素。深度0を未登録の印にも使用し、有効状態の別フラグは不要。既存の深度・連続確認回数は16bitのまま保持。現在の利用先は比較用`depth_world_index_benchmark_node`で、通常の`world_index_to_voxel_node`への適用は別。
+
 **配置だけでは分離できない範囲**
 
 `topological_map_planning_node.cpp`は計画専用と回避実行の共有実装として維持。

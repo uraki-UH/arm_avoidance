@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "name": "graph_before",
+      "argv": [
+        "node",
+        "--expose-gc",
+        "/home/uraki/uraki_ws/benchmarks/data_layout/graph_benchmark.cjs",
+        "/home/uraki/uraki_ws/log/artifacts/data_layout/js_before/graph_protocol.js",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "graph_after",
+      "argv": [
+        "node",
+        "--expose-gc",
+        "/home/uraki/uraki_ws/benchmarks/data_layout/graph_benchmark.cjs",
+        "/home/uraki/uraki_ws/log/artifacts/data_layout/js_after/graph_protocol.js",
+        "@seed@",
+        "@case_dir@/metrics.json"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

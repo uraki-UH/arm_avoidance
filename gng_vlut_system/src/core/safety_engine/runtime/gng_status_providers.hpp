@@ -142,7 +142,7 @@ public:
     auto M_opt =
         dynamics::RobotDynamics::calculateMassMatrix(*chain_, *model_, joints);
     if (!M_opt) {
-      node.status.dynamic_manip_info.valid = false;
+      node.status.dynamic_manip_info.is_valid = false;
       return;
     }
 

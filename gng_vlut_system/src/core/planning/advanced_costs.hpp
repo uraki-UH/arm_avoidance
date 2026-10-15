@@ -32,7 +32,7 @@ public:
   float evaluate(const GNG::NeuronNode<T_angle, T_coord> &u,
                  const GNG::NeuronNode<T_angle, T_coord> &v) override {
     float distance = (v.weight_angle - u.weight_angle).norm();
-    if (!v.status.dynamic_manip_info.valid) {
+    if (!v.status.dynamic_manip_info.is_valid) {
       return distance * 1000.0f; // 動的パラメータがない場合は高いコスト
     }
     double m = v.status.dynamic_manip_info.manipulability;

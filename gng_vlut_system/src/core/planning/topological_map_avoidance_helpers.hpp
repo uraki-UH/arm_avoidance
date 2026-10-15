@@ -161,6 +161,11 @@ static inline std::vector<float> buildPathManipulability(
       values.push_back(nanMetric());
       continue;
     }
+    const auto &cached = rotational ? node.status.rotational_manip_info : node.status.manip_info;
+    if (cached.is_valid) {
+      values.push_back(static_cast<float>(cached.manipulability));
+      continue;
+    }
     const auto manip = calculateManipulabilityForQ(chain, node.weight_angle, rotational);
     values.push_back(manip.valid ? static_cast<float>(manip.manipulability)
                                  : nanMetric());
@@ -221,13 +226,15 @@ buildGraspCandidateMetricArray(
             buildJointStateFromQ(node.weight_angle, controlled_joint_names, stamp);
 
         const auto position_manip =
-            node.status.manip_info.valid
+            node.status.manip_info.is_valid
                 ? node.status.manip_info
                 : calculateManipulabilityForQ(chain, node.weight_angle, false);
         const auto rotation_manip =
-            calculateManipulabilityForQ(chain, node.weight_angle, true);
+            node.status.rotational_manip_info.is_valid
+                ? node.status.rotational_manip_info
+                : calculateManipulabilityForQ(chain, node.weight_angle, true);
 
-        if (position_manip.valid) {
+        if (position_manip.is_valid) {
           metric.position_manipulability =
               static_cast<float>(position_manip.manipulability);
           metric.manipulability_condition_number =
@@ -239,7 +246,7 @@ buildGraspCandidateMetricArray(
               static_cast<float>(position_manip.singular_values.y()),
               static_cast<float>(position_manip.singular_values.z())};
         }
-        if (rotation_manip.valid) {
+        if (rotation_manip.is_valid) {
           metric.rotation_manipulability =
               static_cast<float>(rotation_manip.manipulability);
         }
@@ -665,7 +672,7 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
           reached_goal_id >= 0 && reached_goal_id < static_cast<int>(gng->getMaxNodeNum())) {
         const auto &reached_goal_node = gng->nodeAt(reached_goal_id);
         const auto &rot = reached_goal_node.status.rotational_manip_info;
-        if (rot.valid && rot.manipulability > 1e-8) {
+        if (rot.is_valid && rot.manipulability > 1e-8) {
           const float cond = std::max(1.0f, static_cast<float>(rot.condition_number));
           score += goal_rot_manip_weight * std::log(cond);
         } else {

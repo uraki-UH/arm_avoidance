@@ -48,14 +48,13 @@ class Node{
         ~Node();
         void init(uint32_t id, float eta_s1, float eta_s2);
         void init(uint32_t id, float eta_s1, float eta_s2, Vec3f &pos);
-        node_moments winner_stats, support_stats;
         gng_observation::angle_range observation_range;
-        uint32_t id;
+        uint16_t id;
         Vec3f pos;
         // Vec3f pos_prev;
         // Vec3f s1_w;
         // int s1_w_num;
-        uint32_t edges[NODE_MAX_EDGE];
+        uint16_t edges[NODE_MAX_EDGE];
         uint32_t edge_num;  // 接続しているエッジの数
         uint32_t grid_i;//所属しているgridのvectorの中のindex
         uint32_t grid_vec_i;

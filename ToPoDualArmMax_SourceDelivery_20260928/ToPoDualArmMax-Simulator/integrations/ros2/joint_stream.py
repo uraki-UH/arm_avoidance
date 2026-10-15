@@ -165,7 +165,8 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
         try:
             from physics_stream import physics_handler
             from motor_stream import motor_handler
-            server = tornado.httpserver.HTTPServer(tornado.web.Application([(r'/joints', Handler), (r'/physics', physics_handler(origins, context['clients'], node, track_cleanup)), (r'/motors', motor_handler(node, exchange, origins, context['clients']))], websocket_max_message_size=1048576))
+            from ros_plugins import plugin_handler
+            server = tornado.httpserver.HTTPServer(tornado.web.Application([(r'/joints', Handler), (r'/plugins', plugin_handler(origins, context['clients'], node, track_cleanup)), (r'/physics', physics_handler(origins, context['clients'], node, track_cleanup)), (r'/motors', motor_handler(node, exchange, origins, context['clients']))], websocket_max_message_size=1048576))
             server.listen(port, address=host)
             context['server'] = server
         except Exception as error:

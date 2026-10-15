@@ -789,6 +789,19 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
 #if defined(AIS_GNG_BACKEND_CPU)
     // 起動時・実行中に共通の寿命値検証。無効値の既定値への黙示的な置換防止。
     for (const auto &p : params) {
+        if (p.get_name() == "node.num_max" || p.get_name() == "edge.age_max") {
+            const bool is_node_capacity = p.get_name() == "node.num_max";
+            const int64_t min_value = is_node_capacity ? 1 : 0;
+            const int64_t max_value = is_node_capacity ? UINT16_MAX : UINT32_MAX - 1;
+            if (p.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER ||
+                p.as_int() < min_value || p.as_int() > max_value ||
+                static_cast<double>(static_cast<float>(p.as_int())) > max_value) {
+                result.successful = false;
+                result.reason = p.get_name() + "の値域・整数型が格納表現と一致しません";
+                return result;
+            }
+            continue;
+        }
         if (p.get_name() != "node.static.s1_age_max") {continue;}
         if (p.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER || p.as_int() <= 0 ||
             static_cast<double>(static_cast<float>(p.as_int())) >= std::numeric_limits<int>::max() ||
@@ -804,7 +817,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
             const auto &name = p.get_name();
             bool can_update = false;
             bool is_valid = false;
-            if (name == "node.learning_num" || name == "node.static.age_min" ||
+            if (name == "node.learning_num" || name == "node.static.age_min" || name == "edge.age_max" ||
                 name == "node.static.s1_age_max" ||
                 name == "performance.log_interval_ms") {
                 can_update = true;
