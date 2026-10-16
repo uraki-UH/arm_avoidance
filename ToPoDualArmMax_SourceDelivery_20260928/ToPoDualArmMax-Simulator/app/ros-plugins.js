@@ -54,7 +54,7 @@ export class physics_plugins{
     const fields=parameter_fields(spec,()=>panel.stop()),details=document.createElement('details'),summary=document.createElement('summary');
     details.id=spec.settings_id??'physics-plugin-'+spec.id;summary.textContent=spec.label+'の設定';details.append(summary,fields.element);this.container.append(details);this.fields.set(spec.id,{...fields,details});
    }
-   this.launch_panel=new launch_plugins_panel(catalog.filter(spec=>spec.category==='launch'));
+   this.launch_panel=new launch_plugins_panel(catalog.filter(spec=>spec.category==='launch'),()=>this.panel.robot().modelId);
    this.update();
   }).catch(error=>{document.getElementById('physics-status').textContent=error.message;});
  }
@@ -72,8 +72,8 @@ export class physics_plugins{
 }
 
 export class launch_plugins_panel{
- constructor(specs){
-  this.specs=specs;this.socket=null;this.phase='idle';this.fields=null;
+ constructor(specs,get_model){
+  this.specs=specs;this.get_model=get_model;this.socket=null;this.phase='idle';this.fields=null;
   const section=this.section=document.createElement('section');section.className='ros-launch-plugins';
   section.innerHTML='<h3>ROS launch プラグイン</h3><label>機能<select data-field="plugin"></select></label><p data-field="description" class="sub-note"></p><div data-field="parameters"></div><div class="row-actions"><button data-field="start">開始</button><button data-field="stop" disabled>停止</button></div><p data-field="status" role="status">未起動</p><details><summary>ログ</summary><pre data-field="log"></pre></details>';
   document.getElementById('ros-panel').append(section);this.elements=Object.fromEntries([...section.querySelectorAll('[data-field]')].map(element=>[element.dataset.field,element]));
@@ -92,7 +92,9 @@ export class launch_plugins_panel{
  }
  start(){
   try{
-   const request={type:'start',plugin_id:this.elements.plugin.value,parameters:this.fields.read()};this.phase='starting';this.update_controls();this.elements.status.textContent='開始中';this.elements.log.textContent='';
+   const spec=this.specs.find(value=>value.id===this.elements.plugin.value),parameters=this.fields.read();
+   if(spec.parameters?.model)parameters.model=this.get_model();
+   const request={type:'start',plugin_id:spec.id,parameters};this.phase='starting';this.update_controls();this.elements.status.textContent='開始中';this.elements.log.textContent='';
    if(this.socket?.readyState===WebSocket.OPEN){this.socket.send(JSON.stringify(request));return;}
    const socket=this.socket=new WebSocket(bridge_socket_url(document.getElementById('ros-endpoint').value,'/plugins'));
    socket.onopen=()=>{if(this.socket===socket)socket.send(JSON.stringify(request));};

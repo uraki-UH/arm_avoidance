@@ -39,6 +39,9 @@ aside{padding-inline:12px}
 .ros-connection:focus-within{outline:2px solid #a16aad;outline-offset:1px}
 
 #ros-panel #ros-joints-hz{color:#202020;background:#fff;color-scheme:light;border:1px solid #b8a9c0;border-radius:5px;padding:5px 7px;width:76px;font-variant-numeric:tabular-nums}
+#robot-control-panel .robot-control-choice{display:grid;grid-template-columns:5em minmax(0,1fr);align-items:center;gap:8px;margin:6px 0}
+#robot-control-panel select,#robot-control-panel input:not([type=checkbox]){min-width:0;color:#202020;background:#fff;color-scheme:light;border:1px solid #b8a9c0;border-radius:5px;padding:5px 7px}
+#robot-control-panel .robot-control-choice select{width:100%}
 
 /* 物理設定の入力欄と、未選択時にも読める無効状態 */
 #physics-panel input:not([type=checkbox]),#physics-panel select{color:#27222c;background:#fff;border:1px solid #b8a9c0;border-radius:5px;padding:6px 8px;color-scheme:light}

@@ -1,0 +1,260 @@
+{
+  "cases": [
+    {
+      "name": "rollout_cv_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--condition",
+        "free",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link4",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_reactive_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_reactive",
+        "--condition",
+        "free",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link4",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "cbf_qp_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "cbf_qp",
+        "--condition",
+        "free",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link4",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "oscbf",
+        "--condition",
+        "free",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link4",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_cv_sphere_distal_sweep_l_link4_401",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--condition",
+        "pressure",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link4",
+        "--shape",
+        "sphere",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_cv_sphere_distal_sweep_l_link6_719",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--condition",
+        "pressure",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link6",
+        "--shape",
+        "sphere",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_cv_sphere_link_point_l_tcp_823",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--condition",
+        "pressure",
+        "--mode",
+        "link_point",
+        "--target-link",
+        "L_tcp",
+        "--shape",
+        "sphere",
+        "--seed",
+        "823",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_cv_sphere_random_walk_l_link6_947",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--condition",
+        "pressure",
+        "--mode",
+        "random_walk",
+        "--target-link",
+        "L_link6",
+        "--shape",
+        "sphere",
+        "--seed",
+        "947",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_reactive_sphere_distal_sweep_l_link4_401",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_reactive",
+        "--condition",
+        "pressure",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link4",
+        "--shape",
+        "sphere",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_reactive_linked_arm_link_point_l_link6_719",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_reactive",
+        "--condition",
+        "pressure",
+        "--mode",
+        "link_point",
+        "--target-link",
+        "L_link6",
+        "--shape",
+        "linked_arm",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "cbf_qp_linked_arm_link_point_l_tcp_823",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "cbf_qp",
+        "--condition",
+        "pressure",
+        "--mode",
+        "link_point",
+        "--target-link",
+        "L_tcp",
+        "--shape",
+        "linked_arm",
+        "--seed",
+        "823",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_sphere_random_walk_l_link6_947",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "oscbf",
+        "--condition",
+        "pressure",
+        "--mode",
+        "random_walk",
+        "--target-link",
+        "L_link6",
+        "--shape",
+        "sphere",
+        "--seed",
+        "947",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    }
+  ]
+}

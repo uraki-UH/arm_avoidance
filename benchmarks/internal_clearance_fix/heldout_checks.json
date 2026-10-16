@@ -1,0 +1,7 @@
+{
+  "cases": [
+    {"name":"linked_719","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--policy","rollout_reactive","--seed","719","--shape","linked_arm","--mode","link_point","--link","L_link6","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"heldout_131","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--seed","131","--mode","link_point","--link","L_tcp","--duration","8","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"oscbf_free","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--policy","oscbf","--free","--duration","8","--output","@case_dir@"],"metrics":"comparison.json"}
+  ]
+}

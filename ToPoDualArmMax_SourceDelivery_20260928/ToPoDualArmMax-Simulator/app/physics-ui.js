@@ -174,6 +174,9 @@ export class PhysicsPanel {
   return true;
  }
  stop(message='物理OFF'){
+  if(this.pending_command){clearTimeout(this.pending_command.timer);this.pending_command.reject(Error(message));this.pending_command=null;}
+  this.can_command_robot=false;
+  this.is_command_stopped=false;
   if(this.pending_placement){const pending=this.pending_placement;this.pending_placement=null;clearTimeout(pending.timer);pending.reject(Error(message));}
   this.can_place_objects=false;
   clearInterval(this.leader_timer);this.leader_timer=null;
@@ -184,11 +187,12 @@ export class PhysicsPanel {
  start(){
   if(window.simulator?.avoidance_replay?.has_pose_control&&this.enable_robot_physics){$('physics-status').textContent='実験の姿勢を表示中です。実験終了後に別タブへ切り替えてください';return;}
   this.stop();
-  if(this.robot().pose_source===pose_sources.ros&&this.enable_robot_physics){$('physics-status').textContent='ROS追従中です。姿勢の入力元をシミュレータ操作へ切り替えてください';return;}
+  if(this.robot().pose_source===pose_sources.ros&&this.enable_robot_physics){$('physics-status').textContent='ROS現在姿勢の描画追従中です。ROS2連携でシミュレータ操作か力学追従へ切り替えてください';return;}
   if(this.robot().pose_source===pose_sources.leader&&!this.enable_robot_physics){$('physics-status').textContent='物理フォロワーにはロボットの力学が必要です';return;}
   try{
-   if(this.enable_robot_physics)this.plugins.validate_source(this.robot().pose_source);
-   const avoidance=this.enable_robot_physics?this.plugins.settings():{mode:'none'};
+   const control=window.simulator?.robot_control,control_config=this.enable_robot_physics&&control?control.physics_config():{};
+   const avoidance=this.enable_robot_physics&&(!control||control.config.command_source==='avoidance')?this.plugins.settings():{mode:'none'};
+   if(avoidance.mode!=='none')this.plugins.validate_source(this.robot().pose_source);
    const environment=this.environment,robot=this.robot();this.robot_model=robot;this.targets=robot.getPose();this.actual={...this.targets};this.base_signature=JSON.stringify([robot.position.toArray(),robot.quaternion.toArray()]);
    environment.setEditing(false);const bodies=[];this.kinematic=[];
    if(environment.table.visible)bodies.push(body_description('table',environment.table,'static'));
@@ -196,7 +200,7 @@ export class PhysicsPanel {
    robot.updateWorldMatrix(true,true);
    const enable_dynamics=this.enable_robot_physics;this.enable_dynamics=enable_dynamics;this.actual_joints=null;
    this.leader_anchor=null;this.leader_stamp_sec=null;this.is_leader_stopped=false;this.leader_received_ms=performance.now();
-   const robot_config=enable_dynamics?{model:robot.modelId,pose:this.targets,position:robot.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:robot.getWorldQuaternion(new THREE.Quaternion()).toArray(),locked_joints:[...$('physics-locks').querySelectorAll('input:checked')].map(input=>input.value),enable_self_collision:$('physics-self-collision').checked,enable_leader_follow:robot.pose_source===pose_sources.leader,max_leader_age_sec:this.max_leader_age_ms/1000}:null;
+   const robot_config=enable_dynamics?{model:robot.modelId,pose:this.targets,position:robot.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:robot.getWorldQuaternion(new THREE.Quaternion()).toArray(),locked_joints:[...$('physics-locks').querySelectorAll('input:checked')].map(input=>input.value),enable_self_collision:$('physics-self-collision').checked,enable_leader_follow:robot.pose_source===pose_sources.leader,max_leader_age_sec:this.max_leader_age_ms/1000,...control_config}:null;
    const endpoint=bridge_socket_url($('ros-endpoint').value,'/physics');
    this.update_scene_signature();this.placement_id=0;
    const socket=this.socket=new WebSocket(endpoint);
@@ -207,8 +211,12 @@ export class PhysicsPanel {
     if(this.enable_dynamics&&value.joints&&Number.isFinite(value.time_sec))this.motion_sample={model:robot.modelId,pose:value.joints,motion:value.motion??null,time_ms:value.time_sec*1000,received_ms:performance.now(),is_simulation_input:true};
     // 物理フォロワーの実測と指令処理は描画周期から独立
     if(robot.pose_source===pose_sources.leader&&value.joints){if(!this.actual_joints)this.leader_received_ms=performance.now();this.actual_joints=value.joints;this.actual=Object.fromEntries(robot.actuated.map(joint=>[joint.name,value.joints[joint.name]]));this.motion_state=value.motion??null;if(value.is_leader_stopped&&!this.is_leader_stopped)this.hold_leader('物理側のリーダー入力失効。物理の再開始が必要');}
-    this.latest=value;
-   }if(value.type==='ready'){this.can_place_objects=value.can_place_objects===true;$('physics-status').textContent='MuJoCo接続済み';environment.object_interaction?.refresh();}
+    this.latest=value;this.is_command_stopped=value.is_command_stopped===true;
+    if(this.pending_command&&value.command_id===this.pending_command.id){const pending=this.pending_command;this.pending_command=null;clearTimeout(pending.timer);pending.resolve();}
+   }if(value.type==='ready'){
+    this.can_command_robot=value.can_command_robot===true;
+    if(enable_dynamics&&control&&(control.config.control_mode!=='position'||control.config.command_source==='api'||control.config.command_source==='ros')&&(!this.can_command_robot||value.control_mode!==control.config.control_mode))throw Error('物理ブリッジの更新が必要です');
+    this.can_place_objects=value.can_place_objects===true;$('physics-status').textContent='MuJoCo接続済み';environment.object_interaction?.refresh();}
    if(value.type==='placed'&&value.placement_id===this.pending_placement?.placement_id){
     const pending=this.pending_placement;this.pending_placement=null;this.placement_id=value.placement_id;
     if((this.latest?.placement_id??0)<this.placement_id)this.latest=null;
@@ -250,9 +258,9 @@ export class PhysicsPanel {
   if(!this.socket||!this.enable_dynamics)return false;
   const socket=this.socket;
   const deadline=performance.now()+15000;
-  while(this.socket===socket&&this.scene.userData.physics_time_sec===null&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
+  while(this.socket===socket&&!this.motion_sample&&this.scene.userData.physics_time_sec===null&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
   if(this.socket!==socket)throw Error($('physics-status').textContent);
-  if(this.scene.userData.physics_time_sec===null){this.stop('物理接続が時間切れです');throw Error('物理接続が時間切れです');}
+  if(!this.motion_sample&&this.scene.userData.physics_time_sec===null){this.stop('物理接続が時間切れです');throw Error('物理接続が時間切れです');}
   return true;
  }
  sync_robot_pose(){
@@ -260,18 +268,23 @@ export class PhysicsPanel {
   if(!this.socket||!this.enable_dynamics||this.robot()!==this.robot_model)return;
   const robot=this.robot();
   // 指令値の回収と物理姿勢の維持。受信のない描画フレームでも目標への瞬間移動を防止
-  if(robot.pose_source!==pose_sources.leader)for(const [name,value] of Object.entries(robot.getPose()))if(value!==this.actual[name])this.targets[name]=value;
+  if(robot.pose_source===pose_sources.simulator)for(const [name,value] of Object.entries(robot.getPose()))if(value!==this.actual[name]){
+   this.targets[name]=value;
+   if(window.simulator?.robot_control?.config.control_mode==='position_velocity')this.has_pending_goal=true;
+  }
   const actual=this.actual_joints??this.actual;
   // 同じ実測姿勢の再適用なし。通信・描画からの重複呼出し時も関節行列の更新は差分のみ
   if(Object.entries(actual).some(([name,value])=>robot.joints[name]?.q!==value))robot.set_received_pose(actual);
  }
  set_goal_pose(pose){
-  if(!this.socket||!this.enable_dynamics||!this.plugins.can_set_goal())return false;
+  if(!this.socket||!this.enable_dynamics||!(this.plugins.can_set_goal()||window.simulator?.robot_control?.can_edit_pose))return false;
   const robot=this.robot();
   if(robot.pose_source!==pose_sources.simulator)throw Error('目標姿勢はシミュレータ操作で指定してください');
   if(!pose||Object.keys(pose).length!==robot.actuated.length||robot.actuated.some(joint=>!Number.isFinite(pose[joint.name])||pose[joint.name]<joint.lower||pose[joint.name]>joint.upper))throw Error('目標姿勢の関節角が不正です');
   // 名目目標の一括保持。描画実測の書換え・途中の補間目標の再送なし。
-  this.targets={...pose};this.send_poses();return true;
+  this.targets={...pose};
+  if(window.simulator?.robot_control?.config.control_mode==='position_velocity')this.has_pending_goal=true;
+  else this.send_poses();return true;
  }
  hold_leader(message='リーダー入力停止。物理の再開始が必要'){
   if(this.socket&&this.enable_dynamics&&this.actual)this.targets={...this.actual};
@@ -291,7 +304,39 @@ export class PhysicsPanel {
  send_poses(){
   if(!this.socket||this.socket.readyState!==WebSocket.OPEN||this.socket.bufferedAmount)return;
   const poses=this.kinematic.filter(({id})=>id!=='object_'+this.pending_placement?.item.id).map(({id,group})=>({id,position:group.getWorldPosition(new THREE.Vector3()).toArray(),quaternion:group.getWorldQuaternion(new THREE.Quaternion()).toArray()}));
-  this.socket.send(JSON.stringify({type:'poses',poses,joints:this.enable_dynamics?this.targets:undefined,leader_stamp_sec:this.leader_stamp_sec}));
+  const control=window.simulator?.robot_control;
+  if(control?.config.control_mode==='position_velocity'&&control.config.command_source==='browser'&&this.has_pending_goal&&!this.pending_command){
+   const position=Object.fromEntries(Object.entries(this.targets).filter(([name])=>!document.querySelector(`#physics-locks input[value="${name}"]:checked`)));
+   this.has_pending_goal=false;
+   if(Object.keys(position).length)this.send_command({mode:'position_velocity',position,velocity:Object.fromEntries(Object.keys(position).map(name=>[name,0]))},'browser').catch(error=>{$('physics-status').textContent=error.message;});
+  }
+  const can_send_joints=this.enable_dynamics&&(!control||control.config.control_mode==='position'&&['browser','leader','avoidance'].includes(control.config.command_source));
+  this.socket.send(JSON.stringify({type:'poses',poses,joints:can_send_joints?this.targets:undefined,leader_stamp_sec:this.leader_stamp_sec}));
+ }
+ send_command(command,source){
+  if(!this.socket||this.socket.readyState!==WebSocket.OPEN||!this.can_command_robot)throw Error('関節指令に対応した物理接続が必要です');
+  const mode=window.simulator?.robot_control?.config.control_mode;
+  const required={position:['position'],position_velocity:['position','velocity'],velocity:['velocity'],torque:['effort']}[mode];
+  const allowed=mode==='position_velocity'?[...required,'effort']:required;
+  if(!command||command.mode!==mode||Object.keys(command).some(key=>key!=='mode'&&!allowed.includes(key)))throw Error('実行中の制御方式と指令項目が一致しません');
+  for(const field of required)if(!command[field]||!Object.keys(command[field]).length)throw Error('指令項目が必要です: '+field);
+  const names=Object.keys(command[required[0]]);
+  if(this.pending_command)throw Error('前の関節指令の反映待ちです');
+  for(const field of allowed)if(command[field]){
+   if(typeof command[field]!=='object'||Array.isArray(command[field]))throw Error('指令値は関節名と数値の組が必要です');
+   for(const [name,value] of Object.entries(command[field])){
+    const joint=this.robot().actuated.find(joint=>joint.name===name);
+    if(!joint||!Number.isFinite(value)||typeof value!=='number'||!names.includes(name)||document.querySelector(`#physics-locks input[value="${name}"]:checked`))throw Error('関節指令の名前・値・固定設定が不正です');
+    if(field==='position'&&(value<joint.lower||value>joint.upper)||field==='velocity'&&Math.abs(value)>joint.velocity||field==='effort'&&Math.abs(value)>joint.effort)throw Error('関節指令がURDF上限を超えています');
+   }
+   if(required.includes(field)&&Object.keys(command[field]).length!==names.length)throw Error('指令の関節集合が一致しません');
+  }
+  return new Promise((resolve,reject)=>{
+   const id=this.command_id=(this.command_id??0)+1,timer=setTimeout(()=>this.stop('関節指令の反映が時間切れです'),5000);
+   this.pending_command={id,timer,resolve,reject};
+   try{this.socket.send(JSON.stringify({type:'command',source,command,command_id:id}));if(command.position)Object.assign(this.targets,command.position);}
+   catch(error){this.stop(error.message);}
+  });
  }
  tick(now){
   const current_robot=this.robot();
@@ -325,7 +370,7 @@ export class PhysicsPanel {
    }
    this.environment.renderer.shadowMap.needsUpdate=true;this.environment.syncObject();this.environment.refresh_selection();
    this.update_scene_signature();
-   this.scene.userData.physics_time_sec=frame.time_sec;if(!frame.avoidance)$('physics-status').textContent=`MuJoCo実行中 · ${frame.time_sec.toFixed(2)} s · 接触 ${frame.contacts}件`;
+   this.scene.userData.physics_time_sec=frame.time_sec;if(!frame.avoidance)$('physics-status').textContent=`MuJoCo実行中 · ${frame.time_sec.toFixed(2)} s · 接触 ${frame.contacts}件${frame.is_command_stopped?' · ROS指令待ち':''}`;
   }
   if(current_robot.pose_source===pose_sources.leader&&this.is_leader_stopped)$('physics-status').textContent=this.leader_detail??'リーダー入力停止。物理の再開始が必要';
   if(current_robot.pose_source!==pose_sources.leader&&now-this.last_ms>=33){this.last_ms=now;this.send_poses();}

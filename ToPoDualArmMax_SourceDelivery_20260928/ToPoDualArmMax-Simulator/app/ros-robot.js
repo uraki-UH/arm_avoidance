@@ -46,9 +46,18 @@ export class RosRobotPanel{
   this.joint_stream=new RosJointStream(this);
   this.instance_panel=new RobotInstancePanel(this);
   this.follow_panel=new robot_follow_panel(this);
+  const preview=document.createElement('details');preview.innerHTML='<summary>軌道の表示プレビュー（力学なし）</summary>';panel.before(preview);preview.append(panel);panel.querySelector('h3').remove();
   this.sync_placement_controls();
   $('ros-command-stop').onclick=()=>this.stop();
-  $('ros-command-enable').onchange=()=>{if($('ros-command-enable').checked){this.joint_stream.stop();this.instance_panel.set_source('simulator');}this.active=null;this.sequence=null;this.generation++;this.set_connection_state('trajectory',false);};
+  $('ros-command-enable').onchange=()=>{
+   const enable_preview=$('ros-command-enable').checked;
+   if(enable_preview){
+    try{if(window.simulator?.robot_control)window.simulator.robot_control.configure({usage:'preview'});else window.simulator?.physics_panel?.stop();}
+    catch(error){$('ros-command-enable').checked=false;$('ros-robot-status').textContent=error.message;return;}
+    this.joint_stream.stop();this.instance_panel.set_source('simulator');$('ros-command-enable').checked=true;
+   }
+   this.active=null;this.sequence=null;this.generation++;this.set_connection_state('trajectory',false);
+  };
   $('ros-endpoint').addEventListener('change',()=>this.stop());
   // 手動操作・モデル切替・タブ非表示での受信解除と再生停止
   document.addEventListener('pointerdown',event=>{if(this.active&&!$('ros-panel').contains(event.target)&&!placement_panel.contains(event.target)&&event.target!==this.rgbd.renderer.domElement)this.stop();},true);

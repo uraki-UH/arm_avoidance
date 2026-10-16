@@ -1,4 +1,4 @@
-import {robot_snapshot,attach_camera,bridge_socket_url,pose_sources} from './robot-ros-state.js';
+import {robot_snapshot,attach_camera,bridge_socket_url,pose_sources,pose_source_labels} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 const state_outputs=Object.freeze(['joints','base','tf']);
 
@@ -6,16 +6,36 @@ const state_outputs=Object.freeze(['joints','base','tf']);
 export class RosJointStream {
  constructor(panel){
   this.panel=panel;this.socket=null;this.latest=null;this.is_ready=false;this.state_hz=100;this.next_snapshot_ms=0;this.motion_sample=null;this.is_simulation_input=false;
-  const controls=document.createElement('section');
-  controls.innerHTML=`<h3>ロボット状態の送受信</h3><label>Hz <input id="ros-joints-hz" type="number" min="1" max="200" value="100"></label><label class="field-label">受信 JointState トピック<input id="ros-joints-topic" value="/joint_states"></label><label><input id="ros-state-all" type="checkbox"> ロボット状態をROSへ送信（関節角・配置・TF）</label><label><input id="ros-joints-receive" type="checkbox"> ROSの現在関節角を追従表示</label><pre id="ros-joints-status">通信OFF</pre>`;
+  const controls=document.createElement('div');controls.id='ros-joints-panel';
+  controls.innerHTML=`<label id="robot-pose-source-label">シミュレータの追従<select id="robot-pose-source">${Object.entries(pose_source_labels).map(([value,label])=>`<option value="${value}">${label}</option>`).join('')}</select></label><label id="ros-joints-topic-field" class="field-label">現在姿勢トピック（JointState）<input id="ros-joints-topic" value="/joint_states"></label><label id="ros-target-topic-field" class="field-label"><span id="ros-target-topic-label"></span><input id="ros-target-topic" value="/leader/joint_states"></label><label>Hz <input id="ros-joints-hz" type="number" min="1" max="200" value="100"></label><label><input id="ros-state-all" type="checkbox"> ロボット状態をROSへ送信（関節角・配置・TF）</label><label><input id="ros-joints-receive" type="checkbox"> <span id="ros-joints-receive-label"></span></label><pre id="ros-joints-status">通信OFF</pre>`;
   $('ros-receive-panel').before(controls);
-  for(const id of ['ros-state-all','ros-joints-hz','ros-joints-topic','ros-joints-receive'])$(id).addEventListener('change',()=>{
-   if(id==='ros-joints-topic')this.is_simulation_input=false;
+  $('robot-pose-source').onchange=()=>{
+   const source=$('robot-pose-source').value,checkbox=$('ros-joints-receive');
+   checkbox.checked=source===pose_sources.ros||source===pose_sources.leader;
+   checkbox.dispatchEvent(new Event('change'));
+  };
+  for(const id of ['ros-state-all','ros-joints-hz','ros-joints-topic','ros-target-topic','ros-joints-receive'])$(id).addEventListener('change',()=>{
+   if(id==='ros-joints-topic'||id==='ros-target-topic')this.is_simulation_input=false;
    if(id==='ros-state-all'&&$(id).checked&&!this.enable_duplex)$('ros-joints-receive').checked=false;
    if(id==='ros-joints-receive'&&$(id).checked){if(!this.enable_duplex)$('ros-state-all').checked=false;panel.active=null;$('ros-command-enable').checked=false;}
    this.connect();
   });
   $('ros-endpoint').addEventListener('change',()=>{this.is_simulation_input=false;});
+  this.update_input_controls();
+ }
+ // 描画姿勢と力学入力で独立したトピック設定。切替時の値の流用なし。
+ topic_input(source=$('robot-pose-source').value){return $(source===pose_sources.leader?'ros-target-topic':'ros-joints-topic');}
+ set_input_topic(source,topic){this.topic_input(source).value=topic;}
+ update_input_controls(){
+  const source=$('robot-pose-source').value;
+  const control=window.simulator?.robot_control;
+  const can_receive=!control||control.config.usage==='observation'||control.config.command_source==='leader'||!!this.follow_config;
+  const is_absolute=this.follow_config?.profiles[this.follow_config.profile]?.follow_mode==='absolute';
+  $('ros-joints-topic-field').hidden=source!==pose_sources.ros;
+  $('ros-target-topic-field').hidden=source!==pose_sources.leader;
+  $('ros-target-topic-label').textContent=is_absolute?'目標角トピック（JointState・絶対追従）':'リーダー姿勢トピック（JointState・相対追従）';
+  $('ros-joints-receive-label').textContent=source===pose_sources.ros?'現在姿勢を受信':source===pose_sources.leader?(is_absolute?'目標角を受信':'リーダー姿勢を受信'):'ROS入力を受信';
+  $('ros-joints-receive').parentElement.hidden=!can_receive;
  }
  close(){
   const socket=this.socket;this.socket=null;if(socket)socket.terminate();this.latest=null;this.motion_sample=null;this.is_ready=false;this.next_snapshot_ms=0;
@@ -27,6 +47,7 @@ export class RosJointStream {
  // CLIなどの外部シミュレーション実測への表示接続。送信・ブラウザ内の力学はOFF。
  receive_topic(topic,endpoint,is_simulation_input=false){
   if(this.follow_config)throw Error('共通接続構成を解除してから、外部シミュレーションへ接続してください');
+  window.simulator?.robot_control?.observe_source(pose_sources.ros);
   this.panel.stop();window.simulator?.physics_panel?.stop();
   if(endpoint){$('ros-endpoint').value=endpoint;$('ros-endpoint').dispatchEvent(new Event('change'));}
   this.is_simulation_input=is_simulation_input;
@@ -40,7 +61,9 @@ export class RosJointStream {
  }
  connect(){
   this.close();
-  this.panel.instance_panel.set_source($('ros-joints-receive').checked?($('robot-pose-source').value===pose_sources.leader?pose_sources.leader:pose_sources.ros):pose_sources.simulator);
+  const control=window.simulator?.robot_control;
+  if(control&&control.config.usage==='simulation'&&!['leader'].includes(control.config.command_source))$('ros-joints-receive').checked=false;
+  this.panel.instance_panel.set_source(control?.config.usage==='observation'?pose_sources.ros:$('ros-joints-receive').checked?($('robot-pose-source').value===pose_sources.leader?pose_sources.leader:pose_sources.ros):control&&control.config.usage==='simulation'&&!control.can_edit_pose?pose_sources.command:pose_sources.simulator);
   if(!this.outputs().length&&!$('ros-joints-receive').checked){$('ros-joints-status').textContent='通信OFF';return;}
   const hz=Number($('ros-joints-hz').value);
   if(!Number.isFinite(hz)||hz<1||hz>200){this.stop();$('ros-joints-status').textContent='通信上限は1～200 Hzです';return;}
@@ -80,7 +103,7 @@ export class RosJointStream {
    }catch(error){fail(error.message);}
   };
   socket.onerror=()=>fail('関節WebSocketへ接続できません。ブリッジの更新と起動を確認してください');
-  socket.postMessage({type:'connect',url:url.href,send:this.outputs().length>0,config:{type:'config',model,hz,receive:$('ros-joints-receive').checked,topic:$('ros-joints-topic').value,enable_fresh_input:this.panel.rgbd.robot.pose_source===pose_sources.leader,max_state_age_sec:window.simulator?.physics_panel?.max_leader_age_ms/1000}});
+  socket.postMessage({type:'connect',url:url.href,send:this.outputs().length>0,config:{type:'config',model,hz,receive:$('ros-joints-receive').checked,topic:this.topic_input().value,enable_fresh_input:this.panel.rgbd.robot.pose_source===pose_sources.leader,max_state_age_sec:window.simulator?.physics_panel?.max_leader_age_ms/1000}});
   this.tick();
  }
  // 描画側の状態取得。通信上限より低頻度の設定では不要なTF計算とWorker転送を省略

@@ -1,6 +1,7 @@
+import {pose_sources,pose_source_labels} from './robot-ros-state.js';
 const $=id=>document.getElementById(id);
 const role_labels=Object.freeze({none:'指定なし',s:'シミュレータ',r:'実機リーダー',f:'実機フォロワー',s_and_f:'シミュレータ＋実機フォロワー'});
-const mode_labels=Object.freeze({manual:'手動操作',display:'表示のみ',dynamics:'物理で追従'});
+const mode_labels=Object.freeze({manual:pose_source_labels[pose_sources.simulator],display:pose_source_labels[pose_sources.ros],dynamics:pose_source_labels[pose_sources.leader]});
 
 function connection_roles(profile){
  const has_simulator=profile.simulator_source!=='none',has_follower=profile.follower_source!=='none';
@@ -33,8 +34,9 @@ function set_options(select,entries,preferred){
 export class robot_follow_panel {
  constructor(panel){
   this.panel=panel;this.session_id='';this.config=null;this.is_busy=false;this.is_polling=false;this.enable_heartbeat=false;this.has_pending_selection=false;
-  const section=document.createElement('section');section.innerHTML=`<h3>ロボットの追従</h3><div class="robot-follow-roles"><label>リーダー<select id="robot-follow-leader"></select></label><label>フォロワー<select id="robot-follow-follower"></select></label></div><label id="robot-follow-mode-label" hidden>追従方法<select id="robot-follow-mode" disabled></select></label><div class="row-actions"><button id="robot-follow-apply" disabled>接続を適用</button><button id="robot-follow-start-s" disabled>シミュレータの物理を開始</button></div><pre id="robot-follow-paths">共通launch未接続</pre><pre id="robot-follow-status"></pre><details><summary>実機フォロワーの操作</summary><div class="row-actions"><button id="robot-follow-enable" disabled>出力を準備</button><button id="robot-follow-follow" disabled>追従を開始</button><button id="robot-follow-stop" disabled>停止</button><button id="robot-follow-reset" disabled>停止解除・出力OFF</button><button id="robot-follow-torque_off" disabled>トルクOFF</button></div></details>`;
+  const section=document.createElement('section');section.id='robot-follow-panel';section.innerHTML=`<h3>ロボットの追従</h3><div class="robot-follow-roles"><label>リーダー<select id="robot-follow-leader"></select></label><label>フォロワー<select id="robot-follow-follower"></select></label></div><label id="robot-follow-mode-label" hidden>シミュレータの追従<select id="robot-follow-mode" disabled></select></label><div class="row-actions"><button id="robot-follow-apply" disabled>接続を適用</button><button id="robot-follow-start-s" disabled>シミュレータの物理を開始</button></div><pre id="robot-follow-paths">共通launch未接続</pre><pre id="robot-follow-status"></pre><details><summary>実機フォロワーの操作</summary><div class="row-actions"><button id="robot-follow-enable" disabled>出力を準備</button><button id="robot-follow-follow" disabled>追従を開始</button><button id="robot-follow-stop" disabled>停止</button><button id="robot-follow-reset" disabled>停止解除・出力OFF</button><button id="robot-follow-torque_off" disabled>トルクOFF</button></div></details>`;
   $('ros-receive-panel').before(section);
+  $('robot-follow-mode-label').after($('ros-joints-panel'));
   for(const id of ['leader','follower','mode']){
    $('robot-follow-'+id).disabled=false;
    $('robot-follow-'+id).onchange=()=>{this.has_pending_selection=true;this.update_choices();};
@@ -82,7 +84,10 @@ export class robot_follow_panel {
    return [value,label];
   });
   set_options(mode,modes,preferred.mode);
-  $('robot-follow-mode-label').hidden=matches.length<=1;
+  // 単独のROS入力と共通接続構成の排他的な編集。同じ追従方法の二重表示なし。
+  const has_profile_selection=!!this.config||leader.value!=='none'||follower.value!=='none';
+  $('robot-pose-source-label').hidden=has_profile_selection||!!window.simulator?.robot_control;
+  $('robot-follow-mode-label').hidden=!has_profile_selection||matches.length<=1;
  }
  endpoint(){return new URL('/api/follow',$('ros-endpoint').value);}
  async request(action,extra={}){
@@ -105,7 +110,9 @@ export class robot_follow_panel {
   const choice=this.selection(),has_connection=!!this.session_id;
   if(this.session_id){window.simulator?.physics_panel?.hold_leader('追従管理の接続失効');this.panel.joint_stream.stop();}
   this.session_id='';this.config=null;this.panel.joint_stream.enable_duplex=false;this.panel.joint_stream.follow_config=null;
-  for(const id of ['robot-pose-source','ros-joints-topic','ros-joints-receive','ros-state-all'])$(id).disabled=false;
+  for(const id of ['robot-pose-source','ros-joints-topic','ros-target-topic','ros-joints-receive','ros-state-all'])$(id).disabled=false;
+  this.panel.joint_stream.update_input_controls();
+  window.simulator?.robot_control?.render();
   if(has_connection){this.has_pending_selection=true;this.update_choices(choice,true);}
   for(const id of ['apply','start-s','enable','follow','stop','reset','torque_off'])$('robot-follow-'+id).disabled=true;
   $('robot-follow-paths').textContent='未接続 · 接続後に適用できます';
@@ -136,13 +143,15 @@ export class robot_follow_panel {
   const pending=this.has_pending_selection?this.selection():null;
   this.session_id=config.session_id;this.config=config;
   const profile=config.profiles[config.profile];
+  window.simulator?.robot_control?.follow_config(config);
   this.update_choices(pending??connection_choice(profile),!!pending);
   for(const id of ['leader','follower','mode','apply','stop','reset','torque_off'])$('robot-follow-'+id).disabled=false;
   const stream=this.panel.joint_stream;stream.follow_config=config;stream.enable_duplex=true;
   const source=profile.simulator_mode==='manual'?'simulator':profile.simulator_mode==='display'?'ros':'leader';
-  $('robot-pose-source').value=source;$('ros-joints-topic').value=config.simulator_target_topic;
+  $('robot-pose-source').value=source;
+  if(source!==pose_sources.simulator)stream.set_input_topic(source,config.simulator_target_topic);
   $('ros-joints-receive').checked=source!=='simulator';$('ros-state-all').checked=true;
-  for(const id of ['robot-pose-source','ros-joints-topic','ros-joints-receive','ros-state-all'])$(id).disabled=true;
+  for(const id of ['robot-pose-source','ros-joints-topic','ros-target-topic','ros-joints-receive','ros-state-all'])$(id).disabled=true;
   if(profile.simulator_mode==='dynamics'){const physics=window.simulator?.physics_panel;if(physics){physics.enable_robot_physics=true;physics.max_leader_age_ms=config.max_state_age_sec*1000;}}
   stream.connect();
   const paths=[];

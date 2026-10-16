@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export const pose_sources = Object.freeze({simulator: 'simulator', ros: 'ros', leader: 'leader'});
+export const pose_sources = Object.freeze({simulator: 'simulator', ros: 'ros', leader: 'leader', command: 'command'});
 
 const vector = (s, fallback = [0,0,0]) => s ? s.trim().split(/\s+/).map(Number) : fallback;
 const direct = (e, tag) => [...e.children].filter(c => c.tagName === tag);
@@ -45,6 +45,7 @@ export class Robot extends THREE.Group {
         lower: type === 'continuous' ? -Infinity : +(limit?.getAttribute('lower') ?? 0),
         upper: type === 'continuous' ? Infinity : +(limit?.getAttribute('upper') ?? 0),
         velocity: +(limit?.getAttribute('velocity') ?? 2),
+        effort: +(limit?.getAttribute('effort') ?? 0),
         mimic: mimic ? {joint: mimic.getAttribute('joint'), multiplier: +(mimic.getAttribute('multiplier') ?? 1), offset: +(mimic.getAttribute('offset') ?? 0)} : null
       };
       const joint = this.joints[name];

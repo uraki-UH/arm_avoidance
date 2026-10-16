@@ -16,11 +16,119 @@ import numpy as np
 from gng_inputs import workspace, load_models
 from gng_avoidance import independent_policy, check_kinematics
 from gng_sphere_avoidance import (load_graph, motion_sequence_predictor, representative_index,
-                                  sphere_field, sphere_rollout_policy, cartesian_task)
-from physics_scene import PhysicsScene
-from dual_arm_avoidance_geometry import robot_geometry
+                                  sphere_field, sphere_rollout_policy, cartesian_task, joint_velocity_command)
+from physics_scene import PhysicsScene, compiled_model
+from physics_robot import origin as physics_origin
+from dual_arm_avoidance_geometry import robot_geometry, resolve_mesh_path
 from pursuit_obstacle import pursuit_obstacle, capsule_field
 from pursuit_cbf import pursuit_cbf, angle_delta
+
+
+class internal_clearance_checker:
+    """計画・実測共通の内部離隔。球による絞込み後だけの凸形状照合。"""
+
+    def __init__(self, geometry, urdf_path, min_clearance_th=.005):
+        import mujoco
+        self.geometry, self.mujoco = geometry, mujoco
+        self.min_clearance_th = min_clearance_th
+        self.coarse_check = None
+        self.num_refined_poses = self.num_shape_checks = 0
+        self.last_violations = []
+        root = et.Element('mujoco', model='internal_clearance')
+        et.SubElement(root, 'compiler', angle='radian')
+        asset, world = et.SubElement(root, 'asset'), et.SubElement(root, 'worldbody')
+        self.link_geoms = {}
+        geom_links = []
+        path = Path(urdf_path)
+        for link in et.parse(path).getroot().findall('link'):
+            link_idx = geometry.link_indices[link.get('name')]
+            self.link_geoms[link_idx] = []
+            for shape_idx, shape in enumerate(link.findall('collision') or link.findall('visual')):
+                form = shape.find('geometry')
+                mesh = form.find('mesh')
+                if mesh is not None:
+                    mesh_name = f'link_{link_idx}_{shape_idx}'
+                    et.SubElement(asset, 'mesh', name=mesh_name,
+                        file=str(resolve_mesh_path(mesh.get('filename'), path.parent)), scale=mesh.get('scale', '1 1 1'))
+                    attrs = dict(type='mesh', mesh=mesh_name)
+                elif form.find('box') is not None:
+                    attrs = dict(type='box', size=' '.join(map(str, np.fromstring(form.find('box').get('size'), sep=' ')/2)))
+                elif form.find('sphere') is not None:
+                    attrs = dict(type='sphere', size=form.find('sphere').get('radius'))
+                elif form.find('cylinder') is not None:
+                    cylinder = form.find('cylinder')
+                    attrs = dict(type='cylinder', size=f"{cylinder.get('radius')} {float(cylinder.get('length'))/2}")
+                else:
+                    raise ValueError('内部離隔の未対応形状: '+link.get('name'))
+                self.link_geoms[link_idx].append(len(geom_links))
+                geom_links.append(link_idx)
+                et.SubElement(world, 'geom', **attrs, **physics_origin(shape, mujoco), contype='0', conaffinity='0')
+        self.num_robot_geoms = len(geom_links)
+        self.environment_names = {}
+        for env_idx, (kind, position, rotation, half_size) in enumerate(geometry.environment_shapes):
+            link_idx = len(geometry.link_indices)+env_idx
+            quat = np.zeros(4);mujoco.mju_mat2Quat(quat, rotation.reshape(9))
+            et.SubElement(world, 'geom', type=kind, pos=' '.join(map(str, position)),
+                quat=' '.join(map(str, quat)), size='10 10 .1' if kind=='plane' else ' '.join(map(str, half_size)),
+                contype='0', conaffinity='0')
+            self.link_geoms[link_idx] = [len(geom_links)]
+            geom_links.append(-1)
+            self.environment_names[link_idx] = 'environment_'+kind
+        self.model = compiled_model(mujoco, root, workspace/'docker/runtime/pursuit-clearance')
+        self.data = mujoco.MjData(self.model)
+        mujoco.mj_forward(self.model, self.data)
+        self.geom_links = np.asarray(geom_links[:self.num_robot_geoms])
+        self.local_frames = np.repeat(np.eye(4)[None], self.num_robot_geoms, axis=0)
+        for idx in range(self.num_robot_geoms):
+            self.local_frames[idx,:3,3] = self.model.geom_pos[idx]
+            rotation = np.empty(9);mujoco.mju_quat2Mat(rotation, self.model.geom_quat[idx])
+            self.local_frames[idx,:3,:3] = rotation.reshape(3,3)
+        pairs = geometry.sphere_links[geometry.self_pairs]
+        arm_links = geometry.sphere_links[geometry.is_arm]
+        env_pairs = [np.column_stack((arm_links, np.full(len(arm_links), len(geometry.link_indices)+idx)))
+                     for idx in range(len(geometry.environment_shapes))]
+        self.gap_pairs = np.concatenate([pairs, *env_pairs])
+        self.link_names = {idx:name for name,idx in geometry.link_indices.items()}
+        self.link_names.update(self.environment_names)
+
+    def check(self, positions, centers=None, link_frames=None):
+        """単一姿勢・姿勢列の共通距離基準。物理シーンへの書込みなし。"""
+        positions = np.asarray(positions)
+        centers = self.geometry.centers(positions) if centers is None else centers
+        is_clear = (self.coarse_check(centers, self.min_clearance_th) if self.coarse_check is not None else
+                    self.geometry.has_internal_clearance(centers, self.min_clearance_th))
+        flags = np.asarray(is_clear).reshape(-1).copy()
+        rows = np.flatnonzero(~flags)
+        if positions.ndim==1:
+            self.last_violations = []
+        if not len(rows):
+            return bool(flags[0]) if positions.ndim==1 else flags.reshape(positions.shape[:-1])
+        poses = positions.reshape(-1, positions.shape[-1])
+        frames = (self.geometry.link_transforms(poses[rows]) if link_frames is None else
+                  np.asarray(link_frames).reshape(-1, len(self.geometry.link_indices),4,4)[rows])
+        values = np.asarray(centers).reshape(-1, len(self.geometry.radii),3)[rows]
+        for row, transforms, sphere_centers in zip(rows, frames, values):
+            self.num_refined_poses += 1
+            world_frames = transforms[self.geom_links]@self.local_frames
+            self.data.geom_xpos[:self.num_robot_geoms] = world_frames[:,:3,3]
+            self.data.geom_xmat[:self.num_robot_geoms] = world_frames[:,:3,:3].reshape(-1,9)
+            gaps = self.geometry.internal_clearances(sphere_centers)
+            pairs = np.unique(self.gap_pairs[gaps<self.min_clearance_th], axis=0)
+            flags[row] = True
+            for first, second in pairs:
+                gap = self.min_clearance_th
+                for first_geom in self.link_geoms[first]:
+                    for second_geom in self.link_geoms[second]:
+                        self.num_shape_checks += 1
+                        gap = min(gap, self.mujoco.mj_geomDistance(self.model, self.data,
+                            first_geom, second_geom, self.min_clearance_th, None))
+                if gap<self.min_clearance_th:
+                    flags[row] = False
+                    if positions.ndim==1:
+                        self.last_violations.append(dict(links=[self.link_names[first],self.link_names[second]],gap_m=float(gap)))
+                    else:
+                        break
+        return bool(flags[0]) if positions.ndim==1 else flags.reshape(positions.shape[:-1])
 
 
 def make_scene(pose, names, active, bodies=None, position_limits=None):
@@ -92,13 +200,8 @@ def position_limit_status(positions, names, limits):
 
 
 def apply_target(scene, names, active, positions, velocity, target):
-    desired = np.clip((target[active]-positions[active])/.1,-2.,2.)
     limits = scene.model.jnt_range[[scene.robot.ids[names[idx]] for idx in active]]
-    # 可動域手前の減速と目標飽和。物理関節ストッパーとは独立の指令制限。
-    lower = np.maximum(positions[active]-limits[:,0]-.05,0.)
-    upper = np.maximum(limits[:,1]-positions[active]-.05,0.)
-    desired = np.clip(desired,-np.minimum(3*lower,np.sqrt(16*lower)),np.minimum(3*upper,np.sqrt(16*upper)))
-    desired = np.clip(desired,velocity[active]-.4,velocity[active]+.4)
+    desired = joint_velocity_command(positions[active], velocity[active], (target[active]-positions[active])/.1, limits)
     command = positions.copy()
     command[active] = np.clip(positions[active]+desired*.1,limits[:,0],limits[:,1])
     scene.robot.set_targets(dict(zip(names,map(float,command))))
@@ -216,6 +319,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     if type(config.get('enable_periodic_angles',False)) is not bool:
         raise ValueError('連続関節の周期扱いは真偽値')
     joint_limit_sources = configure_position_limits(geometry,config)
+    internal_checker = internal_clearance_checker(geometry, params['urdf_path'])
     target_link = config.get('target_link','L_tcp')
     if target_link not in geometry.link_indices:
         raise ValueError(f'追跡対象リンク名の不正: {target_link}')
@@ -236,7 +340,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
             raise ValueError('目標変動の指定不正')
         poses['b'][geometry.joint_names.index(name)] += math.radians(value)
     for pose in poses.values():
-        if np.any(pose<geometry.limits[:,0]) or np.any(pose>geometry.limits[:,1]) or not geometry.has_internal_clearance(geometry.centers(pose),.005):
+        if np.any(pose<geometry.limits[:,0]) or np.any(pose>geometry.limits[:,1]) or not internal_checker.check(pose):
             raise ValueError('開始・目標姿勢の位置制限または自己干渉')
     task_object = cartesian_task(geometry,active,poses,task.get('eef_link','L_tcp'),
         float(task.get('max_eef_position_error_th',.015)),math.radians(float(task.get('max_eef_orientation_error_deg_th',3.))))
@@ -304,12 +408,14 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     if not is_cbf:
         graph = load_graph(directory/metadata['gng_file'])
         index = representative_index(geometry,active,poses['a'],graph)
+        internal_checker.coarse_check = lambda centers, margin:index.internal_clear(geometry,centers,margin)
         if policy_name.startswith('rollout_'):
             rollout = sphere_rollout_policy(geometry,active,target_link,graph,
                 mode=dict(rollout_reactive='reactive',rollout_cv='constant_velocity',rollout_sequence='sequence')[policy_name],
                 candidate_metric=config.get('candidate_metric','joint'),memory=memory,node_index=index,
                 horizon_sec=float(config.get('horizon_sec',.4)),margin=float(config.get('margin_m',.08)),
-                task_weight=float(config.get('task_weight',.12)),target_offset=target_offset,task=control_task)
+                task_weight=float(config.get('task_weight',.12)),target_offset=target_offset,task=control_task,
+                internal_checker=internal_checker)
             if is_continuous:
                 rollout.samples_ms = deque(maxlen=1200)
         else:
@@ -458,7 +564,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         num_protected_contacts += int(has_protected_contact)
         contact_sec += .01*has_contact
         proxy_contact_sec += .01*(gap<0)
-        is_internal_clear = bool(geometry.has_internal_clearance(actual_centers,.005))
+        is_internal_clear = internal_checker.check(positions, actual_centers)
         internal_failure_sec += .01*(not is_internal_clear)
         num_internal_frames = 0 if is_internal_clear else num_internal_frames+1
         if has_contact and first_contact is None:
@@ -490,6 +596,8 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         if failure_reason:
             outcome = 'attacker_loss' if failure_reason.startswith('attacker_') else 'attacker_win' if failure_reason=='target_touch' else 'robot_failure'
             failure_details = dict(contact_links=sorted(set(contact_links+environment_contacts)),has_protected_contact=has_protected_contact,contacts=contact_details)
+            if failure_reason=='internal_interference':
+                failure_details['internal_clearance'] = internal_checker.last_violations
             if failure_reason in ('physical_joint_limit','planning_domain_exit'):
                 failure_details['joints'] = limit_joints
         evaluated_sec = now+.01
@@ -512,7 +620,11 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
             goal = 'a' if goal=='b' else 'b'
         if frame%5==0 or failure_reason or (num_frames is not None and frame==num_frames-1):
             motion = scene.robot.motion_state()
+            # ロールアウト・予測の時間幅と同じ長さの直近実軌跡。時間幅のない方式では軌跡なし。
+            predictor = rollout if rollout is not None else getattr(legacy,'predictor',None)
+            obstacle_trail_sec = float(predictor.horizon_sec) if predictor is not None else 0.
             row = dict(time_sec=evaluated_sec,joints=dict(zip(geometry.joint_names,map(float,positions))),
+                obstacle_trail_sec=obstacle_trail_sec,
                 motion={field:{name:values[name] for name in geometry.joint_names if name in values} for field,values in motion.items()},
                 task_goal=evaluated_goal,num_arrivals=arrivals,task_position_error_m=task_position_error_m,task_orientation_error_rad=task_orientation_error_rad,
                 eef=actual_eef.tolist(),sphere=center.tolist(),sphere_radius_m=radius,phase=phase,
@@ -556,8 +668,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         qp_no_solution_sec=phase_sec.get('qp_no_solution',0.),
         first_qp_no_solution_sec=cbf.first_no_solution_sec if cbf is not None and cbf.first_no_solution_sec is not None else (None if is_continuous else duration),
         max_num_consecutive_qp_no_solution=cbf.max_num_consecutive_no_solution if cbf is not None else 0,
-        num_qp_recoveries=cbf.num_recoveries if cbf is not None else 0)
-    metrics['startup_ms'] = startup_stages_ms['ready']
+        num_qp_recoveries=cbf.num_recoveries if cbf is not None else 0,
+        num_coordinated_selections=rollout.num_coordinated_selections if rollout is not None else 0)
+    metrics.update(startup_ms=startup_stages_ms['ready'],num_internal_refined_poses=internal_checker.num_refined_poses,
+                   num_internal_shape_checks=internal_checker.num_shape_checks)
     num_evaluated = int(round(evaluated_sec/.01))
     metrics.update(num_arrivals_with_posture_dev=num_arrivals_with_posture_dev,
         task_position_rms_error_m=math.sqrt(position_error_squared/num_evaluated) if num_evaluated else None,

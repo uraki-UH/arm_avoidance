@@ -1,0 +1,48 @@
+{
+  "scope": "topo_dual_arm_max_long / chasing_sphere",
+  "internal_clearance": {
+    "min_clearance_m": 0.005,
+    "shared_by": ["initial_pose", "gng_rollout", "measured_state"],
+    "coarse": "existing_enclosing_spheres",
+    "fine": "urdf_convex_collision_shapes_with_visual_fallback",
+    "has_coarse_only_failure": false,
+    "has_physics_state_mutation": false,
+    "previous_false_stop_pose_is_clear": true,
+    "penetrating_self_and_floor_cases_are_rejected": true
+  },
+  "regression": {"num_tests": 85, "num_passed": 85},
+  "continuous": {"num_frames": 6, "evaluated_sec": 0.26, "has_recording": false, "has_failure": false},
+  "comparison": [
+    {"condition":"sphere_distal_l_link5_401","before_reason":"internal_interference","before_sec":4.45,"after_reason":"target_touch","after_sec":6.97,"before_arrivals":1,"after_arrivals":1},
+    {"condition":"sphere_distal_l_link5_40","before_reason":"target_touch","before_sec":6.32,"after_reason":"target_touch","after_sec":3.8,"before_arrivals":1,"after_arrivals":1},
+    {"condition":"free_8_sec","before_reason":"","before_sec":8,"after_reason":"","after_sec":8,"before_arrivals":3,"after_arrivals":3},
+    {"condition":"random_walk_l_link6_947","before_reason":"","before_sec":12,"after_reason":"","after_sec":12,"before_arrivals":4,"after_arrivals":4}
+  ],
+  "final_additional_conditions": [
+    {"condition":"reactive_linked_l_link6_719","failure_reason":"","evaluated_sec":12,"num_arrivals":0,"propose_mean_ms":42.36},
+    {"condition":"cv_sphere_l_tcp_131","failure_reason":"target_touch","evaluated_sec":3.99,"num_arrivals":0,"propose_mean_ms":28.29},
+    {"condition":"oscbf_free","failure_reason":"","evaluated_sec":8,"num_arrivals":7,"propose_mean_ms":4.46}
+  ],
+  "raw_results": {
+    "before": "log/artifacts/internal_clearance_fix/paired_run/001_before_*",
+    "final": "log/artifacts/internal_clearance_fix/retained_run",
+    "additional": "log/artifacts/internal_clearance_fix/heldout_run",
+    "test_code": "log/artifacts/internal_clearance_fix"
+  },
+  "runtime": {
+    "all_batch_cleanup_ok": true,
+    "has_owned_test_processes_remaining": false,
+    "has_existing_runtime_stop_operations": false,
+    "existing_ros_and_screen_pids_maintained": true,
+    "has_external_pointcloud_pid_change": true,
+    "containers_running_before_and_after": ["gng_cpu_container", "gng-harmonic-launcher-launcher-1", "rosbridge_container"]
+  },
+  "limits": [
+    "実接触の残存。seed40では接触の早期化。回避性能全体の改善は未確認",
+    "凸包近似・離散候補・離散時刻による判定。連続区間の非接触保証なし",
+    "QP制約・外部障害物の距離近似は変更なし",
+    "初期重複・隣接リンク対の除外は変更なし",
+    "内部離隔モデルの初回コンパイル約8.29 sec。以降はコンパイル済みモデルの再利用",
+    "実機出力なし。実機安全性・配線可動域は未検証"
+  ]
+}

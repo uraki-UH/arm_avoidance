@@ -41,9 +41,13 @@ export class ObjectInteraction {
   window.addEventListener('blur',()=>this.cancel());
   document.addEventListener('visibilitychange',()=>{if(document.hidden)this.cancel();});
   window.addEventListener('keydown',event=>{
-   if(event.ctrlKey||event.metaKey||event.altKey||document.querySelector('dialog[open]'))return;
+   if(event.ctrlKey||event.metaKey||document.querySelector('dialog[open]'))return;
    const key=event.key.toLowerCase();
    if(event.target.closest?.('input,select,textarea,[contenteditable]')&&!(key==='escape'&&event.target.closest('.object-context-menu')))return;
+   if(event.altKey){
+    if(key==='escape'&&this.pending&&!this.is_applying){this.set_preview_rotation(this.pending.initial_quaternion);event.preventDefault();event.stopImmediatePropagation();}
+    return;
+   }
    if(key==='escape'&&(this.pending||this.press||this.hover||this.hover_robot||environment.selected_ids.size||document.querySelector('.object-context-menu:not([hidden])'))){this.clear_selection();event.preventDefault();event.stopImmediatePropagation();return;}
    if(key==='enter'&&this.pending){this.apply();event.preventDefault();event.stopImmediatePropagation();}
    if(key==='t'&&(this.pending||environment.selected)){this.rotate(event.shiftKey?-15:15);event.preventDefault();event.stopImmediatePropagation();}
@@ -101,7 +105,7 @@ export class ObjectInteraction {
   this.canvas.setPointerCapture(event.pointerId);this.canvas.style.cursor=drag_mode!==drag_modes.select?'grabbing':'pointer';
  }
  double_click(event){
-  if(event.button!==0||event.ctrlKey||event.metaKey||event.altKey||!this.pick_preview(event))return;
+  if(event.button!==0||event.ctrlKey||event.metaKey||!this.pick_preview(event))return;
   event.preventDefault();event.stopImmediatePropagation();this.apply();
  }
  pointer_move(event){
@@ -162,7 +166,8 @@ export class ObjectInteraction {
   ghost.traverse(object=>{if(object.isMesh){object.material=Array.isArray(object.material)?object.material.map(preview_material):preview_material(object.material);object.castShadow=false;object.receiveShadow=false;}});
   const matrix=item.group.matrixWorld.clone();matrix.decompose(ghost.position,ghost.quaternion,ghost.scale);
   this.environment.overlay.add(ghost);
-  this.pending={item,ghost,materials,source:matrix,has_source_changed:false,has_surface:true,support_z:null};
+  // 物理更新用のsourceとは独立した、回転操作の復帰先
+  this.pending={item,ghost,materials,source:matrix,initial_quaternion:ghost.quaternion.clone(),has_source_changed:false,has_surface:true,support_z:null};
   this.preview_box.visible=true;this.refresh();
  }
  move_preview(event){
@@ -190,10 +195,14 @@ export class ObjectInteraction {
   this.rotate(-Math.sign(event.deltaY)*(event.ctrlKey?5:15),event.shiftKey?'roll':'pitch');
  }
  rotate(deg,axis='yaw'){
+  if(!this.pending)return;
+  this.set_preview_rotation(this.pending.ghost.quaternion.clone().premultiply(new THREE.Quaternion().setFromAxisAngle(rotation_axes[axis],THREE.MathUtils.degToRad(deg))));
+ }
+ set_preview_rotation(quaternion){
   if(!this.pending||this.is_applying)return;
   const ghost=this.pending.ghost;
   const bottom=new THREE.Box3().setFromObject(ghost,true).min.z;
-  ghost.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(rotation_axes[axis],THREE.MathUtils.degToRad(deg)));
+  ghost.quaternion.copy(quaternion);
   ghost.updateMatrixWorld(true);ghost.position.z+=bottom-new THREE.Box3().setFromObject(ghost,true).min.z;ghost.updateMatrixWorld(true);this.refresh();
  }
  reason(){

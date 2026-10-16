@@ -125,7 +125,7 @@ function setSide(side){activeSide=side;gizmo.attach(targets[side]);document.quer
 function setMode(next){mode=next;gizmo.setMode(next);$('translate-mode').classList.toggle('active',next==='translate');$('rotate-mode').classList.toggle('active',next==='rotate');if(next==='rotate')$('hold-orientation').checked=true;syncTargetInputs();}
 function syncTargets(sides=['L','R']){for(const side of sides){const tcp=robot.tcp(side);targets[side].position.copy(tcp.position);targets[side].quaternion.copy(tcp.quaternion);targetDirty[side]=false;ikGoals[side]=null;}activeTarget=false;solveFrames=0;syncTargetInputs();}
 function syncTargetInputs(){if(!robot)return;const t=targets[activeSide],e=new THREE.Euler().setFromQuaternion(t.quaternion,'ZYX');for(const [id,value] of Object.entries({'target-x':t.position.x*1000,'target-y':t.position.y*1000,'target-z':t.position.z*1000,'target-roll':e.x*DEG,'target-pitch':e.y*DEG,'target-yaw':e.z*DEG})){if(document.activeElement!==$(id))$(id).value=format_fixed(value,1);}}
-function syncControls(){if(!robot)return;$('grip').value=robot.joints[`${activeSide}_gripper_joint`].q/robot.joints[`${activeSide}_gripper_joint`].upper*100;$('grip-value').textContent=Math.round(+$('grip').value)+'%';for(const [name,entry] of Object.entries(jointInputs)){const q=robot.joints[name].q;entry.input.value=q*DEG;if(entry.output)entry.output.textContent=format_fixed(q*DEG,1)+'°';if(entry.number&&document.activeElement!==entry.number)entry.number.value=format_fixed(q*DEG,1);}}
+function syncControls(){if(!robot)return;const can_edit=robot.pose_source==='simulator';for(const input of document.querySelectorAll('#body-controls input,input[id^="target-"],#grip'))input.disabled=!can_edit;$('grip').value=robot.joints[`${activeSide}_gripper_joint`].q/robot.joints[`${activeSide}_gripper_joint`].upper*100;$('grip-value').textContent=Math.round(+$('grip').value)+'%';for(const [name,entry] of Object.entries(jointInputs)){const q=robot.joints[name].q;entry.input.value=q*DEG;if(entry.output)entry.output.textContent=format_fixed(q*DEG,1)+'°';if(entry.number&&document.activeElement!==entry.number)entry.number.value=format_fixed(q*DEG,1);}}
 function homePose(){const p=Object.fromEntries(robot.actuated.map(j=>[j.name,0]));Object.assign(p,Object.fromEntries(Object.entries(pose_presets.home).map(([name,deg])=>[name,deg*RAD])));return p;}
 function presetPose(name){const p=homePose();if(name==='ready'){Object.assign(p,{L_joint1:-.18,R_joint1:.18,L_joint2:-1.35,R_joint2:1.35,L_joint4:-1.15,R_joint4:1.15,L_joint6:.4,R_joint6:-.4,L_gripper_joint:.32,R_gripper_joint:.32});}if(name==='spread'){Object.assign(p,{L_joint2:-.65,R_joint2:.65,L_joint4:-.65,R_joint4:.65,L_joint6:.35,R_joint6:-.35});}if(name==='forward'){Object.assign(p,Object.fromEntries(Object.entries(pose_presets.forward).map(([name,deg])=>[name,deg*RAD])));}return p;}
 let motion_req=0,motion_requires_physics=false;
@@ -214,7 +214,7 @@ function bindUI(){
 }
 
 function updateIK(dt){
- if(['ros','leader'].includes(robot.pose_source)||!activeTarget||playing)return false;
+ if(robot.pose_source!=='simulator'||!activeTarget||playing)return false;
  const side=activeSide,hold=$('hold-orientation').checked,chain=robot.chain(side),before=chain.map(j=>j.q),start=performance.now();
  if(targetDirty[side]||!ikGoals[side]){
   // Solve a stable destination, then interpolate to it; avoid re-solving intermediate
@@ -328,6 +328,9 @@ async function init(){
    document.querySelector('[data-panel=experiment]').click();
    await replay_panel.open(replay_request);
   }
+  const {robot_control_panel}=await import('./robot-control.js');
+  window.simulator.robot_control=new robot_control_panel(window.simulator);
+  window.simulator.robot_control.render();
   window.simulator.motor_monitor=new motor_monitor(window.simulator);
   const joint_topic=new URLSearchParams(location.search).get('joint_topic');
   if(joint_topic){document.title='CLI実測 · '+document.title;ros_points.robot_panel.tick();ros_points.robot_panel.joint_stream.receive_topic(joint_topic,new URLSearchParams(location.search).get('bridge'),new URLSearchParams(location.search).get('state_source')==='simulation');$('physics-status').textContent='外部MuJoCoの実測をROS受信表示';}
@@ -347,7 +350,7 @@ function aimAtTable(){
  toast('カメラをテーブルへ向けます');
 }
 function updateCloudLayers(){
- const only=rgbd?.cloudOnly||lidar?.cloudOnly;camera.layers.mask=0;if(!only)camera.layers.enable(0);if(rgbd?.cloud.visible)camera.layers.enable(1);if(lidar?.cloud.visible||lidar?.axes.visible)camera.layers.enable(2);if(ai)camera.layers.enable(3);updateMarkerVisibility();
+ const only=rgbd?.cloudOnly||lidar?.cloudOnly;camera.layers.mask=0;if(!only){camera.layers.enable(0);camera.layers.enable(4);}if(rgbd?.cloud.visible)camera.layers.enable(1);if(lidar?.cloud.visible||lidar?.axes.visible)camera.layers.enable(2);if(ai)camera.layers.enable(3);updateMarkerVisibility();
 }
 function initWorkspace(){
  workspace=new WorkEnvironment({scene,overlay,camera,renderer,orbit,toast,onEdit:()=>updateMarkerVisibility(),has_priority_pick:(client_x,client_y)=>ros_results?.scene?.has_inspection_at(client_x,client_y)??false});

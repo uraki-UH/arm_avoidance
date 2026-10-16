@@ -1,0 +1,350 @@
+{
+  "status": "implemented_and_verified",
+  "model": "topo_dual_arm_max_long",
+  "active_joints": [
+    "L_joint1",
+    "L_joint2",
+    "L_joint3",
+    "L_joint4",
+    "L_joint5",
+    "L_joint6",
+    "L_joint7"
+  ],
+  "scope": {
+    "gng_rollout": "最大3可動剛体の連動退避・手先位置の変化を抑える補償",
+    "qp_and_oscbf": "既存の7変数最適化の維持",
+    "max_num_additional_candidates": 2,
+    "min_clearance_gain_th_m": 0.002
+  },
+  "checks": {
+    "num_python_tests": 71,
+    "num_comparison_cases": 12,
+    "num_heldout_conditions": 2,
+    "num_final_replay_checks": 2,
+    "num_coordinated_selections": 7,
+    "num_additional_fk_calls": 0,
+    "num_additional_voxel_registrations": 0
+  },
+  "batch_elapsed_sec": {
+    "before_run": 90.98134365901933,
+    "gated_run": 93.22012316901237,
+    "final_run": 12.886257921985816,
+    "heldout_run": 49.62792532800813
+  },
+  "comparison": [
+    {
+      "name": "rollout_cv_free",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "propose_mean_ms": 20.85358410004119,
+        "propose_p95_ms": 21.82319899002323,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "propose_mean_ms": 21.2188939054613,
+        "propose_p95_ms": 23.295913054607805,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "rollout_reactive_free",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "propose_mean_ms": 20.44701084469125,
+        "propose_p95_ms": 21.413998304342385,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "propose_mean_ms": 20.97122045524884,
+        "propose_p95_ms": 23.299714435415808,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "cbf_qp_free",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "propose_mean_ms": 5.335305268636148,
+        "propose_p95_ms": 5.502085645275656,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "propose_mean_ms": 5.367633792957349,
+        "propose_p95_ms": 5.536969253444113,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "oscbf_free",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 7,
+        "num_round_trips": 3,
+        "propose_mean_ms": 4.331658929368132,
+        "propose_p95_ms": 4.433710902230814,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 8.0,
+        "num_arrivals": 7,
+        "num_round_trips": 3,
+        "propose_mean_ms": 4.355641526126419,
+        "propose_p95_ms": 4.5071574961184515,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "rollout_cv_sphere_distal_sweep_l_link4_401",
+      "before": {
+        "failure_reason": "target_touch",
+        "evaluated_sec": 4.16,
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "propose_mean_ms": 22.262105701277807,
+        "propose_p95_ms": 22.79970654344652,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "target_touch",
+        "evaluated_sec": 4.67,
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "propose_mean_ms": 23.104773499653675,
+        "propose_p95_ms": 23.88740194728598,
+        "num_coordinated_selections": 5
+      }
+    },
+    {
+      "name": "rollout_cv_sphere_distal_sweep_l_link6_719",
+      "before": {
+        "failure_reason": "target_touch",
+        "evaluated_sec": 3.52,
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "propose_mean_ms": 21.99397546126061,
+        "propose_p95_ms": 22.71041099447757,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "target_touch",
+        "evaluated_sec": 3.54,
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "propose_mean_ms": 23.64240097280421,
+        "propose_p95_ms": 25.764091493329033,
+        "num_coordinated_selections": 1
+      }
+    },
+    {
+      "name": "rollout_cv_sphere_link_point_l_tcp_823",
+      "before": {
+        "failure_reason": "internal_interference",
+        "evaluated_sec": 1.34,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 21.968269332622487,
+        "propose_p95_ms": 22.846139819012024,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "internal_interference",
+        "evaluated_sec": 1.34,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 22.920142927129444,
+        "propose_p95_ms": 23.806718812556937,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "rollout_cv_sphere_random_walk_l_link6_947",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 2,
+        "num_round_trips": 1,
+        "propose_mean_ms": 21.634678800182883,
+        "propose_p95_ms": 22.820207150653005,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 2,
+        "num_round_trips": 1,
+        "propose_mean_ms": 22.08187214176481,
+        "propose_p95_ms": 23.75234300561715,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "rollout_reactive_sphere_distal_sweep_l_link4_401",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 21.633027543430217,
+        "propose_p95_ms": 22.48428045277251,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 23.40876209103347,
+        "propose_p95_ms": 25.8851444843458,
+        "num_coordinated_selections": 1
+      }
+    },
+    {
+      "name": "rollout_reactive_linked_arm_link_point_l_link6_719",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 36.74396205872957,
+        "propose_p95_ms": 38.011895047384314,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 38.59298262565668,
+        "propose_p95_ms": 42.06262995285215,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "cbf_qp_linked_arm_link_point_l_tcp_823",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 7.007178425798581,
+        "propose_p95_ms": 9.5292014622828,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "propose_mean_ms": 8.40367731580045,
+        "propose_p95_ms": 15.328666947607413,
+        "num_coordinated_selections": 0
+      }
+    },
+    {
+      "name": "oscbf_sphere_random_walk_l_link6_947",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 4,
+        "num_round_trips": 2,
+        "propose_mean_ms": 4.749648699604829,
+        "propose_p95_ms": 6.228873493091669,
+        "num_coordinated_selections": null
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 4,
+        "num_round_trips": 2,
+        "propose_mean_ms": 5.2794169159218045,
+        "propose_p95_ms": 8.856379895587446,
+        "num_coordinated_selections": 0
+      }
+    }
+  ],
+  "heldout": [
+    {
+      "policy": "rollout_cv",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 2,
+        "num_round_trips": 1,
+        "propose_mean_ms": 21.710477724748973,
+        "propose_p95_ms": 22.38017988129286,
+        "num_coordinated_selections": 0
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "propose_mean_ms": 22.891948591617012,
+        "propose_p95_ms": 23.560241259110626,
+        "num_coordinated_selections": 4
+      }
+    },
+    {
+      "policy": "rollout_reactive",
+      "before": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "propose_mean_ms": 35.028149583619474,
+        "propose_p95_ms": 36.26613690285012,
+        "num_coordinated_selections": 0
+      },
+      "after": {
+        "failure_reason": "",
+        "evaluated_sec": 6.0,
+        "num_arrivals": 1,
+        "num_round_trips": 0,
+        "propose_mean_ms": 37.428990332894806,
+        "propose_p95_ms": 40.20592480228515,
+        "num_coordinated_selections": 0
+      }
+    }
+  ],
+  "runtime": {
+    "are_test_processes_stopped": true,
+    "are_containers_preserved": true,
+    "are_existing_processes_preserved": true,
+    "has_external_job_change": true,
+    "has_agent_experiment_start_or_stop": false
+  },
+  "limitations": [
+    "既存12条件中、変更前後とも障害物接触2条件・内部干渉1条件。失敗の解消ではない変更",
+    "未使用条件は2条件・各6 secのみ。全条件・長時間の改善や実機安全性の保証なし",
+    "関節動作量は回避への有効性とは別の指標。採用条件はモデル上の予測離隔",
+    "処理時間は単発測定。動作軌跡・CPU負荷の差を含む値"
+  ],
+  "baseline_source_sha256": "d9fd455b8756e42156a42aa9ce65788cfa7d445779a49ac6f3925c6647ec813c",
+  "source_sha256": {
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_sphere_avoidance.py": "a6ef1e44387fa73889240c5edec4f14432fe3b0e5bea4f61920880f6d25fad25",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py": "007f82daf842e316c6c073f76cb100e8e6785613bc80db1fdbc055b05006e71a"
+  }
+}

@@ -15,6 +15,12 @@ export async function prepare_vendor(root) {
   for (const name of ['three.module.js', 'three.core.js']) {
     await copyFile(path.join(source, 'build', name), path.join(destination, 'build', name));
   }
+  // 画面上の線幅を保証する太線描画と、その内部依存
+  const lines = 'examples/jsm/lines';
+  await mkdir(path.join(destination, lines), {recursive: true});
+  for (const name of ['Line2.js', 'LineGeometry.js', 'LineMaterial.js', 'LineSegments2.js', 'LineSegmentsGeometry.js']) {
+    await copyFile(path.join(source, lines, name), path.join(destination, lines, name));
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

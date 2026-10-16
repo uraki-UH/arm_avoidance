@@ -4,6 +4,14 @@ from collections.abc import Mapping
 import math
 import xml.etree.ElementTree as et
 from types import MappingProxyType
+from enum import Enum
+
+
+class control_mode(str, Enum):
+    position = 'position'
+    position_velocity = 'position_velocity'
+    velocity = 'velocity'
+    torque = 'torque'
 
 
 def numbers(value):
@@ -54,6 +62,12 @@ class PhysicsRobot:
         self._targets = dict(self.initial)
         self._commands = dict(self.initial)
         self.position_gain, self.velocity_gain = 40., 3.
+        self._control_mode = control_mode(config.get('control_mode', 'position'))
+        self.enable_gravity_compensation = config.get('enable_gravity_compensation', self.control_mode != control_mode.torque)
+        if type(self.enable_gravity_compensation) is not bool:
+            raise ValueError('重力補償の設定は真偽値が必要です')
+        self._target_velocity = dict.fromkeys(self.independent, 0.)
+        self._target_effort = dict.fromkeys(self.independent, 0.)
         asset = et.SubElement(root, 'asset')
         equality = et.SubElement(root, 'equality')
         actuator = et.SubElement(root, 'actuator')
@@ -115,10 +129,21 @@ class PhysicsRobot:
             else:
                 effort = float(joint.find('limit').get('effort'))
                 self.max_effort[name] = effort
+                gain, position_bias, velocity_bias = {
+                    control_mode.position: (self.position_gain, -self.position_gain, -self.velocity_gain),
+                    control_mode.position_velocity: (self.position_gain, -self.position_gain, -self.velocity_gain),
+                    control_mode.velocity: (self.velocity_gain, 0., -self.velocity_gain),
+                    control_mode.torque: (1., 0., 0.),
+                }[self.control_mode]
                 et.SubElement(actuator, 'general', name=name, joint=name,
-                              gainprm=text([self.position_gain]), biastype='affine',
-                              biasprm=text([0, -self.position_gain, -self.velocity_gain]),
+                              gainprm=text([gain]), biastype='none' if self.control_mode == control_mode.torque else 'affine',
+                              biasprm=text([0, position_bias, velocity_bias]),
                               forcelimited='true', forcerange=f'{-effort} {effort}')
+
+    @property
+    def control_mode(self):
+        """コンパイル済みアクチュエータと対になる不変の制御方式。"""
+        return self._control_mode
 
     @property
     def targets(self) -> Mapping[str, float]:
@@ -144,14 +169,57 @@ class PhysicsRobot:
 
     def set_targets(self, pose: Mapping[str, float], *, command_pose: Mapping[str, float] | None = None):
         """部分目標の反映と、検査済み経路の補間開始姿勢の一括更新。"""
+        if self.control_mode != control_mode.position:
+            raise ValueError('位置目標だけの更新は位置制御専用です')
         targets = self.validate(pose, base_pose=self._targets)
         commands = self._commands if command_pose is None else self.validate(command_pose, base_pose=self._commands)
         self._targets, self._commands = targets, commands
 
+    def set_command(self, command):
+        """GUI・ROS・APIで共通の即時指令検証。検証後だけの一括反映。"""
+        if not isinstance(command, dict) or command.get('mode') != self.control_mode.value:
+            raise ValueError('指令の制御方式が実行中の方式と一致しません')
+        required = {control_mode.position: ('position',), control_mode.position_velocity: ('position', 'velocity'),
+                    control_mode.velocity: ('velocity',), control_mode.torque: ('effort',)}[self.control_mode]
+        allowed = (*required, 'effort') if self.control_mode == control_mode.position_velocity else required
+        if set(command)-{'mode', *allowed} or any(not command.get(name) for name in required):
+            raise ValueError('制御方式に対応する指令項目が必要です')
+        updates = {}
+        for field in allowed:
+            values = command.get(field, {})
+            if not isinstance(values, dict) or any(name not in self.independent or name in self.locks or
+                    type(value) not in (int, float) or not math.isfinite(value) for name, value in values.items()):
+                raise ValueError('関節指令の名前・値が不正です: '+field)
+            updates[field] = dict(values)
+        if any(set(updates[field]) != set(updates[required[0]]) for field in required):
+            raise ValueError('位置・速度指令の関節集合が一致しません')
+        if set(updates.get('effort', {}))-set(updates[required[0]]):
+            raise ValueError('補助トルクの関節集合が不正です')
+        for name, value in updates.get('position', {}).items():
+            joint = self.independent[name]
+            limit = joint.find('limit')
+            if joint.get('type') != 'continuous' and not float(limit.get('lower')) <= value <= float(limit.get('upper')):
+                raise ValueError('位置指令が可動域外です: '+name)
+        for field, key in (('velocity', 'velocity'), ('effort', 'effort')):
+            for name, value in updates.get(field, {}).items():
+                if abs(value) > float(self.independent[name].find('limit').get(key)):
+                    raise ValueError('指令がURDF上限を超えています: '+name+' / '+field)
+        self._targets.update(updates.get('position', {}))
+        self._target_velocity.update(updates.get('velocity', {}))
+        self._target_effort.update(updates.get('effort', {}))
+        if self.control_mode == control_mode.position_velocity:
+            for name in updates['position']:
+                self._target_effort[name] = updates.get('effort', {}).get(name, 0.)
+
     def hold_position(self):
         """現在の実測関節姿勢による、目標と補間状態の同期。"""
         pose = {name: value for name, value in self.state().items() if name in self.independent}
-        self.set_targets(pose, command_pose=pose)
+        if self.control_mode == control_mode.position:
+            self.set_targets(pose, command_pose=pose)
+        else:
+            self._targets.update(pose)
+            self._target_velocity = dict.fromkeys(self.independent, 0.)
+            self._target_effort = dict.fromkeys(self.independent, 0.)
 
     def bind(self, model, data):
         self.model, self.data = model, data
@@ -171,6 +239,18 @@ class PhysicsRobot:
     def control(self):
         timestep = self.model.opt.timestep
         for name, idx, dof, max_velocity in self.control_entries:
+            if self.control_mode != control_mode.position:
+                effort = self._target_effort[name]
+                if self.enable_gravity_compensation:
+                    effort += self.data.qfrc_bias[dof]
+                # 選択したアクチュエータへの指令。トルク方式での位置・速度サーボなし。
+                if self.control_mode == control_mode.position_velocity:
+                    self.data.ctrl[idx] = self._targets[name]+(self.velocity_gain*self._target_velocity[name]+effort)/self.position_gain
+                elif self.control_mode == control_mode.velocity:
+                    self.data.ctrl[idx] = self._target_velocity[name]+effort/self.velocity_gain
+                else:
+                    self.data.ctrl[idx] = effort
+                continue
             max_step = max_velocity * timestep
             delta = self._targets[name]-self._commands[name]
             step = min(max(delta, -max_step), max_step)
@@ -180,7 +260,7 @@ class PhysicsRobot:
             velocity = min(max(velocity, -max_velocity), max_velocity)
             # URDF速度上限内の位置・速度PDと重力・コリオリ補償。駆動力上限はURDFのeffort。
             self.data.ctrl[idx] = position+(
-                self.velocity_gain*velocity+self.data.qfrc_bias[dof])/self.position_gain
+                self.velocity_gain*velocity+(self.data.qfrc_bias[dof] if self.enable_gravity_compensation else 0.))/self.position_gain
 
     def state(self):
         return {name: float(self.data.qpos[idx]) for name, idx in self.state_entries}

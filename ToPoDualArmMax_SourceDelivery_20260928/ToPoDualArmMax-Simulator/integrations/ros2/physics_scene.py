@@ -127,6 +127,8 @@ class PhysicsScene:
                 et.SubElement(body, 'geom', type=kind, pos=text(vector(geom['position'], 3)), quat=text(quaternion(geom['quaternion'])), size=text(size), mass=str(mass/len(geoms)), friction='.8 .005 .0001', contype='1', conaffinity='1')
         self.robot = None
         adapter, avoidance, prepared = physics_adapter(avoidance, robot)
+        if adapter is not None and robot.get('control_mode', 'position') != 'position':
+            raise ValueError('現在の回避モジュールは位置制御専用です')
         if robot is not None:
             fixed_joint_names = prepared['fixed_joint_names'] if prepared else ()
             base = et.SubElement(world, 'body', name='robot_base', pos=text(vector(robot['position'], 3)),

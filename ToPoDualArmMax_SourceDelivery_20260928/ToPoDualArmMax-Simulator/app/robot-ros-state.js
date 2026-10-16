@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 export const robot_frames=Object.freeze({world:'world',base:'base_footprint',camera:'sim_camera_depth_optical_frame',lidar:'sim_mid360_frame'});
 export {pose_sources} from './robot.js';
+export const pose_source_labels=Object.freeze({simulator:'シミュレータ操作',ros:'ROS現在姿勢入力 → 描画追従',leader:'ROSリーダー姿勢 → 力学追従',command:'外部指令・MuJoCo実測'});
 export const robot_base_frame=robot=>robot.links.base_footprint?'base_footprint':'base_link';
 const joint_topologies=new WeakMap();
 

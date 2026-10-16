@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {"name":"before_reported_401","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","before","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"after_reported_401","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"before_other_40","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","before","--seed","40","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"after_other_40","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--seed","40","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"before_free","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","before","--free","--duration","8","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"after_free","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--free","--duration","8","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"before_random_947","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","before","--seed","947","--mode","random_walk","--link","L_link6","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"after_random_947","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--seed","947","--mode","random_walk","--link","L_link6","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"before_linked_719","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","before","--policy","rollout_reactive","--seed","719","--shape","linked_arm","--mode","link_point","--link","L_link6","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"after_linked_719","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--policy","rollout_reactive","--seed","719","--shape","linked_arm","--mode","link_point","--link","L_link6","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"before_qp_free","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","before","--policy","cbf_qp","--free","--duration","8","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"after_qp_free","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--policy","cbf_qp","--free","--duration","8","--output","@case_dir@"],"metrics":"comparison.json"}
+  ]
+}

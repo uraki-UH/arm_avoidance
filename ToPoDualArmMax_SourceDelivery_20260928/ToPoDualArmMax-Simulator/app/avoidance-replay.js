@@ -1,6 +1,9 @@
 import {format_fixed} from './display-format.js';
 import {observe_balanced_layout} from './balanced-layout.js';
 import * as THREE from 'three';
+import {Line2} from 'three/addons/lines/Line2.js';
+import {LineGeometry} from 'three/addons/lines/LineGeometry.js';
+import {LineMaterial} from 'three/addons/lines/LineMaterial.js';
 
 const policy_names = {avoidance_first:'回避優先',vrm_predictive:'予測・不一致適応',rollout_reactive:'現在観測',rollout_cv:'等速予測',rollout_sequence:'時系列記憶',cbf_qp:'関節CBF-QP',oscbf:'OSCBF'};
 const failure_names = {physical_contact:'接触',internal_interference:'内部干渉',abnormal_joint_speed:'異常速度',joint_limit:'試験可動域の超過（旧記録）',planning_domain_exit:'旧計画域の超過',physical_joint_limit:'関節可動域の超過',invalid_obstacle_trajectory:'障害物の禁止域侵入・評価対象外',qp_infeasible:'QP実行不能・試験停止',qp_no_solution:'QP解未成立・試験停止'};
@@ -116,6 +119,7 @@ export function validate_recording(value,joint_names,model='long',min_num_frames
   if(Object.hasOwn(frame,'obstacle_segments')&&(!Array.isArray(frame.obstacle_segments)||frame.obstacle_segments.length!==2||!frame.obstacle_segments.every(segment=>Array.isArray(segment)&&segment.length===2&&segment.every(is_point))))throw Error('リンク障害物の形式が不正です');
   if(!Number.isFinite(frame.sphere_radius_m)||frame.sphere_radius_m<=0||frame.sphere_radius_m>2||typeof frame.has_contact!=='boolean'||typeof frame.phase!=='string'||!Number.isFinite(frame.proxy_gap_m))throw Error('記録状態の形式が不正です');
   if(frame.obstacle_phase!==undefined&&(!Object.hasOwn(obstacle_phase_names,frame.obstacle_phase)||!Number.isFinite(frame.obstacle_speed_mps)||frame.obstacle_speed_mps<0))throw Error('障害物状態の形式が不正です');
+  if(frame.obstacle_trail_sec!==undefined&&(!Number.isFinite(frame.obstacle_trail_sec)||frame.obstacle_trail_sec<0||frame.obstacle_trail_sec>2))throw Error('障害物軌跡の時間幅が不正です');
   if(frame.task_goal!==undefined&&(!value.task||!['a','b'].includes(frame.task_goal)))throw Error('往復目標の形式不正');
   if(frame.num_arrivals!==undefined&&(!Number.isSafeInteger(frame.num_arrivals)||frame.num_arrivals<0))throw Error('到達回数の形式不正');
   for(const key of ['task_position_error_m','task_orientation_error_rad'])if(frame[key]!==undefined&&(!Number.isFinite(frame[key])||frame[key]<0))throw Error('手先誤差の形式不正');
@@ -238,7 +242,10 @@ export class avoidance_replay {
   const controls=this.element('task-controls');if(controls)controls.hidden=!task;
   if(!task)return;
   const root=new THREE.Group();root.name='task-reference';
-  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(task.reference_path.map(point=>new THREE.Vector3(...point))),new THREE.LineDashedMaterial({color:0x526e9a,dashSize:.025,gapSize:.015}));
+  // 表示倍率・GPUによらず実軌跡の細線より太い5px幅。照明・露出に依存しない濃青の破線
+  const line=new Line2(new LineGeometry().setPositions(task.reference_path.flat()),new LineMaterial({color:0x1d4ed8,linewidth:5,dashed:true,dashSize:.025,gapSize:.015,toneMapped:false}));
+  // 表示専用レイヤー。センサ点群・深度画像・物体選択の対象外
+  line.layers.set(4);
   line.name='task-reference-line';line.computeLineDistances();root.add(line);
   root.visible=this.element('task-visible')?.checked!==false;this.root.add(root);this.task_reference=root;
  }
@@ -576,7 +583,13 @@ export class avoidance_replay {
    capsule.ends.forEach((end,idx)=>{end.position.copy(points[idx]);end.scale.setScalar(this.sphere.scale.x);});
   }
   const is_end=this.time_sec>=frames.at(-1).time_sec;
-  for(const line of this.trails)line.geometry.setDrawRange(0,lower+1);
+  this.trails[0].geometry.setDrawRange(0,lower+1);
+  // 計算側の予測時間に対応する直近実軌跡。未来の予測線・観測履歴とは別。
+  // 時間幅のない旧記録は非表示。固定秒数による推定なし。
+  const trail_sec=first.obstacle_trail_sec??0;
+  let start_idx=0,end_idx=lower+1;
+  while(start_idx<end_idx){const middle=Math.floor((start_idx+end_idx)/2);if(frames[middle].time_sec<this.time_sec-trail_sec)start_idx=middle+1;else end_idx=middle;}
+  this.trails[1].geometry.setDrawRange(start_idx,trail_sec>0?lower+1-start_idx:0);
   this.update_status(first,is_end,now_ms);
   this.renderer.shadowMap.needsUpdate=true;this.num_applied_frames++;
  }

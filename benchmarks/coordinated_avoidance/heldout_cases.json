@@ -1,0 +1,96 @@
+{
+  "cases": [
+    {
+      "name": "before_rollout_cv_heldout",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--condition",
+        "pressure",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link7",
+        "--shape",
+        "sphere",
+        "--seed",
+        "1521",
+        "--output",
+        "@case_dir@",
+        "--policy-source",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/before/gng_sphere_avoidance.py"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "after_rollout_cv_heldout",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--condition",
+        "pressure",
+        "--mode",
+        "distal_sweep",
+        "--target-link",
+        "L_link7",
+        "--shape",
+        "sphere",
+        "--seed",
+        "1521",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "before_rollout_reactive_heldout",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_reactive",
+        "--condition",
+        "pressure",
+        "--mode",
+        "link_point",
+        "--target-link",
+        "L_link5",
+        "--shape",
+        "linked_arm",
+        "--seed",
+        "1657",
+        "--output",
+        "@case_dir@",
+        "--policy-source",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/before/gng_sphere_avoidance.py"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "after_rollout_reactive_heldout",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/coordinated_avoidance/measure.py",
+        "--policy",
+        "rollout_reactive",
+        "--condition",
+        "pressure",
+        "--mode",
+        "link_point",
+        "--target-link",
+        "L_link5",
+        "--shape",
+        "linked_arm",
+        "--seed",
+        "1657",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    }
+  ]
+}

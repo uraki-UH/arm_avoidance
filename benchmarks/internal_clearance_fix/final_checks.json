@@ -1,0 +1,8 @@
+{
+  "cases": [
+    {"name":"reported_401","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"other_40","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--seed","40","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"free","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--free","--duration","8","--output","@case_dir@"],"metrics":"comparison.json"},
+    {"name":"random_947","argv":["python3","/ros2_ws/src/log/artifacts/internal_clearance_fix/measure.py","--variant","after","--seed","947","--mode","random_walk","--link","L_link6","--output","@case_dir@"],"metrics":"comparison.json"}
+  ]
+}

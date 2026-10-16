@@ -50,7 +50,7 @@ def export_recording(case_dir, output_dir):
     if not 2 <= len(frames) <= 20000:
         raise ValueError('記録フレーム数の範囲外')
     keys = ('time_sec','joints','eef','sphere','sphere_radius_m','phase','has_contact','proxy_gap_m')
-    frames = [{**{key:frame[key] for key in keys},**{key:frame[key] for key in ('target','obstacle_segments','obstacle_phase','obstacle_speed_mps','motion','task_goal','num_arrivals','task_position_error_m','task_orientation_error_rad') if key in frame}} for frame in frames]
+    frames = [{**{key:frame[key] for key in keys},**{key:frame[key] for key in ('target','obstacle_segments','obstacle_phase','obstacle_speed_mps','obstacle_trail_sec','motion','task_goal','num_arrivals','task_position_error_m','task_orientation_error_rad') if key in frame}} for frame in frames]
     result = dict(recording_metadata(details),frames=frames)
     body = json.dumps(result,ensure_ascii=False,allow_nan=False,separators=(',',':'))+'\n'
     name = 'avoidance-'+hashlib.sha256(body.encode()).hexdigest()[:20]+'.json'
