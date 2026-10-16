@@ -5,12 +5,12 @@ const $=id=>document.getElementById(id);
 
 export function install_object_actions(environment){
  environment.object_interaction=new ObjectInteraction(environment);
- const panel=document.createElement('div');panel.innerHTML=`<div class="section-label">追加位置</div><label>座標系<select id="spawn-parent"><option value="table">テーブル基準</option><option value="world">world基準</option></select></label><div class="field-grid">${['x','y','z'].map(k=>`<label>${k.toUpperCase()} mm<input id="spawn-${k}" type="number" value="0" step="10"></label>`).join('')}</div><p class="sub-note">Ctrl＋クリック：複数選択　Delete：削除</p>`;
+ const panel=document.createElement('div');panel.innerHTML=`<div class="section-label">追加位置</div><div class="field-grid vector-fields">${['x','y','z'].map(k=>`<label>${k.toUpperCase()} mm<input id="spawn-${k}" type="number" value="0" step="10"></label>`).join('')}</div><p class="sub-note">Ctrl＋クリック：複数選択　Delete：削除</p>`;
  $('object-add').parentElement.insertAdjacentElement('beforebegin',panel);
  const read_position=()=>{
   const position=['x','y','z'].map(k=>$('spawn-'+k).valueAsNumber/1000);
   if(position.some(v=>!Number.isFinite(v)||Math.abs(v)>100))throw Error('追加位置は±100000 mmの有限値を指定してください');
-  return {position,parent:$('spawn-parent').value};
+  return {position,parent:'table'};
  };
  const place=(item,settings)=>{
   if(!item)return;
@@ -26,7 +26,7 @@ export function install_object_actions(environment){
  environment.object_interaction.hide_context_menu=hide_menu;
  const label=document.createElement('div'),button=document.createElement('button');button.textContent='この物体を削除';button.dataset.action='delete';
  const physics=document.createElement('section');physics.className='object-context-physics';
- physics.innerHTML=`<label><input type="checkbox" data-action="toggle-physics"><span data-role="physics-label">物理を有効にする</span></label><details><summary>詳細設定</summary><label>物理モード<select aria-label="右クリック対象の物理モード"><option value="" disabled>選択物体で異なる設定</option>${Object.entries(physics_modes).map(([mode,name])=>`<option value="${mode}">${name}</option>`).join('')}</select></label><button data-action="apply-physics">選択物体に適用</button></details><button data-action="open-physics">物理設定を開く</button><small>変更後は「物理を開始」で反映</small>`;
+ physics.innerHTML=`<label><input type="checkbox" data-action="toggle-physics"><span data-role="physics-label">物理を有効にする</span></label><details><summary>詳細設定</summary><label>物理モード<select aria-label="選択対象の物理モード"><option value="" disabled>選択物体で異なる設定</option>${Object.entries(physics_modes).map(([mode,name])=>`<option value="${mode}">${name}</option>`).join('')}</select></label><button data-action="apply-physics">選択物体に適用</button></details><button data-action="open-physics">物理設定を開く</button><small>変更後は「物理を開始」で反映</small>`;
  menu.append(label,physics,button);document.body.append(menu);
  const physics_select=physics.querySelector('select'),physics_apply=physics.querySelector('[data-action=apply-physics]');let physics_targets=[];
  const physics_toggle=physics.querySelector('[data-action=toggle-physics]');
@@ -41,7 +41,7 @@ export function install_object_actions(environment){
   if(target_robot)return;
   if(environment.physics_panel?.set_object_mode(physics_targets,physics_select.value)){
    environment.toast(`${physics_targets.length}個の物理モードを設定。「物理」で開始してください`);hide_menu();
-  }else environment.toast('対象が変更されています。右クリックし直してください');
+  }else environment.toast('対象が変更されています。設定を開き直してください');
  };
  physics.querySelector('[data-action=open-physics]').onclick=()=>{
   if(target_robot&&environment.physics_panel?.robot()===target_robot){
@@ -49,14 +49,14 @@ export function install_object_actions(environment){
   }else if(target&&environment.items.includes(target)){environment.select(target.id);document.querySelector('[data-panel=physics]').click();}
   hide_menu();
  };
- const canvas=environment.renderer.domElement,ray=new THREE.Raycaster();let press=null,target=null,target_robot=null;
+ const canvas=environment.renderer.domElement,ray=new THREE.Raycaster();let target=null,target_robot=null;
  robot_box.onBeforeRender=()=>{if(target_robot===environment.physics_panel?.robot()&&target_robot?.parent)robot_box.box.setFromObject(target_robot);else hide_menu();};
  const has_visible_ancestors=object=>{for(let node=object;node;node=node.parent)if(!node.visible)return false;return true;};
  canvas.addEventListener('contextmenu',event=>event.preventDefault());
- canvas.addEventListener('pointerdown',event=>{if(event.button===2)press={x:event.clientX,y:event.clientY};});
- canvas.addEventListener('pointerup',event=>{
-  if(event.button!==2||!press)return;const start=press;press=null;
-  if(Math.hypot(event.clientX-start.x,event.clientY-start.y)>5)return;
+ canvas.addEventListener('dblclick',event=>{
+  if(event.button!==0||event.ctrlKey||event.metaKey||event.altKey||environment.editing||environment.object_interaction.has_priority_pick(event.clientX,event.clientY))return;
+  if([environment.gizmo,window.simulator?.gizmo].some(gizmo=>gizmo?.enabled&&(gizmo.dragging||gizmo.axis)))return;
+  event.preventDefault();event.stopImmediatePropagation();
   const rect=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1),environment.camera);
   environment.scene.updateMatrixWorld(true);
   const hit=ray.intersectObjects(environment.scene.children,true).find(h=>h.object.isMesh&&has_visible_ancestors(h.object));
@@ -84,7 +84,7 @@ export function install_object_actions(environment){
   physics_toggle.checked=enabled.every(Boolean);physics_toggle.indeterminate=enabled.some(Boolean)&&!enabled.every(Boolean);physics_toggle.disabled=!environment.physics_panel;
   physics_apply.disabled=physics_select.disabled||!physics_select.value||!environment.physics_panel;menu.hidden=false;
   menu.style.left=Math.max(0,Math.min(event.clientX,innerWidth-menu.offsetWidth))+'px';menu.style.top=Math.max(0,Math.min(event.clientY,innerHeight-menu.offsetHeight))+'px';
- });
+ },true);
  button.onclick=()=>{if(target&&environment.items.includes(target)){$('object-delete').click();}hide_menu();target=null;};
  document.addEventListener('pointerdown',event=>{if(!menu.contains(event.target))hide_menu();});
  window.addEventListener('blur',hide_menu);

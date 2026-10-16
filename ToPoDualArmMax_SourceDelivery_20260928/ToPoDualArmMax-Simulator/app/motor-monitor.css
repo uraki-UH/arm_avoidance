@@ -12,8 +12,8 @@
 .motor-monitor details{margin:10px 0}
 .motor-monitor details:not([open])>:not(summary){display:none}
 .motor-monitor summary{font-size:13px;cursor:pointer}
-.motor-tabs{display:flex;flex-wrap:wrap;gap:4px}
-.motor-tabs button{flex:1 1 auto;font-size:13px;padding:7px 6px}
+.motor-tabs{display:grid;gap:2px;overflow-x:auto}
+.motor-tabs button{min-width:0;font-size:12px;padding:5px 3px;white-space:nowrap}
 .motor-monitor button[aria-selected=true]{background:#edf7e2;border-color:#79bb35;color:#345714}
 .motor-view-tabs{display:flex;gap:2px;margin:0}
 .motor-view-tabs button{font-size:11px;padding:4px 5px;white-space:nowrap}
@@ -21,10 +21,11 @@
 .motor-joint{border-bottom:1px solid var(--line);padding:9px 0;min-width:0}
 .motor-joint-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px}
 .motor-joint-heading strong{font-size:12px;overflow-wrap:anywhere;min-width:0}
-.motor-values{grid-column:1/-1;display:flex;flex-direction:column;align-items:flex-end;gap:3px;min-width:0}
-.motor-values output{font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:18px;min-height:18px;text-align:right}
+.motor-gauges{display:grid;gap:3px;margin-top:6px;min-width:0}
+.motor-gauges>div{display:grid;grid-template-columns:minmax(48px,1fr) minmax(0,auto);gap:8px;align-items:center;min-width:0}
+.motor-gauges output{grid-column:2;min-width:0;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:18px;min-height:18px;text-align:right}
 .motor-monitor .sim{color:#568622}.motor-monitor .hardware{color:#218398}
-.motor-monitor input[type=range]{width:100%;margin:7px 0 0;border:0;background:transparent;padding:0;height:16px}
+.motor-monitor input[type=range]{width:100%;min-width:0;margin:0;border:0;background:transparent;padding:0;height:16px}
 .motor-monitor input[type=range]:disabled{opacity:1;cursor:default;pointer-events:none}
 /* 欠測時の空バー。ゼロ値や中立位置としてのつまみ表示なし */
 .motor-monitor input.is-missing{appearance:none}

@@ -166,7 +166,7 @@ def run(args, emit, chase_config=None):
                 emit(dict(type='started',scenario=args.scenario,execution_mode='continuous',has_recording=False))
                 result = run_case(config,emit=emit if args.enable_frame_stream else None,stop_event=stop_event)
                 emit(dict(type='experiment_finished',metrics=result['metrics'],failure_reason=result['failure_reason'],
-                          failure_details=result['failure_details'],is_valid_scenario=result['is_valid_scenario']))
+                          failure_details=result['failure_details'],is_valid_scenario=result['is_valid_scenario'],outcome=result['outcome']))
                 return 0
             finally:
                 for sig,handler in handlers.items():

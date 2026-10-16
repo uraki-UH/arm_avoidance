@@ -325,7 +325,11 @@ class robot_geometry:
         """単一姿勢・姿勢列の自己干渉ペアと環境形状の表面間距離 [m]。"""
         first, second = self.self_pairs.T
         self_gaps = np.linalg.norm(centers[..., first, :]-centers[..., second, :], axis=-1)-self.radii[first]-self.radii[second]
-        gaps = [self_gaps]
+        return np.concatenate((self_gaps,self.environment_clearances(centers)),axis=-1)
+
+    def environment_clearances(self, centers):
+        """床・台座などの固定環境への離隔 [m]。自己干渉ペアとの重複照合なし。"""
+        gaps = [np.empty(centers.shape[:-2]+(0,))]
         for kind, position, rotation_matrix, half_size in self.environment_shapes:
             local = (centers[..., self.is_arm, :]-position) @ rotation_matrix
             if kind == 'plane':

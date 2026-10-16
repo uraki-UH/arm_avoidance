@@ -16,12 +16,12 @@ export class EnvironmentAssets {
   const draco=new DRACOLoader().setDecoderPath('./vendor/three/examples/jsm/libs/draco/gltf/');
   this.loader=new GLTFLoader().setDRACOLoader(draco);
   const panel=document.createElement('section');panel.id='environment-assets';
-  panel.innerHTML=`<div class="section-label">外部環境 <span>表示・センサ用</span></div><label>環境シーン<select id="environment-asset"><option value="none">なし</option>${Object.entries(environment_assets).map(([id,asset])=>`<option value="${id}">${asset.name}</option>`).join('')}</select></label><div class="row-actions"><button id="environment-asset-apply">環境を読み込む</button><button id="environment-asset-focus" disabled>環境全体を表示</button></div><output id="environment-asset-status" role="status">外部環境なし</output><p id="environment-asset-credit" class="sub-note"></p>`;
-  $('environment-panel').querySelector('.panel-heading').insertAdjacentElement('afterend',panel);
+  panel.innerHTML=`<div class="section-label">外部環境 </div><label>環境シーン<select id="environment-asset"><option value="none">なし</option>${Object.entries(environment_assets).map(([id,asset])=>`<option value="${id}">${asset.name}</option>`).join('')}</select></label><div class="row-actions"><button id="environment-asset-apply">環境を読み込む</button><button id="environment-asset-focus" disabled>環境全体を表示</button></div><p id="environment-asset-credit" class="sub-note"></p>`;
+  $('environment-panel').prepend(panel);
   $('environment-asset-apply').onclick=async()=>{
-   const button=$('environment-asset-apply');button.disabled=true;$('environment-asset-status').textContent='環境を読み込み中…';
+   const button=$('environment-asset-apply');button.disabled=true;
    try{await this.set($('environment-asset').value);}
-   catch(error){$('environment-asset-status').textContent='読込失敗（現在の環境は保持）：'+error.message;}
+   catch(error){this.environment.toast('環境の読込エラー：'+error.message);}
    finally{button.disabled=false;}
   };
   $('environment-asset-focus').onclick=()=>{if(this.group){const box=new THREE.Box3().setFromObject(this.group);box.expandByPoint(new THREE.Vector3(0,0,0));environment.focusBounds(box);}};
@@ -59,7 +59,6 @@ export class EnvironmentAssets {
    const source=document.createElement('a');source.href=asset.source;source.textContent='Littlest Tokyo — '+asset.author;source.target='_blank';source.rel='noopener noreferrer';
    const license=document.createElement('a');license.href=asset.license_url;license.textContent=asset.license;license.target='_blank';license.rel='noopener noreferrer';credit.append(source,' / ',license);
   }
-  $('environment-asset-status').textContent=asset?`${asset.name}：読込完了。水平最大寸法 ${asset.width_m} m（試験用）。物理衝突なし。`:'外部環境なし';
   this.environment.changed();
  }
  async set(asset_id){

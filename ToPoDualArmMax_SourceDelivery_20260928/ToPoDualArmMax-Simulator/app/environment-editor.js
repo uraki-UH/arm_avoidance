@@ -1,3 +1,4 @@
+import {format_fixed} from './display-format.js';
 import {install_object_actions} from './object-actions.js';
 import {EnvironmentAssets} from './environment-assets.js';
 import * as THREE from 'three';
@@ -5,6 +6,17 @@ import {WorkEnvironment,OBJECTS,TABLES} from './environment.js';
 import {VEHICLES,createVehicle} from './vehicles.js';
 const $=id=>document.getElementById(id),rad=Math.PI/180,finite3=a=>Array.isArray(a)&&a.length===3&&a.every(Number.isFinite);
 const fields=(prefix,items)=>items.map(([key,label,value,step])=>`<label>${label}<input id="${prefix}-${key}" type="number" value="${value}" step="${step||10}" aria-label="${prefix} ${label}"></label>`).join('');
+// 既存入力とイベント処理を保持した座標・姿勢・寸法の行分け。
+function arrange_field_groups(prefix,groups){
+ const first_row=$(prefix+'-'+groups[0][0]).parentElement.parentElement,old_rows=new Set(),fragment=document.createDocumentFragment();
+ for(const keys of groups){
+  const row=document.createElement('div');row.className='field-grid'+(keys.length===3?' vector-fields':'');
+  for(const key of keys){const label=$(prefix+'-'+key).parentElement;old_rows.add(label.parentElement);row.append(label);}
+  fragment.append(row);
+ }
+ first_row.before(fragment);
+ for(const row of old_rows)if(!row.children.length)row.remove();
+}
 export class SceneEnvironment extends WorkEnvironment{
  enhanceUI(){
   $('table-type').parentElement.insertAdjacentHTML('beforebegin','<div class="section-label">既定設置物</div><label class="sensor-enable"><input id="environment-default-objects" type="checkbox" checked>既定の机・物体</label><div id="environment-static-surfaces" class="row-actions"></div>');
@@ -38,10 +50,11 @@ export class SceneEnvironment extends WorkEnvironment{
   $('object-copy').onclick=async()=>{const old=this.selected;if(!old)return;try{const n=VEHICLES[old.type]?await this.addVehicle(old.type):this.add(old.type);this.applyItem(n,{...this.itemState(old),is_default:false,position:old.group.position.toArray().map((x,i)=>x+(i<2?.1:0))});this.syncObject();this.changed();}catch(e){this.toast(e.message);}};
   $('object-delete').onclick=()=>{const removed=this.items.filter(x=>this.selected_ids.has(x.id));if(!removed.length)return;this.object_interaction?.cancel();this.select(null);for(const item of removed){item.group.removeFromParent();this.disposeItem(item);}this.items=this.items.filter(x=>!removed.includes(x));this.updateList();this.changed();};
   this.gizmo.addEventListener('objectChange',()=>{if(this.selected&&!this.editTable){for(const k of ['x','y','z']){this.selected.group.position[k]=THREE.MathUtils.clamp(this.selected.group.position[k],-100,100);this.selected.group.scale[k]=THREE.MathUtils.clamp(this.selected.group.scale[k],.001,1000);}this.syncObject();this.changed();}});
-  $('scene-load').parentElement.insertAdjacentHTML('afterend','<details><summary>配置設定の検証</summary><button id="environment-verify" class="wide-button">保存・座標変換を検証</button><output id="environment-qa"></output></details>');
-  $('environment-verify').onclick=async()=>{const b=$('environment-verify');b.disabled=true;try{const {runEnvironmentQA}=await import('./environment-qa.js'),r=await runEnvironmentQA(this);$('environment-qa').textContent=(r.passed?'PASS':'FAIL')+' · '+r.tests.filter(t=>t.passed).length+'/'+r.tests.length;document.documentElement.dataset.environmentQa=JSON.stringify(r);}catch(e){$('environment-qa').textContent=e.message;}finally{b.disabled=false;}};
   install_object_actions(this);
   this.environment_assets=new EnvironmentAssets(this);
+  arrange_field_groups('table',[['x','y','z'],['roll','pitch','yaw'],['width','depth','height'],['color']]);
+  arrange_field_groups('object',[['x','y','z'],['roll','pitch','yaw'],['sx','sy','sz'],['color','scale']]);
+  $('vehicle-dimensions').classList.add('vector-fields');
  }
  set_default_objects(enable_objects){
   this.object_interaction?.cancel();this.select(null);if(this.editTable)$('table-edit').click();
@@ -58,16 +71,21 @@ export class SceneEnvironment extends WorkEnvironment{
   $('environment-static-surfaces').innerHTML=Object.entries(nodes).map(([name,node])=>`<label><input id="environment-${name}-visible" type="checkbox" ${node.visible?'checked':''}>${labels[name]||name}</label>`).join('');
   for(const [name,node]of Object.entries(nodes))$('environment-'+name+'-visible').onchange=()=>{node.visible=$('environment-'+name+'-visible').checked;this.changed();};
  }
- syncTable(){for(const k of ['x','y','z','roll','pitch','yaw','width','depth','height']){const el=$('table-'+k);if(el&&document.activeElement!==el)el.value=(this.state[k]*(['roll','pitch','yaw'].includes(k)?1/rad:1000)).toFixed(1);}}
+ syncTable(){for(const k of ['x','y','z','roll','pitch','yaw','width','depth','height']){const el=$('table-'+k);if(el&&document.activeElement!==el)el.value=format_fixed(this.state[k]*(['roll','pitch','yaw'].includes(k)?1/rad:1000),1);}}
  buildTable(){super.buildTable();this.sync_default_objects();this.syncTable();if($('table-color')){$('table-color').value=this.state.color||'#ffffff';$('table-visible').checked=this.state.visible!==false;}if(this.state.type==='steel')this.table.traverse(o=>{if(o.isMesh&&o.geometry.type==='BoxGeometry'&&o.position.z===-.016)o.material.color.set(this.state.color||'#abb6ba');});}
  add(type,xy){const n=super.add(type,xy);if(!n)return n;n.parent='table';n.group.rotation.order='ZYX';if(type==='wall'||type==='cabinet'){this.scene.attach(n.group);n.parent='world';n.group.position.set(2,type==='wall'?2:-2,-.14);this.setColor(n,'#a5afb9');}n.color=n.color||'#e69331';this.syncObject();return n;}
  async addVehicle(type){if(this.items.length>=30)throw Error('配置は30個までです');const g=await createVehicle(type,type==='ferrari'?'#bd1726':'#b9c5d0'),id=this.nextId++;g.name=VEHICLES[type]+' '+id;g.rotation.order='ZYX';g.position.set(2.8,-1.6,-.14);const item={id,type,color:type==='ferrari'?'#bd1726':'#b9c5d0',parent:'world',group:g};this.scene.add(g);this.items.push(item);this.updateList();this.select(id);this.changed();return item;}
  setColor(item,color){item.color=color;const mats=item.group.userData.paint||[item.group.userData.primary];for(const m of mats)if(m?.color)m.color.set(color);}
  select(id,is_toggle=false){super.select(id,is_toggle);if(this.selected)this.syncObject();}
  setEditing(value){this.editTable=false;if($('table-edit'))$('table-edit').textContent='テーブルのマーカー';super.setEditing(value);}
- syncObject(){if(!this.selected)return;super.syncObject();const g=this.selected.group;for(const [k,v] of [['roll',g.rotation.x/rad],['pitch',g.rotation.y/rad],['sx',g.scale.x],['sy',g.scale.y],['sz',g.scale.z]]){const el=$('object-'+k);if(el&&document.activeElement!==el)el.value=v.toFixed(3);}if(!$('object-parent'))return;$('object-parent').value=this.selected.parent||'table';$('object-visible').checked=g.visible;const size=g.userData.nativeSize;$('vehicle-dimensions').hidden=!size;if(size)for(const [k,i]of[['length',0],['width',1],['height',2]])if(document.activeElement!==$('vehicle-'+k))$('vehicle-'+k).value=(size[i]*g.scale.getComponent(i)*1000).toFixed(1);for(const k of ['x','y','z'])$('object-'+k).parentElement.firstChild.textContent=(this.selected.parent==='world'?'世界 ':'天板 ')+k.toUpperCase()+' mm';}
+ syncObject(){if(!this.selected)return;super.syncObject();const g=this.selected.group;for(const [k,v] of [['roll',g.rotation.x/rad],['pitch',g.rotation.y/rad],['sx',g.scale.x],['sy',g.scale.y],['sz',g.scale.z]]){const el=$('object-'+k);if(el&&document.activeElement!==el)el.value=format_fixed(v,3);}if(!$('object-parent'))return;$('object-parent').value=this.selected.parent||'table';$('object-visible').checked=g.visible;const size=g.userData.nativeSize;$('vehicle-dimensions').hidden=!size;if(size)for(const [k,i]of[['length',0],['width',1],['height',2]])if(document.activeElement!==$('vehicle-'+k))$('vehicle-'+k).value=(size[i]*g.scale.getComponent(i)*1000).toFixed(1);for(const k of ['x','y','z'])$('object-'+k).parentElement.firstChild.textContent=(this.selected.parent==='world'?'世界 ':'天板 ')+k.toUpperCase()+' mm';}
  focus(){if(this.selected)this.focusBounds(new THREE.Box3().setFromObject(this.selected.group));}
- focusBounds(b){const c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3()).length(),distance=Math.max(.4,s/(2*Math.sin(THREE.MathUtils.degToRad(this.camera.fov)/2)));this.orbit.target.copy(c);this.camera.position.copy(c).add(new THREE.Vector3(1,-1,.65).normalize().multiplyScalar(distance));this.orbit.update();}
+ focusBounds(bounds){
+  const ball=bounds.getBoundingSphere(new THREE.Sphere()),half_vertical=THREE.MathUtils.degToRad(this.camera.getEffectiveFOV())/2,half_horizontal=Math.atan(Math.tan(half_vertical)*this.camera.aspect);
+  // 縦横の画角を共に満たす全体表示。細いビュー領域での見切れ防止。
+  const dist=Math.max(.4,1.12*ball.radius/Math.sin(Math.min(half_vertical,half_horizontal)));
+  this.orbit.target.copy(ball.center);this.camera.position.copy(ball.center).add(new THREE.Vector3(1,-1,.65).normalize().multiplyScalar(dist));this.orbit.update();
+ }
  changed(){super.changed();this.scene.updateMatrixWorld(true);}
  itemState(x){return{type:x.type,color:x.color||'#ffffff',parent:x.parent||'table',position:x.group.position.toArray(),rpy:[x.group.rotation.x,x.group.rotation.y,x.group.rotation.z],scaleXYZ:x.group.scale.toArray(),visible:x.group.visible,is_default:!!x.is_default,physics:x.physics||{mode:'none',mass:.2}};}
  getState(){return{format:'topo-workspace/2',table:{...this.state},objects:this.items.map(x=>this.itemState(x)),mid360:this.getSensorState?.()||null,static_surfaces:Object.fromEntries(Object.entries(this.static_surfaces||{}).map(([name,node])=>[name,node.visible])),environment_asset:this.environment_assets?.asset_id||'none'};}

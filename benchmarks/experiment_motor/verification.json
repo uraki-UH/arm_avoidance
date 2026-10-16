@@ -1,0 +1,82 @@
+{
+  "model": "topo_dual_arm_max_long",
+  "tests": {
+    "new_node": 22,
+    "regression_node": 49,
+    "new_export": 16,
+    "legacy_export": 18,
+    "pursuit": 25,
+    "qp": 2,
+    "motor_helpers": "passed",
+    "physical_frames": 21,
+    "physical_joints": 19,
+    "browser_groups": 5,
+    "browser_errors": 0
+  },
+  "behavior": {
+    "actual_velocity_rad_sec": 1.4727507851193764,
+    "actual_torque_nm": 0.16547144697960192,
+    "legacy_velocity_rad_sec": -0.7949275430068239,
+    "legacy_label": "-45.546 deg/s（推定）",
+    "pose_guard": {
+      "is_physics_unchanged": true,
+      "is_ros_unchanged": true
+    },
+    "missing_current": "null",
+    "stale_velocity": null
+  },
+  "diagnosis": {
+    "source_policy": "rollout_cv",
+    "active_joints": [
+      "L_joint1",
+      "L_joint2",
+      "L_joint3",
+      "L_joint4",
+      "L_joint5",
+      "L_joint6",
+      "L_joint7"
+    ],
+    "locked_joints": "左腕7軸以外",
+    "has_eef_orientation_lock": false,
+    "joint_goal_cost": "A/Bの関節角への復帰選好",
+    "same_goal_axes": [
+      3,
+      5,
+      7
+    ],
+    "sample_sec": [
+      662.0600000000001,
+      668.01
+    ],
+    "joint_span_deg": {
+      "L_joint1": 34.204,
+      "L_joint2": 14.923,
+      "L_joint3": 0.424,
+      "L_joint4": 31.482,
+      "L_joint5": 0.027,
+      "L_joint6": 14.874,
+      "L_joint7": 0.031
+    },
+    "phases": [
+      "task"
+    ],
+    "obstacle_phases": [
+      "route_blocked"
+    ],
+    "is_obstacle_stationary": true,
+    "scope": "この既存実験の標本のみ。指摘場面全体の原因の断定なし",
+    "controller_changes": "なし"
+  },
+  "cleanup": {
+    "is_container_process_set_unchanged": true,
+    "is_container_set_unchanged": true,
+    "is_test_port_closed": true,
+    "is_chrome_stopped": true,
+    "is_profile_removed": true,
+    "num_existing_container_processes": 17,
+    "main_job_id": "00530021-b527-45c1-b8a2-adbcccaa348c",
+    "main_job_state": "running"
+  },
+  "browser_limit": "SwiftShader・3D描画停止、モータDOM・2Dグラフの検証",
+  "deployment": "ブラウザ再読込。進行中の旧実験は差分推定、新規実験から実測運動値。既存サーバー・実験の再起動なし"
+}

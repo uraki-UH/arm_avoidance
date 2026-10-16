@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "name": "cbf_qp_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/cartesian_shuttle/measure.py",
+        "--policy",
+        "cbf_qp",
+        "--task-mode",
+        "cartesian",
+        "--condition",
+        "free",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/cartesian_shuttle/measure.py",
+        "--policy",
+        "oscbf",
+        "--task-mode",
+        "cartesian",
+        "--condition",
+        "free",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_cv_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/cartesian_shuttle/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--task-mode",
+        "cartesian",
+        "--condition",
+        "free",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_reactive_free",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/cartesian_shuttle/measure.py",
+        "--policy",
+        "rollout_reactive",
+        "--task-mode",
+        "cartesian",
+        "--condition",
+        "free",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "rollout_cv_pressure",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/cartesian_shuttle/measure.py",
+        "--policy",
+        "rollout_cv",
+        "--task-mode",
+        "cartesian",
+        "--condition",
+        "pressure",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_pressure",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/cartesian_shuttle/measure.py",
+        "--policy",
+        "oscbf",
+        "--task-mode",
+        "cartesian",
+        "--condition",
+        "pressure",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    }
+  ]
+}

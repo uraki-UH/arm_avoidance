@@ -1,0 +1,106 @@
+{
+  "status": "verified_configuration",
+  "model": "topo_dual_arm_max_long",
+  "geometry": {
+    "frame": "base_link",
+    "left_position_m": [
+      0.15001699114012462,
+      0.45004969287532415,
+      0.4999649145705267
+    ],
+    "front_position_m": [
+      0.4090399314095698,
+      0.2027621284023964,
+      0.44389686743797246
+    ],
+    "dist_m": 0.3624743425927403,
+    "orientation_change_deg": 0.029672474240921183,
+    "num_path_checks": 181,
+    "min_internal_gap_m": 0.01559586719336127,
+    "has_speed_setting_changes": false,
+    "has_right_arm_changes": false
+  },
+  "tests": {
+    "python_task": 10,
+    "python_low_speed_candidates": 2,
+    "node_regression": 129,
+    "browser": 1
+  },
+  "batch": {
+    "num_cases": 6,
+    "estimated_sec": 42,
+    "elapsed_sec": 35.17605798901059,
+    "num_free_cases": 4,
+    "num_free_cases_with_round_trip": 4,
+    "num_obstacle_cases": 2,
+    "num_obstacle_contact_cases": 2
+  },
+  "cases": [
+    {
+      "name": "cbf_qp_free",
+      "failure_reason": "",
+      "evaluated_sec": 8.0,
+      "num_arrivals": 3,
+      "num_round_trips": 1,
+      "num_qp_no_solution": 0
+    },
+    {
+      "name": "oscbf_free",
+      "failure_reason": "",
+      "evaluated_sec": 8.0,
+      "num_arrivals": 7,
+      "num_round_trips": 3,
+      "num_qp_no_solution": 0
+    },
+    {
+      "name": "rollout_cv_free",
+      "failure_reason": "",
+      "evaluated_sec": 8.0,
+      "num_arrivals": 3,
+      "num_round_trips": 1,
+      "num_qp_no_solution": 0
+    },
+    {
+      "name": "rollout_reactive_free",
+      "failure_reason": "",
+      "evaluated_sec": 8.0,
+      "num_arrivals": 3,
+      "num_round_trips": 1,
+      "num_qp_no_solution": 0
+    },
+    {
+      "name": "rollout_cv_pressure",
+      "failure_reason": "target_touch",
+      "evaluated_sec": 1.46,
+      "num_arrivals": 0,
+      "num_round_trips": 0,
+      "num_qp_no_solution": 0
+    },
+    {
+      "name": "oscbf_pressure",
+      "failure_reason": "target_touch",
+      "evaluated_sec": 1.3800000000000001,
+      "num_arrivals": 0,
+      "num_round_trips": 0,
+      "num_qp_no_solution": 6
+    }
+  ],
+  "runtime": {
+    "is_runtime_restored": true,
+    "has_existing_job_restart": false,
+    "existing_job_id": "6c02019c-949a-4d73-86b7-79a15a200ac0",
+    "existing_job_state": "completed",
+    "num_browser_errors": 0,
+    "num_browser_writes": 0,
+    "owned_processes": []
+  },
+  "limitations": [
+    "障害物なしの確認時間は各8 sec。長時間・実機の保証なし",
+    "障害物あり2条件ともtarget_touchで終了。回避成功とは別の結果",
+    "URDFのcontinuous軸は既存の有限な暫定範囲を維持。実機可動域の校正は未完了"
+  ],
+  "source_sha256": {
+    "benchmarks/shuttle_bag/task.json": "54a56c4180124ee8d7c2e87e855a6f485d91052c1535e4b9aaebfe896cc1da70",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_sphere_avoidance.py": "d9fd455b8756e42156a42aa9ce65788cfa7d445779a49ac6f3925c6647ec813c"
+  }
+}

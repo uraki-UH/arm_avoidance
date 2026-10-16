@@ -1,0 +1,434 @@
+{
+  "status": "implemented_and_verified",
+  "model": "topo_dual_arm_max_long",
+  "tests": {
+    "node_unit_and_regression": 114,
+    "random_walk_python": 11,
+    "python_regression": 61,
+    "export_regression": 34,
+    "browser_groups": 3,
+    "old_body_and_hash_compatible": true
+  },
+  "batch": {
+    "num_cases": 10,
+    "estimated_sec": 60,
+    "elapsed_sec": 55.44,
+    "num_harness_errors": 0,
+    "num_random_walk_cases": 8,
+    "num_random_walk_contact_cases": 2
+  },
+  "checks": {
+    "seed_reproducibility": true,
+    "target_independence": true,
+    "all_logged_spheres_inside_bounds": true,
+    "no_added_online_fk": true,
+    "no_added_voxel_registration": true,
+    "qp_failure_obstacle_continues": true,
+    "has_hardware_output": false
+  },
+  "limitations": [
+    "球のみのランダム目標点更新型。二節腕のランダム動作は未対応",
+    "固定部ガード後の実測加速度は入力加速度と別の値",
+    "方向待ち・固定部ガードによる一時保持の可能性",
+    "有限8条件中2条件で実接触。回避成功・連続安全性の保証なし"
+  ],
+  "runtime": {
+    "all_owned_test_processes_stopped": true,
+    "existing_ros_pids_preserved": true,
+    "containers_unchanged": true,
+    "num_processes": 16,
+    "authorized_restart_ports": [
+      8877,
+      8879,
+      8880
+    ],
+    "ros_domain_id": 0,
+    "tf_topic": "/tf",
+    "main_supports_random_walk": true
+  },
+  "browser": {
+    "num_check_groups": 3,
+    "ui": {
+      "modes": [
+        "distal_sweep",
+        "link_point",
+        "random_walk"
+      ],
+      "extent": {
+        "min": "0.3",
+        "max": "1.5",
+        "value": "0.6",
+        "is_disabled": false,
+        "display": "",
+        "border": "1px"
+      },
+      "change": {
+        "min": "0.1",
+        "max": "5",
+        "value": "0.6"
+      },
+      "is_offset_disabled": true,
+      "label": "範囲中心・対象開始リンク（開始時）"
+    },
+    "live": {
+      "job_id": "e503b929-34d6-46bc-8739-0c63c20cfa5f",
+      "mode": "random_walk",
+      "region": {
+        "min_position_m": [
+          -0.4054234927345414,
+          -0.3851159492307279,
+          -0.08
+        ],
+        "max_position_m": [
+          0.6945765072654586,
+          0.7148840507692722,
+          0.8953732102545784
+        ],
+        "change_sec": 0.4
+      },
+      "frames": [
+        {
+          "time_sec": 0.01,
+          "sphere": [
+            -0.29250310307338584,
+            0.1740345470406139,
+            0.39290933197682676
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.060000000000000005,
+          "sphere": [
+            -0.2898182233636921,
+            0.1748303853542262,
+            0.3941234327840668
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.11,
+          "sphere": [
+            -0.2871218622720979,
+            0.17562962692034798,
+            0.39534272546451565
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.16,
+          "sphere": [
+            -0.2844255011805037,
+            0.17642886848646974,
+            0.3965620181449645
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.21000000000000002,
+          "sphere": [
+            -0.2817291400889095,
+            0.1772281100525915,
+            0.39778131082541335
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.26,
+          "sphere": [
+            -0.27903277899731527,
+            0.17802735161871328,
+            0.3990006035058622
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.31,
+          "sphere": [
+            -0.27633641790572105,
+            0.17882659318483504,
+            0.40021989618631104
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.36000000000000004,
+          "sphere": [
+            -0.27364005681412684,
+            0.1796258347509568,
+            0.4014391888667599
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.41000000000000003,
+          "sphere": [
+            -0.27113429190279137,
+            0.18017464242418804,
+            0.40191858645243167
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.46,
+          "sphere": [
+            -0.26939091171249085,
+            0.17972171452585714,
+            0.3994384036589952
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.51,
+          "sphere": [
+            -0.26764753152219034,
+            0.17926878662752624,
+            0.3969582208655587
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.56,
+          "sphere": [
+            -0.2659041513318898,
+            0.17881585872919534,
+            0.39447803807212223
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.61,
+          "sphere": [
+            -0.2641607711415893,
+            0.17836293083086444,
+            0.39199785527868575
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.66,
+          "sphere": [
+            -0.2624173909512888,
+            0.17791000293253353,
+            0.38951767248524927
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.7100000000000001,
+          "sphere": [
+            -0.2606740107609883,
+            0.17745707503420263,
+            0.3870374896918128
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.76,
+          "sphere": [
+            -0.25893063057068777,
+            0.17700414713587173,
+            0.3845573068983763
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.81,
+          "sphere": [
+            -0.25700436593774695,
+            0.1768877371060679,
+            0.3827542511354038
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.86,
+          "sphere": [
+            -0.2543465635342449,
+            0.1781173985503723,
+            0.38365970349428713
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.91,
+          "sphere": [
+            -0.25168876113074284,
+            0.17934705999467673,
+            0.38456515585317047
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 0.9600000000000001,
+          "sphere": [
+            -0.2490309587272408,
+            0.18057672143898115,
+            0.3854706082120538
+          ],
+          "phase": "random_walking"
+        },
+        {
+          "time_sec": 1.01,
+          "sphere": [
+            -0.24637315632373874,
+            0.18180638288328557,
+            0.38637606057093715
+          ],
+          "phase": "random_walking"
+        }
+      ],
+      "is_target_visible": false,
+      "status": "対象範囲: L_link4 以降\n状態: 実行中\n制御: 回避\n到達: 0 回 · 誤差 116.9 mm / 20.9°\n障害物: ランダム移動 · 0.06 m/s\n迂回制約: あり\n接触: なし\n最新離隔: 228.7 mm\n終了理由: なし\n可動域: 暫定値あり・実機未照合\n表示: 補間 · 受信差 50 ms（試験時刻） · 更新 0 ms前"
+    },
+    "num_errors": 0,
+    "server_pid": 129879,
+    "chrome_pid": 512330,
+    "profile": "/tmp/topo-replay-browser-C8pr2q",
+    "port": 44037,
+    "main_job_id": "cea8b397-1816-4e05-868e-1783920295e9",
+    "main_state": "completed",
+    "renderer": "SwiftShader・保存姿勢の通常描画、実行中は描画オブジェクトとDOMを検査"
+  },
+  "conditions": [
+    {
+      "name": "001_cbf_qp_link_point_401",
+      "policy": "cbf_qp",
+      "pursuit_mode": "link_point",
+      "seed": 401,
+      "failure_reason": "",
+      "num_arrivals": 0,
+      "evaluated_sec": 6.0,
+      "contact_sec": 0.0,
+      "propose_mean_ms": 5.583880009119942,
+      "num_random_walk_goals": null,
+      "obstacle_path_m": 0.3885270209316849
+    },
+    {
+      "name": "001_cbf_qp_random_walk_401",
+      "policy": "cbf_qp",
+      "pursuit_mode": "random_walk",
+      "seed": 401,
+      "failure_reason": "target_touch",
+      "num_arrivals": 1,
+      "evaluated_sec": 2.32,
+      "contact_sec": 0.01,
+      "propose_mean_ms": 6.075527170980151,
+      "num_random_walk_goals": 4,
+      "obstacle_path_m": 1.4817914538955075
+    },
+    {
+      "name": "001_cbf_qp_random_walk_719",
+      "policy": "cbf_qp",
+      "pursuit_mode": "random_walk",
+      "seed": 719,
+      "failure_reason": "",
+      "num_arrivals": 8,
+      "evaluated_sec": 6.0,
+      "contact_sec": 0.0,
+      "propose_mean_ms": 5.615896282931014,
+      "num_random_walk_goals": 10,
+      "obstacle_path_m": 5.150169003697344
+    },
+    {
+      "name": "001_oscbf_random_walk_401",
+      "policy": "oscbf",
+      "pursuit_mode": "random_walk",
+      "seed": 401,
+      "failure_reason": "target_touch",
+      "num_arrivals": 0,
+      "evaluated_sec": 1.07,
+      "contact_sec": 0.01,
+      "propose_mean_ms": 5.572236955314028,
+      "num_random_walk_goals": 2,
+      "obstacle_path_m": 0.5889065297071353
+    },
+    {
+      "name": "001_oscbf_random_walk_719",
+      "policy": "oscbf",
+      "pursuit_mode": "random_walk",
+      "seed": 719,
+      "failure_reason": "",
+      "num_arrivals": 11,
+      "evaluated_sec": 6.0,
+      "contact_sec": 0.0,
+      "propose_mean_ms": 4.680558865220519,
+      "num_random_walk_goals": 10,
+      "obstacle_path_m": 5.150169003697344
+    },
+    {
+      "name": "001_rollout_cv_distal_sweep_719",
+      "policy": "rollout_cv",
+      "pursuit_mode": "distal_sweep",
+      "seed": 719,
+      "failure_reason": "target_touch",
+      "num_arrivals": 1,
+      "evaluated_sec": 3.63,
+      "contact_sec": 0.01,
+      "propose_mean_ms": 20.8923650390392,
+      "num_random_walk_goals": null,
+      "obstacle_path_m": 2.4379372682277314
+    },
+    {
+      "name": "001_rollout_cv_random_walk_401",
+      "policy": "rollout_cv",
+      "pursuit_mode": "random_walk",
+      "seed": 401,
+      "failure_reason": "",
+      "num_arrivals": 2,
+      "evaluated_sec": 6.0,
+      "contact_sec": 0.0,
+      "propose_mean_ms": 20.784023292314185,
+      "num_random_walk_goals": 10,
+      "obstacle_path_m": 4.6493014475550885
+    },
+    {
+      "name": "001_rollout_cv_random_walk_719",
+      "policy": "rollout_cv",
+      "pursuit_mode": "random_walk",
+      "seed": 719,
+      "failure_reason": "",
+      "num_arrivals": 6,
+      "evaluated_sec": 6.0,
+      "contact_sec": 0.0,
+      "propose_mean_ms": 21.01844330779083,
+      "num_random_walk_goals": 10,
+      "obstacle_path_m": 5.150169003697344
+    },
+    {
+      "name": "001_rollout_reactive_random_walk_401",
+      "policy": "rollout_reactive",
+      "pursuit_mode": "random_walk",
+      "seed": 401,
+      "failure_reason": "",
+      "num_arrivals": 3,
+      "evaluated_sec": 6.0,
+      "contact_sec": 0.0,
+      "propose_mean_ms": 21.12047444121951,
+      "num_random_walk_goals": 10,
+      "obstacle_path_m": 4.6493014475550885
+    },
+    {
+      "name": "001_rollout_reactive_random_walk_719",
+      "policy": "rollout_reactive",
+      "pursuit_mode": "random_walk",
+      "seed": 719,
+      "failure_reason": "",
+      "num_arrivals": 6,
+      "evaluated_sec": 6.0,
+      "contact_sec": 0.0,
+      "propose_mean_ms": 20.98984799255656,
+      "num_random_walk_goals": 10,
+      "obstacle_path_m": 5.150169003697344
+    }
+  ],
+  "source_sha256": {
+    "sphere_chase.py": "9f5d532aa0a89485174722d79bc46e46b9572670ac18c12a8ee1ea979106534c",
+    "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+    "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+    "gng_sphere_avoidance.py": "9e323ea0d6bedd3197fb5ec667dfb79cf1ab1ae9dde1c7d81420eaa671fde99f",
+    "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+    "physics_scene.py": "9c25fba01af19e5a20acca2c5319ae0fccf382584537b75881d3ac2ff5c2b380",
+    "physics_robot.py": "c72f76562ac7af45963f2e9bf1eb660720c558df049818deed5ea24a45091fba",
+    "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+  }
+}

@@ -3,7 +3,6 @@
   "id": "robot_tf",
   "category": "launch",
   "label": "ロボットTF（表示確認）",
-  "description": "独立した名前空間でrobot_state_publisherを起動。関節指令の出力なし。",
   "parameters": {
     "namespace": {
       "type": "string",

@@ -14,11 +14,12 @@ def angle_delta(goal, positions, is_periodic):
 
 class pursuit_cbf:
     """観測距離・速度のみの速度CBF。数値失敗・実行不能時の無フィルタ代替なし。"""
-    def __init__(self, geometry, active, scene, method='cbf_qp', margin=.08):
+    def __init__(self, geometry, active, scene, method='cbf_qp', margin=.08, task=None):
         if method not in ('cbf_qp', 'oscbf') or not 0 < margin <= .3:
             raise ValueError('CBF方式・余裕距離の不正')
         self.geometry, self.active, self.scene = geometry, np.asarray(active), scene
         self.method, self.margin = method, margin
+        self.task = task
         self.num_constraints = 128
         self.alpha = 3.
         self.previous_field = None
@@ -45,6 +46,10 @@ class pursuit_cbf:
             import jax
             from cbfpy import CBF
             from oscbf_avoidance.filter import CollisionConfig
+            from gng_inputs import workspace
+            # 入力形状・実装ハッシュで分離されたJAXキャッシュ。試験間の再コンパイル抑制。
+            jax.config.update('jax_compilation_cache_dir',str(workspace/'docker/runtime/avoidance-jax'))
+            jax.config.update('jax_persistent_cache_min_compile_time_secs',0.)
             begin = time.perf_counter()
             limits = geometry.limits[self.active]
             config = CollisionConfig(np.full(len(active), 2.), np.maximum(limits[:, 0], -1e6), np.minimum(limits[:, 1], 1e6), self.num_constraints)
@@ -74,6 +79,13 @@ class pursuit_cbf:
             rows.append(gradients[idx])
             bounds.append(-self.alpha*(gaps[0, idx]-self.margin)-obstacle_rate[idx])
         pairs = self.geometry.self_pairs
+        if getattr(self.geometry,'environment_shapes',()):
+            environment_gaps = self.geometry.environment_clearances(centers)
+            for idx in np.flatnonzero(environment_gaps[0]<.12):
+                gradient = (environment_gaps[1:,idx]-environment_gaps[0,idx])/.0001
+                if np.linalg.norm(gradient)>1e-8:
+                    rows.append(gradient)
+                    bounds.append(-self.alpha*(environment_gaps[0,idx]-.025))
         if len(pairs):
             pair_gaps = np.linalg.norm(centers[:, pairs[:, 0]]-centers[:, pairs[:, 1]], axis=-1)-self.geometry.radii[pairs[:, 0]]-self.geometry.radii[pairs[:, 1]]
             for idx in np.flatnonzero(pair_gaps[0] < .08):
@@ -91,13 +103,19 @@ class pursuit_cbf:
         self.num_constraints_used = len(rows)
         return np.asarray(rows), np.asarray(bounds)
 
-    def task_weights(self):
+    def task_state(self):
         scene = self.scene
         body = scene.mujoco.mj_name2id(scene.model, scene.mujoco.mjtObj.mjOBJ_BODY, 'robot_L_tcp')
         dofs = [scene.model.jnt_dofadr[scene.robot.ids[self.geometry.joint_names[idx]]] for idx in self.active]
         linear = np.zeros((3, scene.model.nv));angular = np.zeros_like(linear)
         scene.mujoco.mj_jac(scene.model, scene.data, linear, angular, scene.data.xpos[body], body)
         jacobian = np.vstack((linear[:, dofs], angular[:, dofs]))
+        frame = np.eye(4);frame[:3,3] = scene.data.xpos[body];frame[:3,:3] = scene.data.xmat[body].reshape(3,3)
+        return frame,jacobian,dofs
+
+    def task_weights(self, state=None):
+        scene = self.scene
+        _,jacobian,dofs = self.task_state() if state is None else state
         mass = np.zeros((scene.model.nv, scene.model.nv))
         scene.mujoco.mj_fullM(scene.model, mass, scene.data.qM)
         inverse = np.linalg.inv(mass[np.ix_(dofs, dofs)])
@@ -108,7 +126,10 @@ class pursuit_cbf:
     def propose(self, positions, velocity, goal, field, stamp_sec):
         matrix, values = self.constraints(positions, velocity, field, stamp_sec)
         nominal = np.clip(3.*angle_delta(goal, positions, self.is_periodic)[self.active], -2., 2.)
-        weights = self.task_weights() if self.method == 'oscbf' else np.eye(len(self.active))
+        task_state = self.task_state() if self.task is not None else None
+        if self.task is not None:
+            nominal,_ = self.task.control(positions,task_state[0],task_state[1])
+        weights = (self.task_weights(task_state) if task_state is not None else self.task_weights()) if self.method == 'oscbf' else np.eye(len(self.active))
         # 固定寸法QPへの制約生成。未選択行を含む全残差の採用前検査。
         selected = np.argsort(matrix@nominal-values)[:self.num_constraints]
         can_solve = False

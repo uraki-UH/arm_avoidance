@@ -55,7 +55,7 @@ export class camera_workspace {
         </div>
         ${lens_editor('left', '単眼・左レンズの解像度と歪み')}
         ${lens_editor('right', '右レンズの解像度と歪み')}
-        <details><summary>取付位置・左右間隔</summary><div class="field-grid">
+        <details><summary>取付位置・左右間隔</summary><div class="field-grid vector-fields">
           ${['x', 'y', 'z'].map(axis => numeric_field(`camera-mount-${axis}`, `位置 ${axis.toUpperCase()} [m]`, -10, 10)).join('')}
           ${['roll', 'pitch', 'yaw'].map((axis, idx) => numeric_field(`camera-mount-${axis}`, `${['ロール', 'ピッチ', 'ヨー'][idx]} [°]`, -360, 360)).join('')}
           <label id="camera-baseline-field">左右間隔 [mm]<input id="camera-baseline" type="number" min="0.1" max="2000" step="any"></label>

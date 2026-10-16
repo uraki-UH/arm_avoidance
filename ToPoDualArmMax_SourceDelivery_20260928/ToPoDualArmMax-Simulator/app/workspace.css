@@ -1,6 +1,5 @@
 .workspace-tabs{display:flex;gap:4px;position:sticky;top:-25px;z-index:8;background:#fff;padding:10px 0 14px;margin:-10px 0 20px;border-bottom:1px solid #e7deeb}.workspace-tabs button{flex:1;background:#f7f2f9;color:#795384;border:1px solid #e0d2e6;font-size:11px;padding:9px 2.5px}.workspace-tabs button.active{background:#8c1c8c;color:white;border-color:#8c1c8c}.workspace-panel[hidden]{display:none}.workspace-panel .panel-heading{margin-bottom:20px}.field-label{display:flex;flex-direction:column;gap:8px;color:#73537d;font-size:11px;margin:16px 0}.field-label select{padding:9px;width:100%}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:13px 0}.field-grid label{display:flex;flex-direction:column;gap:6px;font-size:10px;color:#8a7591}.field-grid input,.pixel-readout input{border:1px solid #e1d5e7;background:#faf7fc;color:#52335f;border-radius:5px;padding:7px;font-size:12px;width:100%;min-width:0}.field-grid input[type=color]{padding:2px;height:31px}.row-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;color:#81678b}.row-actions button,.wide-button{border:1px solid #dac6e3;color:#8c1c8c;background:#fff;font-size:10px;padding:8px;flex:1;white-space:nowrap}.row-actions button:hover,.wide-button:hover{background:#f3e4f8}.row-actions button:disabled{opacity:.45;cursor:default}.row-actions select{flex:1;min-width:0;padding:7px;font-size:10px}.row-actions label{display:flex;gap:4px;align-items:center}.sub-note{font-size:9px;line-height:1.8;color:#927c9a;margin:12px 0 18px}.space-top{margin-top:20px}#object-list{height:110px;background:#faf7fc;color:#775482;border-color:#decde7;padding:7px}#object-list option{padding:6px}#object-editor[hidden]{display:none}.sensor-images figure{margin:15px 0}.sensor-images figcaption{display:flex;justify-content:space-between;color:#735080;font-weight:600;font-size:11px;margin-bottom:7px}.sensor-images figcaption span{font-size:9px;color:#a18ca9;font-weight:400}.sensor-images canvas{width:100%;height:auto;aspect-ratio:16/9;display:block;background:#18151e;border:1px solid #ddd1e4;border-radius:6px}#depth-preview{cursor:crosshair}.depth-scale{display:flex;justify-content:space-between;background:linear-gradient(90deg,#0000ff,#00ff00,#ff0000);border-radius:3px;color:#fff;font-size:8px;margin-top:4px;padding:2px 4px}.sensor-stats{white-space:pre-line;line-height:1.9;border:1px solid #dfd1e5;background:#f8f3fa;color:#73527d;border-radius:6px;padding:10px;font-size:10px;margin:14px 0}.pixel-readout{padding:12px 0;margin:12px 0;border-block:1px solid #eadfec}.pixel-readout label{flex:1}.pixel-readout input{width:65px}.pixel-readout output{display:block;white-space:pre-line;font:10px/1.8 Consolas,monospace;color:#745a7f;margin-top:10px}.wide-button{width:100%;margin:14px 0 8px}#calibration-json{width:100%;height:245px;resize:vertical;background:#faf8fc;color:#684474;border:1px solid #decce8;border-radius:5px;padding:9px;font:10px/1.5 Consolas,monospace}#sensor-qa{font-size:10px;color:#624170;line-height:1.7;display:block;white-space:pre-line}#sensor-live{background:#8c1c8c;color:white}.sensor-images figure:first-child{margin-top:20px}aside{width:365px;min-width:365px}main{grid-template-columns:minmax(0,1fr) 365px}#export-link{padding:8px 0}.view-top p{max-width:280px}@media(max-width:700px){aside{width:100%;min-width:0}main{grid-template-columns:1fr}.workspace-tabs{top:-15px}.sensor-images{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sensor-images figure{margin:10px 0}.sensor-images figure:first-child{margin-top:10px}}@media(max-width:460px){.sensor-images{display:block}}
 .sensor-enable{display:flex;gap:10px;align-items:center;padding:12px;background:#f2e8f7;color:#602574;border-radius:8px;font-weight:bold;margin:12px 0}
-.workspace-tabs{flex-wrap:wrap}.workspace-tabs button{flex:0 0 auto}
 #camera-panel .sensor-images canvas{aspect-ratio:auto}#camera-panel figure[hidden]{display:none}
 #camera-panel .field-label,#camera-panel .field-grid label,#camera-panel button{font-size:12px}
 #camera-panel .field-grid label{min-width:0;align-items:stretch;text-align:left}
@@ -8,16 +7,17 @@
 #camera-panel summary{justify-content:flex-start;text-align:left;font-size:13px}
 #camera-panel .sensor-stats{display:block;font-size:12px}
 #camera-calibration{width:100%;height:320px;resize:vertical;font:12px/1.5 monospace}
-#camera-live,#camera-once{background:#197a45;color:#fff;border-color:#197a45}
+#camera-live,#camera-once{background:#96e6ac;color:#153820;border-color:#53a86f}
 #camera-load,#camera-apply,#camera-settings-apply{background:#226aa4;color:#fff;border-color:#226aa4}
 #lidar-qa{white-space:pre-wrap;font-size:10px;line-height:1.8;display:block;padding:8px 0}
 #lidar-panel details{margin:12px 0}
 #lidar-panel a{color:#7a187a;font-size:11px}
 .field-grid select{max-width:100%;font-size:11px}
-.workspace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))!important}
-.workspace-tabs button{min-width:0;white-space:normal}
-.sensor-tabs{display:flex;gap:6px;margin:0 0 18px}
-.sensor-tabs button{flex:1;min-width:0;padding:8px 4px;font-size:12px;background:#f7f2f9;color:#795384;border:1px solid #e0d2e6;border-radius:5px}
+.field-grid.vector-fields{grid-template-columns:repeat(3,minmax(0,1fr))}.field-grid.vector-fields>label{min-width:0}
+.workspace-tabs{display:grid;gap:2px;padding:10px 0 14px;margin-bottom:20px}
+.workspace-tabs button{min-width:0;padding:9px 3px;white-space:nowrap}
+.sensor-tabs{display:grid;gap:3px;margin:0 0 18px}
+.sensor-tabs button{min-width:0;padding:8px 3px;font-size:12px;background:#f7f2f9;color:#795384;border:1px solid #e0d2e6;border-radius:5px}
 .sensor-tabs button.active{background:#8c1c8c;color:#fff;border-color:#8c1c8c}
 [hidden]{display:none!important}
 .lidar-pattern-preview{margin:14px 0}.lidar-pattern-preview figcaption{font-size:11px;color:#70477d;display:flex;justify-content:space-between;gap:8px}.lidar-pattern-preview figcaption span{font-size:8px;color:#937c9c}.lidar-pattern-preview canvas{display:block;width:100%;height:auto;border:1px solid #e5dbea;border-radius:8px;margin-top:7px}.lidar-pattern-preview .sub-note{margin:5px 0 10px}
@@ -26,7 +26,7 @@
 
 .object-interaction-toolbar{position:absolute;left:12px;bottom:48px;z-index:4;max-width:calc(100% - 24px);padding:4px;background:#172526ed;color:#fff;border-radius:6px;font-size:11px;pointer-events:auto}
 .object-interaction-row{display:flex;align-items:center;gap:4px}
-.object-interaction-toolbar select,.object-interaction-toolbar button{height:28px;margin:0;padding:3px 7px;border:1px solid #637775;border-radius:4px;background:#243a38;color:#fff;font:inherit;line-height:1.2}
+.object-interaction-toolbar select,.object-interaction-toolbar button{height:28px;margin:0;padding:3px 7px;border:1px solid #637775;border-radius:4px;background:#edf2f6;color:#24333f;font:inherit;line-height:1.2}
 .object-interaction-toolbar select{width:134px;min-width:0;max-width:42vw}
 .object-interaction-toolbar button{min-width:28px;white-space:nowrap}
 .object-interaction-toolbar button:disabled{opacity:.45;cursor:default}
@@ -74,8 +74,26 @@ button.physics-scene-name:hover{color:#568622}
 .physics-scene-toggle{grid-column:2;grid-row:1;font-size:11px;white-space:nowrap;padding:4px 6px;background:var(--panel);color:var(--text)}
 .physics-scene-toggle[aria-pressed=true]{background:#edf7e2;border-color:#79bb35;color:#345714}
 
+/* 無効状態の判読性。背景・文字色による操作可否の区別。 */
+:is(button:disabled,.row-actions button:disabled,.object-interaction-toolbar button:disabled){opacity:1;background:#e3e9ee;color:#586673;border-color:#b5c1ca}
+input[type=number]{border:1px solid #a6b4c0;border-radius:4px;background:#fff;color:#24333f}
+input[type=number]:disabled{border-color:#bcc6ce;background:#eef1f4;color:#5d6973}
+
 /* 定義から生成したROSプラグイン設定とログ */
 .plugin-fields label,.ros-launch-plugins>label{display:flex;flex-direction:column;gap:5px;margin:10px 0;font-size:12px}
 .plugin-fields input:not([type=checkbox]),.plugin-fields select,.ros-launch-plugins select{width:100%;min-width:0;padding:6px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:5px}
 .ros-launch-plugins{border-top:1px solid var(--line);margin-top:18px;padding-top:10px}
 .ros-launch-plugins pre{max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 monospace}
+.robot-follow-roles{display:flex;gap:8px;margin:10px 0}
+.robot-follow-roles label{display:flex;align-items:center;gap:4px;flex:1;min-width:0;white-space:nowrap}
+.robot-follow-roles select{flex:1;min-width:0;width:0;padding:5px 2px;font-size:11px}
+
+/* ロボット配置の数値・単位幅の確保と、残り幅へのスライダー縮小 */
+.robot-placement-row{grid-template-columns:34px minmax(0,1fr) 108px;gap:6px}
+.robot-placement-row>input[type=range]{min-width:0}
+.robot-placement-row .body-joint-number{min-width:0;gap:4px;white-space:nowrap}
+.robot-placement-row .body-joint-number input[type=number]{flex:1 1 0;width:0;min-width:0;text-align:right}
+.robot-placement-unit{flex:0 0 12px;text-align:center}
+
+/* 一括物理設定の押しやすい操作領域と、狭いパネルでの折返し */
+#physics-bulk-apply{min-height:44px;white-space:normal;line-height:1.5}

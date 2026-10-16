@@ -1,3 +1,4 @@
+import {format_fixed} from './display-format.js';
 import * as THREE from 'three';
 import {TransformControls} from 'three/addons/controls/TransformControls.js';
 
@@ -26,8 +27,7 @@ export class WorkEnvironment {
   }
   enhanceUI(){}
   ui(){
-    $('environment-panel').innerHTML=`<div class="panel-heading"><div><span class="eyebrow">WORKSPACE</span></div><span class="chip">m / mm</span></div>
-    <label class="field-label">テーブルの種類<select id="table-type">${Object.entries(TABLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>
+    $('environment-panel').innerHTML=`    <label class="field-label">テーブルの種類<select id="table-type">${Object.entries(TABLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>
     <div class="field-grid">${[['table-x','中心 X',500],['table-y','中心 Y',0],['table-z','天板 Z',120],['table-yaw','Yaw °',0],['table-width','奥行 X',600],['table-depth','幅 Y',800]].map(([id,t,v])=>`<label>${t}<input id="${id}" type="number" value="${v}" step="${id==='table-yaw'?5:10}" aria-label="テーブル ${t}"></label>`).join('')}</div>
     <p class="sub-note">ロボット基準・mm</p>
     <div class="section-label">物体を追加 <span>複数配置・最大30個</span></div><div class="row-actions"><select id="object-type" aria-label="追加する物体">${Object.entries(OBJECTS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><button id="object-add">＋ 追加</button></div>
@@ -51,7 +51,7 @@ export class WorkEnvironment {
     if(s.type==='round'){const mesh=cylinder(this.table,1,1,.032,top,-.016,96);mesh.scale.set(s.width/2,1,s.depth/2);}else if(s.type==='pallet'){for(let n=0;n<7;n++)addMesh(this.table,new THREE.BoxGeometry(s.width,s.depth/7*.82,.035),top,[0,-s.depth/2+(n+.5)*s.depth/7,-.0175]);}else addMesh(this.table,new THREE.BoxGeometry(s.width,s.depth,.032),top,[0,0,-.016]);
     const h=Math.max(.02,s.height-.032);for(const x of [-s.width*(s.type==='round'?.29:.39),s.width*(s.type==='round'?.29:.39)])for(const y of [-s.depth*(s.type==='round'?.29:.39),s.depth*(s.type==='round'?.29:.39)])addMesh(this.table,new THREE.BoxGeometry(.028,.028,h),leg,[x,y,-.032-h/2]);
     if(s.type==='steel')addMesh(this.table,new THREE.BoxGeometry(s.width*.85,s.depth*.85,.015),material('#879397',.65,.43),[0,0,-h*.73]);
-    for(const [key,id] of Object.entries({x:'table-x',y:'table-y',z:'table-z',yaw:'table-yaw',width:'table-width',depth:'table-depth'}))if(document.activeElement!==$(id))$(id).value=(s[key]*(key==='yaw'?1/rad:1000)).toFixed(0);$('table-type').value=s.type;this.changed();
+    for(const [key,id] of Object.entries({x:'table-x',y:'table-y',z:'table-z',yaw:'table-yaw',width:'table-width',depth:'table-depth'}))if(document.activeElement!==$(id))$(id).value=format_fixed(s[key]*(key==='yaw'?1/rad:1000),0);$('table-type').value=s.type;this.changed();
   }
   createObject(type,color){
     const g=new THREE.Group(),m=material(color,type==='can'?.65:.06,type==='bottle'?.28:.43);g.userData.primary=m;
@@ -90,7 +90,7 @@ export class WorkEnvironment {
     for(const item of this.items){if(!this.selected_ids.has(item.id)||item===this.selected)continue;let box=this.selection_boxes.get(item.id);if(!box){box=new THREE.Box3Helper(new THREE.Box3(),0x8c1c8c);this.overlay.add(box);this.selection_boxes.set(item.id,box);}box.box.setFromObject(item.group);}
   }
   setEditing(value){this.editing=!!(value&&this.selected&&this.selected_ids.size===1);this.gizmo.enabled=this.editing;this.gizmo.getHelper().visible=this.editing;if(this.editing)this.gizmo.attach(this.selected.group);else this.gizmo.detach();$('object-edit').textContent=this.editing?'配置を完了':'配置マーカー';this.onEdit(this.editing);}
-  syncObject(){if(!this.selected)return;const g=this.selected.group;for(const k of ['x','y','z'])if(document.activeElement!==$('object-'+k))$('object-'+k).value=(g.position[k]*1000).toFixed(1);if(document.activeElement!==$('object-yaw'))$('object-yaw').value=(g.rotation.z/rad).toFixed(1);if(document.activeElement!==$('object-scale'))$('object-scale').value=g.scale.x.toFixed(2);$('object-color').value=this.selected.color;}
+  syncObject(){if(!this.selected)return;const g=this.selected.group;for(const k of ['x','y','z'])if(document.activeElement!==$('object-'+k))$('object-'+k).value=format_fixed(g.position[k]*1000,1);if(document.activeElement!==$('object-yaw'))$('object-yaw').value=format_fixed(g.rotation.z/rad,1);if(document.activeElement!==$('object-scale'))$('object-scale').value=g.scale.x.toFixed(2);$('object-color').value=this.selected.color;}
   changed(){this.root.updateMatrixWorld(true);this.refresh_selection();this.renderer.shadowMap.needsUpdate=true;this.onChange?.();}
   getState(){return {format:'topo-workspace/1',table:{...this.state},objects:this.items.map(x=>({type:x.type,color:x.color,position:x.group.position.toArray(),yaw:x.group.rotation.z,scale:x.group.scale.x,quaternion:x.group.quaternion.toArray(),physics:x.physics||{mode:'none',mass:.2}}))};}
   load(value){

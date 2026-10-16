@@ -10,7 +10,7 @@
   "max_eef_orientation_error_deg_th": 3.0,
   "max_arrival_velocity_th": 0.12,
   "poses_deg": {
-    "a": {"L_joint1": -70, "L_joint2": -80, "L_joint4": -40, "R_joint1": 70, "R_joint2": 80, "R_joint4": 40},
-    "b": {"L_joint1": -35, "L_joint2": -65, "L_joint4": -75, "L_joint6": 15, "R_joint1": 70, "R_joint2": 80, "R_joint4": 40}
+    "a": {"L_joint1": -103.5, "L_joint2": 8.8, "L_joint3": 62.2, "L_joint4": -47.2, "L_joint5": -71.6, "L_joint6": 11.3, "L_joint7": -46.7, "R_joint1": 70, "R_joint2": 80, "R_joint4": 40},
+    "b": {"L_joint1": -70, "L_joint2": -80, "L_joint4": -40, "R_joint1": 70, "R_joint2": 80, "R_joint4": 40}
   }
 }

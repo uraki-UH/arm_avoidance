@@ -1,0 +1,20 @@
+{
+  "cwd": "/home/uraki/uraki_ws",
+  "status": "all_test_processes_stopped",
+  "commands": [
+    "node log/artifacts/pursuit_sweep/check_api.mjs",
+    "docker exec -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_sweep/check_sweep.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_target/check_target.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_v2/check_pursuit.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_fixes/check_fixes.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_smooth/check_qp.py'",
+    "PYTHONDONTWRITEBYTECODE=1 timeout 60 python3 log/artifacts/pursuit_fixes/check_export.py",
+    "timeout 60 node --test log/artifacts/pursuit_continuous/check_window.mjs log/artifacts/pursuit_continuous/check_delete.mjs log/artifacts/pursuit_continuous/check_live.mjs log/artifacts/pursuit_smooth/check_clock.mjs log/artifacts/pursuit_fixes/check_recording.mjs",
+    "docker exec -i -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && python3 - /ros2_ws/src/benchmarks/pursuit_sweep/cases.json --output /ros2_ws/src/log/artifacts/pursuit_sweep/batch2 --repeats 1 --timeout-sec 45 --max-total-sec 180 --estimate-sec 6 --continue-on-error' < /home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py",
+    "timeout 180 node log/artifacts/pursuit_sweep/check_browser.mjs"
+  ],
+  "temporary_services": {
+    "http": "random_port",
+    "renderer": "Chrome SwiftShader",
+    "bridge": "no_new_bridge",
+    "cleanup": "専用Node・所有実験・Chromeの停止、専用プロファイルと所有記録の削除"
+  },
+  "existing_services": "8877画面・8879点群ブリッジ・既存連続実験・ROSノードをすべて維持",
+  "note": "自作テストはGit無視対象のローカル保持。比較出力には新規の未使用ディレクトリが必要"
+}

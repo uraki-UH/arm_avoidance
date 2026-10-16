@@ -71,7 +71,8 @@ export class RosJointStream {
      this.latest=Object.keys(pose).length?pose:null;
      if(this.latest){
       const motion=Object.fromEntries(['velocity','effort'].map(field=>[field,Object.fromEntries(Object.keys(pose).filter(name=>typeof data.motion?.[field]?.[name]==='number'&&Number.isFinite(data.motion[field][name])).map(name=>[name,data.motion[field][name]]))]));
-      this.motion_sample={model,pose,motion,is_simulation_input:this.is_simulation_input,received_ms:performance.now(),stamp_sec:data.stamp_sec};
+      const received_ms=performance.now();
+      this.motion_sample={model,pose,motion,is_simulation_input:this.is_simulation_input,received_ms,time_ms:Number.isFinite(data.stamp_sec)?data.stamp_sec*1000:received_ms,stamp_sec:data.stamp_sec};
      }
      this.latest_stamp_sec=data.stamp_sec;
      if(is_leader){const physics=window.simulator?.physics_panel;if(physics?.set_leader_target(data.pose))physics.leader_stamp_sec=data.stamp_sec;this.latest=null;}
@@ -101,7 +102,7 @@ export class RosJointStream {
    this.next_snapshot_ms=this.next_snapshot_ms?this.next_snapshot_ms+(Math.floor((now-this.next_snapshot_ms)/period_ms)+1)*period_ms:now+period_ms;
    this.publish_state();
   }
-  if(this.latest&&$('ros-joints-receive').checked){
+  if(this.latest&&$('ros-joints-receive').checked&&!window.simulator?.avoidance_replay?.has_pose_control){
   try{if(this.panel.rgbd.robot.pose_source===pose_sources.leader){
    const age_sec=Date.now()/1000-this.latest_stamp_sec;
    if(Number.isFinite(age_sec)&&age_sec>=0&&age_sec<window.simulator?.physics_panel?.max_leader_age_ms/1000)window.simulator?.physics_panel?.set_leader_target(this.latest);

@@ -1,3 +1,4 @@
+import {format_fixed} from './display-format.js';
 import {robot_snapshot} from './robot-ros-state.js';
 import {CloudColorControls,displayPLY,update_cloud_geometry} from './pointcloud-colors.js';
 import * as THREE from 'three';
@@ -104,7 +105,7 @@ export class RGBDWorkspace {
   const {colors}=this.colorControls.compute(f.xyz,f.depthWorld,f.colors);update_cloud_geometry(this.cloud,f.xyz,colors);this.cloud.matrixAutoUpdate=false;this.cloud.matrix.fromArray(f.depthWorld);this.cloud.updateMatrixWorld(true);
  }
  updateFrustum(){const k=this.sensor.calibration.depth,m=this.sensor.opticalToWorld(this.opticalWorld()),points=[],origin=new THREE.Vector3().applyMatrix4(m),corners=[[-.5,-.5],[k.width-.5,-.5],[k.width-.5,k.height-.5],[-.5,k.height-.5]].map(([u,v])=>deproject(u,v,.7,k).applyMatrix4(m));for(let i=0;i<4;i++)points.push(origin,corners[i],corners[i],corners[(i+1)%4]);this.frustum.geometry.dispose();this.frustum.geometry=new THREE.BufferGeometry().setFromPoints(points);}
- readPixel(u,v){const f=this.sensor.lastFrame;if(!f)return;const k=f.calibration.depth;u=Math.round(u);v=Math.round(v);$('pixel-u').value=u;$('pixel-v').value=v;if(u<0||v<0||u>=k.width||v>=k.height){$('pixel-result').textContent='画像の範囲外です';return;}const z=f.depth[v*k.width+u];if(!z){$('pixel-result').textContent=`(${u}, ${v}) 深度なし（範囲外・背景・遮蔽）`;return;}const p=deproject(u,v,z,k),w=p.clone().applyMatrix4(new THREE.Matrix4().fromArray(f.depthWorld));$('pixel-result').textContent=`(${u}, ${v}) Z = ${z.toFixed(6)} m\n光学 XYZ: ${p.toArray().map(x=>x.toFixed(6)).join(', ')} m\n世界 XYZ: ${w.toArray().map(x=>x.toFixed(6)).join(', ')} m`;}
+ readPixel(u,v){const f=this.sensor.lastFrame;if(!f)return;const k=f.calibration.depth;u=Math.round(u);v=Math.round(v);$('pixel-u').value=u;$('pixel-v').value=v;if(u<0||v<0||u>=k.width||v>=k.height){$('pixel-result').textContent='画像の範囲外です';return;}const z=f.depth[v*k.width+u];if(!z){$('pixel-result').textContent=`(${u}, ${v}) 深度なし（範囲外・背景・遮蔽）`;return;}const p=deproject(u,v,z,k),w=p.clone().applyMatrix4(new THREE.Matrix4().fromArray(f.depthWorld));$('pixel-result').textContent=`(${u}, ${v}) Z = ${z.toFixed(6)} m\n光学 XYZ: ${p.toArray().map(x=>format_fixed(x,6)).join(', ')} m\n世界 XYZ: ${w.toArray().map(x=>format_fixed(x,6)).join(', ')} m`;}
  async exportFrame(){
   const f=this.sensor.lastFrame;if(!f)return;$('sensor-export').disabled=true;
   try{

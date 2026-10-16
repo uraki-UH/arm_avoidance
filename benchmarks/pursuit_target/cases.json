@@ -1,0 +1,9 @@
+{"cases":[
+ {"name":"before_oscbf_401","argv":["python3","/ros2_ws/src/log/artifacts/pursuit_target/measure.py","--version","before","--policy","oscbf","--seed","401","--output","@case_dir@"],"metrics":"metrics.json"},
+ {"name":"oscbf_401","argv":["python3","/ros2_ws/src/log/artifacts/pursuit_target/measure.py","--policy","oscbf","--seed","401","--output","@case_dir@"],"metrics":"metrics.json"},
+ {"name":"oscbf_401_warm","argv":["python3","/ros2_ws/src/log/artifacts/pursuit_target/measure.py","--policy","oscbf","--seed","401","--output","@case_dir@"],"metrics":"metrics.json"},
+ {"name":"oscbf_linked_719","argv":["python3","/ros2_ws/src/log/artifacts/pursuit_target/measure.py","--policy","oscbf","--shape","linked_arm","--target","L_link6","--seed","719","--output","@case_dir@"],"metrics":"metrics.json"},
+ {"name":"cbf_linked_701","argv":["python3","/ros2_ws/src/log/artifacts/pursuit_target/measure.py","--policy","cbf_qp","--shape","linked_arm","--target","L_link6","--seed","701","--output","@case_dir@"],"metrics":"metrics.json"},
+ {"name":"oscbf_direct_401","argv":["python3","/ros2_ws/src/log/artifacts/pursuit_target/measure.py","--policy","oscbf","--guard","off","--seed","401","--output","@case_dir@"],"metrics":"metrics.json"},
+ {"name":"gng_linked_719","argv":["python3","/ros2_ws/src/log/artifacts/pursuit_target/measure.py","--policy","rollout_cv","--shape","linked_arm","--seed","719","--output","@case_dir@"],"metrics":"metrics.json"}
+]}

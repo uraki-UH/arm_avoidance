@@ -7,14 +7,16 @@ import json
 import math
 from pathlib import Path
 import sys
+import tempfile
 import time
+import xml.etree.ElementTree as et
 
 import numpy as np
 
 from gng_inputs import workspace, load_models
 from gng_avoidance import independent_policy, check_kinematics
 from gng_sphere_avoidance import (load_graph, motion_sequence_predictor, representative_index,
-                                  sphere_field, sphere_rollout_policy)
+                                  sphere_field, sphere_rollout_policy, cartesian_task)
 from physics_scene import PhysicsScene
 from dual_arm_avoidance_geometry import robot_geometry
 from pursuit_obstacle import pursuit_obstacle, capsule_field
@@ -25,8 +27,10 @@ def make_scene(pose, names, active, bodies=None, position_limits=None):
     locked = [name for idx,name in enumerate(names) if idx not in active]
     body = dict(id='pursuer',mode='kinematic',mass=.2,position=[3.,0.,3.],quaternion=[0,0,0,1],
                 geoms=[dict(type='sphere',radius=.06,position=[0,0,0],quaternion=[0,0,0,1])])
-    scene = PhysicsScene([body] if bodies is None else bodies,dict(model='long',pose=dict(zip(names,map(float,pose))),
-        position=[0,0,0],quaternion=[0,0,0,1],locked_joints=locked),dict(mode='none'))
+    pedestal = dict(id='experiment_pedestal',mode='static',mass=1.,position=[0,0,-.07],quaternion=[0,0,0,1],
+        geoms=[dict(type='box',size=[.085,.085,.069],position=[0,0,0],quaternion=[0,0,0,1])])
+    scene = PhysicsScene([*([body] if bodies is None else bodies),pedestal],dict(model='long',pose=dict(zip(names,map(float,pose))),
+        position=[0,0,0],quaternion=[0,0,0,1],locked_joints=locked),dict(mode='none'),model_cache_dir=workspace/'docker/runtime/pursuit-model')
     scene.robot.control_entries = [(name,idx,dof,min(limit,2.)) for name,idx,dof,limit in scene.robot.control_entries]
     if position_limits is None:
         position_limits = [(-np.pi,np.pi) if scene.robot.joints[name].get('type')=='continuous' else
@@ -42,6 +46,13 @@ def make_scene(pose, names, active, bodies=None, position_limits=None):
 def state(scene, names):
     pose, motion = scene.robot.state(), scene.robot.motion_state()
     return np.asarray([pose[name] for name in names]), np.asarray([motion['velocity'][name] for name in names])
+
+
+def body_velocity_at_origin(scene, body, twist):
+    """世界座標の角速度・リンク原点速度。重心速度からの低コスト補正。"""
+    scene.mujoco.mj_objectVelocity(scene.model,scene.data,scene.mujoco.mjtObj.mjOBJ_BODY,body,twist,0)
+    twist[3:] += np.cross(twist[:3],scene.data.xpos[body]-scene.data.xipos[body])
+    return twist
 
 
 def configure_position_limits(geometry, config):
@@ -93,7 +104,47 @@ def apply_target(scene, names, active, positions, velocity, target):
     scene.robot.set_targets(dict(zip(names,map(float,command))))
 
 
-def calibrate(geometry, active, poses, duration_sec=8.):
+def calibrate(geometry, active, poses, duration_sec=8., cache_dir=None):
+    """同一物理モデル・姿勢・有限可動域の速度校正値の再利用。"""
+    source = Path(__file__).parent
+    urdf = source.parents[1]/'app/source.urdf'
+    files = [source/name for name in ('sphere_chase.py','physics_scene.py','physics_robot.py')]+[urdf]
+    files.extend(sorted({urdf.parent/node.get('filename') for node in et.parse(urdf).findall('.//collision/geometry/mesh')}))
+    import mujoco
+    signature = dict(mujoco_version=mujoco.__version__,numpy_version=np.__version__,duration_sec=duration_sec,
+        names=geometry.joint_names,active=np.asarray(active).tolist(),limits=geometry.limits.tolist(),poses={name:value.tolist() for name,value in poses.items()},
+        files={str(path.relative_to(source.parents[1])):hashlib.sha256(path.read_bytes()).hexdigest() for path in files})
+    key = hashlib.sha256(json.dumps(signature,sort_keys=True).encode()).hexdigest()
+    cache_dir = Path(cache_dir) if cache_dir is not None else workspace/'docker/runtime/pursuit-calibration'
+    cache = cache_dir/(key+'.json')
+    try:
+        record = json.loads(cache.read_text())
+        value = record['reference_eef_speed_mps']
+        if record.get('key')==key and type(value) in (int,float) and math.isfinite(value) and .01<=value<=100:
+            geometry.calibration_source = 'cache'
+            return float(value)
+    except (OSError,ValueError,KeyError,TypeError):
+        pass
+    value = calibrate_reference(geometry,active,poses,duration_sec)
+    geometry.calibration_source = 'computed'
+    temporary = None
+    try:
+        cache_dir.mkdir(parents=True,exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode='w',dir=cache_dir,prefix='calibration-',suffix='.tmp',delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(dict(key=key,reference_eef_speed_mps=value),stream,allow_nan=False)
+        temporary.chmod(0o644)
+        temporary.replace(cache)
+    except OSError:
+        # 書込み不可時の校正結果の継続使用。キャッシュ成立との混同なし。
+        geometry.calibration_source = 'computed_uncached'
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return value
+
+
+def calibrate_reference(geometry, active, poses, duration_sec=8.):
     scene = make_scene(poses['a'],geometry.joint_names,active,position_limits=geometry.limits)
     body = scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_L_tcp')
     previous = scene.data.xpos[body].copy()
@@ -114,6 +165,13 @@ def calibrate(geometry, active, poses, duration_sec=8.):
 
 
 def run_case(config, output_dir=None, emit=None, stop_event=None):
+    startup_begin = time.perf_counter()
+    startup_stages_ms = {}
+    def progress(stage):
+        elapsed_ms = (time.perf_counter()-startup_begin)*1000
+        startup_stages_ms[stage] = elapsed_ms
+        if emit is not None:
+            emit(dict(type='experiment_progress',stage=stage,elapsed_ms=elapsed_ms))
     execution_mode = config.get('execution_mode','recorded')
     if execution_mode not in ('recorded','continuous'):
         raise ValueError('未対応の実行方式')
@@ -144,10 +202,13 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         raise ValueError('追跡速度比は0〜3の範囲内')
     if not 0 < float(config.get('max_ball_acceleration',.8)) <= 30. or not 0 <= float(config.get('pursuit_delay_sec',0.)) <= .5 or not .25 <= float(config.get('start_dist_m',.45)) <= 2.:
         raise ValueError('追跡球の加速度・追従遅延・開始距離の範囲外')
+    progress('robot_geometry')
     params, models = load_models(workspace/'gng_vlut_system/config/topo_dual_arm_max_long.yaml')
     check_kinematics(params['urdf_path'],'long')
-    geometry = robot_geometry(params['urdf_path'],environment_shapes=())
-    profiles = independent_policy(geometry,models)
+    geometry = robot_geometry(params['urdf_path'],environment_shapes=(
+        ('plane',np.array([0.,0.,-.14]),np.eye(3),np.zeros(3)),
+        ('box',np.array([0.,0.,-.07]),np.eye(3),np.array([.085,.085,.069]))))
+    profiles = independent_policy(geometry,{'left_arm':models['left_arm']})
     arm = profiles.policies['left_arm']
     geometry.is_arm = arm.geometry.is_arm.copy()
     active = np.asarray(arm.arm_indices)
@@ -161,9 +222,14 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     target_offset = np.asarray(config.get('target_offset_m',[0.,0.,0.]),dtype=float)
     if target_offset.shape != (3,) or not np.isfinite(target_offset).all() or np.linalg.norm(target_offset)>.5:
         raise ValueError('追跡対象のリンク内オフセットの不正')
+    if config.get('pursuit_mode','link_point') not in ('link_point','distal_sweep','random_walk'):
+        raise ValueError('球の動きの不正')
     task = json.loads((workspace/'benchmarks/shuttle_bag/task.json').read_text())
     poses = {key:np.asarray([math.radians(value.get(name,0.)) for name in geometry.joint_names])
              for key,value in task['poses_deg'].items()}
+    task_mode = config.get('task_mode','cartesian' if policy_name.startswith('rollout_') or policy_name in ('cbf_qp','oscbf') else 'joint')
+    if task_mode not in ('cartesian','joint') or (task_mode=='cartesian' and policy_name in ('avoidance_first','vrm_predictive')):
+        raise ValueError('未対応のタスク方式。旧経由点方式はjointのみ')
     offset_deg = config.get('goal_offset_deg',{})
     for name,value in offset_deg.items():
         if name not in arm.arm_names or not np.isfinite(value) or abs(value)>15:
@@ -172,18 +238,31 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     for pose in poses.values():
         if np.any(pose<geometry.limits[:,0]) or np.any(pose>geometry.limits[:,1]) or not geometry.has_internal_clearance(geometry.centers(pose),.005):
             raise ValueError('開始・目標姿勢の位置制限または自己干渉')
+    task_object = cartesian_task(geometry,active,poses,task.get('eef_link','L_tcp'),
+        float(task.get('max_eef_position_error_th',.015)),math.radians(float(task.get('max_eef_orientation_error_deg_th',3.))))
+    control_task = task_object if task_mode=='cartesian' else None
+    task_metadata = task_object.metadata(task_mode)
+    progress('drive_calibration')
     reference_speed = calibrate(geometry,active,poses)
+    progress('obstacle_setup')
     transform = geometry.link_transforms(poses['a'])[geometry.link_indices[target_link]]
     followed = transform[:3,3]+transform[:3,:3]@target_offset
     generator = np.random.default_rng(seed)
     initial = config.get('initial_direction')
     if initial is not None and (np.asarray(initial).shape!=(3,) or not np.isfinite(initial).all() or np.linalg.norm(initial)<1e-8):
         raise ValueError('開始方向は非ゼロの有限3次元ベクトル')
+    start_dist = float(config.get('start_dist_m',.45))
+    if config.get('pursuit_mode')=='random_walk':
+        extent = config.get('random_walk_extent_m',.6)
+        change_sec = config.get('random_walk_change_sec',.6)
+        if type(extent) not in (int,float) or not .3<=extent<=1.5 or type(change_sec) not in (int,float) or not .1<=change_sec<=5.:
+            raise ValueError('ランダムウォークの範囲・更新間隔の不正')
+        start_dist = min(start_dist,.8*extent)
     for attempt in range(64):
         direction = np.asarray(initial,dtype=float) if initial is not None and attempt==0 else generator.normal(size=3)
         direction[2] = abs(direction[2])*.5
         direction /= max(float(np.linalg.norm(direction)),1e-9)
-        center = followed+direction*float(config.get('start_dist_m',.45))
+        center = followed+direction*start_dist
         gap = np.min(np.linalg.norm(geometry.centers(poses['a'])-center,axis=1)-geometry.radii-radius)
         if gap>.12 and center[2]>radius:
             try:
@@ -197,11 +276,13 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     else:
         raise ValueError('非接触の球開始位置なし')
     initial_center = obstacle.center.copy()
+    motion_metadata = dict(random_walk=dict(min_position_m=obstacle.min_random_walk_position_m.tolist(),
+        max_position_m=obstacle.max_random_walk_position_m.tolist(),change_sec=obstacle.random_walk_change_sec)) if obstacle.pursuit_mode=='random_walk' else {}
     scene = make_scene(poses['a'],geometry.joint_names,active,obstacle.bodies(),geometry.limits)
     obstacle.move_scene(scene)
-    obstacle_geoms = {idx for idx in range(scene.model.ngeom) if scene.model.geom_bodyid[idx] in set(scene.body_ids.values())}
-    obstacle_indices = {idx:int(scene.mujoco.mj_id2name(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,int(scene.model.geom_bodyid[idx])).removeprefix('body_pursuer_'))
-                        for idx in ()}
+    obstacle_bodies = {value for name,value in scene.body_ids.items() if name.startswith('pursuer_')}
+    obstacle_geoms = {idx for idx in range(scene.model.ngeom) if scene.model.geom_bodyid[idx] in obstacle_bodies}
+    obstacle_indices = {}
     for idx in obstacle_geoms:
         body_id = int(scene.model.geom_bodyid[idx])
         obstacle_indices[idx] = next(int(name.removeprefix('pursuer_')) for name,value in scene.body_ids.items() if value==body_id)
@@ -209,29 +290,44 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     target_body = scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+target_link)
     anchor_bodies = [scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+name) for name in obstacle.guard_anchor_links]
     protected_links = {geometry.spheres[idx][0] for idx in np.flatnonzero(obstacle.protected_mask)}
+    active_links = {geometry.spheres[idx][0] for idx in np.flatnonzero(geometry.is_arm)}
+    geom_links = [scene.mujoco.mj_id2name(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,int(body)) or 'world' for body in scene.model.geom_bodyid]
     eef = scene.data.xpos[eef_body].copy()
     metadata = models['left_arm']
     directory = Path(params['gng']['data_directory'])/params['gng']['experiment_id']/'left_arm'
-    graph = load_graph(directory/metadata['gng_file'])
-    index = representative_index(geometry,active,poses['a'],graph)
+    is_cbf = policy_name in ('cbf_qp','oscbf')
+    graph = index = rollout = legacy = None
     memory = motion_sequence_predictor(enable_learning=config.get('enable_learning',True))
     if config.get('memory_file'):
         memory.restore(json.loads(Path(config['memory_file']).read_text()))
-    rollout = sphere_rollout_policy(geometry,active,target_link,graph,
-        mode=dict(rollout_reactive='reactive',rollout_cv='constant_velocity',rollout_sequence='sequence').get(policy_name,'reactive'),
-        candidate_metric=config.get('candidate_metric','joint'),memory=memory,node_index=index,
-        horizon_sec=float(config.get('horizon_sec',.4)),margin=float(config.get('margin_m',.08)),
-        task_weight=float(config.get('task_weight',.12)),target_offset=target_offset)
-    if is_continuous:
-        rollout.samples_ms = deque(maxlen=1200)
-    cbf = pursuit_cbf(geometry,active,scene,policy_name,float(config.get('margin_m',.08))) if policy_name in ('cbf_qp','oscbf') else None
-    legacy = independent_policy(geometry,{'left_arm':metadata},strategy='vrm_predictive' if policy_name=='vrm_predictive' else 'avoidance_first').policies['left_arm']
-    legacy.clock_sec = lambda:float(scene.data.time)
-    legacy.positions = poses['a'].copy()
-    legacy.config.update(max_bridge_step=.025,min_clearance_th=.01,min_planning_clearance_th=.005,
-        trigger_clearance_th=.10,release_clearance_th=.14,return_clear_sec=.5,max_state_age_sec=.3,max_local_step=.12)
+    progress('cbf_solver' if is_cbf else 'gng_index')
+    if not is_cbf:
+        graph = load_graph(directory/metadata['gng_file'])
+        index = representative_index(geometry,active,poses['a'],graph)
+        if policy_name.startswith('rollout_'):
+            rollout = sphere_rollout_policy(geometry,active,target_link,graph,
+                mode=dict(rollout_reactive='reactive',rollout_cv='constant_velocity',rollout_sequence='sequence')[policy_name],
+                candidate_metric=config.get('candidate_metric','joint'),memory=memory,node_index=index,
+                horizon_sec=float(config.get('horizon_sec',.4)),margin=float(config.get('margin_m',.08)),
+                task_weight=float(config.get('task_weight',.12)),target_offset=target_offset,task=control_task)
+            if is_continuous:
+                rollout.samples_ms = deque(maxlen=1200)
+        else:
+            legacy = independent_policy(geometry,{'left_arm':metadata},strategy='vrm_predictive' if policy_name=='vrm_predictive' else 'avoidance_first').policies['left_arm']
+            legacy.clock_sec = lambda:float(scene.data.time)
+            legacy.positions = poses['a'].copy()
+            legacy.config.update(max_bridge_step=.025,min_clearance_th=.01,min_planning_clearance_th=.005,
+                trigger_clearance_th=.10,release_clearance_th=.14,return_clear_sec=.5,max_state_age_sec=.3,max_local_step=.12)
+    cbf = pursuit_cbf(geometry,active,scene,policy_name,float(config.get('margin_m',.08)),task=control_task) if is_cbf else None
+    progress('ready')
     pending, eef_history = deque(),deque()
     goal, arrivals, first_contact = 'b',0,None
+    arrival_events = deque(maxlen=120) if is_continuous else []
+    num_arrivals_with_posture_dev = 0
+    position_error_squared = orientation_error_squared = 0.
+    max_task_position_error_m = max_task_orientation_error_rad = 0.
+    task_position_error_m = task_orientation_error_rad = 0.
+    task_twist = np.zeros(6)
     contact_sec = proxy_contact_sec = internal_failure_sec = stopped_sec = 0.
     min_gap = 1e6
     max_ball_speed = max_eef_speed = max_joint_speed = 0.
@@ -263,13 +359,14 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         from sphere_replay import recording_metadata
         emit(dict(type='experiment_ready',recording=recording_metadata(dict(
             config={**config,'policy':policy_name,'seed':seed},enable_periodic_angles=False,joint_position_limits=joint_position_limits,
-            contact_rule='target_tip',target_contact_links=sorted(obstacle.target_links),outcome=outcome))))
+            task=task_metadata,contact_rule='target_tip',target_contact_links=sorted(obstacle.target_links),outcome=outcome,**motion_metadata))))
     num_frames = None if is_continuous else int(round(duration/.01))
     for frame in count():
         if (num_frames is not None and frame>=num_frames) or (stop_event is not None and stop_event.is_set()):
             break
         frame_started_sec = time.monotonic() if is_continuous else None
         now = frame*.01
+        task_object.goal = goal
         positions,velocity = state(scene,geometry.joint_names)
         actual_eef = scene.data.xpos[eef_body].copy()
         target_position = scene.data.xpos[target_body]+scene.data.xmat[target_body].reshape(3,3)@target_offset
@@ -355,7 +452,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
             body_name = scene.mujoco.mj_id2name(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,int(scene.model.geom_bodyid[other])) or 'ground'
             link = body_name.removeprefix('robot_')
             contact_links.append(link)
-            contact_details.append(dict(link=link,is_protected=link in protected_links,
+            contact_details.append(dict(link=link,is_protected=link in protected_links,is_environment=link in ('world','ground','experiment_pedestal'),
                 obstacle_idx=obstacle_indices[obstacle_geom],position=contact.pos.tolist()))
         has_protected_contact = any(name in protected_links for name in contact_links)
         num_protected_contacts += int(has_protected_contact)
@@ -371,8 +468,19 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         goal_error = float(np.max(np.abs(angle_delta(poses[goal],positions,geometry.is_periodic)[active])))
         # 接触後の押し出し・内部干渉・異常運動を成功に含めない共通打切り条件。
         limit_reason,limit_joints = position_limit_status(positions,geometry.joint_names,geometry.limits)
+        environment_contacts = []
+        for contact in scene.data.contact[:scene.data.ncon]:
+            names = [geom_links[geom] for geom in (contact.geom1,contact.geom2)]
+            if any(name in ('world','experiment_pedestal') for name in names):
+                environment_contacts.extend(name.removeprefix('robot_') for name in names if name.removeprefix('robot_') in active_links)
+        if environment_contacts and not has_contact:
+            contact_sec += .01
+            if first_contact is None:
+                first_contact = now+.01
         if has_contact:
             failure_reason = obstacle.contact_result(contact_details)
+        elif environment_contacts:
+            failure_reason = 'robot_environment_contact'
         elif num_internal_frames >= 3:
             failure_reason = 'internal_interference'
         elif np.max(np.abs(velocity[active])) > 6.:
@@ -381,18 +489,35 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
             failure_reason = limit_reason
         if failure_reason:
             outcome = 'attacker_loss' if failure_reason.startswith('attacker_') else 'attacker_win' if failure_reason=='target_touch' else 'robot_failure'
-            failure_details = dict(contact_links=sorted(set(contact_links)),has_protected_contact=has_protected_contact,contacts=contact_details)
+            failure_details = dict(contact_links=sorted(set(contact_links+environment_contacts)),has_protected_contact=has_protected_contact,contacts=contact_details)
             if failure_reason in ('physical_joint_limit','planning_domain_exit'):
                 failure_details['joints'] = limit_joints
         evaluated_sec = now+.01
-        if not failure_reason and goal_error<.035 and np.max(np.abs(velocity[active]))<.12:
+        task_frame = np.eye(4);task_frame[:3,3] = actual_eef;task_frame[:3,:3] = scene.data.xmat[eef_body].reshape(3,3)
+        body_velocity_at_origin(scene,eef_body,task_twist)
+        task_position_error_m,task_orientation_error_rad,can_arrive = task_object.measure(task_frame,task_twist[3:],task_twist[:3])
+        position_error_squared += task_position_error_m**2;orientation_error_squared += task_orientation_error_rad**2
+        max_task_position_error_m = max(max_task_position_error_m,task_position_error_m)
+        max_task_orientation_error_rad = max(max_task_orientation_error_rad,task_orientation_error_rad)
+        evaluated_goal = goal
+        if task_mode=='joint':
+            can_arrive = goal_error<.035 and np.max(np.abs(velocity[active]))<.12
+        if not failure_reason and can_arrive:
             arrivals += 1
+            posture_dev = float(np.max(np.abs(positions[active]-poses[goal][active])))
+            num_arrivals_with_posture_dev += int(posture_dev>=.035 or np.max(np.abs(velocity[active]))>=.12)
+            arrival_events.append(dict(time_sec=evaluated_sec,goal=goal,position_error_m=task_position_error_m,
+                orientation_error_rad=task_orientation_error_rad,max_posture_dev_rad=posture_dev,
+                max_joint_speed_radps=float(np.max(np.abs(velocity[active]))),linear_speed_mps=float(np.linalg.norm(task_twist[3:])),angular_speed_radps=float(np.linalg.norm(task_twist[:3]))))
             goal = 'a' if goal=='b' else 'b'
         if frame%5==0 or failure_reason or (num_frames is not None and frame==num_frames-1):
+            motion = scene.robot.motion_state()
             row = dict(time_sec=evaluated_sec,joints=dict(zip(geometry.joint_names,map(float,positions))),
+                motion={field:{name:values[name] for name in geometry.joint_names if name in values} for field,values in motion.items()},
+                task_goal=evaluated_goal,num_arrivals=arrivals,task_position_error_m=task_position_error_m,task_orientation_error_rad=task_orientation_error_rad,
                 eef=actual_eef.tolist(),sphere=center.tolist(),sphere_radius_m=radius,phase=phase,
-                target=(scene.data.xpos[target_body]+scene.data.xmat[target_body].reshape(3,3)@target_offset).tolist(),
-                has_contact=bool(has_contact),proxy_gap_m=gap,obstacle_phase=obstacle.phase,obstacle_speed_mps=achieved_speed)
+                target=(obstacle.sweep_aim if obstacle.sweep_aim is not None else scene.data.xpos[target_body]+scene.data.xmat[target_body].reshape(3,3)@target_offset).tolist(),
+                has_contact=bool(has_contact or environment_contacts),proxy_gap_m=gap,obstacle_phase=obstacle.phase,obstacle_speed_mps=achieved_speed)
             if obstacle.shape == 'linked_arm':
                 row['obstacle_segments'] = obstacle.segments.tolist()
             if not is_continuous:
@@ -432,12 +557,26 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         first_qp_no_solution_sec=cbf.first_no_solution_sec if cbf is not None and cbf.first_no_solution_sec is not None else (None if is_continuous else duration),
         max_num_consecutive_qp_no_solution=cbf.max_num_consecutive_no_solution if cbf is not None else 0,
         num_qp_recoveries=cbf.num_recoveries if cbf is not None else 0)
+    metrics['startup_ms'] = startup_stages_ms['ready']
+    num_evaluated = int(round(evaluated_sec/.01))
+    metrics.update(num_arrivals_with_posture_dev=num_arrivals_with_posture_dev,
+        task_position_rms_error_m=math.sqrt(position_error_squared/num_evaluated) if num_evaluated else None,
+        task_orientation_rms_error_deg=math.degrees(math.sqrt(orientation_error_squared/num_evaluated)) if num_evaluated else None,
+        max_task_position_error_m=max_task_position_error_m if num_evaluated else None,
+        max_task_orientation_error_deg=math.degrees(max_task_orientation_error_rad) if num_evaluated else None)
+    if obstacle.pursuit_mode == 'distal_sweep':
+        metrics.update(num_obstacle_sweeps=obstacle.num_sweeps,num_completed_obstacle_sweeps=obstacle.num_completed_sweeps,
+            num_sweep_links=len(obstacle.sweep_links),obstacle_sweep_total_ms=obstacle.sweep_cost_ms)
+    if obstacle.pursuit_mode == 'random_walk':
+        metrics['num_random_walk_goals'] = obstacle.num_random_walk_goals
     if not max_ball_speed <= reference_speed*max_ratio+1e-8:
         raise RuntimeError('障害物速度上限の超過')
     result = dict(config=config,metrics=metrics,phase_sec=phase_sec,failure_reason=failure_reason,failure_details=failure_details,
         execution_mode=execution_mode,has_recording=not is_continuous,cost_window_size=len(costs),
         is_valid_scenario=outcome!='attacker_loss',outcome=outcome,contact_rule='target_tip',
-        target_contact_links=sorted(obstacle.target_links),
+        target_contact_links=sorted(obstacle.target_links),task=task_metadata,arrival_events=list(arrival_events),**motion_metadata,
+        startup_stages_ms=startup_stages_ms,
+        calibration_source=geometry.calibration_source,
         enable_periodic_angles=False,
         joint_position_limits=joint_position_limits,
         has_hardware_output=False,
@@ -449,7 +588,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         source_sha256={name:hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()
                        for name in ('sphere_chase.py','pursuit_obstacle.py','pursuit_cbf.py','gng_sphere_avoidance.py','gng_prediction.py','physics_scene.py','physics_robot.py','gng_avoidance.py')},
         input_sha256={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
-                      for path in (Path(params['urdf_path']),directory/metadata['gng_file'],index.kernel_path)})
+                      for path in ([Path(params['urdf_path'])] if is_cbf else [Path(params['urdf_path']),directory/metadata['gng_file'],index.kernel_path])})
     if output_dir is not None:
         output_dir = Path(output_dir);output_dir.mkdir(parents=True,exist_ok=True)
         for name,value in (('metrics.json',metrics),('details.json',result),('memory.json',memory.export())):

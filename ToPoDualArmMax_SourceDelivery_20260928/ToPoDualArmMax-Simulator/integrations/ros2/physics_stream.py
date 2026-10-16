@@ -20,6 +20,7 @@ class physics_session:
         self.scene = None
         self.pending_poses = None
         self.closed_future = None
+        self.placement_id = 0
 
     def start(self, value):
         robot = value.get('robot') or {}
@@ -59,6 +60,20 @@ class physics_session:
         if self.enable_leader_follow:
             self.leader_stamp_sec = stamp
 
+    def place(self, value):
+        """計算worker内の配置確定。未処理の旧キネマティック姿勢と配置前フレームの識別。"""
+        placement_id = value['placement_id']
+        if type(placement_id) is not int or placement_id <= self.placement_id:
+            raise ValueError('配置要求番号が不正です')
+        if self.close_event.is_set():
+            return None
+        self.scene.place(value['pose'])
+        with self.lock:
+            if self.pending_poses is not None:
+                self.pending_poses = {**self.pending_poses, 'poses': [pose for pose in self.pending_poses['poses'] if pose['id'] != value['pose']['id']]}
+        self.placement_id = placement_id
+        return dict(type='placed', placement_id=placement_id)
+
     def step(self):
         if self.close_event.is_set():
             return None
@@ -74,6 +89,7 @@ class physics_session:
         if self.close_event.is_set():
             return None
         result = self.scene.step()
+        result['placement_id'] = self.placement_id
         if self.enable_leader_follow:
             result['is_leader_stopped'] = self.is_leader_stopped
         return None if self.close_event.is_set() else result
@@ -131,9 +147,14 @@ def physics_handler(origins, clients, node=None, on_release=None):
                     self.is_ready = True
                     self.timer = tornado.ioloop.PeriodicCallback(self.step, 10)
                     self.timer.start()
-                    self.write_message({'type': 'ready', 'engine': 'MuJoCo', 'timestep_sec': .002})
+                    self.write_message({'type': 'ready', 'engine': 'MuJoCo', 'timestep_sec': .002, 'can_place_objects': True})
                 elif value['type'] == 'poses' and self.is_ready:
                     self.session.queue_poses(value)
+                elif value['type'] == 'place' and self.is_ready:
+                    session = self.session
+                    result = await asyncio.wrap_future(session.executor.submit(session.place, value))
+                    if result is not None and self.session is session:
+                        self.write_message(result)
                 else:
                     raise ValueError('未対応の物理操作です')
             except (ValueError, TypeError, KeyError, ImportError, RuntimeError) as error:

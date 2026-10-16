@@ -1,7 +1,9 @@
+import {format_fixed} from './display-format.js';
 import {create_ros_results} from './generated/ros-results.js';
 import {PhysicsPanel} from './physics-ui.js';
 import {motor_monitor} from './motor-monitor.js';
 import './sidebar-resize.js';
+import {observe_balanced_layout} from './balanced-layout.js';
 import {RosPointsPanel} from './ros-points.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -19,9 +21,14 @@ import {RGBDWorkspace} from './rgbd-ui.js';
 import {camera_workspace} from './camera-ui.js';
 import {VMAIWorkspace} from './vm-ai.js';
 import {ROBOT_MODELS,initialModel} from './models.js';
+for(const container of document.querySelectorAll('.workspace-tabs,.sensor-tabs'))observe_balanced_layout(container);
 const pose_presets=await (await fetch(new URL('./robot-poses.json',import.meta.url))).json();
 let physics_panel, ros_results, replay_panel;
-const is_replay_view=new URLSearchParams(location.search).has('replay');
+const startup_url=new URL(location.href);
+const replay_request=startup_url.searchParams.get('replay');
+const is_replay_view=replay_request!==null&&performance.getEntriesByType('navigation')[0]?.type!=='reload';
+// URL指定は初回の表示要求。再読込み時の記録再生と実験タブの自動復元の防止。
+if(replay_request!==null){startup_url.searchParams.delete('replay');history.replaceState(history.state,'',startup_url);}
 let workspace, rgbd, lidar, ai, ros_points, demoMotion=null;
 let color_camera_panel;
 let model=initialModel(),switchingModel=false;
@@ -57,9 +64,9 @@ renderer.domElement.setAttribute('aria-label','3Dロボットと手先マーカ�
 const scene=new THREE.Scene(), overlay=new THREE.Scene();
 scene.background=new THREE.Color('#edf0ed');scene.fog=new THREE.Fog('#edf0ed',18,65);
 const camera=new THREE.PerspectiveCamera(34,1,.01,200);camera.up.set(0,0,1);
-// 視点操作の慣性遅れを抑制し、ドラッグ量を即時反映
-const orbit=new OrbitControls(camera,renderer.domElement);orbit.enableDamping=false;
-orbit.minDistance=.25;orbit.maxDistance=100;orbit.maxPolarAngle=Math.PI*.52;orbit.target.set(0,0,.21);
+// マウス位置を基準とした拡大と画面平面の移動。視点操作の慣性なし。
+const orbit=new OrbitControls(camera,renderer.domElement);orbit.enableDamping=false;orbit.zoomToCursor=true;orbit.screenSpacePanning=true;
+orbit.minDistance=camera.near*2;orbit.maxDistance=100;orbit.maxPolarAngle=Math.PI*.52;orbit.target.set(0,0,.21);
 camera.position.set(1.45,-1.15,1.0);orbit.target.set(.28,0,.22);orbit.update();
 
 const environment=new RoomEnvironment();
@@ -117,8 +124,8 @@ function updateMarkerVisibility(){const show=document.querySelector('[data-panel
 function setSide(side){activeSide=side;gizmo.attach(targets[side]);document.querySelectorAll('[data-arm]').forEach(b=>b.classList.toggle('active',b.dataset.arm===side));syncTargetInputs();syncControls();updateMarkerVisibility();}
 function setMode(next){mode=next;gizmo.setMode(next);$('translate-mode').classList.toggle('active',next==='translate');$('rotate-mode').classList.toggle('active',next==='rotate');if(next==='rotate')$('hold-orientation').checked=true;syncTargetInputs();}
 function syncTargets(sides=['L','R']){for(const side of sides){const tcp=robot.tcp(side);targets[side].position.copy(tcp.position);targets[side].quaternion.copy(tcp.quaternion);targetDirty[side]=false;ikGoals[side]=null;}activeTarget=false;solveFrames=0;syncTargetInputs();}
-function syncTargetInputs(){if(!robot)return;const t=targets[activeSide],e=new THREE.Euler().setFromQuaternion(t.quaternion,'ZYX');for(const [id,value] of Object.entries({'target-x':t.position.x*1000,'target-y':t.position.y*1000,'target-z':t.position.z*1000,'target-roll':e.x*DEG,'target-pitch':e.y*DEG,'target-yaw':e.z*DEG})){if(document.activeElement!==$(id))$(id).value=value.toFixed(1);}}
-function syncControls(){if(!robot)return;$('grip').value=robot.joints[`${activeSide}_gripper_joint`].q/robot.joints[`${activeSide}_gripper_joint`].upper*100;$('grip-value').textContent=Math.round(+$('grip').value)+'%';for(const [name,entry] of Object.entries(jointInputs)){const q=robot.joints[name].q;entry.input.value=q*DEG;if(entry.output)entry.output.textContent=(q*DEG).toFixed(1)+'°';if(entry.number&&document.activeElement!==entry.number)entry.number.value=(q*DEG).toFixed(1);}}
+function syncTargetInputs(){if(!robot)return;const t=targets[activeSide],e=new THREE.Euler().setFromQuaternion(t.quaternion,'ZYX');for(const [id,value] of Object.entries({'target-x':t.position.x*1000,'target-y':t.position.y*1000,'target-z':t.position.z*1000,'target-roll':e.x*DEG,'target-pitch':e.y*DEG,'target-yaw':e.z*DEG})){if(document.activeElement!==$(id))$(id).value=format_fixed(value,1);}}
+function syncControls(){if(!robot)return;$('grip').value=robot.joints[`${activeSide}_gripper_joint`].q/robot.joints[`${activeSide}_gripper_joint`].upper*100;$('grip-value').textContent=Math.round(+$('grip').value)+'%';for(const [name,entry] of Object.entries(jointInputs)){const q=robot.joints[name].q;entry.input.value=q*DEG;if(entry.output)entry.output.textContent=format_fixed(q*DEG,1)+'°';if(entry.number&&document.activeElement!==entry.number)entry.number.value=format_fixed(q*DEG,1);}}
 function homePose(){const p=Object.fromEntries(robot.actuated.map(j=>[j.name,0]));Object.assign(p,Object.fromEntries(Object.entries(pose_presets.home).map(([name,deg])=>[name,deg*RAD])));return p;}
 function presetPose(name){const p=homePose();if(name==='ready'){Object.assign(p,{L_joint1:-.18,R_joint1:.18,L_joint2:-1.35,R_joint2:1.35,L_joint4:-1.15,R_joint4:1.15,L_joint6:.4,R_joint6:-.4,L_gripper_joint:.32,R_gripper_joint:.32});}if(name==='spread'){Object.assign(p,{L_joint2:-.65,R_joint2:.65,L_joint4:-.65,R_joint4:.65,L_joint6:.35,R_joint6:-.35});}if(name==='forward'){Object.assign(p,Object.fromEntries(Object.entries(pose_presets.forward).map(([name,deg])=>[name,deg*RAD])));}return p;}
 let motion_req=0,motion_requires_physics=false;
@@ -154,7 +161,7 @@ function build_body_controls(){
   const unit=document.createElement('span');unit.className='body-joint-number';unit.append(number,document.createTextNode('°'));
   input.addEventListener('input',()=>set_manual_joint(name,+input.value*RAD));
   number.addEventListener('input',()=>{const q=number.valueAsNumber;if(Number.isFinite(q))set_manual_joint(name,THREE.MathUtils.clamp(q,+input.min,+input.max)*RAD);});
-  number.addEventListener('change',()=>{const q=Number(number.value);if(Number.isFinite(q)){const degrees=THREE.MathUtils.clamp(q,+input.min,+input.max);number.value=degrees.toFixed(1);set_manual_joint(name,degrees*RAD);}else syncControls();});
+  number.addEventListener('change',()=>{const q=Number(number.value);if(Number.isFinite(q)){const degrees=THREE.MathUtils.clamp(q,+input.min,+input.max);number.value=format_fixed(degrees,1);set_manual_joint(name,degrees*RAD);}else syncControls();});
   row.append(title,input,unit);$('body-controls').append(row);jointInputs[name]={input,number};
  }
 }
@@ -182,7 +189,7 @@ async function importPose(file){try{if(file.size>1e6)throw new Error('ファイ�
 function bindUI(){
  document.querySelectorAll('[data-model]').forEach(b=>{b.onclick=()=>switchModel(b.dataset.model);b.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=model.id==='long'?'standard':'long';document.querySelector(`[data-model=${next}]`).focus();switchModel(next);}};});
  document.querySelectorAll('[data-arm]').forEach(b=>b.onclick=()=>setSide(b.dataset.arm));for(const side of ['L','R'])$(`label-${side}`).onclick=()=>setSide(side);
- $('translate-mode').onclick=()=>setMode('translate');$('rotate-mode').onclick=()=>setMode('rotate');$('coordinate-space').onchange=e=>gizmo.setSpace(e.target.value);
+ $('translate-mode').onclick=()=>setMode('translate');$('rotate-mode').onclick=()=>setMode('rotate');
  $('hold-orientation').onchange=()=>{if($('hold-orientation').checked){targets[activeSide].quaternion.copy(robot.tcp(activeSide).quaternion);syncTargetInputs();}targetDirty[activeSide]=true;activeTarget=true;solveFrames=0;};
  for(const id of ['target-x','target-y','target-z'])$(id).addEventListener('change',()=>{stopPlayback();const p=['target-x','target-y','target-z'].map(n=>+$(n).value/1000);if(p.every(Number.isFinite)&&p.every(v=>Math.abs(v)<=5)){targets[activeSide].position.fromArray(p);targetDirty[activeSide]=true;activeTarget=true;solveFrames=0;}else{toast('目標位置は ±5000 mm 内の数値で入力してください。');syncTargetInputs();}});
  for(const id of ['target-roll','target-pitch','target-yaw'])$(id).addEventListener('change',()=>{stopPlayback();const e=['target-roll','target-pitch','target-yaw'].map(n=>+$(n).value*RAD);if(e.every(Number.isFinite)){targets[activeSide].quaternion.setFromEuler(new THREE.Euler(...e,'ZYX'));$('hold-orientation').checked=true;targetDirty[activeSide]=true;activeTarget=true;solveFrames=0;}});
@@ -239,7 +246,7 @@ function updateIK(dt){
 function updateLabels(){for(const side of ['L','R']){const tcp=robot.tcp(side),p=targets[side].position.clone().project(camera),label=$(`label-${side}`);label.style.left=((p.x*.5+.5)*host.clientWidth+(side==='L'?18:-96))+'px';label.style.top=((-p.y*.5+.5)*host.clientHeight+22)+'px';label.style.opacity=p.z>1||p.z< -1?'0':'1';const line=targets[side].userData.errorLine;line.geometry.setFromPoints([tcp.position,targets[side].position]);line.computeLineDistances();line.visible=markersVisible&&!photoMode&&tcp.position.distanceTo(targets[side].position)>.002;
  if($('show-trails').checked){const t=trails[side];if(!t.points.length||t.points.at(-1).distanceTo(tcp.position)>.002){t.points.push(tcp.position.clone());if(t.points.length>1500)t.points.shift();t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry().setFromPoints(t.points);}}}
 }
-function updateUI(){const tcp=robot.tcp(activeSide),error=tcp.position.distanceTo(targets[activeSide].position)*1000,angle=orientationError(targets[activeSide].quaternion,tcp.quaternion).length()*DEG,hold=$('hold-orientation').checked,ok=error<1&&(!hold||angle<1);$('ik-state').textContent=playing?'ポーズを再生中':ok?'目標に到達':activeTarget&&solveFrames<40?'手先が追従中':'目標未到達';$('ik-error').textContent=error.toFixed(1)+' mm'+(hold?' / '+angle.toFixed(1)+'°':'');$('ik-dot').style.background=ok?'var(--green)':'var(--amber)';$('ik-state').style.color=ok?'#007700':'var(--amber)';$('actual-position').textContent='TCP '+tcp.position.toArray().map(v=>(v*1000).toFixed(1).padStart(6)).join(' / ')+' mm';syncControls();if(!gizmo.dragging)syncTargetInputs();if(window.simulator)document.documentElement.dataset.simState=JSON.stringify(window.simulator.getState());}
+function updateUI(){const tcp=robot.tcp(activeSide),error=tcp.position.distanceTo(targets[activeSide].position)*1000,angle=orientationError(targets[activeSide].quaternion,tcp.quaternion).length()*DEG,hold=$('hold-orientation').checked,ok=error<1&&(!hold||angle<1);$('ik-state').textContent=playing?'ポーズを再生中':ok?'目標に到達':activeTarget&&solveFrames<40?'手先が追従中':'目標未到達';$('ik-error').textContent=error.toFixed(1)+' mm'+(hold?' / '+angle.toFixed(1)+'°':'');$('ik-dot').style.background=ok?'var(--green)':'var(--amber)';$('ik-state').style.color=ok?'#007700':'var(--amber)';$('actual-position').textContent='TCP '+tcp.position.toArray().map(v=>format_fixed(v*1000,1).padStart(6)).join(' / ')+' mm';syncControls();if(!gizmo.dragging)syncTargetInputs();if(window.simulator)document.documentElement.dataset.simState=JSON.stringify(window.simulator.getState());}
 // 標準品質では中間バッファと画面全体の後処理を省略
 let last_view_draw_ms=-Infinity,last_view_input_ms=-Infinity,is_view_input_active=false;
 orbit.addEventListener('start',()=>{is_view_input_active=true;});
@@ -250,11 +257,12 @@ function draw(is_moving=false){
  const now=performance.now();
  if(rgbd?.enable_readback_priority&&!is_moving&&!gizmo.dragging&&!is_view_input_active&&now-last_view_input_ms>100&&rgbd.sensor.readback_pool.has_pending&&now-last_view_draw_ms<50)return false;
  last_view_draw_ms=now;if(ao.enabled)composer.render();else renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(overlay,camera);renderer.autoClear=true;return true;}
-function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=replay_panel?replay_panel.tick(now):updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;physics_panel?.tick(now);ros_results?.tick(now);rgbd?.tick(now);color_camera_panel?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);physics_panel?.sync_robot_pose();if(physics_panel?.socket&&physics_panel.enable_dynamics&&!activeTarget&&!gizmo.dragging)syncTargets();updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}if(draw(moving)){diagnostics.frames++;frameCount++;}if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}replay_panel?.set_active(document.querySelector('[data-panel=experiment]').classList.contains('active'));const moving=replay_panel?.has_pose_control?replay_panel.tick(now):updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;physics_panel?.tick(now);ros_results?.tick(now);rgbd?.tick(now);color_camera_panel?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);physics_panel?.sync_robot_pose();if(physics_panel?.socket&&physics_panel.enable_dynamics&&!activeTarget&&!gizmo.dragging)syncTargets();updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}if(draw(moving)){diagnostics.frames++;frameCount++;}if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
 
 function updateModelUI(){
  document.querySelector('.product-header strong').textContent=model.title;document.title=model.title+' · Motion Studio';
  document.querySelector('.loader-symbol span').textContent=model.id==='long'?'MAX LONG':'MAX STANDARD';
+ if(replay_panel&&!replay_panel.has_pose_control)replay_panel.robot=robot;
  for(const b of document.querySelectorAll('[data-model]')){const selected=b.dataset.model===model.id;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;b.disabled=switchingModel;}
  $('model-status').textContent=switchingModel?'モデル読込中…':model.label+' · 19 DOF';
 }
@@ -266,7 +274,7 @@ async function loadRobotModel(def){
  modelCache.set(def.id,next);return next;
 }
 async function switchModel(id){
- if(is_replay_view||switchingModel||!ready||id===model.id||!Object.hasOwn(ROBOT_MODELS,id))return;
+ if(replay_panel?.has_pose_control||switchingModel||!ready||id===model.id||!Object.hasOwn(ROBOT_MODELS,id))return;
  const previous=model,previousRobot=robot,restoreTabFocus=!!document.activeElement?.closest('#model-tabs'),wasLive={lidar:lidar.live,rgbd:rgbd?.live,ai:ai?.running};
  modelStates.set(model.id,{pose:robot.getPose(),keyframes:structuredClone(keyframes)});
  stopPlayback();releaseMarker();ready=false;switchingModel=true;diagnostics.ready=false;
@@ -300,8 +308,7 @@ async function init(){
  try {
   updateModelUI();robot=await loadRobotModel(model);scene.add(robot);robot.setPose(homePose());
   build_body_controls();bindUI();syncTargets();setSide('L');syncControls();
-  if(is_replay_view)robot.pose_source='ros';
-  else{initWorkspace();await physics_panel.plugins.ready;}
+  initWorkspace();await physics_panel.plugins.ready;
   $('loading-text').textContent='照明とマテリアルを準備中';$('load-progress').style.width='95%';
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
   $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');
@@ -314,13 +321,12 @@ async function init(){
    setTarget:(side,xyz,rpy)=>{setSide(side);targets[side].position.fromArray(xyz);if(rpy){targets[side].quaternion.setFromEuler(new THREE.Euler(...rpy,'ZYX'));$('hold-orientation').checked=true;}targetDirty[side]=true;activeTarget=true;solveFrames=0;syncTargetInputs();},
    reset:()=>{stopPlayback();robot.setPose(homePose());syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;}
   };
+  const {avoidance_replay}=await import('./avoidance-replay.js');
+  replay_panel=new avoidance_replay({robot,scene,renderer,camera,controls:orbit,on_pose:()=>{syncTargets();syncControls();}});
+  window.simulator.avoidance_replay=replay_panel;
   if(is_replay_view){
-   const {avoidance_replay}=await import('./avoidance-replay.js');
-   markersVisible=false;updateMarkerVisibility();
-   replay_panel=new avoidance_replay({robot,scene,renderer,camera,controls:orbit,on_pose:()=>{syncTargets();syncControls();}});
-   window.simulator.avoidance_replay=replay_panel;
-   await replay_panel.open(new URLSearchParams(location.search).get('replay'));
-   return;
+   document.querySelector('[data-panel=experiment]').click();
+   await replay_panel.open(replay_request);
   }
   window.simulator.motor_monitor=new motor_monitor(window.simulator);
   const joint_topic=new URLSearchParams(location.search).get('joint_topic');
@@ -355,7 +361,7 @@ function initWorkspace(){
  ros_points=new RosPointsPanel({environment:workspace,rgbd,lidar,toast});
  ros_results=create_ros_results({scene,camera,renderer,controls:orbit,robot:()=>robot});
  physics_panel=new PhysicsPanel({environment:workspace,robot:()=>robot,scene});
- document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});for(const name of ['robot','environment','sensors','physics','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=['environment','physics'].includes(b.dataset.panel)&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
+ document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});for(const name of ['robot','environment','sensors','physics','experiment','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=['environment','physics'].includes(b.dataset.panel)&&!!workspace.selected;replay_panel?.set_active(b.dataset.panel==='experiment');document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
  // センサUIの再生成なし。子タブ選択・設定値・取得状態の保持。
  document.querySelectorAll('[data-sensor-panel]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('[data-sensor-panel]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});

@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {createInterface} from 'node:readline';
 import {isDeepStrictEqual} from 'node:util';
 
-const allowed_keys=['policy','obstacle_shape','target_link','target_offset_m','duration_sec','seed','radius_m','speed_ratios','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration','execution_mode','speed_ramp_sec','enable_proximal_guard'];
+const allowed_keys=['policy','obstacle_shape','pursuit_mode','target_link','target_offset_m','duration_sec','seed','radius_m','speed_ratios','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration','execution_mode','speed_ramp_sec','enable_proximal_guard','random_walk_extent_m','random_walk_change_sec'];
 
 export function validate_experiment(value,link_names){
  if(!value||Array.isArray(value)||typeof value!=='object'||Object.keys(value).some(key=>!allowed_keys.includes(key)))throw Error('未対応の実験設定');
@@ -21,6 +21,13 @@ export function validate_experiment(value,link_names){
  for(const [key,min,max] of [['duration_sec',config.execution_mode==='continuous'?0:1,60],['speed_ramp_sec',1,60],['seed',0,2147483647],['radius_m',.015,.15],['max_ball_acceleration',.1,30],['max_ball_deceleration',.1,30],['max_ball_turn_acceleration',.1,30]])if(!bounded(config[key],min,max))throw Error('設定の範囲外: '+key);
  if(!Number.isInteger(config.seed)||!Array.isArray(config.speed_ratios)||config.speed_ratios.length!==2||!config.speed_ratios.every(v=>bounded(v,.05,3))||config.speed_ratios[0]>config.speed_ratios[1])throw Error('seed・速度比の不正');
  if(!Array.isArray(config.target_offset_m)||config.target_offset_m.length!==3||!config.target_offset_m.every(v=>bounded(v,-.5,.5))||Math.hypot(...config.target_offset_m)>.5)throw Error('追跡点オフセットの不正');
+ if(Object.hasOwn(config,'pursuit_mode')&&!['link_point','distal_sweep','random_walk'].includes(config.pursuit_mode))throw Error('球の動きの不正');
+ if(['distal_sweep','random_walk'].includes(config.pursuit_mode)&&(config.obstacle_shape!=='sphere'||!/^L_(link[1-7]|tcp|gripper_base|finger_(left|right))$/.test(config.target_link)||config.target_offset_m.some(v=>v!==0)))throw Error('横切り・ランダムウォークは球・左腕可動リンク・追跡点オフセットなし');
+ if(config.pursuit_mode==='random_walk'){
+  if(!Object.hasOwn(config,'random_walk_extent_m'))config.random_walk_extent_m=.6;
+  if(!Object.hasOwn(config,'random_walk_change_sec'))config.random_walk_change_sec=.6;
+  if(!bounded(config.random_walk_extent_m,.3,1.5)||!bounded(config.random_walk_change_sec,.1,5))throw Error('ランダムウォークの範囲・更新間隔の不正');
+ }
  if(Object.hasOwn(config,'enable_proximal_guard')&&typeof config.enable_proximal_guard!=='boolean')throw Error('近位部の迂回条件は真偽値');
  return {...config,enable_proximal_guard:config.enable_proximal_guard??true,enable_learning:false,enable_periodic_angles:false,enable_fixed_guard:true,start_dist_m:.45};
 }
@@ -114,7 +121,7 @@ export function create_experiment_service(root,port){
  const reply=(res,code,value)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
  const snapshot=(after=null)=>{
   const live=after===null?null:live_window.read(after);
-  return {is_available,live_protocol_version:1,archive_protocol_version:2,continuous_protocol_version:1,job:job?{...job,output:job.state==='failed'?job.output.slice(-1800):undefined,
+  return {is_available,live_protocol_version:1,archive_protocol_version:2,continuous_protocol_version:1,pursuit_modes:['link_point','distal_sweep','random_walk'],job:job?{...job,output:job.state==='failed'?job.output.slice(-1800):undefined,
    live:live?{...live,metadata:after===0||live.has_gap||!['running','stopping'].includes(job.state)?live_metadata:undefined}:undefined}:null};
  };
  const stop=reason=>{
@@ -135,9 +142,11 @@ export function create_experiment_service(root,port){
   job={job_id,state:'running',config,case_dir:relative_dir,started_ms:Date.now(),output:''};
   live_metadata=null;live_window=new experiment_frame_window(is_continuous?120:Math.ceil(config.duration_sec*20)+2);
   // シミュレーション専用の固定コマンド。シェル補間・ROS出力指定の受付なし。
-  const command=[path.join(simulator,'start_ros.sh'),'--simulate','--scenario','chasing_sphere','--stream-frames','--scenario-file',is_continuous?'-':relative_dir+'/config.json'];
+  const has_ros_environment=(process.env.AMENT_PREFIX_PATH||'').split(path.delimiter).some(prefix=>prefix&&fs.existsSync(path.join(prefix,'share/gng_vlut_system/package.xml')));
+  const command=has_ros_environment?['python3',path.join(simulator,'integrations/ros2/simulate.py')]:['bash',path.join(simulator,'start_ros.sh'),'--simulate'];
+  command.push('--scenario','chasing_sphere','--stream-frames','--scenario-file',is_continuous?'-':relative_dir+'/config.json');
   if(!is_continuous)command.push('--case-dir',relative_dir);
-  child=spawn('bash',command,{cwd:workspace,detached:true,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'1'},stdio:[is_continuous?'pipe':'ignore','pipe','pipe']});
+  child=spawn(command[0],command.slice(1),{cwd:workspace,detached:true,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'1'},stdio:[is_continuous?'pipe':'ignore','pipe','pipe']});
   const owned=child,record=job;
   if(is_continuous){owned.stdin.on('error',error=>{if(error.code!=='EPIPE')record.output+=error.message;});owned.stdin.end(JSON.stringify(config));}
   const log=case_dir?fs.createWriteStream(path.join(case_dir,'execution.log'),{flags:'wx'}):null;
@@ -148,6 +157,7 @@ export function create_experiment_service(root,port){
   lines.on('line',line=>{
    if(line.length>16384)return;
    let value;try{value=JSON.parse(line);}catch{return;}
+   if(value.type==='experiment_progress'&&typeof value.stage==='string'&&Number.isFinite(value.elapsed_ms))record.progress={stage:value.stage,elapsed_ms:value.elapsed_ms};
    if(value.type==='experiment_ready'&&value.recording?.format==='topo-avoidance-replay/1')live_metadata=value.recording;
    if(value.type==='experiment_frame'&&live_metadata)live_window.append(value.frame);
    if(is_continuous&&value.type==='experiment_finished'){

@@ -1,3 +1,4 @@
+import {format_fixed} from './display-format.js';
 import * as THREE from 'three';
 import {decodeFrame,encode_input} from './vm-packet.js';
 import {points_in_base,transform_points,robot_frames,robot_base_frame} from './robot-ros-state.js';
@@ -101,7 +102,7 @@ export class VMAIWorkspace{
   const m=this.frame?.meta,age=this.lastReceived?performance.now()-this.lastReceived:null,stale=age===null||age>2000;
   const state={connected:!!this.vm,running:this.running,busy:this.busy,source:this.source,sent:this.sent,received:this.received,stale,age_ms:age,latency_ms:this.latency,matched:!!this.matched,matched_input_points:this.matched?.points,domain:this.vm?.domain,hostname:this.vm?.hostname,frame:m?{sequence:m.sequence,stamp_ns:m.stamp_ns,points:m.pointCount,nodes:m.nodeCount,edges:m.edgeCount,fvg_same_frame:m.fvg_same_frame,fvg_add:this.frame.fvgAdd.length/10,fvg_delete:this.frame.fvgDelete.length/10,fvg_memory:this.frame.fvgMemory.length/10,metrics:m.metrics}:null,error:this.error,robotMoving:this.motion.active()};
   document.documentElement.dataset.aiState=JSON.stringify(state);
-  const fnum=n=>Number.isFinite(n)?n.toFixed(1):'—';
+  const fnum=n=>Number.isFinite(n)?format_fixed(n,1):'—';
   $('ai-status').textContent=this.connectionError||this.error||`${this.vm?this.vm.hostname+' · ROS 2 domain '+this.vm.domain:'未接続'}\n入力 ${this.sent} / 描画 ${this.received} フレーム · ${stale?'更新待ち':this.running?'実行中':'入力停止'}\n${m?m.pointCount.toLocaleString()+' 点 → '+m.nodeCount.toLocaleString()+' ノード / '+m.edgeCount.toLocaleString()+' エッジ':'点群入力を待っています'}\nAiS ${fnum(m?.metrics.ais_ms)} ms / FVG ${fnum(m?.metrics.fvg_ms)} ms\n往復・待機・転送 ${fnum(this.latency)} ms\n入力実測 ${fnum(m?.metrics.input_hz)} Hz · FVG同一フレーム ${m?.fvg_same_frame?'一致':'—'}`;
   this.badge.hidden=!this.vm;this.badge.textContent=`VM · AiS-GNG-FVG ${stale?'更新待ち':m?.nodeCount+' nodes · '+m?.edgeCount+' edges'}${this.motion.active()?' · ROBOT MOVING':''}`;
  }

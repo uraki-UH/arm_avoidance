@@ -1,6 +1,9 @@
 """ブラウザ配置からのMuJoCo接触モデルと固定刻みシミュレーション。"""
 import math
 import xml.etree.ElementTree as et
+import hashlib
+from pathlib import Path
+import tempfile
 from physics_robot import PhysicsRobot, text
 from ros_plugins import physics_adapter
 
@@ -18,8 +21,40 @@ def quaternion(value):
     return [value[3], *value[:3]]
 
 
+def compiled_model(mujoco, root, cache_dir):
+    """同一XML・衝突メッシュ・MuJoCo版のコンパイル済み物理モデル。"""
+    xml = et.tostring(root,encoding='unicode')
+    if cache_dir is None:
+        return mujoco.MjModel.from_xml_string(xml)
+    digest = hashlib.sha256((mujoco.__version__+xml).encode())
+    for filename in sorted({node.get('file') for node in root.findall('./asset/mesh')}):
+        digest.update(Path(filename).read_bytes())
+    directory = Path(cache_dir)
+    filename = directory/(digest.hexdigest()+'.mjb')
+    if filename.is_file():
+        try:
+            return mujoco.MjModel.from_binary_path(str(filename))
+        except (ValueError,OSError):
+            pass
+    model = mujoco.MjModel.from_xml_string(xml)
+    temporary = None
+    try:
+        directory.mkdir(parents=True,exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=directory,prefix='model-',suffix='.tmp',delete=False) as stream:
+            temporary = Path(stream.name)
+        mujoco.mj_saveModel(model,str(temporary),None)
+        temporary.chmod(0o644)
+        temporary.replace(filename)
+    except OSError:
+        pass
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return model
+
+
 class PhysicsScene:
-    def __init__(self, bodies, robot=None, avoidance=None, ros_node=None):
+    def __init__(self, bodies, robot=None, avoidance=None, ros_node=None, *, model_cache_dir=None):
         import mujoco
         self.mujoco = mujoco
         if not isinstance(bodies, list) or not 0 <= len(bodies) <= 512:
@@ -31,13 +66,23 @@ class PhysicsScene:
         et.SubElement(world, 'geom', type='plane', pos='0 0 -.14', size='10 10 .1', friction='.8 .005 .0001')
         self.dynamic = []
         self.kinematic = []
+        self.body_modes = {}
+        self.anchors = {}
         ids = set()
         for value in bodies:
             name, mode = value['id'], value['mode']
             if not isinstance(name, str) or len(name) > 80 or name in ids or mode not in ('static', 'dynamic', 'kinematic', 'hinge', 'slide'):
                 raise ValueError('物理物体IDまたはモードが不正です')
             ids.add(name)
-            body = et.SubElement(world, 'body', name=name, pos=text(vector(value['position'], 3)), quat=text(quaternion(value['quaternion'])))
+            self.body_modes[name] = mode
+            placement = dict(pos=text(vector(value['position'], 3)), quat=text(quaternion(value['quaternion'])))
+            parent = world
+            if mode in ('hinge', 'slide'):
+                # 拘束基準の可動アンカー。通常計算中は世界固定、直接配置時だけ更新
+                self.anchors[name] = 'anchor_'+name
+                parent = et.SubElement(world, 'body', name=self.anchors[name], mocap='true', **placement)
+                placement = {}
+            body = et.SubElement(parent, 'body', name=name, **placement)
             if mode == 'dynamic':
                 et.SubElement(body, 'freejoint')
                 self.dynamic.append(name)
@@ -51,9 +96,10 @@ class PhysicsScene:
                     raise ValueError('拘束範囲は初期位置0を含む昇順です')
                 et.SubElement(body, 'joint', type=mode, axis=text(axis), pos=text(vector(constraint.get('pivot', [0, 0, 0]), 3)), limited='true', range=text(limits), damping='.1')
                 self.dynamic.append(name)
-            elif mode == 'kinematic':
+            elif mode in ('static', 'kinematic'):
                 body.set('mocap', 'true')
-                self.kinematic.append(name)
+                if mode == 'kinematic':
+                    self.kinematic.append(name)
             geoms = value['geoms']
             if not isinstance(geoms, list) or not 1 <= len(geoms) <= 256:
                 raise ValueError('衝突形状数が不正です')
@@ -86,11 +132,12 @@ class PhysicsScene:
             base = et.SubElement(world, 'body', name='robot_base', pos=text(vector(robot['position'], 3)),
                                  quat=text(quaternion(robot['quaternion'])))
             self.robot = PhysicsRobot(root, base, robot, mujoco, fixed_joint_names)
-        self.model = mujoco.MjModel.from_xml_string(et.tostring(root, encoding='unicode'))
+        self.model = compiled_model(mujoco,root,model_cache_dir)
         self.data = mujoco.MjData(self.model)
         if self.robot:
             self.robot.bind(self.model, self.data)
         self.body_ids = {name: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in ids}
+        self.anchor_ids = {name: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, anchor) for name, anchor in self.anchors.items()}
         mujoco.mj_forward(self.model, self.data)
         self.avoidance = None
         if adapter is not None:
@@ -119,6 +166,37 @@ class PhysicsScene:
                     self.avoidance.apply()
             self.mujoco.mj_step(self.model, self.data)
         self.mujoco.mj_forward(self.model, self.data)
+        return self.state()
+
+    def place(self, pose):
+        """対象物体だけの直接配置。速度・拘束変位の初期化、他物体・ロボット・時刻の保持。"""
+        name = pose['id']
+        if name not in self.body_modes or not name.startswith('object_'):
+            raise ValueError('直接配置対象の物体がありません')
+        position, quat = vector(pose['position'], 3), quaternion(pose['quaternion'])
+        idx = self.body_ids[name]
+        mode = self.body_modes[name]
+        if mode == 'dynamic':
+            joint = self.model.body_jntadr[idx]
+            qpos = self.model.jnt_qposadr[joint]
+            self.data.qpos[qpos:qpos+7] = [*position, *quat]
+        else:
+            anchor = self.anchor_ids.get(name, idx)
+            mocap = self.model.body_mocapid[anchor]
+            self.data.mocap_pos[mocap] = position
+            self.data.mocap_quat[mocap] = quat
+            if mode in ('hinge', 'slide'):
+                joint = self.model.body_jntadr[idx]
+                self.data.qpos[self.model.jnt_qposadr[joint]] = 0
+        if mode in ('dynamic', 'hinge', 'slide'):
+            dof = self.model.jnt_dofadr[self.model.body_jntadr[idx]]
+            num_dofs = 6 if mode == 'dynamic' else 1
+            self.data.qvel[dof:dof+num_dofs] = 0
+            self.data.qacc_warmstart[dof:dof+num_dofs] = 0
+        self.mujoco.mj_forward(self.model, self.data)
+
+    def state(self):
+        """同一計算状態の描画・モータ標本。"""
         poses = []
         for name in self.dynamic:
             idx = self.body_ids[name]

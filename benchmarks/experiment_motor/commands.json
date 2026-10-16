@@ -1,0 +1,20 @@
+{
+  "cwd": "/home/uraki/uraki_ws",
+  "status": "all_owned_test_processes_stopped",
+  "commands": [
+    "timeout 60 node --test log/artifacts/experiment_motor/check_motion.mjs",
+    "timeout 60 node --test log/artifacts/pursuit_continuous/check_window.mjs log/artifacts/pursuit_continuous/check_delete.mjs log/artifacts/pursuit_continuous/check_live.mjs log/artifacts/pursuit_smooth/check_clock.mjs log/artifacts/pursuit_fixes/check_recording.mjs",
+    "node log/artifacts/motor_monitor_tabs_20261012/helpers.mjs",
+    "PYTHONDONTWRITEBYTECODE=1 timeout 30 python3 log/artifacts/experiment_motor/check_export.py",
+    "PYTHONDONTWRITEBYTECODE=1 timeout 30 python3 log/artifacts/pursuit_fixes/check_export.py",
+    "docker exec -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_v2/check_pursuit.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_smooth/check_qp.py'",
+    "docker exec -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout 45 python3 /ros2_ws/src/log/artifacts/experiment_motor/check_scene.py'",
+    "timeout 180 node log/artifacts/experiment_motor/check_browser.mjs"
+  ],
+  "notes": [
+    "自作テストのGit無視対象への保持",
+    "物理試験の再実行時は未使用の出力ディレクトリが必要",
+    "専用ポートの画面サーバー・Chrome・所有実験は停止済み",
+    "8877番と既存実験への接続は読取のみ、既存ROS・点群ブリッジを維持"
+  ]
+}

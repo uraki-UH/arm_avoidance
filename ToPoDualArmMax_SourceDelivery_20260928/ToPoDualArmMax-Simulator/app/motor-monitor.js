@@ -1,7 +1,9 @@
+import {format_fixed} from './display-format.js';
 import {bridge_socket_url} from './robot-ros-state.js';
+import {observe_balanced_layout} from './balanced-layout.js';
 
-const metrics={position_rad:{label:'角度',unit:'deg',scale:180/Math.PI},velocity_rad_sec:{label:'角速度',unit:'deg/s',scale:180/Math.PI},torque_nm:{label:'トルク',unit:'N·m',scale:1},current_a:{label:'電流',unit:'A',scale:1},jerk_rad_sec3:{label:'ジャーク',unit:'deg/s³',scale:180/Math.PI}};
-const metric_names=Object.keys(metrics),input_units=metric_names.filter(name=>name!=='jerk_rad_sec3'),max_sample_age_ms=1000;
+const metrics={position_rad:{label:'角度',unit:'deg',scale:180/Math.PI},velocity_rad_sec:{label:'角速度',unit:'deg/s',scale:180/Math.PI},acceleration_rad_sec2:{label:'角加速度',unit:'deg/s²',scale:180/Math.PI},torque_nm:{label:'トルク',unit:'N·m',scale:1},current_a:{label:'電流',unit:'A',scale:1},jerk_rad_sec3:{label:'ジャーク',unit:'deg/s³',scale:180/Math.PI}};
+const metric_names=Object.keys(metrics),input_units=['position_rad','velocity_rad_sec','torque_nm','current_a'],max_sample_age_ms=1000;
 const finite_or_null=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
 
 // 表示専用の出力軸換算。電気回路・電圧制限の計算や駆動設定の変更なし
@@ -44,7 +46,7 @@ export class jerk_estimator{
  }
 }
 
-// 表示関節ごとの固定長履歴。5指標×2系列、欠測はNaN、ゼロ補完なし
+// 表示関節ごとの固定長履歴。欠測はNaN、ゼロ補完なし
 export class motor_history{
  constructor(max_points=600){this.max_points=max_points;this.num_columns=1+metric_names.length*2;this.data=new Float64Array(max_points*this.num_columns);this.flags=new Uint16Array(max_points);this.num_points=0;this.idx=0;}
  clear(){this.num_points=0;this.idx=0;}
@@ -61,7 +63,7 @@ export class motor_history{
  each(callback){for(let num=0;num<this.num_points;num++){const idx=(this.idx-this.num_points+num+this.max_points)%this.max_points;callback(this.data,idx*this.num_columns,this.flags[idx]);}}
 }
 
-const is_estimated=(values,metric)=>metric==='jerk_rad_sec3'?finite_or_null(values[metric])!==null:!!values[metric==='torque_nm'?'is_torque_estimated':metric==='current_a'?'is_current_estimated':'is_motion_estimated'];
+const is_estimated=(values,metric)=>['acceleration_rad_sec2','jerk_rad_sec3'].includes(metric)?finite_or_null(values[metric])!==null:metric==='velocity_rad_sec'?!!(values.is_velocity_estimated||values.is_motion_estimated):!!values[metric==='torque_nm'?'is_torque_estimated':metric==='current_a'?'is_current_estimated':'is_motion_estimated'];
 const set_text=(element,value)=>{if(element.textContent!==value)element.textContent=value;};
 
 export class motor_monitor{
@@ -89,6 +91,8 @@ export class motor_monitor{
    const button=document.createElement('button');button.textContent=description.label;button.dataset.metric=metric;button.id='motor-tab-'+metric;button.setAttribute('role','tab');button.setAttribute('aria-controls','motor-joint-list motor-combined-plot');button.onclick=()=>this.select_metric(metric);this.tabs.set(metric,button);this.section.querySelector('.motor-tabs').append(button);
    button.onkeydown=event=>{let idx=metric_names.indexOf(metric);if(event.key==='ArrowRight')idx=(idx+1)%metric_names.length;else if(event.key==='ArrowLeft')idx=(idx+metric_names.length-1)%metric_names.length;else if(event.key==='Home')idx=0;else if(event.key==='End')idx=metric_names.length-1;else return;event.preventDefault();this.select_metric(metric_names[idx]);this.tabs.get(metric_names[idx]).focus();};
   }
+  // モータ指標の既定6項目は1行。追加時も共通の均等配分。
+  observe_balanced_layout(this.section.querySelector('.motor-tabs'),6);
   this.elements.joint.onchange=()=>this.select_joint();
   this.elements.clear.onclick=()=>{for(const row of this.rows.values())row.history?.clear();this.tick();};
   this.elements.show_all.onclick=()=>{for(const row of this.rows.values())this.set_visible(row,true);};
@@ -161,26 +165,32 @@ export class motor_monitor{
   }
   this.samples=next;
  }
+ get_simulation_sample(now_ms){
+  const replay=this.simulator.avoidance_replay,robot=this.simulator.robot;
+  // 表示姿勢を所有する実験の優先。欠測時の別入力源の混在防止。
+  if(replay?.has_pose_control||replay?.is_live)return replay.get_motion_sample?.(now_ms)??null;
+  const physics=this.simulator.physics_panel;
+  if(physics?.socket&&physics.enable_dynamics&&physics.robot_model===robot)return physics.get_motion_sample(now_ms);
+  const remote=this.simulator.ros_points?.robot_panel?.joint_stream?.get_motion_sample(now_ms);
+  return remote?.is_simulation_input===true?remote:null;
+ }
  tick(now_ms=performance.now()){
   const robot=this.simulator.robot;
-  if(this.model!==robot.modelId){this.disconnect('モデル切替。実機監視OFF');this.model=robot.modelId;this.profiles={};this.last_motion=null;this.sim_received_ms=-Infinity;this.build_joints(robot);this.select_joint();}
-  const physics=this.simulator.physics_panel,remote=this.simulator.ros_points?.robot_panel?.joint_stream?.get_motion_sample(now_ms);
-  const has_remote_sim=remote?.is_simulation_input===true;
-  const has_local_sim=!!(physics.socket&&physics.enable_dynamics&&physics.robot_model===robot);
-  const motion=has_local_sim?physics.motion_state:has_remote_sim?remote.motion:null;
-  if(has_local_sim&&motion&&motion!==this.last_motion){this.last_motion=motion;this.sim_received_ms=now_ms;}
-  if(has_remote_sim&&!has_local_sim)this.sim_received_ms=remote.received_ms;
-  const has_sim=!!(motion&&(has_local_sim||has_remote_sim)&&now_ms-this.sim_received_ms<=max_sample_age_ms);
+  if(this.model!==robot.modelId){this.disconnect('モデル切替。実機監視OFF');this.model=robot.modelId;this.profiles={};this.build_joints(robot);this.select_joint();}
+  const sim_sample=this.get_simulation_sample(now_ms),motion=sim_sample?.motion;
+  const has_sim=!!(motion&&sim_sample.model===robot.modelId&&now_ms-sim_sample.received_ms>=0&&now_ms-sim_sample.received_ms<=max_sample_age_ms);
   const sample=unit=>{const value=this.samples[unit];return value&&now_ms-value.received_ms<=max_sample_age_ms?value:null;};
   const inputs=Object.fromEntries(input_units.map(unit=>[unit,sample(unit)])),can_render=!document.hidden&&!document.getElementById('robot-panel').hidden;
   for(const row of this.rows.values()){
    if(!row.is_visible)continue;
    const name=row.joint.name,coefficient=this.profile(name).output_torque_nm_per_a;
-   const position=has_local_sim?physics.actual_joints?.[name]??physics.actual?.[name]:has_remote_sim?remote.pose[name]:row.joint.q;
-   const sim={...motor_values(has_sim?motion.effort?.[name]:null,has_sim?motion.current_a?.[name]:null,coefficient),position_rad:finite_or_null(has_local_sim&&!has_sim?null:position),velocity_rad_sec:finite_or_null(has_sim?motion.velocity?.[name]:null)};
+   const position=sim_sample?(has_sim?sim_sample.pose[name]:null):row.joint.q;
+   const sim={...motor_values(has_sim?motion.effort?.[name]:null,has_sim?motion.current_a?.[name]:null,coefficient),position_rad:finite_or_null(position),velocity_rad_sec:finite_or_null(has_sim?motion.velocity?.[name]:null),is_velocity_estimated:has_sim&&motion.estimated_velocity_joints?.includes(name)===true};
    const hardware={...motor_values(inputs.torque_nm?.values[name],inputs.current_a?.values[name],coefficient),position_rad:finite_or_null(inputs.position_rad?.values[name]),velocity_rad_sec:finite_or_null(inputs.velocity_rad_sec?.values[name])};
-   sim.jerk_rad_sec3=row.jerk.sim.update(sim.velocity_rad_sec,has_sim?this.sim_received_ms:NaN);
+   sim.jerk_rad_sec3=row.jerk.sim.update(sim.velocity_rad_sec,has_sim?sim_sample.time_ms??sim_sample.received_ms:NaN);
    hardware.jerk_rad_sec3=row.jerk.hardware.update(hardware.velocity_rad_sec,inputs.velocity_rad_sec?.time_ms);
+   sim.acceleration_rad_sec2=row.jerk.sim.acceleration?.value??null;
+   hardware.acceleration_rad_sec2=row.jerk.hardware.acceleration?.value??null;
    if(now_ms-(row.last_history_ms??-Infinity)>=100){row.history.push(now_ms,sim,hardware);row.last_history_ms=now_ms;}row.values={sim,hardware};
    for(const metric of metric_names)row.display_limits[metric]=Math.max(row.display_limits[metric],Math.abs((sim[metric]??0)*metrics[metric].scale),Math.abs((hardware[metric]??0)*metrics[metric].scale));
    if(can_render&&!this.is_combined)this.render_row(row,has_sim,inputs);
@@ -199,11 +209,11 @@ export class motor_monitor{
   if(robot.joints.L_joint1)this.elements.joint.value='L_joint1';
   for(const joint of robot.actuated){
    const card=document.createElement('article');card.className='motor-joint';card.dataset.joint=joint.name;
-   card.innerHTML=`<div class="motor-joint-heading"><strong></strong><div class="motor-view-tabs" role="tablist" aria-label="関節の表示形式"><button role="tab" data-view="slider">スライダー</button><button role="tab" data-view="graph">グラフ</button></div><div class="motor-values"><output class="sim"></output><output class="hardware" hidden></output></div></div><div class="motor-gauges"><div class="sim"><input type="range" min="-1" max="1" step="any" value="0" disabled></div><div class="hardware" hidden><input type="range" min="-1" max="1" step="any" value="0" disabled></div></div>`;
+   card.innerHTML=`<div class="motor-joint-heading"><strong></strong><div class="motor-view-tabs" role="tablist" aria-label="関節の表示形式"><button role="tab" data-view="slider">スライダー</button><button role="tab" data-view="graph">グラフ</button></div></div><div class="motor-gauges"><div class="sim"><input type="range" min="-1" max="1" step="any" value="0" disabled><output class="sim"></output></div><div class="hardware" hidden><input type="range" min="-1" max="1" step="any" value="0" disabled><output class="hardware" hidden></output></div></div>`;
    card.querySelector('strong').textContent=joint.name;card.querySelector('.motor-view-tabs').setAttribute('aria-label',joint.name+'の表示形式');
    const checkbox=document.createElement('input');checkbox.type='checkbox';const label=document.createElement('label');label.append(checkbox,document.createTextNode(joint.name));this.section.querySelector('.motor-joint-checks').append(label);
    const max_effort=Number(robot.urdf.querySelector(`joint[name="${joint.name}"] > limit`)?.getAttribute('effort'));
-   const row={joint,card,checkbox,is_visible:true,is_angle_dragging:false,views:{},jerk:{sim:new jerk_estimator(),hardware:new jerk_estimator()},display_limits:{position_rad:Math.max(180,Number.isFinite(joint.lower)?Math.abs(joint.lower*180/Math.PI):0,Number.isFinite(joint.upper)?Math.abs(joint.upper*180/Math.PI):0),velocity_rad_sec:Math.max(1,Math.abs(joint.velocity*180/Math.PI)),torque_nm:Math.max(1,max_effort||0),current_a:1,jerk_rad_sec3:1},color:`hsl(${this.rows.size*137.508%360} 72% 65%)`,fields:{}};
+   const row={joint,card,checkbox,is_visible:true,is_angle_dragging:false,views:{},jerk:{sim:new jerk_estimator(),hardware:new jerk_estimator()},display_limits:{position_rad:Math.max(180,Number.isFinite(joint.lower)?Math.abs(joint.lower*180/Math.PI):0,Number.isFinite(joint.upper)?Math.abs(joint.upper*180/Math.PI):0),velocity_rad_sec:Math.max(1,Math.abs(joint.velocity*180/Math.PI)),acceleration_rad_sec2:1,torque_nm:Math.max(1,max_effort||0),current_a:1,jerk_rad_sec3:1},color:`hsl(${this.rows.size*137.508%360} 72% 65%)`,fields:{}};
    for(const source of ['sim','hardware']){const gauge_box=card.querySelector('.motor-gauges .'+source);row.fields[source]={output:card.querySelector('output.'+source),gauge_box,gauge:gauge_box.querySelector('input')};}
    const angle_input=row.fields.sim.gauge;
    angle_input.oninput=()=>{if(this.can_edit_angle(row))this.simulator.set_manual_joint(joint.name,angle_input.valueAsNumber*Math.PI/180);};
@@ -226,14 +236,14 @@ export class motor_monitor{
   for(const [name,button] of this.tabs){button.setAttribute('aria-selected',String(name===metric));button.tabIndex=name===metric?0:-1;}
   this.section.querySelector('.motor-joint-list').setAttribute('aria-labelledby',this.tabs.get(metric).id);
   this.elements.combined_plot.setAttribute('aria-labelledby',this.tabs.get(metric).id);
-  const is_jerk=metric==='jerk_rad_sec3';this.elements.metric_note.hidden=!is_jerk;this.elements.metric_note.textContent=is_jerk?'推定':'';
-  this.elements.metric_note.title=is_jerk?'角速度の2段差分によるジャーク推定［deg/s³］。ノイズの影響あり。':'';this.elements.metric_note.setAttribute('aria-label',this.elements.metric_note.title);
+  const is_derivative=['acceleration_rad_sec2','jerk_rad_sec3'].includes(metric);this.elements.metric_note.hidden=!is_derivative;this.elements.metric_note.textContent=is_derivative?'推定':'';
+  this.elements.metric_note.title=metric==='acceleration_rad_sec2'?'角速度の差分による角加速度推定［deg/s²］。ノイズの影響あり。':metric==='jerk_rad_sec3'?'角速度の2段差分によるジャーク推定［deg/s³］。ノイズの影響あり。':'';this.elements.metric_note.setAttribute('aria-label',this.elements.metric_note.title);
   for(const row of this.rows.values())this.apply_view(row);this.elements.scale_error.hidden=true;this.update_plot_controls();if(can_tick)this.tick();
  }
  apply_view(row){
   const is_graph=row.views[this.metric]==='graph';
   for(const button of row.card.querySelectorAll('[data-view]'))button.setAttribute('aria-selected',String((button.dataset.view==='graph')===is_graph));
-  row.card.querySelector('.motor-gauges').hidden=is_graph;
+  for(const fields of Object.values(row.fields))fields.gauge.hidden=is_graph;
   if(is_graph&&!row.canvas){row.canvas=document.createElement('canvas');row.canvas.className='motor-plot';row.canvas.setAttribute('role','img');row.card.append(row.canvas);}
   if(row.canvas){row.canvas.hidden=!is_graph;row.canvas.setAttribute('aria-label',row.joint.name+' '+metrics[this.metric].label+'の時系列グラフ');}
  }
@@ -261,16 +271,17 @@ export class motor_monitor{
    const fields=row.fields[source],values=row.values[source],value=values[metric]===null?null:values[metric]*description.scale,has_hardware=!!this.socket;
    fields.output.hidden=source==='hardware'&&!has_hardware;fields.gauge_box.hidden=source==='hardware'&&!has_hardware;
    const is_estimated_value=is_estimated(values,metric),label=source==='sim'?'シミュレーション':'実機';
-   set_text(fields.output,`${value===null?'—':(Math.abs(value)>=10000?value.toExponential(2):value.toFixed(3))} ${description.unit}${is_estimated_value?'（推定）':''}`);
+   set_text(fields.output,`${value===null?'—':(Math.abs(value)>=10000?value.toExponential(2):format_fixed(value,3))} ${description.unit}${is_estimated_value?'（推定）':''}`);
    fields.output.setAttribute('aria-label',row.joint.name+' '+label+' '+description.label+' '+fields.output.textContent);
-   const can_edit=source==='sim'&&this.can_edit_angle(row),is_missing=value===null&&!can_edit;fields.gauge.disabled=!can_edit;fields.gauge.hidden=false;fields.gauge.classList.toggle('is-missing',is_missing);
+   const can_edit=source==='sim'&&this.can_edit_angle(row),is_missing=value===null&&!can_edit;fields.gauge.disabled=!can_edit;fields.gauge.hidden=row.views[metric]==='graph';fields.gauge.classList.toggle('is-missing',is_missing);
    fields.gauge.min=can_edit&&Number.isFinite(row.joint.lower)?row.joint.lower*description.scale:-max_value;fields.gauge.max=can_edit&&Number.isFinite(row.joint.upper)?row.joint.upper*description.scale:max_value;fields.gauge.step=can_edit?'0.1':'any';
    const physics=this.simulator.physics_panel,goal=can_edit&&physics.socket&&physics.enable_dynamics&&physics.robot_model===this.simulator.robot?finite_or_null(physics.targets?.[row.joint.name]):null;
    if(!can_edit||!row.is_angle_dragging)fields.gauge.value=can_edit?(goal??row.joint.q)*description.scale:value??0;
    fields.gauge.setAttribute('aria-valuetext',is_missing?'未受信・未計算':fields.gauge.value+' '+description.unit);
    fields.gauge.setAttribute('aria-label',row.joint.name+' '+label+' '+description.label+(can_edit?'の調整':'の読取り専用ゲージ'));
-   let note=value===null?'未受信・未計算・失効':metric==='jerk_rad_sec3'?'角速度の差分推定':is_estimated_value?'換算・推定'+(profile.has_verified_calibration?'':'（未校正）'):source==='sim'?(has_sim?'MuJoCo計算値':'ブラウザ表示角'):'ROS配信値';
-   const source_sample=inputs[metric==='jerk_rad_sec3'?'velocity_rad_sec':metric]??(is_estimated_value?inputs[metric==='torque_nm'?'current_a':'torque_nm']:null);
+   const is_derivative=['acceleration_rad_sec2','jerk_rad_sec3'].includes(metric);
+   let note=value===null?'未受信・未計算・失効':is_derivative?'角速度の差分推定':is_estimated_value?(metric==='velocity_rad_sec'?'記録角度の差分推定':'換算・推定'+(profile.has_verified_calibration?'':'（未校正）')):source==='sim'?(has_sim?'MuJoCo計算値':'ブラウザ表示角'):'ROS配信値';
+   const source_sample=inputs[is_derivative?'velocity_rad_sec':metric]??(is_estimated_value?inputs[metric==='torque_nm'?'current_a':'torque_nm']:null);
    if(source==='hardware'&&source_sample&&!source_sample.has_source_stamp)note+='・取得時刻なし';
    fields.output.title=label+'・'+note;fields.gauge.title=can_edit?'シミュレータ目標角［deg］。現在角は数値欄。':fields.output.title;
   }

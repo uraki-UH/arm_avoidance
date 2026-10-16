@@ -1,0 +1,19 @@
+{
+  "cwd": "/home/uraki/uraki_ws",
+  "status": "all_owned_test_processes_stopped_existing_services_updated",
+  "commands": [
+    "docker exec -i -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && python3 - /ros2_ws/src/benchmarks/random_walk/cases.json --output /ros2_ws/src/log/artifacts/random_walk/batch1 --repeats 1 --timeout-sec 60 --max-total-sec 300 --estimate-sec 6 --continue-on-error' < skills/run-benchmark-batch/scripts/run_batch.py",
+    "docker exec -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout 60 python3 /ros2_ws/src/log/artifacts/random_walk/check_walk.py'",
+    "timeout 60 node --test log/artifacts/random_walk/check_api.mjs log/artifacts/cartesian_shuttle/check_reference.mjs log/artifacts/experiment_motor/check_motion.mjs log/artifacts/pursuit_continuous/check_live.mjs log/artifacts/pursuit_continuous/check_window.mjs log/artifacts/pursuit_continuous/check_delete.mjs log/artifacts/pursuit_smooth/check_clock.mjs log/artifacts/pursuit_fixes/check_recording.mjs",
+    "docker exec -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_v2/check_pursuit.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_fixes/check_fixes.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_smooth/check_qp.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_target/check_target.py && timeout 60 python3 /ros2_ws/src/log/artifacts/pursuit_sweep/check_sweep.py'",
+    "PYTHONDONTWRITEBYTECODE=1 timeout 30 python3 log/artifacts/experiment_motor/check_export.py",
+    "PYTHONDONTWRITEBYTECODE=1 timeout 30 python3 log/artifacts/pursuit_fixes/check_export.py",
+    "timeout 180 node log/artifacts/random_walk/check_browser.mjs"
+  ],
+  "authorized_service_restart": "docker exec -d -e PYTHONDONTWRITEBYTECODE=1 -e ROS_DOMAIN_ID=0 -w /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator gng_cpu_container bash start_ros.sh --restart",
+  "notes": [
+    "再測定時は未使用の出力先を指定。既存結果への上書き禁止",
+    "自作テストコードはlog/artifacts/random_walkのGit無視対象へ保持",
+    "検証用のNode・Chrome・所有実験は停止済み。許可済み更新の8877/8879番だけ既存サービスとして維持"
+  ]
+}

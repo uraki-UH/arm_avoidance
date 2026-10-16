@@ -1,0 +1,132 @@
+{
+  "cases": [
+    {
+      "name": "cbf_qp_link_point_401",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "cbf_qp",
+        "--mode",
+        "link_point",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "cbf_qp_distal_sweep_401",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "cbf_qp",
+        "--mode",
+        "distal_sweep",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "cbf_qp_link_point_719",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "cbf_qp",
+        "--mode",
+        "link_point",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "cbf_qp_distal_sweep_719",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "cbf_qp",
+        "--mode",
+        "distal_sweep",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_link_point_401",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "oscbf",
+        "--mode",
+        "link_point",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_distal_sweep_401",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "oscbf",
+        "--mode",
+        "distal_sweep",
+        "--seed",
+        "401",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_link_point_719",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "oscbf",
+        "--mode",
+        "link_point",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    },
+    {
+      "name": "oscbf_distal_sweep_719",
+      "argv": [
+        "python3",
+        "/ros2_ws/src/log/artifacts/pursuit_sweep/measure.py",
+        "--policy",
+        "oscbf",
+        "--mode",
+        "distal_sweep",
+        "--seed",
+        "719",
+        "--output",
+        "@case_dir@"
+      ],
+      "metrics": "comparison.json"
+    }
+  ]
+}

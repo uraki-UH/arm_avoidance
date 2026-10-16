@@ -1,3 +1,4 @@
+import {format_fixed} from './display-format.js';
 import * as THREE from 'three';
 
 // 計測座標と元のRGBを保持した、表示専用の着色
@@ -40,7 +41,7 @@ export class CloudColorControls{
   const change=()=>{const mode=el('mode').value,auto=el('auto').checked,min=el('min').valueAsNumber,max=el('max').valueAsNumber;el('min').disabled=el('max').disabled=auto||mode==='rgb';el('auto').disabled=mode==='rgb';if(!auto&&(!Number.isFinite(min)||!Number.isFinite(max)||max<=min)){el('legend').textContent='上限を下限より大きくしてください';return;}this.settings={mode,auto,min,max};onChange();};
   for(const k of ['mode','auto','min','max'])el(k).onchange=change;for(const k of ['min','max'])el(k).oninput=change;
  }
- compute(xyz,matrix,source){const result=cloudColors(xyz,matrix,this.settings,source,this.buffers),s=result.summary;this.summary=s;this.el('legend').textContent=s.mode==='rgb'?'RGB · 色のない画素は灰色':`${s.mode==='height'?'高さ':s.mode==='range'?'距離':'模擬反射強度'} ${s.min.toFixed(3)} 〜 ${s.max.toFixed(3)} ${s.units} · ${s.count.toLocaleString()} 点`;if(this.settings.auto){this.el('min').value=s.min.toFixed(3);this.el('max').value=s.max.toFixed(3);}this.el('legend').dataset.color=JSON.stringify(s);return result;}
+ compute(xyz,matrix,source){const result=cloudColors(xyz,matrix,this.settings,source,this.buffers),s=result.summary;this.summary=s;this.el('legend').textContent=s.mode==='rgb'?'RGB · 色のない画素は灰色':`${s.mode==='height'?'高さ':s.mode==='range'?'距離':'模擬反射強度'} ${format_fixed(s.min,3)} 〜 ${format_fixed(s.max,3)} ${s.units} · ${s.count.toLocaleString()} 点`;if(this.settings.auto){this.el('min').value=format_fixed(s.min,3);this.el('max').value=format_fixed(s.max,3);}this.el('legend').dataset.color=JSON.stringify(s);return result;}
 }
 export function displayPLY(xyz,matrix,rgb,world){
  const n=xyz.length/3,h=new TextEncoder().encode(`ply\nformat binary_little_endian 1.0\ncomment Display colors only; raw measurements are in points.ply\nelement vertex ${n}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n`),b=new ArrayBuffer(h.length+n*15),d=new DataView(b);new Uint8Array(b).set(h);

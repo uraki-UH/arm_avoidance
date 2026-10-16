@@ -1,3 +1,4 @@
+import {format_fixed} from './display-format.js';
 import {bridge_socket_url} from './robot-ros-state.js';
 
 let loaded_catalog=[];
@@ -37,7 +38,7 @@ export function format_plugin_status(frame,spec){
  if(typeof phase==='object')phase=is_moving?phase.moving:phase.holding;
  const parts=['MuJoCo',display.label??spec?.label??state.mode,phase].filter(Boolean);
  if(display.enable_motion_status)parts.push(max_speed===null?'実速度未取得':(is_moving?'動作中':'姿勢保持')+' · 腕 '+(max_speed*180/Math.PI).toFixed(1)+' deg/s');
- for(const field of display.fields??[])if(Number.isFinite(state[field.name]))parts.push(field.label+' '+state[field.name].toFixed(field.decimals??0)+(field.unit?' '+field.unit:''));
+ for(const field of display.fields??[])if(Number.isFinite(state[field.name]))parts.push(field.label+' '+format_fixed(state[field.name],field.decimals??0)+(field.unit?' '+field.unit:''));
  return parts.join(' · ')+(state.message?'\n'+state.message:'');
 }
 export function plugin_definition(id){return loaded_catalog.find(spec=>spec.id===id);}

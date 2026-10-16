@@ -32,6 +32,12 @@ def recording_metadata(details):
     if details.get('contact_rule')=='target_tip':
         result.update(contact_rule='target_tip',outcome=details.get('outcome','unfinished'),
             enable_proximal_guard=config.get('enable_proximal_guard',True),target_contact_links=details['target_contact_links'])
+    if 'pursuit_mode' in config:
+        result['pursuit_mode'] = config['pursuit_mode']
+    if 'task' in details:
+        result['task'] = details['task']
+    if 'random_walk' in details:
+        result['random_walk'] = details['random_walk']
     return result
 
 
@@ -44,7 +50,7 @@ def export_recording(case_dir, output_dir):
     if not 2 <= len(frames) <= 20000:
         raise ValueError('記録フレーム数の範囲外')
     keys = ('time_sec','joints','eef','sphere','sphere_radius_m','phase','has_contact','proxy_gap_m')
-    frames = [{**{key:frame[key] for key in keys},**{key:frame[key] for key in ('target','obstacle_segments','obstacle_phase','obstacle_speed_mps') if key in frame}} for frame in frames]
+    frames = [{**{key:frame[key] for key in keys},**{key:frame[key] for key in ('target','obstacle_segments','obstacle_phase','obstacle_speed_mps','motion','task_goal','num_arrivals','task_position_error_m','task_orientation_error_rad') if key in frame}} for frame in frames]
     result = dict(recording_metadata(details),frames=frames)
     body = json.dumps(result,ensure_ascii=False,allow_nan=False,separators=(',',':'))+'\n'
     name = 'avoidance-'+hashlib.sha256(body.encode()).hexdigest()[:20]+'.json'
@@ -63,7 +69,8 @@ def export_recording(case_dir, output_dir):
                 target_link=result['target_link'],obstacle_shape=result['obstacle_shape'],
                 has_legacy_planning_domain=result['has_legacy_planning_domain'],
                 has_unbounded_joint_limits=result['has_unbounded_joint_limits'],
-                failure_reason=result['failure_reason'],duration_sec=frames[-1]['time_sec'])
+                failure_reason=result['failure_reason'],duration_sec=frames[-1]['time_sec'],
+                **({key:result[key] for key in ('pursuit_mode',) if key in result}))
 
 
 def export_catalog(case_dir='latest', output_dir=None):
