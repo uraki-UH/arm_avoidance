@@ -1,0 +1,45 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "container": "gng_cpu_container",
+  "has_hardware_output": false,
+  "commands": [
+    {
+      "purpose": "実測接触リンク・QP不成立の診断",
+      "command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 timeout 90 python3 log/artifacts/pursuit_fixes/diagnose.py'",
+      "state": "stopped"
+    },
+    {
+      "purpose": "有限可動域・肩包絡の単体試験13件",
+      "command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 timeout 60 python3 log/artifacts/pursuit_fixes/check_fixes.py'",
+      "state": "stopped"
+    },
+    {
+      "purpose": "既存制御回帰56件",
+      "command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 timeout 90 bash -c \"python3 log/artifacts/pursuit_v2/check_pursuit.py && python3 log/artifacts/chasing_sphere/check_sphere.py\"'",
+      "state": "stopped"
+    },
+    {
+      "purpose": "4条件の有限バッチ",
+      "command": "docker exec -i --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 - benchmarks/pursuit_fixes/cases.json --output log/artifacts/pursuit_fixes/verified --repeats 1 --timeout-sec 75 --max-total-sec 240 --estimate-sec 25' < /home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py",
+      "state": "stopped",
+      "num_cases_completed": 4,
+      "elapsed_sec": 75.6331701479794,
+      "note": "既存出力先への再実行不可。新規出力ディレクトリの指定が必要"
+    },
+    {
+      "purpose": "専用Chrome・専用HTTPサーバーでのGUI回帰",
+      "command": "timeout 150 node log/artifacts/pursuit_fixes/check_browser.mjs > log/artifacts/pursuit_fixes/browser.log 2>&1",
+      "state": "stopped",
+      "exit_code": 124,
+      "checks_completed": ["有限可動域と暫定表示", "旧無制限記録の識別", "実測姿勢・障害物・追跡点とURDFの整合", "再生・停止", "停止理由と接触リンクの表示", "二節表示", "GUI実行・中止"],
+      "checks_incomplete": ["最後の通常画面切替・全体の完了判定"],
+      "note": "既存サービスと異なる専用ポート。専用サーバーとChromeの終了確認済み"
+    }
+  ],
+  "existing_services": {
+    "ros_launch_pid": 21179,
+    "viewer_server_pid": 86665,
+    "pointcloud_bridge_pid": 86676,
+    "state": "preserved"
+  }
+}

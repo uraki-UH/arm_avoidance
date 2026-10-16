@@ -1,0 +1,47 @@
+{
+  "purpose": "高速・急切返し・追跡リンク変更・二節障害物での同条件比較",
+  "model": "topo_dual_arm_max_long",
+  "methods": [
+    "rollout_cv",
+    "cbf_qp",
+    "oscbf"
+  ],
+  "development_seeds": [
+    211
+  ],
+  "evaluation_seeds": [
+    701,
+    719
+  ],
+  "evaluation_duration_sec": 18,
+  "num_cases": 18,
+  "max_total_sec": 600,
+  "timeout_sec": 60,
+  "allow_evaluation_retuning": false,
+  "evaluation_learning": false,
+  "method_semantics": {
+    "cbf_qp": "観測距離の局所線形速度CBF、OSQP、関節空間目的関数",
+    "oscbf": "同一距離制約、公式OSCBFVelocityConfig/CBFpy/qpax、質量整合の作業空間目的関数"
+  },
+  "limits": [
+    "速度入力の局所線形近似。トルク制限付きPD実機構との誤差あり",
+    "QP解未成立時は試験打切り。以後の非接触継続の保証なし",
+    "二節障害物の全端点速度上限。固定部ガードの介入・禁止域侵入を別集計",
+    "手先と前腕は同じ無障害手先最高速度を速度基準に使用",
+    "接触・自己干渉・解未成立などの停止理由を分離。停止までの時間だけで回避性能を評価しない",
+    "追跡側の反応は既知形状の理想観測。実LiDAR視野・死角の再現なし"
+  ],
+  "selection_metrics": [
+    "num_round_trips",
+    "num_arrivals",
+    "contact_sec",
+    "evaluated_sec",
+    "is_failure",
+    "propose_p95_ms",
+    "obstacle_blocked_sec",
+    "min_fixed_gap_m",
+    "max_ball_speed_mps",
+    "max_obstacle_acceleration_m_per_sec2",
+    "num_qp_no_solution"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "purpose": "有限可動域と障害物禁止域の回帰確認。回避全般の性能改善の証明とは別の検証",
+  "num_cases": 4,
+  "duration_sec": 18,
+  "max_total_sec": 240,
+  "max_case_sec": 75,
+  "enable_hardware_output": false,
+  "enable_tuning": false,
+  "source_cases": {
+    "legacy_131": "log/artifacts/chasing_sphere/holdout/001_holdout_reactive_131/details.json",
+    "user_linked_401": "log/artifacts/pursuit_v2/manual_gui_efddec31-3f87-4517-83f4-687094bad317/details.json",
+    "linked_719": "benchmarks/pursuit_v2/linked_rollout_cv_719.json",
+    "forearm_701": "benchmarks/pursuit_v2/forearm_rollout_cv_701.json"
+  },
+  "checks": [
+    "全関節の有限制限と候補・指令・物理の整合",
+    "保護リンクへの実測接触なし",
+    "実測角度の制限逸脱量",
+    "追跡停止時間・速度上限の併記",
+    "回避失敗の隠蔽なし"
+  ],
+  "unconfirmed": "continuous軸の実機可動域。±180度は暫定試験制限"
+}

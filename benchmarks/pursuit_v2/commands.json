@@ -1,0 +1,26 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "simulation_only": true,
+  "commands": {
+    "final_comparison": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && PYTHONDONTWRITEBYTECODE=1 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/pursuit_v2/cases.json --output log/artifacts/pursuit_v2/new_final_holdout --repeats 1 --timeout-sec 60 --max-total-sec 600 --estimate-sec 10 --continue-on-error'",
+    "gui_end_to_end": "timeout 240 node log/artifacts/pursuit_v2/check.browser.mjs",
+    "gui_layout": "timeout 150 node log/artifacts/pursuit_v2/check_layout.browser.mjs",
+    "gui_runtime_restart": "docker exec gng_cpu_container bash /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/start_ros.sh --restart --port 8877 --bridge-port 8879 --tf-topic /tf",
+    "open_gui": "bash scripts/open_dual_arm_nvidia.sh --replay"
+  },
+  "runtime_status": {
+    "test_processes": "stopped",
+    "gui_port": 8877,
+    "bridge_port": 8879,
+    "gui_service": "running_by_explicit_user_restart_approval",
+    "ros_domain_id": 0
+  },
+  "local_test_records": [
+    "log/artifacts/pursuit_v2/smoke_01/report.json",
+    "log/artifacts/pursuit_v2/smoke_02/report.json",
+    "log/artifacts/pursuit_v2/holdout/report.json",
+    "log/artifacts/pursuit_v2/holdout_verified/report.json",
+    "log/artifacts/pursuit_v2/final_holdout/report.json",
+    "log/artifacts/pursuit_v2/metrics.json"
+  ]
+}

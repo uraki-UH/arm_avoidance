@@ -1,0 +1,22 @@
+{
+  "evaluation_seeds": [
+    701,
+    719
+  ],
+  "is_control_frozen": true,
+  "has_evaluation_retuning": false,
+  "source_sha256": {
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py": "c7734a52333d847ef9ef2a6bb88e957b94816875151fffac00183258fb1e55e3",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_sphere_avoidance.py": "69171ea9eeee0f0f820017e055b3950ee19a10ae824ce8731a7f0ae03b77b318",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/pursuit_obstacle.py": "53d0c0a1923042853106d26333d26d50c5f045b837a6981bf527f16e581ce0fa",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/pursuit_cbf.py": "581aed52b9c576fe1ce761be8d038649d85186dccaec6ae72bc1800a0ee2907c",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/physics_scene.py": "2e4157d4f1e7555e7e7ecccf57138cf5e141484ff92d854d7b14569cf4a606aa",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/physics_robot.py": "c72f76562ac7af45963f2e9bf1eb660720c558df049818deed5ea24a45091fba",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/oscbf_avoidance/filter.py": "6b809beeed0b61e27339dfe00c5dca7715d157719336bd55227bec58a37a31fd",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/oscbf_avoidance/vendor/oscbf/core/oscbf_configs.py": "101517c73c426a1d2d65607b09ab4ce9cb2c9ff8b2439e2027bb79594bd8c36f",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/oscbf_avoidance/requirements.txt": "d66f432a8634f8d40cdb01f82a1dcad205de38c657182096661098cc3a223d5d"
+  },
+  "raw_output": "log/artifacts/pursuit_v2/final_holdout"
+}

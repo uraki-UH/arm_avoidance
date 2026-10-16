@@ -1,4 +1,4 @@
-"""ブラウザと共通のMuJoCo・回避処理による、有限時間のCLI実行。"""
+"""ブラウザと共通のMuJoCo・回避処理によるCLI実行。有限記録・連続表示の選択。"""
 import argparse
 import collections
 import json
@@ -28,9 +28,12 @@ def nonnegative(value):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--scenario', choices=('live','chasing_sphere'), default='live', help='既存ROS入力／手先追跡球の有限試験')
+    parser.add_argument('--scenario', choices=('live','chasing_sphere'), default='live', help='既存ROS入力／指定リンク追跡障害物の有限試験')
     parser.add_argument('--scenario-file', type=Path, help='追跡球の試験設定JSON')
     parser.add_argument('--case-dir', type=Path, help='追跡球の結果保存先。省略時は日時付きの新規ディレクトリ')
+    parser.add_argument('--stream-frames', dest='enable_frame_stream', action='store_true', help='追跡実験の実測フレームの逐次JSONL出力')
+    parser.add_argument('--target-link', help='追跡対象のURDFリンク名。追跡試験のみ、既定L_tcp')
+    parser.add_argument('--target-offset', type=float, nargs=3, metavar=('X','Y','Z'), help='追跡リンク内の対象点 [m]')
     parser.add_argument('--model', choices=('long', 'standard'), default='long')
     parser.add_argument('--avoidance', choices=('gng', 'none', 'oscbf'), default='gng')
     parser.add_argument('--gng-strategy', choices=('graph', 'avoidance_first', 'vrm_predictive'), default='graph',
@@ -60,7 +63,7 @@ def parse_arguments():
         if args.duration is not None and not 1 <= args.duration <= 180:
             parser.error('追跡球の--durationは1～180 secです')
     else:
-        if args.scenario_file or args.case_dir:
+        if args.scenario_file or args.case_dir or args.target_link is not None or args.target_offset is not None or args.enable_frame_stream:
             parser.error('--scenario-fileと--case-dirは追跡球用です')
         if args.duration is None:
             args.duration = 30.
@@ -129,16 +132,55 @@ def wait_for_viewer_service(process, port, stop_event, enable_http=False):
     raise RuntimeError('Viewer受信用ROSブリッジの起動時間超過')
 
 
-def run(args, emit):
+def read_chase_config(args):
+    """保存先を開く前の追跡実験設定と出力条件の検査。"""
+    config_file = args.scenario_file or simulator_dir.parents[1]/'benchmarks/chasing_sphere/default.json'
+    if str(config_file)=='-':
+        body = sys.stdin.read(8193)
+        if len(body)>8192:
+            raise ValueError('実験設定の容量超過')
+        config = json.loads(body)
+    else:
+        config = json.loads(config_file.read_text())
+    if not isinstance(config,dict):
+        raise ValueError('試験設定はJSONオブジェクトの指定が必要')
+    if args.target_link is not None:
+        config['target_link'] = args.target_link
+    if args.target_offset is not None:
+        config['target_offset_m'] = args.target_offset
+    if args.duration is not None:
+        config['duration_sec'] = args.duration
+    if config.get('execution_mode')=='continuous' and (args.case_dir or args.output):
+        raise ValueError('連続実験は記録なし。--case-dir・--outputの併用不可')
+    return config
+
+
+def run(args, emit, chase_config=None):
     if args.scenario == 'chasing_sphere':
         from sphere_chase import run_case
-        config_file = args.scenario_file or simulator_dir.parents[1]/'benchmarks/chasing_sphere/default.json'
-        config = json.loads(config_file.read_text())
-        if args.duration is not None:
-            config['duration_sec'] = args.duration
+        config = chase_config if chase_config is not None else read_chase_config(args)
+        if config.get('execution_mode')=='continuous':
+            stop_event = threading.Event()
+            handlers = {sig:signal.signal(sig,lambda *_:stop_event.set()) for sig in (signal.SIGINT,signal.SIGTERM)}
+            try:
+                emit(dict(type='started',scenario=args.scenario,execution_mode='continuous',has_recording=False))
+                result = run_case(config,emit=emit if args.enable_frame_stream else None,stop_event=stop_event)
+                emit(dict(type='experiment_finished',metrics=result['metrics'],failure_reason=result['failure_reason'],
+                          failure_details=result['failure_details'],is_valid_scenario=result['is_valid_scenario']))
+                return 0
+            finally:
+                for sig,handler in handlers.items():
+                    signal.signal(sig,handler)
         output_dir = args.case_dir or simulator_dir.parents[1]/'log/artifacts/chasing_sphere'/time.strftime('manual_%Y%m%d_%H%M%S')
         emit(dict(type='started',scenario=args.scenario,case_dir=str(output_dir)))
-        result = run_case(config,output_dir)
+        result = run_case(config,output_dir,emit=emit if args.enable_frame_stream else None)
+        from sphere_replay import export_catalog, export_recording
+        try:
+            export_catalog(output_dir)
+            recording = export_recording(Path(output_dir),simulator_dir/'app/exports')
+            emit(dict(type='replay',viewer_url='http://127.0.0.1:8877/?model=long&replay=latest',recording_url=recording['url']))
+        except (OSError,ValueError,KeyError,TypeError) as error:
+            emit(dict(type='replay_unavailable',message=str(error)))
         emit(dict(type='summary',scenario=args.scenario,case_dir=str(output_dir),
                   failure_reason=result['failure_reason'],**result['metrics']))
         return 0
@@ -292,15 +334,16 @@ def main():
     if os.environ.get('TOPO_ROS_SETUP_READY') != '1':
         os.execv('/bin/bash', ['bash', str(simulator_dir/'start_ros.sh'), '--simulate', *sys.argv[1:]])
     try:
+        chase_config = read_chase_config(args) if args.scenario=='chasing_sphere' else None
         stream = args.output.open('x') if args.output else sys.stdout
-    except OSError as error:
+    except (OSError,ValueError) as error:
         print(json.dumps(dict(type='error', message=str(error)), ensure_ascii=False), file=sys.stderr)
         return 2
     try:
         def emit(value):
             print(json.dumps(value, ensure_ascii=False, allow_nan=False), file=stream, flush=True)
         try:
-            return run(args, emit)
+            return run(args, emit, chase_config)
         except (ImportError, ValueError, RuntimeError, OSError) as error:
             emit(dict(type='error', message=str(error)))
             print(str(error), file=sys.stderr)

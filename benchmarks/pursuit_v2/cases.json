@@ -1,0 +1,346 @@
+{
+  "cases": [
+    {
+      "name": "tcp_rollout_cv_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/tcp_rollout_cv_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "tcp_cbf_qp_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/tcp_cbf_qp_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "tcp_oscbf_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/tcp_oscbf_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "forearm_rollout_cv_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/forearm_rollout_cv_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "forearm_cbf_qp_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/forearm_cbf_qp_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "forearm_oscbf_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/forearm_oscbf_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "linked_rollout_cv_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/linked_rollout_cv_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "linked_cbf_qp_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/linked_cbf_qp_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "linked_oscbf_701",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/linked_oscbf_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "tcp_rollout_cv_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/tcp_rollout_cv_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "tcp_cbf_qp_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/tcp_cbf_qp_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "tcp_oscbf_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/tcp_oscbf_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "forearm_rollout_cv_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/forearm_rollout_cv_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "forearm_cbf_qp_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/forearm_cbf_qp_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "forearm_oscbf_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/forearm_oscbf_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "linked_rollout_cv_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/linked_rollout_cv_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "linked_cbf_qp_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/linked_cbf_qp_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "linked_oscbf_719",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_v2/linked_oscbf_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "cwd": "../..",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/ros2_ws/src/gng_vlut_system/scripts"
+      },
+      "metrics": "metrics.json"
+    }
+  ]
+}

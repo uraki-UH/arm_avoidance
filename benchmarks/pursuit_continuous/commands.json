@@ -1,0 +1,20 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "docker_environment": "gng_cpu_container / ROS Humble / PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1",
+  "node_units": "node --test log/artifacts/pursuit_continuous/check_window.mjs log/artifacts/pursuit_continuous/check_delete.mjs log/artifacts/pursuit_continuous/check_live.mjs log/artifacts/pursuit_smooth/check_clock.mjs log/artifacts/pursuit_smooth/check_client.mjs log/artifacts/pursuit_fixes/check_api.mjs log/artifacts/pursuit_fixes/check_recording.mjs",
+  "lifetime": "timeout --signal=TERM --kill-after=5s 90s python3 log/artifacts/pursuit_continuous/check_continuous.py",
+  "cli": "python3 log/artifacts/pursuit_continuous/check_cli.py",
+  "python_regressions": [
+    "python3 log/artifacts/pursuit_v2/check_pursuit.py",
+    "python3 log/artifacts/pursuit_fixes/check_fixes.py",
+    "python3 log/artifacts/pursuit_smooth/check_qp.py",
+    "python3 log/artifacts/chasing_sphere/check_sphere.py",
+    "python3 log/artifacts/pursuit_live/check_flags.py"
+  ],
+  "host_export_unit": "PYTHONDONTWRITEBYTECODE=1 python3 log/artifacts/pursuit_fixes/check_export.py",
+  "http": "timeout --signal=TERM --kill-after=10s 120s node log/artifacts/pursuit_continuous/check_http.mjs",
+  "browser": "timeout --signal=TERM --kill-after=10s 150s node log/artifacts/pursuit_continuous/check_browser.mjs",
+  "deployment": "python3 integrations/ros2/start_simulator.py --restart --port 8877 --bridge-port 8879 --tf-topic /tf",
+  "test_process_state": "全試験・専用HTTP・一時Chromeの停止済み",
+  "main_service_state": "ユーザーの明示許可による常用画面・点群ブリッジの再起動と稼働維持"
+}

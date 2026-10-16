@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { create_experiment_service } from './avoidance-experiments.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT||8877);
+const experiments=create_experiment_service(root,port);
 const required_assets=['generated/ros-results.js','vendor/three/build/three.module.js','vendor/three/build/three.core.js'];
 const missing_assets=required_assets.filter(name=>!fs.existsSync(path.join(root,name)));
 if(missing_assets.length){console.error('起動用ファイル不足: '+missing_assets.join(', ')+' / npm ci && npm run build を実行してください');process.exit(1);}
@@ -14,6 +16,7 @@ const instance=createHash('sha256').update(process.platform==='win32'?root.toLow
 const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.urdf':'application/xml; charset=utf-8','.wasm':'application/wasm','.glb':'model/gltf-binary','.bin':'application/octet-stream','.stl':'application/octet-stream','.png':'image/png','.md':'text/plain; charset=utf-8','.zip':'application/zip'};
 const server=http.createServer((req,res)=>{
  let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);}catch{res.writeHead(400);res.end();return;}
+ if(pathname.startsWith('/api/avoidance-experiments')){experiments.handle(req,res,pathname).catch(error=>{console.error(error);if(!res.headersSent)res.writeHead(500);res.end();});return;}
  // 登録定義の公開部分。起動コマンド・Python接続先は実行側で管理
  if(pathname==='/api/plugins'){
   try{
@@ -57,3 +60,4 @@ const server=http.createServer((req,res)=>{
 });
 server.listen(port,'127.0.0.1',()=>console.log(`ToPo Motion Studio: http://127.0.0.1:${port}\nClose this process to stop.`));
 server.on('error',e=>{console.error(e.code==='EADDRINUSE'?`Port ${port} is already in use. Open http://127.0.0.1:${port} or set PORT to another number.`:e);process.exitCode=1;});
+for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{experiments.close().finally(()=>server.close(()=>process.exit(0)));});

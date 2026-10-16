@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "name": "legacy_131",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_fixes/legacy_131.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1"
+      }
+    },
+    {
+      "name": "user_linked_401",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_fixes/user_linked_401.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1"
+      }
+    },
+    {
+      "name": "linked_719",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_fixes/linked_719.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1"
+      }
+    },
+    {
+      "name": "forearm_701",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "python3",
+        "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py",
+        "--config",
+        "benchmarks/pursuit_fixes/forearm_701.json",
+        "--case-dir",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1"
+      }
+    }
+  ]
+}

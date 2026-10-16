@@ -1,0 +1,141 @@
+{
+  "format": "topo-pursuit-continuous-verification/1",
+  "workspace": "/home/uraki/uraki_ws",
+  "source_sha256": {
+    "app/avoidance-experiments.mjs": "d92e072aab781e017c1eea20bef141d9371a781f35c9d5dbd055bc16c96aa1ca",
+    "app/avoidance-replay.js": "9feee5b01ffa7bed1e93837cb73b5f88da8e7dc6e0b4791936fe3c7a995ca456",
+    "integrations/ros2/sphere_chase.py": "18f0d7f37178c24efdba55248cdbc8f6cce0536337daf402b3bc0c397f3023a2",
+    "integrations/ros2/pursuit_obstacle.py": "0f5f3ca22e3a62431978aa48043175544541693899327fd19a31d4f1bc2644a0",
+    "integrations/ros2/simulate.py": "d22c952eb2f604bc0287125e3a8dac9565b9accdbf3719040b640b2751f682b2",
+    "integrations/ros2/sphere_replay.py": "38f569fab67aadad42fb8d1a464a7649732a14bbed1e2581eedd553f69cc3757"
+  },
+  "tests": {
+    "num_node_units": 90,
+    "num_python_units": 105,
+    "num_total_units": 195,
+    "python_counts": {
+      "unit_python.log": 7,
+      "unit_cli.log": 6,
+      "regression_pursuit.log": 25,
+      "regression_fixes.log": 13,
+      "regression_qp.log": 2,
+      "regression_sphere.log": 31,
+      "regression_flags.log": 3,
+      "unit_export.log": 18
+    },
+    "num_http_cases": 3,
+    "num_browser_groups": 4
+  },
+  "continuous": {
+    "execution_mode": "continuous",
+    "has_time_limit": false,
+    "has_recording": false,
+    "max_num_frames": 120,
+    "num_accelerated_lifetime_sec": 181,
+    "accelerated_lifetime_wall_sec": 51.624,
+    "max_num_cost_samples": 1200,
+    "max_num_synthetic_frames": 100005,
+    "lifetime_scope": "制御保持・障害物静止・待機省略による寿命確認。181秒の実時間回避成功ではない条件",
+    "has_cancel_verified": true,
+    "has_contact_stop_verified": true,
+    "has_reconnect_verified": true,
+    "has_cross_tab_stop_unit_verified": true,
+    "has_no_output_file_unit_verified": true
+  },
+  "deletion": {
+    "mode": "permanent",
+    "has_source_directory_removed": true,
+    "has_memory_history_cleared": true,
+    "has_reload_reappearance": false,
+    "has_export_reappearance": false,
+    "has_restore_endpoint": false,
+    "has_outside_workspace_deletion_rejected": true,
+    "has_precommit_failure_rollback_verified": true,
+    "retained_state": "再掲載防止用の空マーカーのみ。過去のごみ箱の一括消去なし",
+    "num_own_recordings_permanently_deleted": 2,
+    "has_user_existing_recordings_deleted": false
+  },
+  "linked_arm": {
+    "joint_types": [
+      "ball",
+      "ball"
+    ],
+    "kinematics": "手首3D位置＋肘旋回。カプセルの軸回りねじりは占有上省略",
+    "has_fixed_world_z_bend_plane": false,
+    "has_endpoint_speed_limit_verified": true,
+    "has_protected_volume_regressions_passed": true,
+    "scope": "kinematicカプセルによる形状・運動学。人体の慣性・関節駆動の動力学再現ではないモデル"
+  },
+  "http": {
+    "num_cases": 3,
+    "results": [
+      {
+        "name": "continuous_cancel",
+        "job_id": "371794ab-3907-47b2-b3b8-296b0cc40c35",
+        "elapsed_sec": 7.34,
+        "num_frames": 147,
+        "num_retained_frames": 120,
+        "has_recording": false
+      },
+      {
+        "name": "continuous_contact",
+        "job_id": "5645acfc-a227-430e-872f-a18f4fc7ed26",
+        "elapsed_sec": 0.56,
+        "failure_reason": "physical_contact",
+        "has_recording": false
+      },
+      {
+        "name": "recorded_delete",
+        "job_id": "289094d4-2a85-490f-91f1-3ff41d8d05f1",
+        "recording_url": "/exports/avoidance-a1b8e7794f50647f493d.json",
+        "has_source_removed": true,
+        "has_reappeared_after_export": false
+      }
+    ],
+    "server_pid": 100450,
+    "port": 32917
+  },
+  "browser": {
+    "num_check_groups": 4,
+    "live": {
+      "job_id": "a486dccc-b91f-4a1e-94be-9baff8071b9c",
+      "is_continuous": true,
+      "num_frames": 32,
+      "max_num_frames": 120,
+      "time_sec": 1.56,
+      "is_transient": true,
+      "is_play_disabled": true,
+      "status": "実行中 · 1.56 sec · 連続・記録なし"
+    },
+    "stopped": {
+      "is_playing": false,
+      "is_seek_disabled": true,
+      "is_play_disabled": true,
+      "status": "実験を中止 · 記録なし"
+    },
+    "deleted_recording_url": "/exports/avoidance-cbdc4c6b328ad0e4afd7.json",
+    "deleted_case_dir": "log/artifacts/pursuit_v2/manual_gui_c1775b8a-4651-405e-b6e4-6fe4bffa651f",
+    "num_errors": 0,
+    "num_robot_sockets": 0,
+    "renderer": "SwiftShader",
+    "server_pid": 100729,
+    "port": 36499
+  },
+  "rendering_scope": "SwiftShaderによるGUI・姿勢接続の確認。ハードウェアGPUのフレーム率・実機安全性の評価なし",
+  "runtime": {
+    "manager_pid": 101318,
+    "server_pid": 101320,
+    "bridge_pid": 101332,
+    "tf_topic": "/tf",
+    "live_protocol_version": 1,
+    "archive_protocol_version": 2,
+    "continuous_protocol_version": 1,
+    "has_main_service_restart_authorized": true,
+    "has_existing_ros_preserved": true,
+    "has_existing_containers_preserved": true,
+    "remaining_owned_test_processes": [],
+    "has_owned_test_processes_stopped": true
+  },
+  "commands": "benchmarks/pursuit_continuous/commands.json",
+  "artifacts": "log/artifacts/pursuit_continuous"
+}

@@ -1,0 +1,109 @@
+{
+  "purpose": "実行中表示・終了後再生・中止・再同期の機能検証。回避性能の改善評価とは別の検証",
+  "num_unit_tests_passed": 150,
+  "num_unit_tests_failed": 0,
+  "tests": {
+    "control": 69,
+    "recording_export": 18,
+    "recording_input": 23,
+    "api_config": 26,
+    "live_client": 11,
+    "cli_flags": 3
+  },
+  "http": {
+    "num_cases": 3,
+    "cases": [
+      {
+        "shape": "sphere",
+        "num_frames": 41,
+        "num_running_updates": 40,
+        "first_frame_before_exit_ms": 1912,
+        "case_dir": "log/artifacts/pursuit_v2/manual_gui_e242aed8-d916-4603-ac3e-03a1e43ef9af",
+        "job_id": "e242aed8-d916-4603-ac3e-03a1e43ef9af"
+      },
+      {
+        "shape": "linked_arm",
+        "num_frames": 41,
+        "num_running_updates": 40,
+        "first_frame_before_exit_ms": 2431,
+        "case_dir": "log/artifacts/pursuit_v2/manual_gui_d0039671-f3e0-402b-8261-4b5f937a86f3",
+        "job_id": "d0039671-f3e0-402b-8261-4b5f937a86f3"
+      },
+      {
+        "shape": "cancel",
+        "job_id": "eb568f76-79ba-4dbd-b246-c8819250abe4",
+        "case_dir": "log/artifacts/pursuit_v2/manual_gui_eb568f76-79ba-4dbd-b246-c8819250abe4",
+        "num_frames": 5
+      }
+    ],
+    "has_stream_matches_saved_trajectory": true,
+    "has_final_time_matches_evaluated_time": true
+  },
+  "browser": {
+    "num_check_groups": 6,
+    "num_errors": 0,
+    "num_robot_sockets": 0,
+    "num_distinct_live_stamps": 138,
+    "first_live_sec": 0.060000000000000005,
+    "last_live_sec": 7.96,
+    "max_pose_error_rad": 0,
+    "has_trail_buffer_reuse": true,
+    "has_resume_verified": true,
+    "has_cancel_verified": true,
+    "renderer": "SwiftShader",
+    "raw": "log/artifacts/pursuit_live/browser_metrics.json"
+  },
+  "has_hardware_output": false,
+  "has_owned_test_processes_stopped": true,
+  "runtime": {
+    "has_authorized_service_restart": true,
+    "has_original_ros_processes_preserved": true,
+    "original_ros_launch_pid": 21179,
+    "replacement_manager_pid": 96925,
+    "replacement_viewer_pid": 96926,
+    "replacement_bridge_pid": 96937,
+    "ros_domain_id": 0,
+    "live_protocol_version": 1,
+    "has_replacement_services_intentionally_running": true
+  },
+  "source_sha256": {
+    "app/avoidance-replay.js": "41fed0fd3c8907abb4818f68712621c924f61a78ebec68b57e5e0d8741918e82",
+    "app/avoidance-experiments.mjs": "ba87deed3dff67a0b852c3f98d8ec37ce225dfd46147b3fa56b8dcfbacb8ea70",
+    "integrations/ros2/sphere_chase.py": "f8669f3f16b2b908048d6ad850c4f5a3b6e1b3ab8b4c47939d9053a610ca2dbc",
+    "integrations/ros2/sphere_replay.py": "e678353ba8c91f799948584d1e963c3927b539726edc89b7ca57b60f1b765b80",
+    "integrations/ros2/simulate.py": "31a69250a10c2f109865ec38bff6ff2f79e9e94cd220236f257843c657d52e9a"
+  },
+  "commands": [
+    {
+      "purpose": "HTTP実測配信・保存一致・中止",
+      "command": "timeout 120 node log/artifacts/pursuit_live/check_http.mjs",
+      "state": "stopped"
+    },
+    {
+      "purpose": "ブラウザのライブ描画・再生・復帰",
+      "command": "timeout 120 node log/artifacts/pursuit_live/check_browser.mjs",
+      "state": "stopped"
+    },
+    {
+      "purpose": "逐次表示の差分・バッファ・入力検査",
+      "command": "node log/artifacts/pursuit_live/check_client.mjs",
+      "state": "stopped"
+    },
+    {
+      "purpose": "制御回帰",
+      "command": "docker exec --user 1000:1000 gng_cpu_container bash -c 'cd /ros2_ws/src && source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 timeout 90 bash -c \"python3 log/artifacts/pursuit_fixes/check_fixes.py && python3 log/artifacts/pursuit_v2/check_pursuit.py && python3 log/artifacts/chasing_sphere/check_sphere.py\"'",
+      "state": "stopped"
+    },
+    {
+      "purpose": "許可済みの画面・ブリッジ更新",
+      "command": "docker exec -d gng_cpu_container bash -c 'cd /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator && source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && ROS_DOMAIN_ID=0 PYTHONDONTWRITEBYTECODE=1 python3 integrations/ros2/start_simulator.py --restart --port 8877 --bridge-port 8879 --tf-topic /tf > /ros2_ws/src/log/artifacts/pursuit_live/deployment_02.log 2>&1'",
+      "state": "running_authorized_replacement"
+    }
+  ],
+  "limitations": [
+    "ハードリアルタイム・実時間1倍の保証なし",
+    "ソフトウェア描画による機能確認。GPU描画性能の測定なし",
+    "物理・回避制御の二重実行なし。表示通信とは独立の有限試験",
+    "8秒ブラウザ試験後に最終フレーム出力を補完。最終時刻の一致は更新後の球・二節腕HTTP試験で確認"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "policy": "rollout_cv",
+  "obstacle_shape": "linked_arm",
+  "target_link": "L_tcp",
+  "target_offset_m": [
+    0,
+    0,
+    0
+  ],
+  "duration_sec": 18,
+  "seed": 401,
+  "radius_m": 0.035,
+  "speed_ratios": [
+    0.4,
+    1.3
+  ],
+  "max_ball_acceleration": 3,
+  "max_ball_deceleration": 8,
+  "max_ball_turn_acceleration": 10,
+  "enable_learning": false,
+  "enable_periodic_angles": false,
+  "enable_fixed_guard": true,
+  "start_dist_m": 0.45
+}

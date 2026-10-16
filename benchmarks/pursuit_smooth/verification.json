@@ -1,0 +1,371 @@
+{
+  "format": "topo-pursuit-smooth-verification/1",
+  "workspace": "/home/uraki/uraki_ws",
+  "source_sha256": {
+    "app/avoidance-replay.js": "d44a8a4ec3474c820faae4e251187fd0d98ed30e101b204ef63b46db9c90c4e1",
+    "app/avoidance-experiments.mjs": "0a34f8dd4aff0d36e49c8467d7402c4c1c09748fc1d05ee51e9fde9c75c5229f",
+    "integrations/ros2/pursuit_cbf.py": "d8c7219e90c0d1a2260ca4f204b080622f9f662a5acb586341e5a24b9ac3e1b0",
+    "integrations/ros2/sphere_chase.py": "3cb613868e033c7c92f76588b00b04d4d87691f1d43329ba8e4c1ceac03fbd15",
+    "integrations/ros2/sphere_replay.py": "76ef209efffb098cb070462540b4688d2b0867dc555a7e78adfac28fb48b9031"
+  },
+  "tests": {
+    "num_node_units": 72,
+    "num_python_units": 92,
+    "num_total_units": 164,
+    "num_http_cases": 3,
+    "num_browser_groups": 7,
+    "num_simulation_cases": 4
+  },
+  "clock": [
+    {
+      "rate": 0.5,
+      "enable_jitter": false,
+      "num_render_updates": 479,
+      "num_old_updates": 80,
+      "max_step_sec": 0.009437234668228989,
+      "old_max_step_sec": 0.05000000000000071,
+      "max_receive_gap_sec": 0.07264079180984062
+    },
+    {
+      "rate": 0.5,
+      "enable_jitter": true,
+      "num_render_updates": 479,
+      "num_old_updates": 80,
+      "max_step_sec": 0.009711496694493782,
+      "old_max_step_sec": 0.05000000000000071,
+      "max_receive_gap_sec": 0.07629093171274981
+    },
+    {
+      "rate": 1,
+      "enable_jitter": false,
+      "num_render_updates": 479,
+      "num_old_updates": 80,
+      "max_step_sec": 0.018874469384105197,
+      "old_max_step_sec": 0.10000000000000142,
+      "max_receive_gap_sec": 0.14528158496469068
+    },
+    {
+      "rate": 1,
+      "enable_jitter": true,
+      "num_render_updates": 479,
+      "num_old_updates": 80,
+      "max_step_sec": 0.019424048901861113,
+      "old_max_step_sec": 0.10000000000000142,
+      "max_receive_gap_sec": 0.15262295229886647
+    },
+    {
+      "rate": 2,
+      "enable_jitter": false,
+      "num_render_updates": 479,
+      "num_old_updates": 80,
+      "max_step_sec": 0.038029020020255544,
+      "old_max_step_sec": 0.20000000000000284,
+      "max_receive_gap_sec": 0.2990837701065656
+    },
+    {
+      "rate": 2,
+      "enable_jitter": true,
+      "num_render_updates": 479,
+      "num_old_updates": 80,
+      "max_step_sec": 0.03898648202829502,
+      "old_max_step_sec": 0.20000000000000284,
+      "max_receive_gap_sec": 0.30947241769073486
+    }
+  ],
+  "clock_scope": "決定的60 Hz描画時計・10 Hz受信試験。実GPUのフレーム率の評価ではない結果",
+  "browser": {
+    "renderer": "SwiftShader",
+    "num_live_samples": 7,
+    "num_interpolated_samples": 5,
+    "max_pose_error_rad": 0,
+    "max_sphere_error_m": 0,
+    "num_errors": 0,
+    "num_robot_sockets": 0,
+    "failed_initial_attempts": 2,
+    "failed_initial_reason": "ソフトウェアGPUによる長い描画休止で補間サンプル数の条件未達。最終は実ブラウザ内の補間値一致・操作接続の判定。フレーム率保証なし"
+  },
+  "qp": [
+    {
+      "case": "cbf_tcp_401",
+      "config": {
+        "policy": "cbf_qp",
+        "duration_sec": 4,
+        "seed": 401,
+        "target_link": "L_tcp",
+        "radius_m": 0.06,
+        "speed_ratios": [
+          0.4,
+          1.3
+        ],
+        "max_ball_acceleration": 3,
+        "max_ball_deceleration": 8,
+        "max_ball_turn_acceleration": 10,
+        "enable_learning": false,
+        "enable_fixed_guard": true
+      },
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 1.16,
+        "evaluated_sec": 1.17,
+        "failure_penalty_sec": 2.83,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 0.66325,
+        "proxy_contact_sec": 0.03,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.01,
+        "min_proxy_gap_m": -0.01534088490824724,
+        "first_contact_sec": 1.17,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.8213648291762007,
+        "max_eef_speed_mps": 1.2893769220207592,
+        "max_joint_speed_radps": 2.2522155740589187,
+        "propose_mean_ms": 8.366783210173404,
+        "propose_p95_ms": 12.97291130758822,
+        "num_proposals": 24,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 0,
+        "obstacle_blocked_sec": 0.0,
+        "min_fixed_gap_m": 0.05829665800576114,
+        "min_protected_gap_m": 0.05829665800576114,
+        "num_protected_contacts": 0,
+        "max_obstacle_acceleration_m_per_sec2": 10.440306508910888,
+        "cbf_warmup_ms": 0.0,
+        "num_qp_no_solution": 9,
+        "qp_no_solution_sec": 0.4200000000000002,
+        "first_qp_no_solution_sec": 0.75,
+        "max_num_consecutive_qp_no_solution": 9,
+        "num_qp_recoveries": 0
+      },
+      "failure_reason": "physical_contact",
+      "phase_sec": {
+        "avoiding": 0.7500000000000004,
+        "qp_no_solution": 0.4200000000000002
+      }
+    },
+    {
+      "case": "cbf_forearm_701",
+      "config": {
+        "policy": "cbf_qp",
+        "duration_sec": 4,
+        "seed": 701,
+        "target_link": "L_link6",
+        "radius_m": 0.06,
+        "speed_ratios": [
+          0.4,
+          1.3
+        ],
+        "max_ball_acceleration": 3,
+        "max_ball_deceleration": 8,
+        "max_ball_turn_acceleration": 10,
+        "enable_learning": false,
+        "enable_fixed_guard": true
+      },
+      "metrics": {
+        "num_arrivals": 4,
+        "num_round_trips": 2,
+        "contact_sec": 0.0,
+        "safe_sec": 4.0,
+        "evaluated_sec": 4.0,
+        "failure_penalty_sec": 0.0,
+        "is_failure": 0,
+        "first_failure_speed_ratio": 1.3,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.46000000000000024,
+        "min_proxy_gap_m": 0.08930244669720336,
+        "first_contact_sec": 4.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.5849018395123736,
+        "max_eef_speed_mps": 0.804250611334651,
+        "max_joint_speed_radps": 2.1931808679190086,
+        "propose_mean_ms": 5.267554213423864,
+        "propose_p95_ms": 5.49150793813169,
+        "num_proposals": 80,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 0,
+        "obstacle_blocked_sec": 0.8100000000000005,
+        "min_fixed_gap_m": 0.1768098901356523,
+        "min_protected_gap_m": 0.08930244669720336,
+        "num_protected_contacts": 0,
+        "max_obstacle_acceleration_m_per_sec2": 43.79726224168117,
+        "cbf_warmup_ms": 0.0,
+        "num_qp_no_solution": 6,
+        "qp_no_solution_sec": 0.3000000000000001,
+        "first_qp_no_solution_sec": 0.1,
+        "max_num_consecutive_qp_no_solution": 6,
+        "num_qp_recoveries": 1
+      },
+      "failure_reason": "",
+      "phase_sec": {
+        "avoiding": 2.7999999999999843,
+        "qp_no_solution": 0.3000000000000001,
+        "task": 0.9000000000000006
+      }
+    },
+    {
+      "case": "oscbf_tcp_401",
+      "config": {
+        "policy": "oscbf",
+        "duration_sec": 4,
+        "seed": 401,
+        "target_link": "L_tcp",
+        "radius_m": 0.06,
+        "speed_ratios": [
+          0.4,
+          1.3
+        ],
+        "max_ball_acceleration": 3,
+        "max_ball_deceleration": 8,
+        "max_ball_turn_acceleration": 10,
+        "enable_learning": false,
+        "enable_fixed_guard": true
+      },
+      "metrics": {
+        "num_arrivals": 0,
+        "num_round_trips": 0,
+        "contact_sec": 0.01,
+        "safe_sec": 3.08,
+        "evaluated_sec": 3.09,
+        "failure_penalty_sec": 0.9100000000000001,
+        "is_failure": 1,
+        "first_failure_speed_ratio": 1.09525,
+        "proxy_contact_sec": 0.03,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.07,
+        "min_proxy_gap_m": -0.02304907033419601,
+        "first_contact_sec": 3.09,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 1.00360310704805,
+        "max_eef_speed_mps": 1.3523829850412172,
+        "max_joint_speed_radps": 2.327835562345064,
+        "propose_mean_ms": 4.750420918196229,
+        "propose_p95_ms": 5.683238136407453,
+        "num_proposals": 62,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 0,
+        "obstacle_blocked_sec": 1.0100000000000007,
+        "min_fixed_gap_m": 0.030000493058068622,
+        "min_protected_gap_m": 0.030000493058068622,
+        "num_protected_contacts": 0,
+        "max_obstacle_acceleration_m_per_sec2": 40.971735690162596,
+        "cbf_warmup_ms": 1704.3149390083272,
+        "num_qp_no_solution": 3,
+        "qp_no_solution_sec": 0.13999999999999999,
+        "first_qp_no_solution_sec": 2.95,
+        "max_num_consecutive_qp_no_solution": 3,
+        "num_qp_recoveries": 0
+      },
+      "failure_reason": "physical_contact",
+      "phase_sec": {
+        "avoiding": 2.949999999999981,
+        "qp_no_solution": 0.13999999999999999
+      }
+    },
+    {
+      "case": "oscbf_forearm_701",
+      "config": {
+        "policy": "oscbf",
+        "duration_sec": 4,
+        "seed": 701,
+        "target_link": "L_link6",
+        "radius_m": 0.06,
+        "speed_ratios": [
+          0.4,
+          1.3
+        ],
+        "max_ball_acceleration": 3,
+        "max_ball_deceleration": 8,
+        "max_ball_turn_acceleration": 10,
+        "enable_learning": false,
+        "enable_fixed_guard": true
+      },
+      "metrics": {
+        "num_arrivals": 3,
+        "num_round_trips": 1,
+        "contact_sec": 0.0,
+        "safe_sec": 4.0,
+        "evaluated_sec": 4.0,
+        "failure_penalty_sec": 0.0,
+        "is_failure": 0,
+        "first_failure_speed_ratio": 1.3,
+        "proxy_contact_sec": 0.0,
+        "internal_failure_sec": 0.0,
+        "stopped_sec": 0.5000000000000002,
+        "min_proxy_gap_m": 0.08896843867701171,
+        "first_contact_sec": 4.0,
+        "reference_eef_speed_mps": 1.251126929438235,
+        "max_ball_speed_mps": 0.5849018395123747,
+        "max_eef_speed_mps": 0.995570308650581,
+        "max_joint_speed_radps": 2.1957277990775874,
+        "propose_mean_ms": 4.487934875942301,
+        "propose_p95_ms": 6.1054155507008545,
+        "num_proposals": 80,
+        "num_memory_contexts": 0,
+        "num_memory_learning": 0,
+        "learned_pursuit_gain": 0.0,
+        "num_gng_nodes": 0,
+        "obstacle_blocked_sec": 3.1099999999999777,
+        "min_fixed_gap_m": 0.17814818822046913,
+        "min_protected_gap_m": 0.08896843867701171,
+        "num_protected_contacts": 0,
+        "max_obstacle_acceleration_m_per_sec2": 43.79726307099274,
+        "cbf_warmup_ms": 1700.864108017413,
+        "num_qp_no_solution": 6,
+        "qp_no_solution_sec": 0.3000000000000001,
+        "first_qp_no_solution_sec": 0.1,
+        "max_num_consecutive_qp_no_solution": 6,
+        "num_qp_recoveries": 1
+      },
+      "failure_reason": "",
+      "phase_sec": {
+        "avoiding": 2.949999999999981,
+        "qp_no_solution": 0.3000000000000001,
+        "task": 0.7500000000000004
+      }
+    }
+  ],
+  "batch_estimate_sec": 60,
+  "batch_elapsed_sec": 35.72389044900774,
+  "qp_scope": "QP不成立による打切りの解消。4条件中2条件は後続の実接触。高速回避・減速保持の安全保証は未達",
+  "archive": {
+    "restore": "直前1件・sessionStorage参照",
+    "trash": "app/exports/.avoidance-trash",
+    "has_raw_logs_preserved": true,
+    "has_active_job_deletion_rejected": true,
+    "has_deleted_entries_excluded_after_export": true,
+    "own_failed_browser_recordings_retired": [
+      "avoidance-e503cf13149ea87fe76e.json",
+      "avoidance-a73e7109e5a1254f3154.json"
+    ]
+  },
+  "graphics": {
+    "loaded_nvidia_driver": "595.91.07",
+    "nvml_library": "595.99",
+    "nvidia_smi_status": "Driver/library version mismatch",
+    "glxinfo_status": "X_GLXCreateNewContext BadValue / DISPLAY :0",
+    "has_driver_changed": false,
+    "has_os_rebooted": false
+  },
+  "runtime": {
+    "manager_pid": 99247,
+    "server_pid": 99249,
+    "bridge_pid": 99261,
+    "has_main_service_restart_authorized": true,
+    "has_owned_test_processes_stopped": true,
+    "has_original_containers_preserved": true,
+    "remaining_owned_test_processes": [],
+    "tf_topic": "/tf",
+    "live_protocol_version": 1,
+    "archive_protocol_version": 1
+  },
+  "artifacts": "log/artifacts/pursuit_smooth",
+  "commands": "benchmarks/pursuit_smooth/commands.json"
+}

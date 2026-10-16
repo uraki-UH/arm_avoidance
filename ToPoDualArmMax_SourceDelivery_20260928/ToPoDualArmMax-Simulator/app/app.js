@@ -20,7 +20,8 @@ import {camera_workspace} from './camera-ui.js';
 import {VMAIWorkspace} from './vm-ai.js';
 import {ROBOT_MODELS,initialModel} from './models.js';
 const pose_presets=await (await fetch(new URL('./robot-poses.json',import.meta.url))).json();
-let physics_panel, ros_results;
+let physics_panel, ros_results, replay_panel;
+const is_replay_view=new URLSearchParams(location.search).has('replay');
 let workspace, rgbd, lidar, ai, ros_points, demoMotion=null;
 let color_camera_panel;
 let model=initialModel(),switchingModel=false;
@@ -108,6 +109,7 @@ new ResizeObserver(resize).observe(host);resize();
 function setView(view){
   const views={perspective:[1.45,-1.15,1.0],front:[2.1,0,.42],side:[.25,-1.9,.50],top:[.30,.001,2.1]};
   camera.position.fromArray(views[view]||views.perspective);orbit.target.set(.28,0,.22);orbit.update();
+  replay_panel?.fit_view();
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
 }
 function setPhoto(value){photoMode=value;document.body.classList.toggle('photo-mode',value);updateMarkerVisibility();$('photo').classList.toggle('active',value);}
@@ -248,7 +250,7 @@ function draw(is_moving=false){
  const now=performance.now();
  if(rgbd?.enable_readback_priority&&!is_moving&&!gizmo.dragging&&!is_view_input_active&&now-last_view_input_ms>100&&rgbd.sensor.readback_pool.has_pending&&now-last_view_draw_ms<50)return false;
  last_view_draw_ms=now;if(ao.enabled)composer.render();else renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(overlay,camera);renderer.autoClear=true;return true;}
-function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;physics_panel?.tick(now);ros_results?.tick(now);rgbd?.tick(now);color_camera_panel?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);physics_panel?.sync_robot_pose();if(physics_panel?.socket&&physics_panel.enable_dynamics&&!activeTarget&&!gizmo.dragging)syncTargets();updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}if(draw(moving)){diagnostics.frames++;frameCount++;}if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=replay_panel?replay_panel.tick(now):updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;physics_panel?.tick(now);ros_results?.tick(now);rgbd?.tick(now);color_camera_panel?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);physics_panel?.sync_robot_pose();if(physics_panel?.socket&&physics_panel.enable_dynamics&&!activeTarget&&!gizmo.dragging)syncTargets();updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}if(draw(moving)){diagnostics.frames++;frameCount++;}if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
 
 function updateModelUI(){
  document.querySelector('.product-header strong').textContent=model.title;document.title=model.title+' · Motion Studio';
@@ -264,7 +266,7 @@ async function loadRobotModel(def){
  modelCache.set(def.id,next);return next;
 }
 async function switchModel(id){
- if(switchingModel||!ready||id===model.id||!Object.hasOwn(ROBOT_MODELS,id))return;
+ if(is_replay_view||switchingModel||!ready||id===model.id||!Object.hasOwn(ROBOT_MODELS,id))return;
  const previous=model,previousRobot=robot,restoreTabFocus=!!document.activeElement?.closest('#model-tabs'),wasLive={lidar:lidar.live,rgbd:rgbd?.live,ai:ai?.running};
  modelStates.set(model.id,{pose:robot.getPose(),keyframes:structuredClone(keyframes)});
  stopPlayback();releaseMarker();ready=false;switchingModel=true;diagnostics.ready=false;
@@ -298,12 +300,12 @@ async function init(){
  try {
   updateModelUI();robot=await loadRobotModel(model);scene.add(robot);robot.setPose(homePose());
   build_body_controls();bindUI();syncTargets();setSide('L');syncControls();
-  initWorkspace();
-  await physics_panel.plugins.ready;
+  if(is_replay_view)robot.pose_source='ros';
+  else{initWorkspace();await physics_panel.plugins.ready;}
   $('loading-text').textContent='照明とマテリアルを準備中';$('load-progress').style.width='95%';
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
   $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');
-  ready=true;diagnostics.ready=true;toast('手先の矢印をドラッグして操作できます');
+  ready=true;diagnostics.ready=true;toast(is_replay_view?'回避実験の記録を読込み中':'手先の矢印をドラッグして操作できます');
   window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,ros_results,color_camera_panel,get physics_panel(){return physics_panel;},diagnostics,keyframes,
    cancel_robot_motion:()=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;},
    apply_ros_pose:pose=>{playing=null;demoMotion=null;activeTarget=false;targetDirty.L=targetDirty.R=false;robot.set_received_pose(pose);syncTargets();renderer.shadowMap.needsUpdate=true;},
@@ -312,6 +314,14 @@ async function init(){
    setTarget:(side,xyz,rpy)=>{setSide(side);targets[side].position.fromArray(xyz);if(rpy){targets[side].quaternion.setFromEuler(new THREE.Euler(...rpy,'ZYX'));$('hold-orientation').checked=true;}targetDirty[side]=true;activeTarget=true;solveFrames=0;syncTargetInputs();},
    reset:()=>{stopPlayback();robot.setPose(homePose());syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;}
   };
+  if(is_replay_view){
+   const {avoidance_replay}=await import('./avoidance-replay.js');
+   markersVisible=false;updateMarkerVisibility();
+   replay_panel=new avoidance_replay({robot,scene,renderer,camera,controls:orbit,on_pose:()=>{syncTargets();syncControls();}});
+   window.simulator.avoidance_replay=replay_panel;
+   await replay_panel.open(new URLSearchParams(location.search).get('replay'));
+   return;
+  }
   window.simulator.motor_monitor=new motor_monitor(window.simulator);
   const joint_topic=new URLSearchParams(location.search).get('joint_topic');
   if(joint_topic){document.title='CLI実測 · '+document.title;ros_points.robot_panel.tick();ros_points.robot_panel.joint_stream.receive_topic(joint_topic,new URLSearchParams(location.search).get('bridge'),new URLSearchParams(location.search).get('state_source')==='simulation');$('physics-status').textContent='外部MuJoCoの実測をROS受信表示';}

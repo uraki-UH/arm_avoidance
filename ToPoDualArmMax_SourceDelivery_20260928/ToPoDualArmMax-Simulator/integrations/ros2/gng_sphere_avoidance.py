@@ -250,19 +250,37 @@ class representative_index:
             raise ValueError('自己干渉照会の入力不正')
         return can_pass.reshape(shape).astype(bool)
 
-    def update(self, center, radius, margin=.10):
+    def update(self, center, radius, margin=.10, enable_graph_labels=True):
         code = self.library.gng_dynamic_node_gaps(len(self.ids), len(self.radii), self.centers, self.radii,
             self.lower, self.upper, np.ascontiguousarray(center,dtype=float), radius, margin, self.gaps, self.labels)
         if code:
             raise ValueError('動的代表姿勢照会の入力不正')
-        self.graph['labels'] = dict(zip(self.ids,map(int,self.labels)))
+        if enable_graph_labels:
+            self.graph['labels'] = dict(zip(self.ids,map(int,self.labels)))
+
+    def update_field(self, field, margin=.10):
+        if not hasattr(field, 'covering_spheres'):
+            self.update(field.center, field.radius, margin)
+            return
+        # カプセル被覆球のC++照合。索引は保守的な候補除外、採用検査は元カプセル。
+        gaps = np.full(len(self.ids), np.inf)
+        has_collision = np.zeros(len(self.ids), dtype=bool)
+        has_danger = np.zeros(len(self.ids), dtype=bool)
+        for center, radius in field.covering_spheres():
+            self.update(center, radius, margin, enable_graph_labels=False)
+            np.minimum(gaps, self.gaps, out=gaps)
+            has_collision |= self.labels == 2
+            has_danger |= self.labels == 3
+        self.gaps[:] = gaps
+        self.labels[:] = np.where(has_collision, 2, np.where(has_danger, 3, 1))
+        self.graph['labels'] = dict(zip(self.ids, map(int, self.labels)))
 
 
 class sphere_rollout_policy:
     """速度・加速度制約付き候補の有限ロールアウト。予測は選好、現観測検査は共通の採用条件。"""
     def __init__(self, geometry, active, eef_link, graph, mode='constant_velocity', candidate_metric='joint',
                  horizon_sec=.4, max_velocity=2., max_acceleration=8., margin=.08, memory=None, node_index=None,
-                 task_weight=.12):
+                 task_weight=.12, target_offset=None):
         if mode not in ('reactive','constant_velocity','sequence') or candidate_metric not in ('joint','occupancy'):
             raise ValueError('候補・予測方式の不正')
         if not .1 <= horizon_sec <= 1. or not 0 < max_velocity <= 10. or not 0 < max_acceleration <= 100. or not 0 <= margin <= .5:
@@ -270,7 +288,10 @@ class sphere_rollout_policy:
         if not 0 <= task_weight <= 10.:
             raise ValueError('タスク選好係数の不正')
         self.geometry, self.active, self.graph = geometry, np.asarray(active), graph
+        self.angle_values = None if graph is None else np.asarray([graph['angles'][idx] for idx in graph['angle_node_ids']])
         self.eef_idx = geometry.link_indices[eef_link]
+        self.target_offset = np.zeros(3) if target_offset is None else np.asarray(target_offset)
+        self.is_periodic = np.asarray(getattr(geometry,'is_periodic',np.zeros(len(geometry.joint_names),dtype=bool)))
         self.mode, self.candidate_metric = mode, candidate_metric
         self.horizon_sec, self.max_velocity, self.max_acceleration, self.margin = horizon_sec,max_velocity,max_acceleration,margin
         self.task_weight = task_weight
@@ -285,11 +306,16 @@ class sphere_rollout_policy:
         transforms = self.geometry.link_transforms(poses)
         selected = transforms[...,self.geometry.sphere_links,:,:]
         centers = np.einsum('...nij,nj->...ni',selected[...,:3,:3],self.geometry.sphere_points)+selected[...,:3,3]
-        return centers,transforms[...,self.eef_idx,:3,3]
+        target = transforms[...,self.eef_idx,:3,3]+np.einsum('...ij,j->...i',transforms[...,self.eef_idx,:3,:3],self.target_offset)
+        return centers,target
+
+    def angle_delta(self, goal, positions):
+        delta = np.asarray(goal)-np.asarray(positions)
+        return np.where(self.is_periodic[self.active],(delta+np.pi)%(2*np.pi)-np.pi,delta)
 
     def proposals(self, positions, velocity, goal, field):
         num_active = len(self.active)
-        nominal = np.clip(3.*(goal[self.active]-positions[self.active]), -self.max_velocity, self.max_velocity)
+        nominal = np.clip(3.*self.angle_delta(goal[self.active],positions[self.active]), -self.max_velocity, self.max_velocity)
         self.nominal_velocity = nominal
         candidates = [nominal, np.zeros(num_active), self.previous_velocity]
         for idx in range(num_active):
@@ -300,11 +326,9 @@ class sphere_rollout_policy:
         probes = np.repeat(positions[None], num_active+1, axis=0)
         probes[1:, self.active] += np.eye(num_active)*.002
         centers,eef = self.kinematics(probes)
-        gaps = np.linalg.norm(centers[0]-field.center,axis=1)-self.geometry.radii-field.radius
+        gaps = field.query(centers[0])[0]-self.geometry.radii
         selected = int(np.argmin(gaps))
-        jacobian = (centers[1:,selected]-centers[0,selected]).T/.002
-        normal = unit_vector(centers[0,selected]-field.center)
-        gradient = normal@jacobian
+        gradient = (field.query(centers[1:,selected])[0]-field.query(centers[0,selected])[0])/.002
         escape = gradient/max(float(np.max(np.abs(gradient))),1e-8)*self.max_velocity
         candidates.extend((escape, nominal+.6*escape, nominal+escape))
         eef_jacobian = (eef[1:]-eef[0]).T/.002
@@ -316,7 +340,13 @@ class sphere_rollout_policy:
                 cartesian = .22*(bearing+sign*unit_vector(tangent))
                 candidates.append(inverse@cartesian+.2*nominal)
         if self.graph is not None:
-            _, nearest = self.graph['angle_tree'].query(positions[self.active], k=min(32,len(self.graph['angles'])))
+            if np.any(self.is_periodic[self.active]):
+                squared = np.sum(self.angle_delta(self.angle_values,positions[self.active])**2,axis=1)
+                num = min(32,len(squared))
+                nearest = np.argpartition(squared,num-1)[:num]
+                nearest = nearest[np.argsort(squared[nearest])]
+            else:
+                _, nearest = self.graph['angle_tree'].query(positions[self.active], k=min(32,len(self.graph['angles'])))
             ids = [self.graph['angle_node_ids'][int(idx)] for idx in np.atleast_1d(nearest)]
             ids = [idx for idx in ids if self.graph['labels'].get(idx)==1]
             self.num_node_rejections += len(np.atleast_1d(nearest))-len(ids)
@@ -335,7 +365,7 @@ class sphere_rollout_policy:
                 else:
                     targets = targets[:8]
                 for target in targets:
-                    delta = target-positions[self.active]
+                    delta = self.angle_delta(target,positions[self.active])
                     candidates.append(delta/max(float(np.max(np.abs(delta))),1e-8)*self.max_velocity)
         values = np.asarray(candidates)
         values *= np.minimum(1., self.max_velocity/np.maximum(np.max(np.abs(values),axis=1,keepdims=True),1e-8))
@@ -362,19 +392,22 @@ class sphere_rollout_policy:
             trajectory.append(poses.copy())
         trajectory = np.stack(trajectory,axis=1)
         shape,eef_poses = self.kinematics(trajectory)
-        obstacle = self.predictor.forecast(eef_poses,times,self.mode)
-        gaps = np.linalg.norm(shape-obstacle[:,:,None,:],axis=-1)-self.geometry.radii-field.radius
+        if hasattr(field,'trajectory_gaps'):
+            gaps = (field.query(shape)[0] if self.mode=='reactive' else field.trajectory_gaps(shape,times))-self.geometry.radii
+        else:
+            obstacle = self.predictor.forecast(eef_poses,times,self.mode)
+            gaps = np.linalg.norm(shape-obstacle[:,:,None,:],axis=-1)-self.geometry.radii-field.radius
         min_gaps = np.min(gaps,axis=-1)
         deficits = np.maximum(0.,self.margin-min_gaps)
-        task_error = np.mean((trajectory[:,-1,self.active]-goal[self.active])**2,axis=1)
+        task_error = np.mean(self.angle_delta(goal[self.active],trajectory[:,-1,self.active])**2,axis=1)
         smooth = np.mean((candidates-self.previous_velocity)**2,axis=1)
         costs = 150.*np.mean(deficits**2,axis=1)+self.task_weight*task_error+.002*smooth-.03*np.minimum(np.min(min_gaps,axis=1),.2)
         # 現観測での短区間検査。衝突開始時も障害物の消去なし、離隔の単調回復だけを許容。
         current_centers = self.geometry.centers(positions)
-        current_gap = float(np.min(np.linalg.norm(current_centers-field.center,axis=-1)-self.geometry.radii-field.radius))
+        current_gap = float(np.min(field.query(current_centers)[0]-self.geometry.radii))
         min_gap = min(.01,current_gap-.0002)
         target_idx = min(1,len(times)-1)
-        guard_gaps = np.linalg.norm(shape[:,:target_idx+1]-field.center,axis=-1)-self.geometry.radii-field.radius
+        guard_gaps = field.query(shape[:,:target_idx+1])[0]-self.geometry.radii
         can_pass = np.min(guard_gaps,axis=(1,2)) >= min_gap
         # 将来自己干渉姿勢への誘引も抑制。外部予測の安全保証とは別の内部形状検査。
         is_internal_clear = (self.node_index.internal_clear(self.geometry,shape) if self.node_index is not None

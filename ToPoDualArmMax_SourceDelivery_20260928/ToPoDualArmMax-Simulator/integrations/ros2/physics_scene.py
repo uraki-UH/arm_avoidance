@@ -62,11 +62,16 @@ class PhysicsScene:
                 raise ValueError('質量は0.001～1000 kgです')
             for geom in geoms:
                 kind = geom.get('type', 'box')
-                if kind == 'sphere':
+                if kind in ('sphere', 'capsule'):
                     radius = geom.get('radius')
                     if type(radius) not in (int, float) or not math.isfinite(radius) or not 0 < radius <= 10:
                         raise ValueError('球の半径が不正です')
                     size = [radius]
+                    if kind == 'capsule':
+                        half_length = geom.get('half_length')
+                        if type(half_length) not in (int, float) or not math.isfinite(half_length) or not 0 < half_length <= 10:
+                            raise ValueError('カプセルの半長の不正')
+                        size.append(half_length)
                 elif kind == 'box':
                     size = vector(geom['size'], 3, 10)
                     if min(size) <= 0:

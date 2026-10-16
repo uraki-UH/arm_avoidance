@@ -1,0 +1,19 @@
+{
+  "duration_sec": 18,
+  "seed": 701,
+  "radius_m": 0.06,
+  "speed_ratios": [
+    0.4,
+    1.3
+  ],
+  "start_dist_m": 0.45,
+  "enable_learning": false,
+  "enable_periodic_angles": true,
+  "enable_fixed_guard": true,
+  "max_ball_acceleration": 3,
+  "max_ball_deceleration": 8,
+  "max_ball_turn_acceleration": 10,
+  "policy": "rollout_cv",
+  "target_link": "L_tcp",
+  "obstacle_shape": "sphere"
+}
