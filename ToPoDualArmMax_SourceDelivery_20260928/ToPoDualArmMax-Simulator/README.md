@@ -56,10 +56,8 @@ UIビルドにはworkspaceの`ToPoFuzzy-Viewer/frontend/src/`・`libs/ros_visual
 
 ## 受領時の確認
 
-```bash
-node tools/verify.mjs
-node --test tests/server.test.mjs
-```
+Git共有版の構築・確認は[RUN_GUIDE](../../MD/RUN_GUIDE.md)。自作`tests/`はGit管理外。
+`tools/verify.mjs`は元の送付ZIPのマニフェスト照合用で、更新済みGitソースの合否確認には非対応。
 
 ### Longの基準フレーム
 

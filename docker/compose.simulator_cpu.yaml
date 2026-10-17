@@ -22,6 +22,9 @@ x-cpu-workflow:
     gng_packages: [gng_vlut_system, topo_fuzzy_viewer]
   check:
     duration_sec: 1.0
+  # 学習データ・実センサ不要の最小回避。方式・物理条件はシナリオ側への集約
+  demo:
+    scenario_file: benchmarks/cpu_demo/chase.json
 services:
   simulator:
     build:

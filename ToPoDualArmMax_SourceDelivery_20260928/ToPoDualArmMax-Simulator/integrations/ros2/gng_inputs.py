@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import xml.etree.ElementTree as et
 
 import numpy as np
 from scipy.spatial import cKDTree
@@ -12,6 +13,30 @@ import yaml
 workspace = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(workspace / 'gng_vlut_system/scripts'))
 from gng_avoidance_planner import graph_topology_hash, voxel_centers
+
+
+def load_robot_profiles(params_file):
+    """URDF・操作グループだけの読込み。学習済みGNG/VLUTとは独立の関節構成。"""
+    params = yaml.safe_load(Path(params_file).read_text())['/**']['ros__parameters']
+    joints = {item.find('child').get('link'): item for item in et.parse(params['urdf_path']).getroot().findall('joint')}
+    profiles = {}
+    for name, group in params['gng']['profiles'].items():
+        link, names, visited = group['eef'], [], set()
+        while link != group['root']:
+            if link in visited or link not in joints:
+                raise ValueError('操作グループのURDFチェーンが不正です: '+name)
+            visited.add(link)
+            joint = joints[link]
+            if joint.get('type') != 'fixed' and joint.get('name') not in group.get('dof_exclude', []):
+                names.append(joint.get('name'))
+            link = joint.find('parent').get('link')
+        names.reverse()
+        if not names or len(names) != group['dof'] or len(names) != len(set(names)):
+            raise ValueError('操作グループの関節数が不正です: '+name)
+        profiles[name] = dict(joint_names=names)
+    if not profiles:
+        raise ValueError('操作グループが空です')
+    return params, profiles
 
 
 def load_models(params_file):

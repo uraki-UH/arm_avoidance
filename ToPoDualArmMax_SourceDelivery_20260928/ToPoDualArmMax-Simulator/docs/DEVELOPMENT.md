@@ -7,21 +7,19 @@ Simulatorルートで実行:
 ```bash
 npm ci
 npm run build
-npm run typecheck
-npm run test:ros
-npm test
 ```
 
 起動は[README](../README.md)、監視ビルドは`npm run dev`。
 更新後はブラウザ再読込、`server.mjs`変更後はサーバー再起動。
 責務・接続構成は[ARCHITECTURE](ARCHITECTURE.md)を参照。
+共有版の変更確認は[CONTRIBUTING](../../../CONTRIBUTING.md)。自作`tests/`・`qa_reference.py`はGit管理外のため、以下のローカル試験は検証コードのある環境だけが対象。
 
 共有ソースはワークスペースのViewer・`libs/ros_visualization_web/`を直接参照。
 依存導入はSimulator側のみ。配布時はGit管理外の`app/generated/`も同梱。
 共有部品の変更時はThree.jsの版が異なるViewer側も型検査・ビルド・描画確認が必要。
 依存更新時は`npm audit`を確認し、`THIRD_PARTY_NOTICES.md`・`licenses/ROS-VIEWER-LICENSES.txt`も更新。
 
-## ブラウザの処理コスト計測
+## ブラウザの処理コスト計測（ローカル検証コードが必要）
 
 ```bash
 npm run test:performance -- --output ../../log/artifacts/browser_performance/before
@@ -32,7 +30,7 @@ npm run test:performance -- --output ../../log/artifacts/browser_performance/pro
 
 Node.js 22以上・ビルド済みUI・Chromeが必要。専用サーバーと一時プロファイルのChromeを使用し、終了・失敗時に停止。
 既存ブラウザ・ROSノードへの接続なし。出力先は毎回別のディレクトリを指定。
-GPU・試験条件・検証オプションは[性能試験の引数定義](../tests/performance.browser.mjs)を参照。
+GPU・試験条件・検証オプションはローカルの`tests/performance.browser.mjs`を参照。
 実GPU指定時のソフトウェア描画への代替は失敗扱い。
 
 `render_submit`はCPUの描画送信と待機、RGB-Dの`render_ms`は読出し完了までの時間。
@@ -50,11 +48,10 @@ GPU単体時間・ネットワーク・DDS・ROS計算とは別。
 
 ```bash
 bash tools/build_rgbd_points.sh /path/to/clang++
-npm run test:rgbd
 ```
 
 生成したwasmもソースと合わせて更新。倍精度の演算順を保持し、fast-math・積和融合は無効。
-参照版とのバイト一致は`test:rgbd`、実GPUは性能試験の`--verify-depth --verify-profile`で確認。
+ローカル検証コードがある場合、参照版とのバイト一致は`npm run test:rgbd`、実GPUは性能試験の`--verify-depth --verify-profile`で確認。
 
 ## URDF / STLの変更とキャッシュ再生成
 
@@ -63,15 +60,13 @@ Python 3.10以上とNumPyは、この工程だけで使用します。
 ```text
 python -m pip install -r tools/requirements-mesh.txt
 python tools/rebuild_meshes.py --model all
-python tools/qa_reference.py
-python tools/qa_reference.py --standard
 ```
 
 標準のみは `--model standard`、Longのみは `--model long`。元のZIPや開発者のDownloadsフォルダーは不要です。各URDFに対する相対パスでSTLを読み、現在の配置を保ったまま描画キャッシュを作成します。旧キャッシュを自動削除する処理はありません。
 
 URDFに記載された関節名、左右7軸、首・腰・カメラ/TCPリンク名はフロントエンドの設定と対応しています。別機種へ移植するときは、`robot.js` の `chain()` / `tcp()`、`app.js` のホーム・プリセット・軸操作、各センサの取付先も更新してください。
 
-`qa_reference.py` はNumPyで独立にリンク変換を計算します。ブラウザ側の順運動学と突き合わせる基準です。URDF更新時は基準も再生成してください。
+ローカルの`qa_reference.py`はNumPyによるリンク変換の独立照合用。共有版ではURDF更新後のブラウザ描画・関節動作の確認が必要。
 
 ## MID-360形状 / 走査データ
 
@@ -98,7 +93,7 @@ SDK・実機がある環境で任意に実行。取得コマンド・校正JSON�
 
 `app/` をHTTP配信ルートにしてください。ES Modules、Worker、WASM、GLB、URDF、バイナリキャッシュを配信できる必要があります。JavaScriptはJavaScript MIME、WASMは `application/wasm` を設定します。同梱Nodeサーバーでは設定済みです。
 
-Nodeサーバー自体はWindows固有APIを使用しません。送付時点ではLinux / macOS上の起動は未検証のため、移植先で `npm test` とブラウザQAを行ってください。ROS 2との結合は[ROS連携](../integrations/ros2/README.md)を参照。
+Nodeサーバー自体はWindows固有APIを使用しません。移植先のCPU動作・ブラウザ描画は個別確認が必要。ROS 2との結合は[ROS連携](../integrations/ros2/README.md)を参照。
 
 ## 汎用モータ計算
 

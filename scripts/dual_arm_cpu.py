@@ -1,11 +1,13 @@
 """CPUコンテナ内の共通処理。Compose YAMLによる機能・ビルド対象・機体設定の選択。"""
 import argparse
+import json
 import math
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 import yaml
 
@@ -28,11 +30,14 @@ def source_path(value):
 def load_config(path=config_path):
     config = yaml.safe_load(path.read_text())
     config = config.get('x-cpu-workflow') if isinstance(config, dict) else None
-    if not isinstance(config, dict) or set(config) != {'enable_gng', 'model', 'params_file', 'build', 'check'}:
+    if not isinstance(config, dict) or set(config) != {'enable_gng', 'model', 'params_file', 'build', 'check', 'demo'}:
         raise ValueError('x-cpu-workflowの設定項目が不正です')
     if type(config['enable_gng']) is not bool or config['model'] not in ('standard', 'long'):
         raise ValueError('GNG有効設定または機体名が不正です')
     source_path(config['params_file'])
+    if not isinstance(config['demo'], dict) or set(config['demo']) != {'scenario_file'}:
+        raise ValueError('demoの設定項目が不正です')
+    source_path(config['demo']['scenario_file'])
     build, check = config['build'], config['check']
     if not isinstance(build, dict) or set(build) != {'build_type', 'executor', 'base_paths', 'base_packages', 'gng_packages'}:
         raise ValueError('buildの設定項目が不正です')
@@ -95,6 +100,9 @@ def check_workspace(config):
              'import rclpy, tornado, scipy, mujoco, osqp; '
              'import ais_gng_msgs.msg, ais_gng_feature_msgs.msg, gng_control_msgs.srv, voxel_msgs.msg; '
              'print("ROS・CPU依存: OK")'], timeout=30)
+    for path in ('app/generated/ros-results.js', 'app/vendor/three/build/three.module.js'):
+        if not (simulator_dir/path).is_file():
+            raise ValueError('UI構築が必要です: '+path)
     execute([sys.executable, str(simulator_dir/'integrations/ros2/native_points.py')], timeout=60)
     execute(simulation_command(config, ['--avoidance', 'none', '--duration', str(config['check']['duration_sec'])]),
             timeout=90)
@@ -110,9 +118,29 @@ def check_workspace(config):
              str(source_path(config['params_file']))], env=environment, timeout=30)
 
 
+def demo_workspace(config):
+    """同梱設定による有限回避。正常終了とは別の接触・実行時間・両者の移動確認。"""
+    if config['model'] != 'long':
+        raise ValueError('同梱CPU回避デモの対象はlongです')
+    scenario = source_path(config['demo']['scenario_file'])
+    settings = json.loads(scenario.read_text())
+    destination = workspace_dir/'log/artifacts/cpu_demo'/str(time.time_ns())
+    destination.mkdir(parents=True, exist_ok=False)
+    execute(simulation_command(config, ['--scenario', 'chasing_sphere', '--avoidance', 'gng', '--scenario-file', str(scenario),
+                                      '--case-dir', str(destination)]), timeout=180)
+    result = json.loads((destination/'details.json').read_text())
+    metrics = result['metrics']
+    if (result['failure_reason'] or not result['is_valid_scenario'] or metrics['contact_sec'] != 0
+            or metrics['evaluated_sec'] < settings['duration_sec']-.02
+            or metrics['max_ball_speed_mps'] <= 0 or metrics['max_eef_speed_mps'] <= 0
+            or result['phase_sec'].get('avoiding', 0) <= 0):
+        raise ValueError('CPU回避デモの確認失敗。結果: '+str(destination/'details.json'))
+    print('CPU回避デモ: OK / 結果: '+str(destination/'details.json'), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('build', 'check', 'simulate'))
+    parser.add_argument('operation', choices=('build', 'check', 'demo', 'simulate'))
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.operation != 'simulate' and args.arguments:
@@ -122,7 +150,7 @@ def main():
         if args.operation == 'simulate':
             command = simulation_command(config, args.arguments)
             os.execvp(command[0], command)
-        dict(build=build_workspace, check=check_workspace)[args.operation](config)
+        dict(build=build_workspace, check=check_workspace, demo=demo_workspace)[args.operation](config)
     except (ValueError, yaml.YAMLError, OSError, subprocess.SubprocessError) as error:
         print('CPU構成の実行失敗: '+str(error), file=sys.stderr)
         return 1

@@ -102,6 +102,7 @@ def export_unlocked_catalog(case_dir, output_dir):
     for pattern in ('final_holdout/*/details.json','manual_*/details.json'):
         candidates += [path.parent for path in (artifact_dir.parent/'pursuit_v2').glob(pattern)]
     candidates += [path.parent for path in (artifact_dir.parent/'pursuit_fixes').glob('verified/*/details.json')]
+    candidates += [path.parent for path in (artifact_dir.parent/'cpu_demo').glob('*/details.json')]
     candidates = [path for path in candidates if (path/'trajectory.jsonl').is_file()]
     if str(case_dir) == 'latest':
         if not candidates:

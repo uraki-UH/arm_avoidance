@@ -15,7 +15,7 @@ import xml.etree.ElementTree as et
 
 import numpy as np
 
-from gng_inputs import workspace, load_models
+from gng_inputs import workspace, load_models, load_robot_profiles
 from gng_avoidance import independent_policy, check_kinematics
 from gng_sphere_avoidance import (load_graph, motion_sequence_predictor, representative_index,
                                   sphere_field, sphere_rollout_policy, cartesian_task, joint_velocity_command,
@@ -33,13 +33,15 @@ class experiment_resources:
     def __init__(self):
         self.key, self.values = None, {}
 
-    def prepare(self):
-        params,models = load_models(workspace/'gng_vlut_system/config/topo_dual_arm_max_long.yaml')
+    def prepare(self, enable_gng=True):
+        loader = load_models if enable_gng else load_robot_profiles
+        params,models = loader(workspace/'gng_vlut_system/config/topo_dual_arm_max_long.yaml')
         urdf = Path(params['urdf_path'])
         files = {urdf, workspace/'benchmarks/shuttle_bag/task.json', Path(__file__).resolve().parents[2]/'app/source.urdf'}
         files.update(resolve_mesh_path(mesh.get('filename'),urdf.parent) for mesh in et.parse(urdf).getroot().findall('.//mesh'))
         directory = Path(params['gng']['data_directory'])/params['gng']['experiment_id']/'left_arm'
-        files.update(directory/models['left_arm'][name] for name in ('gng_file','vlut_file'))
+        if enable_gng:
+            files.update(directory/models['left_arm'][name] for name in ('gng_file','vlut_file'))
         files.update(Path(prefix)/'lib/gng_vlut_system/libgng_dynamic_kernel.so'
                      for prefix in os.environ.get('AMENT_PREFIX_PATH','').split(os.pathsep)
                      if prefix and (Path(prefix)/'lib/gng_vlut_system/libgng_dynamic_kernel.so').is_file())
@@ -511,6 +513,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None, resources=None
     policy_name = config.get('policy','rollout_cv')
     if policy_name not in ('vlut_graph','avoidance_first','vrm_predictive','rollout_reactive','rollout_cv','rollout_sequence','cbf_qp','oscbf'):
         raise ValueError('未対応の球回避方式')
+    is_cbf = policy_name in ('cbf_qp','oscbf')
     duration = float(config.get('duration_sec',0. if is_continuous else 20.))
     if is_continuous and duration!=0.:
         raise ValueError('連続実験の時間指定不可')
@@ -532,7 +535,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None, resources=None
         raise ValueError('追跡球の加速度・追従遅延・開始距離の範囲外')
     progress('robot_geometry')
     resources = experiment_resources() if resources is None else resources
-    params,models = resources.prepare()
+    params,models = resources.prepare(enable_gng=not is_cbf or config.get('trajectory_planner')=='gng_chomp')
     base_geometry,base_checker = resources.get('robot',lambda:robot_assets(params,models))
     geometry = copy.deepcopy(base_geometry)
     profiles = independent_policy(geometry,{'left_arm':models['left_arm']})
@@ -570,7 +573,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None, resources=None
         if np.any(pose<geometry.limits[:,0]) or np.any(pose>geometry.limits[:,1]) or not internal_checker.check(pose):
             raise ValueError('開始・目標姿勢の位置制限または自己干渉')
     progress('reference_trajectory')
-    trajectory_planner = config.get('trajectory_planner','gng_chomp')
+    trajectory_planner = config.get('trajectory_planner','rrt_chomp' if is_cbf else 'gng_chomp')
     if trajectory_planner not in ('gng_chomp','rrt_chomp','direct'):
         raise ValueError('未対応の往復軌道生成方式')
     directory = Path(params['gng']['data_directory'])/params['gng']['experiment_id']/'left_arm'
@@ -684,7 +687,6 @@ def run_case(config, output_dir=None, emit=None, stop_event=None, resources=None
     eef = scene.data.xpos[eef_body].copy()
     metadata = models['left_arm']
     directory = Path(params['gng']['data_directory'])/params['gng']['experiment_id']/'left_arm'
-    is_cbf = policy_name in ('cbf_qp','oscbf')
     graph = index = rollout = legacy = None
     memory = motion_sequence_predictor(enable_learning=config.get('enable_learning',True))
     if config.get('memory_file'):

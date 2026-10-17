@@ -1,20 +1,30 @@
 # 別PCでの双腕ブラウザ・ROS 2の起動（Ubuntu・NVIDIA不要）
 
 対象: Ubuntu・Docker Compose・WebGL 2対応ブラウザ。ROS・Node.jsはコンテナ側、NVIDIA専用環境は不要。
-共有先には非公開リポジトリのアクセス権が必要。固定版は `v0.1.0-cpu-preview.1`、最新の開発内容は `main`。
+共有先には非公開リポジトリのアクセス権が必要。共同開発の取得先は `main`、変更箇所と確認方法は[CONTRIBUTING](../CONTRIBUTING.md)。
 
 ## ソース取得・基本構築
 
 ```bash
-git clone --depth 1 --branch v0.1.0-cpu-preview.1 https://github.com/uraki-UH/arm_avoidance.git
+git clone --branch main https://github.com/uraki-UH/arm_avoidance.git
 cd arm_avoidance
 bash scripts/dual_arm_cpu.sh build
 bash scripts/dual_arm_cpu.sh check
 ```
 
 リポジトリ全体を配置。Simulator単体では共有UI・独自メッセージが不足。
-固定版の確認範囲はCPU基本構成。checkは依存・点群処理・短時間MuJoCoの確認で、回避性能の判定ではない。
+checkはCPU依存・点群処理・短時間MuJoCoの確認で、回避性能の判定ではない。
 構成は[Compose](../docker/compose.simulator_cpu.yaml)の`x-cpu-workflow`を参照。起動窓口は[dual_arm_cpu.sh](../scripts/dual_arm_cpu.sh)。
+旧固定版`v0.1.0-cpu-preview.1`はCPU基本構成のみ。以下の`demo`操作は未収録。
+
+## 学習データ・bagなしの回避デモ
+
+```bash
+bash scripts/dual_arm_cpu.sh demo
+```
+
+Long左腕の往復と追跡球、既存のCBF-QP方式。設定は[同梱シナリオ](../benchmarks/cpu_demo/chase.json)。GNG/VLUT方式とは別。
+結果は`log/artifacts/cpu_demo/`。ブラウザ起動後、実験タブの記録一覧で再生。デモ再実行の結果は別保存。
 
 ## ブラウザとROS 2の起動・終了
 
@@ -23,7 +33,7 @@ bash scripts/dual_arm_cpu.sh start
 ```
 
 表示: `http://127.0.0.1:8877/?model=long`。終了: 起動端末のCtrl+C、片付けは`bash scripts/dual_arm_cpu.sh stop`。
-開発用gng_cpuとは別構成。同じポートの同時使用は禁止。連携ノードのROS_DOMAIN_IDを統一。
+開発用gng_cpuとは別構成。同じポートの同時使用は禁止。
 
 ## 画面なしのCPU実行・ROS確認
 
@@ -32,6 +42,7 @@ bash scripts/dual_arm_cpu.sh simulate --avoidance none --duration 3
 bash scripts/dual_arm_cpu.sh shell
 ```
 
+上記操作はホスト側で実行。`simulate`の相対パスはリポジトリルート基準、出力省略時は端末表示。
 shellはROS環境読込み済み。ブラウザのセンサ送信は明示的に有効化。
 
 ## GNG／VLUT回避まで使う場合
@@ -75,7 +86,6 @@ GPUブラウザは`bash scripts/open_viewer_nvidia.sh`。[Viewer単体の構築]
 | 用途 | 手順・設定 |
 | --- | --- |
 | ブラウザ・MuJoCo・ROS送受信 | [Simulator](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md)・[ROS連携](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md) |
-| 建設現場の独立シミュレーション | [MuJoCo](../simulation/mujoco_ws/README.md)・[Gazebo](../simulation/gazebo_ws/README.md)・[Isaac Sim](../simulation/construction_isaac_sim/README.md) |
 | センシング→ROS回避→実行先 | [双腕シミュレーション](../gng_vlut_system/docs/dual_arm_simulation.md) |
 | bag・データセット | [bag再生](../scripts/play_bag.sh)・[点群確認](../docker/rosbag_pointcloud_validation.md) |
 | MID-360実機 | [接続・取付TF](../hardware/mid360/README.md) |

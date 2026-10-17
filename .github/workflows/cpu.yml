@@ -1,0 +1,37 @@
+name: CPU基本構成
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpu-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      COMPOSE_PROJECT_NAME: cpu-${{ github.run_id }}-${{ github.run_attempt }}
+      ROS_DOMAIN_ID: 181
+    steps:
+      - name: ソース取得
+        # actions/checkout v6の固定commit。認証情報の作業ツリーへの保持なし
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: CPU・ROS・UI構築
+        run: bash scripts/dual_arm_cpu.sh build
+      - name: 依存・点群・MuJoCo確認
+        run: bash scripts/dual_arm_cpu.sh check
+      - name: 学習データ不要の回避デモ
+        run: bash scripts/dual_arm_cpu.sh demo
+      - name: 専用環境の片付け
+        if: always()
+        run: docker compose -f docker/compose.simulator_cpu.yaml down --volumes

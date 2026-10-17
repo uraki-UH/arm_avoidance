@@ -1,0 +1,12 @@
+{
+  "policy": "cbf_qp",
+  "trajectory_planner": "rrt_chomp",
+  "duration_sec": 8,
+  "seed": 11,
+  "radius_m": 0.06,
+  "speed_ratios": [0.2, 0.5],
+  "start_dist_m": 0.38,
+  "enable_learning": false,
+  "target_link": "L_link4",
+  "obstacle_shape": "sphere"
+}
