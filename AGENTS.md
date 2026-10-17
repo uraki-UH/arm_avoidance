@@ -45,6 +45,13 @@
 - 報告が必要な場合は「項目名: 値」を基本とし、数値・単位・条件・状態を明記。書式は `gng_vlut_system/docs/RELEASE_NOTE_TEMPLATE.md`、更新の判断は `skills/maintain-project-docs/SKILL.md` を参照。
 - 過去文書の一括整理・削除は別途依頼された範囲で行う。規約変更だけを理由に既存履歴を削除しない。
 
+## Git共有・commit
+
+- 共有基準は `main`、開発作業は `uraki_*` などの作業ブランチ。共有済み履歴の書換え・強制pushは禁止。
+- 1 commitは1目的。件名は `<対象>: <変更内容>` とし、単独の「修正」「更新」は不使用。
+- PR内の試行錯誤は、`main`への取り込み時にsquashで集約。既存の`main`の履歴は保持。
+- 共有用タグは検証済みcommitへ付与し、確認範囲・未検証事項を注記。公開済みタグの移動・再利用は禁止。
+
 ## Git worktree同期フロー
 
 - 各worktreeの基準ブランチは、`branch.<worktreeブランチ名>.codex-base`へ明示的に保存する。

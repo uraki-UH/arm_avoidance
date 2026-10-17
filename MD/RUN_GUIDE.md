@@ -1,19 +1,19 @@
 # 別PCでの双腕ブラウザ・ROS 2の起動（Ubuntu・NVIDIA不要）
 
 対象: Ubuntu・Docker Compose・WebGL 2対応ブラウザ。ROS・Node.jsはコンテナ側、NVIDIA専用環境は不要。
-共有先には非公開リポジトリのアクセス権と対象commitの共有が必要。
+共有先には非公開リポジトリのアクセス権が必要。固定版は `v0.1.0-cpu-preview.1`、最新の開発内容は `main`。
 
 ## ソース取得・基本構築
 
 ```bash
-git clone --depth 1 --branch main https://github.com/uraki-UH/arm_avoidance.git
+git clone --depth 1 --branch v0.1.0-cpu-preview.1 https://github.com/uraki-UH/arm_avoidance.git
 cd arm_avoidance
 bash scripts/dual_arm_cpu.sh build
 bash scripts/dual_arm_cpu.sh check
 ```
 
 リポジトリ全体を配置。Simulator単体では共有UI・独自メッセージが不足。
-checkは依存・点群処理・短時間MuJoCoの確認で、回避性能の判定ではない。
+固定版の確認範囲はCPU基本構成。checkは依存・点群処理・短時間MuJoCoの確認で、回避性能の判定ではない。
 構成は[Compose](../docker/compose.simulator_cpu.yaml)の`x-cpu-workflow`を参照。起動窓口は[dual_arm_cpu.sh](../scripts/dual_arm_cpu.sh)。
 
 ## ブラウザとROS 2の起動・終了
