@@ -264,12 +264,14 @@ class shuttle_task:
             joint_names=self.geometry.joint_names,positions=self.reference_path.tolist(),task=self.reference)
 
     def follow_target(self, scene):
+        """実測に基づく経路追従と、非操作軸の初期目標保持。"""
         import numpy as np
         state = scene.robot.state()
         positions = np.array([state[name] for name in self.geometry.joint_names])
         self.reference_follower.update(positions[self.active],self.task.goal)
-        positions[self.active] = self.reference_follower.target
-        return dict(zip(self.geometry.joint_names,map(float,positions)))
+        target = self.poses['a'].copy()
+        target[self.active] = self.reference_follower.target
+        return dict(zip(self.geometry.joint_names,map(float,target)))
 
     def update(self, scene):
         import numpy as np
