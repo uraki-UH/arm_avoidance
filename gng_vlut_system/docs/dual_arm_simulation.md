@@ -87,9 +87,13 @@ bash scripts/run_dual_arm_simulation.sh --nonstop-simulation --gng-strategy vrm_
 
 bag・左腕往復・回避計算・表示を一括起動。タスクは[task.json](../../benchmarks/shuttle_bag/task.json)、bagは[arm_avoidance_bag.yaml](../../scripts/arm_avoidance_bag.yaml)を参照。
 表示URLは起動ログ。終了はCtrl+C、時間指定は`--duration`。
+通常は事前生成した関節空間の基準軌道へ追従、表示線はその手先軌跡。先読み区間の障害物で回避へ切替え、離隔の安定後に基準軌道へ復帰。
+回避候補はGNG接続・VLUT状態からの有界A*種経路と局所候補。目標切替え・基準経路逸脱を抑える選好を併用。
 視野外・遮蔽・欠測・接触・経路なしによる保持なし。欠測時は名目往復、観測時は退避先の選好コストへ反映。
 有効な固定禁止領域は例外。禁止領域を避ける候補がない場合は、その領域への指令を棄却。
 URDF可動域は維持。無接触保証なし、実機使用禁止。指令は`/sim/nonstop/joint_command`、通常の実機指令経路とは分離。
+基準軌道はGNG種経路／RRT-Connectと独自の離散CHOMP系による生成。RRT*・MoveIt CHOMPは未使用、実電力量・大域最適性の保証なし。
+bag途中からの再生は、先頭付近の固定TF欠落に注意。観測不足時の名目往復は回避動作の検証対象外。
 
 ## Gazebo Harmonicの標準effort制御
 

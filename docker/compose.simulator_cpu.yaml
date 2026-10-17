@@ -1,5 +1,27 @@
 # Ubuntu向けのCPU計算環境。ブラウザ描画はホスト側の通常ブラウザ
 name: topo-dual-arm-cpu
+# build・check・simulate共通の構成。操作名ではなく機能設定による対象選択。
+x-cpu-workflow:
+  # GNG・VLUT・Viewerの追加構築と、学習済みデータの配置確認。
+  enable_gng: false
+  model: long
+  params_file: gng_vlut_system/config/topo_dual_arm_max_long.yaml
+  build:
+    build_type: Release
+    executor: sequential
+    base_paths:
+      - MSG
+      - ais_gng_cpu/src
+      - libs/arrow_visualization
+      - libs/voxel_idx
+      - pointcloud_sampling
+      - grasping_system
+      - gng_vlut_system
+      - ToPoFuzzy-Viewer/backend/src
+    base_packages: [ais_gng_feature_msgs, ais_gng_msgs, gng_control_msgs, voxel_msgs]
+    gng_packages: [gng_vlut_system, topo_fuzzy_viewer]
+  check:
+    duration_sec: 1.0
 services:
   simulator:
     build:

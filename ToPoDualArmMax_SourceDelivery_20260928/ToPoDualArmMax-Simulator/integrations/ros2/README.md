@@ -13,7 +13,7 @@ bash scripts/open_dual_arm_nvidia.sh long
 Docker内のSimulatorルートでは`bash start_ros.sh`。更新時は`bash start_ros.sh --restart`とブラウザ再読み込み。
 UIソース変更後は`npm ci && npm run build`。
 表示は`http://127.0.0.1:8877/?model=long`、HTTPブリッジは8879、WebSocketは8880。
-同じ`ROS_DOMAIN_ID`を使用。ブラウザ終了だけでは背景サービスは停止しないため、起動時の停止案内を参照。
+ブラウザ終了だけでは背景サービスは停止しないため、起動時の停止案内を参照。
 
 ## センシングとROS回避の独立起動
 
@@ -21,26 +21,9 @@ bag／実センサ → 共通ROS回避 → MuJoCo／実機。
 [共通手順](../../../../gng_vlut_system/docs/dual_arm_simulation.md#センシング--ros回避--実行先)を参照。
 ブラウザ内物理と外部シミュレータによる同一ロボットの同時駆動は禁止。
 
-## ROS launch プラグイン
-
-### launchの追加
-
-[plugins](plugins/)に登録JSONを追加。実装例は[robot_tf.json](plugins/robot_tf.json)、型・起動管理は[ros_plugins.py](ros_plugins.py)を参照。
-ROS package・launchは事前導入が必要。新しいlaunch選択肢だけならJS分岐の追加は不要。
-
-### 物理方式の追加
-
-登録JSONとPythonアダプタを追加。接続契約は`prepare`・`create`と、生成オブジェクトの`update`・`apply`・`status`・`close`。
-目標対応は`set_targets`。実装例は[gng_avoidance.py](gng_avoidance.py)・[OSCBF](oscbf_avoidance/README.md)を参照。
-
-### 所有権と終了
-
-所有launchは停止・切断・ページ再読込みで子ノードごと終了。外部起動プロセスは停止対象外。
-APIは`GET /api/plugins`とWebSocket `/plugins`。登録外の任意コマンド実行は非対応。
-
 ## ROS処理結果の表示専用接続
 
-ROS環境をsourceし、別起動のViewerゲートウェイを同じdomainへ接続:
+ROS環境をsource後:
 
 ```bash
 ros2 run topo_fuzzy_viewer viewer_ws_gateway_node
@@ -177,12 +160,16 @@ bash scripts/run_dual_arm_simulation.sh --scenario chasing_sphere \
 ```
 
 設定は[追跡実験JSON](../../../../benchmarks/vlut_pursuit/vlut.json)を参照。
+表示線は事前生成した往復基準の手先軌跡。CHOMP系は独自の離散共変勾配版、MoveItプラグインとは別実装。
+事前計画の対象は自己形状・床・台座、動的障害物は既存の局所回避。基準軌道の生成器は[bag非停止実験](../../../../gng_vlut_system/docs/dual_arm_simulation.md#非停止のbag往復実験mujoco専用)と共用。
+区間検証は関節補間の標本照合。連続衝突回避・実電力量最小・大域最適性の保証なし。
 `vlut_graph`は保存済みGNG/VLUTを使用。VLUT対応の`gng_dynamic_kernel`が必要。
 GNG候補方式・CBF系はrad/sの直接速度駆動専用。固定角度刻み・仮角度目標への換算なし。
 従来の代表姿勢幾何照合・CBF系も比較用に保持。接触・追跡停滞・QP不成立の一般解消は未保証。
 条件と結果は[比較検証](../../../../benchmarks/vlut_pursuit/repair_verification.json)を参照。
 
 連続実行は記録なし、時間指定は記録あり。リロードで自動再生なし。
+リンク型の原点はworld座標［m］、実験開始時に固定。実行中の原点変更は非対応。
 接触／異常で終了、ブラウザを閉じても実行は継続。記録削除は元データも削除し取消不可。
 実験の可動域は実機未照合。高速の往復回避・実機安全性の検証は未達。
 
@@ -223,20 +210,12 @@ ros2 launch gng_vlut_system robot_follow.launch.py
 
 接続設定と実行開始は別操作。設定だけでは追従・物理・実機出力を開始しない構成。
 設定・起動条件は[共通追従構成](../../../../gng_vlut_system/docs/dynamixel_sim_control.md#srfの共通追従構成)を参照。
-
-### 姿勢・TFのWebSocket送受信
-
-状態配信の通信上限は1～200 Hz。対象は関節・配置・TF。
-MuJoCo実行中は位置・速度・駆動トルク、物理OFFでは位置のみ。電流・接触力・MuJoCoのclock配信なし。
-描画追従の実測入力と、力学追従の指令入力は別トピック。
-
-WebSocketはブリッジHTTPポート+1の`/joints`。設定・実装は[joint_stream.py](joint_stream.py)を参照。
 リーダー入力の失効・切断・範囲超過で保持。通信復旧だけでは再開せず物理の明示再開始が必要。
-TF／Poseによる基台配置の受信追従は未対応。
 
 ### ロボット配置・TF・ROS軌道の往復（2026-10-01追加）
 
 基台配置はworld座標、XYZ［m］・RPY［deg］。
+TF／Poseによる基台配置の受信追従は未対応。
 
 | トピック | 内容 |
 | --- | --- |
@@ -251,24 +230,13 @@ TF／Poseによる基台配置の受信追従は未対応。
 受信OFF・Esc・ページ非表示・モデル切替で表示再生を停止。
 仕様は[robot_exchange.py](robot_exchange.py)を参照。
 
-## 含めたもの / 別途必要なもの
+## 外部AI連携（別途導入）
 
-従来のVM・AI連携にはAiS-GNG-FVG本体・observer・独自ROSメッセージが別途必要。
-HTTP・形式解析コードだけではAI処理を実行不可。
-
-## 起動例（Ubuntu / Bash）
-
+AiS-GNG-FVG本体・observer・独自ROSメッセージが必要。送付版でのVM再接続は未検証。
 外部AIのROS環境をsource後:
 
 ```bash
 python3 integrations/ros2/robot_bridge.py
 ```
 
-HTTPはlocalhost:8878。VMを跨ぐ場合はSSH転送等で接続。
-AI・observer・timing・bridgeのROS domainを統一。
-
-## 接続仕様
-
-VM用の入出力は[protocol.py](protocol.py)・[compact_frame.py](compact_frame.py)を参照。
-stamp・frame・sequenceが揃った結果だけを表示。欠落時は更新待ち。
-独立ROS2連携と従来VM・AI経路は別機能。送付版でのVM再接続は未検証。
+接続先は`http://localhost:8878`。

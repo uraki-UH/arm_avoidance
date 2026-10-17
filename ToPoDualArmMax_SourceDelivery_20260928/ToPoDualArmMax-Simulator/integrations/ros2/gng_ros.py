@@ -177,6 +177,11 @@ class avoidance_node(Node):
         self.create_subscription(JointState, goal_topic, self.receive_goal, 1)
         self.goal_lock = threading.Lock()
         self.pending_goal = None
+        self.pending_reference = None
+        if self.enable_nonstop_simulation:
+            from rclpy.qos import QoSProfile,DurabilityPolicy
+            self.create_subscription(String,'/sim/nonstop/reference',self.receive_reference,
+                QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.filter = None
         self.worker_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='ros-avoidance')
         self.future = None
@@ -201,6 +206,19 @@ class avoidance_node(Node):
         except ValueError as error:
             self.get_logger().warning(str(error))
 
+    def receive_reference(self, message):
+        """保持付きの固定基準の受付。制御更新スレッドへの引渡しだけの購読処理。"""
+        try:
+            if len(message.data)>262144:
+                raise ValueError('往復基準の容量超過')
+            value = json.loads(message.data)
+            if not isinstance(value,dict) or value.get('format')!='topo-shuttle-reference/1':
+                raise ValueError('往復基準の形式不正')
+            with self.goal_lock:
+                self.pending_reference = value
+        except (ValueError,TypeError) as error:
+            self.get_logger().warning(str(error))
+
     def update(self):
         self.robot.begin_cycle()
         if self.filter is None:
@@ -218,6 +236,9 @@ class avoidance_node(Node):
             self.filter = gng_filter(scene, self.settings, self, dict(model=self.model_id), (self.params, self.models))
         with self.goal_lock:
             goal, self.pending_goal = self.pending_goal, None
+            reference,self.pending_reference = self.pending_reference,None
+        if reference is not None:
+            self.filter.set_reference(reference)
         if goal is not None:
             self.filter.set_targets(goal)
         self.filter.update()

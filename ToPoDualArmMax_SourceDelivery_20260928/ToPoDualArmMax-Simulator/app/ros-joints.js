@@ -1,4 +1,5 @@
 import {robot_snapshot,attach_camera,bridge_socket_url,pose_sources,pose_source_labels} from './robot-ros-state.js';
+import {make_reference_line} from './avoidance-replay.js';
 const $=id=>document.getElementById(id);
 const state_outputs=Object.freeze(['joints','base','tf']);
 
@@ -40,6 +41,14 @@ export class RosJointStream {
  close(){
   const socket=this.socket;this.socket=null;if(socket)socket.terminate();this.latest=null;this.motion_sample=null;this.is_ready=false;this.next_snapshot_ms=0;
   this.panel.set_connection_state('joints',false);
+  this.set_reference(null);
+ }
+ set_reference(task){
+  const layers=window.simulator?.avoidance_replay?.trajectory_layers;
+  if(this.reference_line){layers?.unbind('reference',this.reference_line);this.reference_line.removeFromParent();this.reference_line.geometry.dispose();this.reference_line.material.dispose();this.reference_line=null;}
+  if(!task)return;
+  if(task.frame!=='world'||task.reference_kind!=='joint_path')throw Error('ROS基準軌道の座標系不正');
+  this.reference_line=make_reference_line(task.reference_path);layers?.bind('reference',this.reference_line);window.simulator.scene.add(this.reference_line);
  }
  // 関節角・配置・TFの一括送信。同一スナップショットと共通ROS時刻
  outputs(){return $('ros-state-all').checked?state_outputs:[];}
@@ -79,6 +88,7 @@ export class RosJointStream {
     const data=event.data;
     if(data.type==='ready'){this.is_ready=true;this.panel.set_connection_state('joints',true);$('ros-joints-status').textContent=`接続済み · 上限 ${hz} Hz`;}
     else if(data.type==='error')fail(data.error);
+    else if(data.type==='task_reference'&&this.is_simulation_input)this.set_reference(data.task);
     else if(data.type==='joints'&&$('ros-joints-receive').checked){
      const robot=this.panel.rgbd.robot;
      const is_leader=robot.pose_source===pose_sources.leader;

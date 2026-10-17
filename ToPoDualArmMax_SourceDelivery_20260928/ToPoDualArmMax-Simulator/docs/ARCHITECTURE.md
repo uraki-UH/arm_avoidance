@@ -57,6 +57,23 @@ Three.jsのES Modulesをブラウザのimport mapで解決します。新しいR
 
 モデル変更時は旧ロボットをシーンから外し、センサを新しいリンクへ接続します。LiDAR Workerを再作成して旧応答を破棄し、RGB-DとAIの古い点群表示を消去します。モデルごとの姿勢・キーフレームはページを開いている間保持します。
 
+## ROS連携の拡張・通信契約
+
+ROS側の相互接続は同一`ROS_DOMAIN_ID`。従来VM・AI経路ではAI・observer・timing・bridgeが対象、VMを跨ぐlocalhost接続はSSH転送等による到達経路が別途必要。独立ROS 2連携とは別経路。
+
+- launch拡張: [plugins](../integrations/ros2/plugins/)の登録JSON。例は`robot_tf.json`、型・起動管理は[ros_plugins.py](../integrations/ros2/ros_plugins.py)。ROS package・launchは事前導入、選択肢追加だけならJS分岐の追加不要。
+- 物理方式: 登録JSONとPythonアダプタ。`prepare`・`create`、生成オブジェクトの`update`・`apply`・`status`・`close`、目標設定の`set_targets`。例は[gng_avoidance.py](../integrations/ros2/gng_avoidance.py)・[OSCBF](../integrations/ros2/oscbf_avoidance/README.md)。
+- launch所有権: 停止・切断・ページ再読込みで所有子ノードも終了。外部プロセスは対象外。APIは`GET /api/plugins`・WebSocket `/plugins`、登録外の任意コマンド実行は非対応。
+- 姿勢配信: ブリッジHTTPポート+1の`/joints`、1～200 Hz。MuJoCo実行中は位置・速度・駆動トルク、物理OFFでは位置のみ。電流・接触力・clockの配信なし。実測表示と駆動指令は別トピック。実装は[joint_stream.py](../integrations/ros2/joint_stream.py)。
+- VM入出力: [protocol.py](../integrations/ros2/protocol.py)・[compact_frame.py](../integrations/ros2/compact_frame.py)。stamp・frame・sequenceが揃った結果だけを表示、欠落時は更新待ち。HTTP・形式解析だけではAI処理を実行不可。
+
+## 往復基準の接続契約
+
+`shuttle_trajectory.py`は追跡障害物とbag非停止実験で共通の基準軌道生成・追従処理。
+bagからの入力は点群とTF、往復目標はタスク設定。記録済みの関節指令による駆動なし。
+`/sim/nonstop/reference`は保持配信の`std_msgs/String`、形式は`topo-shuttle-reference/1`。`positions`は`joint_names`順のrad、`task.reference_path`はworld座標のm。
+回避側はMuJoCo非停止実験だけでモデル・関節順序・可動域を照合。`joint_stream.py`から`ros-joints.js`への基準線配信は`/sim/joint_states`の読取り専用接続、センサ入力・実機指令との分離。
+
 ## モータ表示の契約
 
 物理実行中のスライダーは目標角、数値・グラフは実測値。ROS追従中は表示専用。

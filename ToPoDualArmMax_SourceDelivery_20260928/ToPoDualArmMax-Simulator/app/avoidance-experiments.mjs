@@ -5,12 +5,13 @@ import {randomUUID} from 'node:crypto';
 import {createInterface} from 'node:readline';
 import {isDeepStrictEqual} from 'node:util';
 
-const allowed_keys=['policy','obstacle_shape','pursuit_mode','target_link','target_offset_m','duration_sec','seed','radius_m','speed_ratios','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration','execution_mode','speed_ramp_sec','enable_proximal_guard','random_walk_extent_m','random_walk_change_sec'];
+const allowed_keys=['policy','trajectory_planner','obstacle_shape','pursuit_mode','target_link','target_offset_m','duration_sec','seed','radius_m','speed_ratios','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration','execution_mode','speed_ramp_sec','enable_proximal_guard','random_walk_extent_m','random_walk_change_sec','shoulder_position_m'];
 const policies=['vlut_graph','rollout_cv','rollout_reactive','cbf_qp','oscbf'];
 
 export function validate_experiment(value,link_names){
  if(!value||Array.isArray(value)||typeof value!=='object'||Object.keys(value).some(key=>!allowed_keys.includes(key)))throw Error('未対応の実験設定');
- const config={policy:'rollout_cv',obstacle_shape:'sphere',target_link:'L_tcp',target_offset_m:[0,0,0],duration_sec:18,seed:401,radius_m:.06,speed_ratios:[.4,1.3],max_ball_acceleration:3,max_ball_deceleration:8,max_ball_turn_acceleration:10,execution_mode:'recorded',...value};
+ const config={policy:'rollout_cv',trajectory_planner:'gng_chomp',obstacle_shape:'sphere',target_link:'L_tcp',target_offset_m:[0,0,0],duration_sec:18,seed:401,radius_m:.06,speed_ratios:[.4,1.3],max_ball_acceleration:3,max_ball_deceleration:8,max_ball_turn_acceleration:10,execution_mode:'recorded',...value};
+ if(!['gng_chomp','rrt_chomp'].includes(config.trajectory_planner))throw Error('往復軌道の生成方式の不正');
  if(!['recorded','continuous'].includes(config.execution_mode))throw Error('実行方式の不正');
  if(config.execution_mode==='continuous'){
   if(Object.hasOwn(value,'duration_sec')&&value.duration_sec!==0)throw Error('連続実験の時間指定不可');
@@ -22,6 +23,7 @@ export function validate_experiment(value,link_names){
  for(const [key,min,max] of [['duration_sec',config.execution_mode==='continuous'?0:1,60],['speed_ramp_sec',1,60],['seed',0,2147483647],['radius_m',.015,.15],['max_ball_acceleration',.1,30],['max_ball_deceleration',.1,30],['max_ball_turn_acceleration',.1,30]])if(!bounded(config[key],min,max))throw Error('設定の範囲外: '+key);
  if(!Number.isInteger(config.seed)||!Array.isArray(config.speed_ratios)||config.speed_ratios.length!==2||!config.speed_ratios.every(v=>bounded(v,.05,3))||config.speed_ratios[0]>config.speed_ratios[1])throw Error('seed・速度比の不正');
  if(!Array.isArray(config.target_offset_m)||config.target_offset_m.length!==3||!config.target_offset_m.every(v=>bounded(v,-.5,.5))||Math.hypot(...config.target_offset_m)>.5)throw Error('追跡点オフセットの不正');
+ if(Object.hasOwn(config,'shoulder_position_m')&&(config.obstacle_shape!=='linked_arm'||!Array.isArray(config.shoulder_position_m)||config.shoulder_position_m.length!==3||!config.shoulder_position_m.every((v,idx)=>bounded(v,idx===2?0:-2,2))))throw Error('リンク原点の位置不正（world座標・m）');
  if(Object.hasOwn(config,'pursuit_mode')&&!['link_point','distal_sweep','random_walk'].includes(config.pursuit_mode))throw Error('球の動きの不正');
  if(['distal_sweep','random_walk'].includes(config.pursuit_mode)&&(config.obstacle_shape!=='sphere'||!/^L_(link[1-7]|tcp|gripper_base|finger_(left|right))$/.test(config.target_link)||config.target_offset_m.some(v=>v!==0)))throw Error('横切り・ランダムウォークは球・左腕可動リンク・追跡点オフセットなし');
  if(config.pursuit_mode==='random_walk'){
@@ -30,7 +32,7 @@ export function validate_experiment(value,link_names){
   if(!bounded(config.random_walk_extent_m,.3,1.5)||!bounded(config.random_walk_change_sec,.1,5))throw Error('ランダムウォークの範囲・更新間隔の不正');
  }
  if(Object.hasOwn(config,'enable_proximal_guard')&&typeof config.enable_proximal_guard!=='boolean')throw Error('近位部の迂回条件は真偽値');
- return {...config,enable_proximal_guard:config.enable_proximal_guard??true,enable_learning:false,enable_periodic_angles:false,enable_fixed_guard:true,start_dist_m:.45};
+ return {...config,enable_proximal_guard:config.enable_proximal_guard??true,enable_learning:false,enable_periodic_angles:false,start_dist_m:.45};
 }
 
 export class experiment_frame_window{
@@ -117,16 +119,16 @@ export function create_experiment_service(root,port){
  const simulator=path.resolve(root,'..'),workspace=path.resolve(simulator,'../..');
  const link_names=[...fs.readFileSync(path.join(root,'source.urdf'),'utf8').matchAll(/<link\s+name="([^"]+)"/g)].map(match=>match[1]);
  const is_available=fs.existsSync('/.dockerenv')&&fs.existsSync('/opt/ros/'+(process.env.ROS_DISTRO||'humble')+'/setup.bash');
- let job=null,child=null,timer=null,kill_timer=null;
+ let job=null,child=null,timer=null,kill_timer=null,log=null,worker_revision=null;
  let live_metadata=null,live_window=new experiment_frame_window();
  const reply=(res,code,value)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
  const snapshot=(after=null)=>{
   const live=after===null?null:live_window.read(after);
-  return {is_available,policies,live_protocol_version:1,archive_protocol_version:2,continuous_protocol_version:1,pursuit_modes:['link_point','distal_sweep','random_walk'],job:job?{...job,output:job.state==='failed'?job.output.slice(-1800):undefined,
+  return {is_available,policies,worker_pid:child?.pid??null,live_protocol_version:1,archive_protocol_version:2,continuous_protocol_version:1,pursuit_modes:['link_point','distal_sweep','random_walk'],job:job?{...job,output:job.state==='failed'?job.output.slice(-1800):undefined,
    live:live?{...live,metadata:after===0||live.has_gap||!['running','stopping'].includes(job.state)?live_metadata:undefined}:undefined}:null};
  };
  const stop=reason=>{
-  if(!child||child.exitCode!==null||child.signalCode!==null)return;
+  if(!child||!job||!['running','stopping'].includes(job.state)||child.exitCode!==null||child.signalCode!==null)return;
   job.state='stopping';job.stop_reason=reason;
   try{process.kill(-child.pid,'SIGINT');}catch(error){if(error.code!=='ESRCH')throw error;}
   const owned=child;
@@ -136,57 +138,91 @@ export function create_experiment_service(root,port){
   let body='';req.setEncoding('utf8');req.on('data',chunk=>{body+=chunk;if(Buffer.byteLength(body)>8192){reject(Error('実験設定の容量超過'));req.destroy();}});
   req.on('end',()=>{try{resolve(JSON.parse(body));}catch{reject(Error('設定JSONの不正'));}});req.on('error',reject);
  });
- const start=config=>{
+ const finish=(code,signal=null)=>{
+  if(!job||!['running','stopping'].includes(job.state))return;
+  const record=job,is_continuous=record.config.execution_mode==='continuous',case_dir=record.case_dir?path.join(workspace,record.case_dir):null;
+  clearTimeout(timer);clearTimeout(kill_timer);log?.end();log=null;
+  record.finished_ms=Date.now();record.exit_code=code;record.signal=signal;
+  record.state=record.stop_reason?'stopped':code===0?'completed':'failed';
+  if(is_continuous){
+   if(record.state==='completed'&&!record.metrics){record.state='failed';record.output+='連続実験の終了情報なし';}
+   return;
+  }
+  if(record.state==='completed'){
+   try{const details=JSON.parse(fs.readFileSync(path.join(case_dir,'details.json'),'utf8'));record.metrics=details.metrics;record.failure_reason=details.failure_reason;record.viewer_url='/?model=long&replay=latest';
+    if(live_metadata)live_metadata={...live_metadata,metrics:details.metrics,failure_reason:details.failure_reason,failure_details:details.failure_details,is_valid_scenario:details.is_valid_scenario,outcome:details.outcome};}
+   catch(error){record.state='failed';record.output+=error.message;}
+  }
+  if(live_metadata&&record.state!=='completed'){
+   live_metadata={...live_metadata,is_partial:true,completion_state:record.state};
+   if(live_window.frames.length)fs.writeFileSync(path.join(case_dir,'partial-recording.json'),JSON.stringify({...live_metadata,frames:live_window.frames})+'\n',{flag:'wx'});
+  }
+  fs.writeFileSync(path.join(case_dir,'execution.json'),JSON.stringify({...record,output:undefined},null,2)+'\n',{flag:'wx'});
+ };
+ const close_worker=async()=>{
+  const owned=child;
+  if(!owned)return;
+  const completed=new Promise(resolve=>owned.once('close',resolve));
+  owned.stdin.end();
+  const forced=setTimeout(()=>{try{process.kill(-owned.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')console.error(error);}},3000);forced.unref();
+  try{await completed;}finally{clearTimeout(forced);}
+ };
+ const ensure_worker=async()=>{
+  const directory=path.join(simulator,'integrations/ros2');
+  const files=[directory,path.join(workspace,'gng_vlut_system/scripts')].flatMap(folder=>fs.readdirSync(folder).filter(name=>name.endsWith('.py')).sort().map(name=>path.join(folder,name)));
+  for(const prefix of (process.env.AMENT_PREFIX_PATH||'').split(path.delimiter)){
+   const filename=path.join(prefix,'lib/gng_vlut_system/libgng_dynamic_kernel.so');
+   if(prefix&&fs.existsSync(filename))files.push(filename);
+  }
+  const revision=files.map(filename=>{const stat=fs.statSync(filename);return `${filename}:${stat.mtimeMs}:${stat.size}`;}).join('|');
+  if(child&&worker_revision===revision)return;
+  if(child)await close_worker();
+  // 同じワーカーへの依頼。ソース変更時だけの再起動、ROS出力指定の受付なし。
+  const has_ros_environment=(process.env.AMENT_PREFIX_PATH||'').split(path.delimiter).some(prefix=>prefix&&fs.existsSync(path.join(prefix,'share/gng_vlut_system/package.xml')));
+  const command=has_ros_environment?['python3',path.join(simulator,'integrations/ros2/simulate.py')]:['bash',path.join(simulator,'start_ros.sh'),'--simulate'];
+  command.push('--scenario','chasing_sphere','--stream-frames','--experiment-worker');
+  child=spawn(command[0],command.slice(1),{cwd:workspace,detached:true,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'1'},stdio:['pipe','pipe','pipe']});
+  worker_revision=revision;
+  const owned=child;
+  owned.stdin.on('error',error=>{if(job&&['running','stopping'].includes(job.state)){job.output+=error.message;finish(2);}});
+  const output=chunk=>{if(job&&['running','stopping'].includes(job.state)){job.output=(job.output+chunk.toString()).slice(-32768);log?.write(chunk);}};
+  owned.stdout.on('data',output);owned.stderr.on('data',output);
+  // GUIとは独立した標準出力の受信。低速な表示クライアントによる計算停止なし。
+  const lines=createInterface({input:owned.stdout});
+  lines.on('line',line=>{
+   if(line.length>65536)return;
+   let value;try{value=JSON.parse(line);}catch{return;}
+   const record=job;
+   if(!record||value.job_id!==record.job_id)return;
+   if(value.type==='experiment_progress'&&typeof value.stage==='string'&&Number.isFinite(value.elapsed_ms))record.progress={stage:value.stage,elapsed_ms:value.elapsed_ms};
+   if(value.type==='experiment_ready'&&value.recording?.format==='topo-avoidance-replay/1')live_metadata=value.recording;
+   if(value.type==='experiment_frame'&&live_metadata)live_window.append(value.frame);
+   if(value.type==='experiment_finished'){
+    record.metrics=value.metrics;record.failure_reason=value.failure_reason;record.viewer_url='/?model=long&replay=latest';
+    if(live_metadata)live_metadata={...live_metadata,metrics:value.metrics,failure_reason:value.failure_reason,failure_details:value.failure_details,is_valid_scenario:value.is_valid_scenario,outcome:value.outcome};
+   }
+   if(value.type==='replay'&&/^\/exports\/avoidance-[a-f0-9]+\.json$/.test(value.recording_url))record.recording_url=value.recording_url;
+   if(value.type==='error')record.output+='\n'+value.message;
+   if(value.type==='experiment_complete')finish(value.exit_code);
+  });
+  owned.on('error',error=>{if(job)job.output+=error.message;});
+  owned.on('close',(code,signal)=>{
+   if(child===owned){child=null;worker_revision=null;}
+   if(job?.job_id===owned.experiment_job_id)finish(code??2,signal);
+  });
+ };
+ const start=async config=>{
   const is_continuous=config.execution_mode==='continuous';
   const job_id=randomUUID(),relative_dir=is_continuous?null:'log/artifacts/pursuit_v2/manual_gui_'+job_id,case_dir=relative_dir?path.join(workspace,relative_dir):null;
   if(case_dir){fs.mkdirSync(case_dir,{recursive:true});fs.writeFileSync(path.join(case_dir,'config.json'),JSON.stringify(config,null,2)+'\n',{flag:'wx'});}
   job={job_id,state:'running',config,case_dir:relative_dir,started_ms:Date.now(),output:''};
   live_metadata=null;live_window=new experiment_frame_window(is_continuous?120:Math.ceil(config.duration_sec*20)+2);
-  // シミュレーション専用の固定コマンド。シェル補間・ROS出力指定の受付なし。
-  const has_ros_environment=(process.env.AMENT_PREFIX_PATH||'').split(path.delimiter).some(prefix=>prefix&&fs.existsSync(path.join(prefix,'share/gng_vlut_system/package.xml')));
-  const command=has_ros_environment?['python3',path.join(simulator,'integrations/ros2/simulate.py')]:['bash',path.join(simulator,'start_ros.sh'),'--simulate'];
-  command.push('--scenario','chasing_sphere','--stream-frames','--scenario-file',is_continuous?'-':relative_dir+'/config.json');
-  if(!is_continuous)command.push('--case-dir',relative_dir);
-  child=spawn(command[0],command.slice(1),{cwd:workspace,detached:true,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'1'},stdio:[is_continuous?'pipe':'ignore','pipe','pipe']});
-  const owned=child,record=job;
-  if(is_continuous){owned.stdin.on('error',error=>{if(error.code!=='EPIPE')record.output+=error.message;});owned.stdin.end(JSON.stringify(config));}
-  const log=case_dir?fs.createWriteStream(path.join(case_dir,'execution.log'),{flags:'wx'}):null;
-  const output=chunk=>{record.output=(record.output+chunk.toString()).slice(-32768);log?.write(chunk);};
-  owned.stdout.on('data',output);owned.stderr.on('data',output);
-  // GUIとは独立した標準出力の受信。低速な表示クライアントによる計算停止なし。
-  const lines=createInterface({input:owned.stdout});
-  lines.on('line',line=>{
-   if(line.length>16384)return;
-   let value;try{value=JSON.parse(line);}catch{return;}
-   if(value.type==='experiment_progress'&&typeof value.stage==='string'&&Number.isFinite(value.elapsed_ms))record.progress={stage:value.stage,elapsed_ms:value.elapsed_ms};
-   if(value.type==='experiment_ready'&&value.recording?.format==='topo-avoidance-replay/1')live_metadata=value.recording;
-   if(value.type==='experiment_frame'&&live_metadata)live_window.append(value.frame);
-   if(is_continuous&&value.type==='experiment_finished'){
-    record.metrics=value.metrics;record.failure_reason=value.failure_reason;record.viewer_url='/?model=long&replay=latest';
-    if(live_metadata)live_metadata={...live_metadata,metrics:value.metrics,failure_reason:value.failure_reason,failure_details:value.failure_details,is_valid_scenario:value.is_valid_scenario,outcome:value.outcome};
-   }
-   if(value.type==='replay'&&/^\/exports\/avoidance-[a-f0-9]+\.json$/.test(value.recording_url))record.recording_url=value.recording_url;
-  });
-  owned.on('error',error=>{record.output+=error.message;});
-  owned.on('close',(code,signal)=>{
-   clearTimeout(timer);clearTimeout(kill_timer);log?.end();child=null;
-   record.finished_ms=Date.now();record.exit_code=code;record.signal=signal;
-   record.state=record.stop_reason?'stopped':code===0?'completed':'failed';
-   if(is_continuous){
-    if(record.state==='completed'&&!record.metrics){record.state='failed';record.output+='連続実験の終了情報なし';}
-    return;
-   }
-   if(record.state==='completed'){
-    try{const details=JSON.parse(fs.readFileSync(path.join(case_dir,'details.json'),'utf8'));record.metrics=details.metrics;record.failure_reason=details.failure_reason;record.viewer_url='/?model=long&replay=latest';
-     if(live_metadata)live_metadata={...live_metadata,metrics:details.metrics,failure_reason:details.failure_reason,failure_details:details.failure_details,is_valid_scenario:details.is_valid_scenario,outcome:details.outcome};}
-    catch(error){record.state='failed';record.output+=error.message;}
-   }
-   if(live_metadata&&record.state!=='completed'){
-    live_metadata={...live_metadata,is_partial:true,completion_state:record.state};
-    if(live_window.frames.length)fs.writeFileSync(path.join(case_dir,'partial-recording.json'),JSON.stringify({...live_metadata,frames:live_window.frames})+'\n',{flag:'wx'});
-   }
-   fs.writeFileSync(path.join(case_dir,'execution.json'),JSON.stringify({...record,output:undefined},null,2)+'\n',{flag:'wx'});
-  });
+  log=case_dir?fs.createWriteStream(path.join(case_dir,'execution.log'),{flags:'wx'}):null;
+  try{
+   await ensure_worker();
+   child.experiment_job_id=job_id;
+   child.stdin.write(JSON.stringify({job_id,config,case_dir:relative_dir})+'\n');
+  }catch(error){job.output+=error.message;finish(2);throw error;}
   if(!is_continuous){timer=setTimeout(()=>stop('wall_time_limit'),180000);timer.unref();}
  };
  return {
@@ -201,7 +237,7 @@ export function create_experiment_service(root,port){
    try{
     const value=await read_body(req);
     if(pathname==='/api/avoidance-experiments/delete'){
-     if(child){reply(res,409,{message:'実行中の削除不可。実験終了後に操作してください'});return;}
+     if(job&&['running','stopping'].includes(job.state)){reply(res,409,{message:'実行中の削除不可。実験終了後に操作してください'});return;}
      const result=delete_recording(root,value);
      if(job?.recording_url&&result.deleted_recording_urls.includes(job.recording_url)){job=null;live_metadata=null;live_window=new experiment_frame_window();}
      reply(res,200,result);return;
@@ -212,10 +248,10 @@ export function create_experiment_service(root,port){
     }
     if(pathname!=='/api/avoidance-experiments'){reply(res,404,{message:'未対応の操作'});return;}
     if(!is_available){reply(res,503,{message:'実験の実行にはROSコンテナ内の画面サーバーが必要です'});return;}
-    if(child){reply(res,409,{message:'実験を実行中です。終了後に開始してください'});return;}
-    start(validate_experiment(value,link_names));reply(res,202,snapshot());
+    if(job&&['running','stopping'].includes(job.state)){reply(res,409,{message:'実験を実行中です。終了後に開始してください'});return;}
+    await start(validate_experiment(value,link_names));reply(res,202,snapshot());
    }catch(error){if(!res.destroyed)reply(res,400,{message:error.message});}
   },
-  async close(){stop('server_shutdown');if(child)await new Promise(resolve=>child.once('close',resolve));}
+  async close(){stop('server_shutdown');await close_worker();}
  };
 }

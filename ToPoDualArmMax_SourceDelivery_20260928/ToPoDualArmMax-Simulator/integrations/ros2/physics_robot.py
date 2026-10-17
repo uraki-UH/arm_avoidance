@@ -61,6 +61,9 @@ class PhysicsRobot:
         self.initial = MappingProxyType(self.validate(config.get('pose', {})))
         self._targets = dict(self.initial)
         self._commands = dict(self.initial)
+        self.enable_synchronized_position = config.get('enable_synchronized_position', False)
+        if type(self.enable_synchronized_position) is not bool:
+            raise ValueError('同期位置補間の設定は真偽値が必要です')
         self.position_gain, self.velocity_gain = 40., 3.
         self._control_mode = control_mode(config.get('control_mode', 'position'))
         self.enable_gravity_compensation = config.get('enable_gravity_compensation', self.control_mode != control_mode.torque)
@@ -238,6 +241,13 @@ class PhysicsRobot:
 
     def control(self):
         timestep = self.model.opt.timestep
+        position_ratio = 1.
+        if self.control_mode == control_mode.position and self.enable_synchronized_position:
+            # 関節直線の共通進捗率。各軸独立の到達時刻差による経路変形の抑制。
+            for name, _, _, max_velocity in self.control_entries:
+                delta = abs(self._targets[name]-self._commands[name])
+                if delta > 1e-12:
+                    position_ratio = min(position_ratio, max_velocity*timestep/delta)
         for name, idx, dof, max_velocity in self.control_entries:
             if self.control_mode != control_mode.position:
                 effort = self._target_effort[name]
@@ -253,7 +263,7 @@ class PhysicsRobot:
                 continue
             max_step = max_velocity * timestep
             delta = self._targets[name]-self._commands[name]
-            step = min(max(delta, -max_step), max_step)
+            step = delta*position_ratio if self.enable_synchronized_position else min(max(delta, -max_step), max_step)
             self._commands[name] += step
             position = self.data.qpos[self.model.jnt_qposadr[self.ids[name]]]
             velocity = step/timestep+self.position_gain/self.velocity_gain*(self._commands[name]-position)

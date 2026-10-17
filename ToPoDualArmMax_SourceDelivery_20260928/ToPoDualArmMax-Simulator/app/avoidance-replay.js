@@ -10,8 +10,34 @@ const failure_names = {physical_contact:'接触',internal_interference:'内部�
 const phase_names = {task:'往復',avoiding:'回避',holding:'保持',waiting:'待機',returning:'復帰',monitoring:'待機',waiting_for_clearance:'離隔待ち',qp_no_solution:'QP不成立・減速保持／再計算',constraint_recovery:'制約回復'};
 const obstacle_phase_names = {pursuing:'追跡',sweep_approach:'通過点へ接近',sweeping:'横切り',random_walking:'ランダム移動',random_waiting:'ランダム移動・次の方向待ち',detouring:'迂回',route_blocked:'経路制約・移動困難',target_out_of_reach:'腕の到達域外'};
 Object.assign(failure_names,{target_touch:'指定リンク接触',attacker_protected_contact:'近位部接触・評価対象外',attacker_off_target_contact:'指定外接触・評価対象外',attacker_shaft_contact:'先端以外の接触・評価対象外',attacker_environment_contact:'接触',robot_environment_contact:'接触'});
-const startup_stage_names = {robot_geometry:'ロボット形状',drive_calibration:'速度基準',obstacle_setup:'障害物配置',cbf_solver:'QP初期化',gng_index:'GNG索引',ready:'計算開始'};
+const startup_stage_names = {robot_geometry:'ロボット形状',reference_trajectory:'往復軌道',drive_calibration:'速度基準',obstacle_setup:'障害物配置',cbf_solver:'QP初期化',gng_index:'GNG索引',ready:'計算開始'};
 const max_file_size = 16*1024*1024;
+
+export function make_reference_line(points){
+ if(!Array.isArray(points)||points.length<2||points.length>2049||!points.every(point=>Array.isArray(point)&&point.length===3&&point.every(value=>Number.isFinite(value)&&Math.abs(value)<100)))throw Error('基準軌道の座標形式不正');
+ const line=new Line2(new LineGeometry().setPositions(points.flat()),new LineMaterial({color:0x1d4ed8,linewidth:5,dashed:true,dashSize:.025,gapSize:.015,toneMapped:false}));
+ line.layers.set(4);line.name='task-reference-line';line.computeLineDistances();return line;
+}
+
+// 実行・再生・ROS表示で共通の表示状態。描画対象の差替え時も選択状態を保持。
+export class trajectory_layers {
+ constructor(is_eef_visible=true){
+  this.layers=new Map([['reference',true],['eef',is_eef_visible],['obstacle',true]].map(([name,is_visible])=>[name,{is_visible,objects:new Set(),controls:new Set()}]));
+ }
+ bind(name,object){
+  const layer=this.layers.get(name);layer.objects.add(object);object.visible=layer.is_visible;
+ }
+ unbind(name,object){this.layers.get(name).objects.delete(object);}
+ bind_control(name,input){
+  const layer=this.layers.get(name);layer.controls.add(input);input.checked=layer.is_visible;
+  input.addEventListener('change',()=>this.set_visible(name,input.checked));
+ }
+ set_visible(name,is_visible){
+  const layer=this.layers.get(name);layer.is_visible=!!is_visible;
+  for(const object of layer.objects)object.visible=layer.is_visible;
+  for(const input of layer.controls)input.checked=layer.is_visible;
+ }
+}
 
 export class live_playback_clock {
  constructor({buffer_ms=120,max_receive_age_ms=500,max_backlog_ms=600}={}){
@@ -86,10 +112,10 @@ export function validate_recording(value,joint_names,model='long',min_num_frames
  if(typeof value.failure_reason!=='string')throw Error('失敗状態の形式が不正です');
  if(value.task!==undefined){
   const task=value.task,is_point=point=>Array.isArray(point)&&point.length===3&&point.every(v=>Number.isFinite(v)&&Math.abs(v)<100);
-  if(!task||!['cartesian','joint'].includes(task.mode)||task.eef_link!=='L_tcp'||task.frame!=='world'||task.reference_kind!=='goal_line'||!Array.isArray(task.reference_path)||task.reference_path.length!==2||!task.reference_path.every(is_point))throw Error('往復タスクの形式不正');
+  if(!task||!['cartesian','joint'].includes(task.mode)||task.eef_link!=='L_tcp'||task.frame!=='world'||!['goal_line','joint_path'].includes(task.reference_kind)||!Array.isArray(task.reference_path)||task.reference_path.length<2||task.reference_path.length>2049||(task.reference_kind==='goal_line'&&task.reference_path.length!==2)||!task.reference_path.every(is_point))throw Error('往復タスクの形式不正');
   for(const [idx,name] of ['a','b'].entries()){
    const goal=task.goals?.[name];
-   if(!goal||!is_point(goal.position)||!Array.isArray(goal.quaternion)||goal.quaternion.length!==4||!goal.quaternion.every(Number.isFinite)||Math.abs(Math.hypot(...goal.quaternion)-1)>1e-5||goal.position.some((v,axis)=>Math.abs(v-task.reference_path[idx][axis])>1e-6))throw Error('手先目標の形式不正');
+   if(!goal||!is_point(goal.position)||!Array.isArray(goal.quaternion)||goal.quaternion.length!==4||!goal.quaternion.every(Number.isFinite)||Math.abs(Math.hypot(...goal.quaternion)-1)>1e-5||goal.position.some((v,axis)=>Math.abs(v-task.reference_path[idx===0?0:task.reference_path.length-1][axis])>1e-6))throw Error('手先目標の形式不正');
   }
   if(!Number.isFinite(task.max_position_error_th)||task.max_position_error_th<=0||task.max_position_error_th>.1||!Number.isFinite(task.max_orientation_error_rad_th)||task.max_orientation_error_rad_th<=0||task.max_orientation_error_rad_th>.5)throw Error('手先到達条件の形式不正');
  }
@@ -150,9 +176,25 @@ export function interpolate_joint_motion(first,second,fraction,previous=null){
  return motion;
 }
 
+function make_capsule(material){
+ const group=new THREE.Group();
+ const cylinder=new THREE.Mesh(new THREE.CylinderGeometry(1,1,1,16),material);
+ const ends=[0,1].map(()=>new THREE.Mesh(new THREE.SphereGeometry(1,16,12),material));
+ group.add(cylinder,...ends);return {group,cylinder,ends};
+}
+
+function set_capsule_segment(capsule,start,end,radius){
+ const delta=end.clone().sub(start);
+ capsule.cylinder.position.copy(start).add(end).multiplyScalar(.5);
+ capsule.cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.clone().normalize());
+ capsule.cylinder.scale.set(radius,delta.length(),radius);
+ capsule.ends.forEach((mesh,idx)=>{mesh.position.copy(idx?end:start);mesh.scale.setScalar(radius);});
+}
+
 export class avoidance_replay {
  constructor({robot,scene,renderer,camera,controls,on_pose}) {
   this.robot=robot;this.scene=scene;this.renderer=renderer;this.camera=camera;this.orbit=controls;this.on_pose=on_pose;
+  this.trajectory_layers=new trajectory_layers(document.getElementById('show-trails')?.checked??true);
   this.recording=null;this.is_playing=false;this.last_ms=null;this.time_sec=0;this.load_generation=0;this.num_applied_frames=0;
   this.is_live=false;this.is_active=false;this.has_pose_control=false;this.is_closed=false;this.live_job_id=null;this.live_next_frame_idx=0;this.experiment_generation=0;
   sessionStorage.removeItem('avoidance-deleted-recording');
@@ -160,14 +202,18 @@ export class avoidance_replay {
   this.sphere=new THREE.Mesh(new THREE.SphereGeometry(1,32,20),new THREE.MeshStandardMaterial({color:0xf28b24,roughness:.45}));
   this.sphere.name='追跡球';this.root.add(this.sphere);this.root.visible=false;
   this.capsules=[0,1].map(()=>{
-   const group=new THREE.Group(),material=this.sphere.material;
-   const cylinder=new THREE.Mesh(new THREE.CylinderGeometry(1,1,1,16),material);
-   const ends=[0,1].map(()=>new THREE.Mesh(new THREE.SphereGeometry(1,16,12),material));
-   group.add(cylinder,...ends);this.root.add(group);return {group,cylinder,ends};
+   const capsule=make_capsule(this.sphere.material);this.root.add(capsule.group);return capsule;
   });
   this.trails=['eef','sphere'].map((name,idx)=>{
-   const line=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:idx?0x1984e8:0xe0ac12}));line.name=name+'-trajectory';this.root.add(line);return line;
+   const line=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:idx?0x1984e8:0xe0ac12}));line.name=name+'-trajectory';line.layers.set(4);this.root.add(line);return line;
   });
+  this.trajectory_layers.bind('eef',this.trails[0]);this.trajectory_layers.bind('obstacle',this.trails[1]);
+  this.anchor_preview=new THREE.AxesHelper(.15);this.anchor_preview.name='リンク障害物の原点';this.anchor_preview.visible=false;scene.add(this.anchor_preview);
+  this.link_preview=new THREE.Group();this.link_preview.name='リンク障害物の配置プレビュー';this.link_preview.visible=false;scene.add(this.link_preview);
+  const preview_material=new THREE.MeshStandardMaterial({color:0xf28b24,roughness:.45,transparent:true,opacity:.4,depthWrite:false});
+  this.preview_capsules=[0,1].map(()=>{const capsule=make_capsule(preview_material);this.link_preview.add(capsule.group);return capsule;});
+  // 表示専用レイヤー。仮想カメラ・LiDARへのプレビュー混入防止。
+  this.link_preview.traverse(object=>object.layers.set(4));this.anchor_preview.layers.set(4);
   this.make_controls();this.make_experiment_controls();
   this.load_catalog();
   document.addEventListener('visibilitychange',()=>{if(document.hidden)this.pause();});
@@ -181,6 +227,7 @@ export class avoidance_replay {
 
  set_active(is_active) {
   this.is_active=is_active;
+  this.update_anchor_preview?.();
   const has_pose_control=!!this.is_live||(is_active&&!!this.recording);
   if(has_pose_control)this.robot.pose_source='ros';
   if(has_pose_control===this.has_pose_control)return;
@@ -193,6 +240,25 @@ export class avoidance_replay {
   }else this.pause();
   for(const button of document.querySelectorAll('[data-model]'))button.disabled=has_pose_control;
   const source=document.getElementById('robot-pose-source');if(source)source.disabled=has_pose_control;
+ }
+
+ update_link_preview(){
+  const form=this.experiment_panel.querySelector('form');
+  const target=this.robot.links[form.elements.namedItem('target_link').value];
+  const radius_field=form.elements.namedItem('radius_m'),radius=Number(radius_field.value);
+  this.link_preview.visible=this.anchor_preview.visible&&!this.is_live&&!this.is_playing&&!!target&&radius_field.value!==''&&radius_field.validity.valid;
+  if(!this.link_preview.visible)return;
+  target.updateWorldMatrix(true,false);
+  const start=this.anchor_preview.position.clone(),delta=target.getWorldPosition(new THREE.Vector3()).sub(start);
+  const dist=THREE.MathUtils.clamp(delta.length(),.005,.695);
+  const axis=delta.lengthSq()>1e-12?delta.normalize():new THREE.Vector3(1,0,0);
+  const bend=new THREE.Vector3(0,0,1).addScaledVector(axis,-axis.z);
+  if(bend.lengthSq()<1e-8)bend.set(0,1,0).addScaledVector(axis,-axis.y);
+  // GUI既定の0.35 m×2節。実行開始時の干渉回避による肘姿勢とは別の配置目安。
+  const elbow=start.clone().addScaledVector(axis,dist*.5).addScaledVector(bend.normalize(),Math.sqrt(.35**2-(dist*.5)**2));
+  const wrist=start.clone().addScaledVector(axis,dist);
+  set_capsule_segment(this.preview_capsules[0],start,elbow,radius);
+  set_capsule_segment(this.preview_capsules[1],elbow,wrist,radius);
  }
 
  make_controls() {
@@ -210,7 +276,7 @@ export class avoidance_replay {
    <div class="replay-actions replay-transport"><button id="replay-toggle" disabled>再生</button><button id="replay-reset" disabled>先頭</button><button id="replay-event" disabled>停止位置</button><button id="replay-delete" disabled>記録を削除</button></div>
    <input id="replay-seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="再生時刻" disabled><output id="replay-time">0.00 sec</output>
    <label>速度<select id="replay-speed" aria-label="再生速度"><option value="0.25">0.25倍</option><option value="0.5">0.5倍</option><option value="1" selected>1倍</option><option value="2">2倍</option><option value="4">4倍</option></select></label>
-   <div id="replay-task-controls" hidden><label><input id="replay-task-visible" type="checkbox" checked>基準線</label><div class="replay-note">破線: 基準線（軌道拘束なし） · 黄: 手先の実軌跡</div></div>
+   <div id="replay-task-controls"><label><input id="replay-task-visible" type="checkbox" checked>計画軌道（基準線）</label><label><input id="replay-eef-visible" type="checkbox" checked>手先の軌跡</label><label><input id="replay-obstacle-visible" type="checkbox" checked>障害物の軌跡</label></div>
    <pre id="replay-status" role="status"></pre>`;
   document.getElementById('experiment-panel').append(section);this.controls=section;
   for(const container of section.querySelectorAll('.replay-actions'))observe_balanced_layout(container);
@@ -225,7 +291,7 @@ export class avoidance_replay {
   this.element('seek').oninput=()=>{this.pause();this.seek(Number(this.element('seek').value));};
   this.element('run').onchange=()=>{this.pause();this.update_archive_controls();};
   this.element('delete').onclick=()=>this.delete_recording();
-  this.element('task-visible').onchange=()=>{if(this.task_reference)this.task_reference.visible=this.element('task-visible').checked;};
+  for(const [name,id] of [['reference','task-visible'],['eef','eef-visible'],['obstacle','obstacle-visible']])this.trajectory_layers.bind_control(name,this.element(id));
  }
 
  element(name){return document.getElementById('replay-'+name);}
@@ -233,21 +299,20 @@ export class avoidance_replay {
  set_task_reference(task){
   // 記録切替時だけの描画資源更新。フレームごとのメッシュ生成なし。
   if(this.task_reference){
+   this.trajectory_layers.unbind('reference',this.task_reference);
    this.task_reference.traverse(object=>{
     object.geometry?.dispose();
     for(const material of Array.isArray(object.material)?object.material:[object.material]){material?.map?.dispose();material?.dispose();}
    });
    this.root.remove(this.task_reference);this.task_reference=null;
   }
-  const controls=this.element('task-controls');if(controls)controls.hidden=!task;
   if(!task)return;
   const root=new THREE.Group();root.name='task-reference';
   // 表示倍率・GPUによらず実軌跡の細線より太い5px幅。照明・露出に依存しない濃青の破線
-  const line=new Line2(new LineGeometry().setPositions(task.reference_path.flat()),new LineMaterial({color:0x1d4ed8,linewidth:5,dashed:true,dashSize:.025,gapSize:.015,toneMapped:false}));
+  const line=make_reference_line(task.reference_path);
   // 表示専用レイヤー。センサ点群・深度画像・物体選択の対象外
-  line.layers.set(4);
-  line.name='task-reference-line';line.computeLineDistances();root.add(line);
-  root.visible=this.element('task-visible')?.checked!==false;this.root.add(root);this.task_reference=root;
+  root.add(line);
+  this.trajectory_layers.bind('reference',root);this.root.add(root);this.task_reference=root;
  }
 
  async delete_recording(){
@@ -309,27 +374,46 @@ export class avoidance_replay {
    #experiment-form .experiment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0;width:100%;min-width:0}
    #experiment-form label{display:flex;flex-direction:column;align-items:stretch;min-width:0;gap:4px;white-space:normal;font-size:13px}
    #experiment-form input,#experiment-form select{box-sizing:border-box;width:100%;min-width:0;max-width:100%;flex:none;font-size:14px;margin:0;padding:7px}
-   #experiment-form .experiment-offset{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+   #experiment-form .anchor-row{display:grid;grid-template-columns:18px minmax(0,1fr) 82px;gap:8px;align-items:center}
+   #experiment-form .anchor-row input[type=range]{padding:0}
+   #experiment-form .anchor-row input[type=number]{border:1px solid #bbc0c7;border-radius:4px}
    #experiment-start:not(:disabled){background:#96e6ac;color:#153820;border-color:#53a86f}#experiment-stop:not(:disabled){background:#ffe1df;color:#7e2420;border-color:#d58984}#experiment-status{white-space:pre-wrap;font-size:13px;margin:8px 0}
    </style><form id="experiment-form"><div class="experiment-grid">
    <label>実行方式<select name="execution_mode"><option value="continuous" selected>連続・記録なし</option><option value="recorded">時間指定・記録あり</option></select></label>
    <label>回避方式<select name="policy"><option value="vlut_graph">GNG-VLUT</option><option value="rollout_cv">幾何候補・等速予測</option><option value="rollout_reactive">幾何候補・現在観測</option><option value="cbf_qp">関節CBF-QP</option><option value="oscbf">OSCBF</option></select></label>
+   <label>往復軌道<select name="trajectory_planner"><option value="gng_chomp">GNG＋CHOMP</option><option value="rrt_chomp">RRT＋CHOMP</option></select></label>
    <label>障害物<select name="obstacle_shape"><option value="sphere">球</option><option value="linked_arm">二節腕・球関節×2</option></select></label>
-   <label>球の動き<select name="pursuit_mode"><option value="distal_sweep">末端側を横切る</option><option value="link_point">リンク点を追跡</option><option value="random_walk">ランダムウォーク</option></select></label>
-   <label>移動経路<select name="enable_proximal_guard"><option value="true">近位部を迂回</option><option value="false">迂回制約なし</option></select></label>
+   <label>動き<select name="pursuit_mode"><option value="distal_sweep">末端側を横切る</option><option value="link_point">リンクを追跡</option><option value="random_walk">ランダムウォーク</option></select></label>
+   <div id="experiment-anchor-position" style="grid-column:1/-1" hidden><span>原点位置 [m] · world</span>${['x','y','z'].map((axis,idx)=>`<label class="anchor-row"><span>${axis.toUpperCase()}</span><input name="anchor_${axis}_range" aria-label="原点${axis.toUpperCase()}スライダー" type="range" min="${idx===2?0:-2}" max="2" step=".01" value="${[.5,.4,.6][idx]}"><input name="anchor_${axis}" aria-label="原点${axis.toUpperCase()}" type="number" min="${idx===2?0:-2}" max="2" step=".01" value="${[.5,.4,.6][idx]}" required></label>`).join('')}</div>
    <label style="grid-column:1/-1"><span id="experiment-link-label">通過を許す開始リンク</span><select name="target_link"></select></label>
-   <label id="experiment-offset-label" style="grid-column:1/-1">リンク内の追跡点 [m]<span class="experiment-offset"><input name="offset_x" aria-label="追跡点X" type="number" min="-.5" max=".5" step=".01" value="0" required><input name="offset_y" aria-label="追跡点Y" type="number" min="-.5" max=".5" step=".01" value="0" required><input name="offset_z" aria-label="追跡点Z" type="number" min="-.5" max=".5" step=".01" value="0" required></span></label>
    ${[['duration_sec','速度上昇時間 [sec]',18,1,60,1],['seed','条件seed',401,0,2147483647,1],['radius_m','半径 [m]',.06,.015,.15,.005],['speed_start','開始速度比',.4,.05,3,.05],['speed_end','最終速度比',1.3,.05,3,.05],['max_ball_acceleration','加速度 [m/s²]',3,.1,30,.1],['max_ball_deceleration','減速力 [m/s²]',8,.1,30,.1],['max_ball_turn_acceleration','旋回加速度 [m/s²]',10,.1,30,.1],['random_walk_extent_m','移動範囲 ±[m]',.6,.3,1.5,.05],['random_walk_change_sec','方向更新間隔 [sec]',.6,.1,5,.1]].map(([name,label,value,min,max,step])=>`<label><span${name==='duration_sec'?' id="experiment-time-label"':''}>${label}</span><input type="number" name="${name}" value="${value}" min="${min}" max="${max}" step="${step}" required></label>`).join('')}
    </div>
    <div class="replay-actions"><button id="experiment-start" type="submit" disabled>実験を実行</button><button id="experiment-view" type="button" hidden>実行中を表示</button><button id="experiment-stop" type="button" disabled>中止</button></div></form><div id="experiment-status" role="status">実行環境を確認中</div>`;
   this.controls.prepend(panel);this.experiment_panel=panel;
   for(const container of panel.querySelectorAll('.replay-actions'))observe_balanced_layout(container);
   const form=panel.querySelector('form'),links=form.elements.namedItem('target_link');
+  this.update_anchor_preview=()=>{
+   const is_linked=form.elements.namedItem('obstacle_shape').value==='linked_arm';
+   panel.querySelector('#experiment-anchor-position').hidden=!is_linked;
+   const position=['x','y','z'].map(axis=>Number(form.elements.namedItem('anchor_'+axis).value));
+   const has_position=['x','y','z'].every(axis=>{const field=form.elements.namedItem('anchor_'+axis);return field.value!==''&&field.validity.valid;});
+   for(const axis of ['x','y','z'])for(const suffix of ['','_range'])form.elements.namedItem('anchor_'+axis+suffix).disabled=!is_linked||!!this.is_experiment_running;
+   this.anchor_preview.visible=!!this.is_active&&is_linked&&!this.is_experiment_running&&has_position;
+   if(has_position)this.anchor_preview.position.set(...position);
+   this.update_link_preview();
+  };
+  for(const axis of ['x','y','z']){
+   const number=form.elements.namedItem('anchor_'+axis),range=form.elements.namedItem('anchor_'+axis+'_range');
+   range.oninput=()=>{number.value=range.value;this.update_anchor_preview();};
+   number.oninput=()=>{if(number.value!==''&&number.validity.valid)range.value=number.value;this.update_anchor_preview();};
+  }
   form.elements.namedItem('execution_mode').onchange=()=>{
    const is_continuous=form.elements.namedItem('execution_mode').value==='continuous';
    panel.querySelector('#experiment-time-label').textContent=is_continuous?'速度上昇時間 [sec]':'時間 [sec]';
   };
   for(const name of Object.keys(this.robot.links)){const option=document.createElement('option');option.value=name;option.textContent=name;links.append(option);}links.value='L_link4';
+  links.onchange=this.update_anchor_preview;
+  form.elements.namedItem('radius_m').addEventListener('input',this.update_anchor_preview);
   const update_pursuit_mode=()=>{
    const mode=form.elements.namedItem('pursuit_mode'),is_linked=form.elements.namedItem('obstacle_shape').value==='linked_arm';
    // 旧サーバーの対応範囲はリンク点追跡のみ。未確認時の既定選択の維持。
@@ -342,12 +426,10 @@ export class avoidance_replay {
    if(mode.selectedOptions[0]?.disabled)mode.value='link_point';
    if(is_linked)mode.value='link_point';mode.disabled=is_linked;
    const is_sweep=mode.value==='distal_sweep',is_random=mode.value==='random_walk',has_distal_range=is_sweep||is_random;
-   panel.querySelector('#experiment-link-label').textContent=is_random?'範囲中心・対象開始リンク（開始時）':is_sweep?'通過を許す開始リンク':'追跡リンク';
-   panel.querySelector('#experiment-offset-label').style.display=has_distal_range?'none':'';
-   for(const axis of ['x','y','z'])form.elements.namedItem('offset_'+axis).disabled=has_distal_range;
    for(const name of ['random_walk_extent_m','random_walk_change_sec']){const field=form.elements.namedItem(name);field.disabled=!is_random;field.closest('label').style.display=is_random?'':'none';}
    for(const option of links.options)option.disabled=has_distal_range&&!/^L_(link[1-7]|tcp|gripper_base|finger_(left|right))$/.test(option.value);
    if(links.selectedOptions[0]?.disabled)links.value='L_link4';
+   this.update_anchor_preview();
   };
   this.update_pursuit_mode=update_pursuit_mode;
   form.elements.namedItem('pursuit_mode').onchange=update_pursuit_mode;
@@ -364,7 +446,8 @@ export class avoidance_replay {
    event.preventDefault();if(this.is_archive_busy||!form.reportValidity())return;
    const fields=new FormData(form),number=name=>Number(fields.get(name));
    const pursuit_mode=form.elements.namedItem('pursuit_mode').value;
-   const config={execution_mode:fields.get('execution_mode'),policy:fields.get('policy'),obstacle_shape:fields.get('obstacle_shape'),pursuit_mode,enable_proximal_guard:fields.get('enable_proximal_guard')==='true',target_link:fields.get('target_link'),target_offset_m:pursuit_mode!=='link_point'?[0,0,0]:['x','y','z'].map(axis=>number('offset_'+axis)),speed_ratios:[number('speed_start'),number('speed_end')]};
+   const config={execution_mode:fields.get('execution_mode'),policy:fields.get('policy'),trajectory_planner:fields.get('trajectory_planner'),obstacle_shape:fields.get('obstacle_shape'),pursuit_mode,target_link:fields.get('target_link'),target_offset_m:[0,0,0],speed_ratios:[number('speed_start'),number('speed_end')]};
+   if(config.obstacle_shape==='linked_arm')config.shoulder_position_m=['x','y','z'].map(axis=>number('anchor_'+axis));
    if(pursuit_mode==='random_walk')for(const name of ['random_walk_extent_m','random_walk_change_sec'])config[name]=number(name);
    for(const name of ['duration_sec','seed','radius_m','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration'])config[name]=number(name);
    if(config.execution_mode==='continuous'){config.speed_ramp_sec=config.duration_sec;config.duration_sec=0;}
@@ -372,7 +455,7 @@ export class avoidance_replay {
    ++this.experiment_generation;clearTimeout(this.experiment_timer);
    try{
     if(pursuit_mode==='link_point'&&!this.supported_pursuit_modes)delete config.pursuit_mode;
-    else if(!this.supported_pursuit_modes?.includes(pursuit_mode))throw Error('選択した球の動きは画面サーバー未対応です');
+    else if(!this.supported_pursuit_modes?.includes(pursuit_mode))throw Error('選択した動きは画面サーバー未対応です');
     const result=await request('/api/avoidance-experiments',config);this.owned_job_id=result.job.job_id;sessionStorage.setItem('avoidance-experiment-job',this.owned_job_id);this.begin_live(result.job);await this.refresh_experiment();
    }
    catch(error){document.getElementById('experiment-status').textContent=error.message;document.getElementById('experiment-start').disabled=false;}
@@ -580,11 +663,7 @@ export class avoidance_replay {
   for(const [idx,capsule] of this.capsules.entries()){
    capsule.group.visible=!!first.obstacle_segments;if(!capsule.group.visible)continue;
    const points=first.obstacle_segments[idx].map((point,end)=>new THREE.Vector3(...point).lerp(new THREE.Vector3(...second.obstacle_segments[idx][end]),fraction));
-   const delta=points[1].clone().sub(points[0]);
-   capsule.cylinder.position.copy(points[0]).add(points[1]).multiplyScalar(.5);
-   capsule.cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.clone().normalize());
-   capsule.cylinder.scale.set(this.sphere.scale.x,delta.length(),this.sphere.scale.x);
-   capsule.ends.forEach((end,idx)=>{end.position.copy(points[idx]);end.scale.setScalar(this.sphere.scale.x);});
+   set_capsule_segment(capsule,points[0],points[1],this.sphere.scale.x);
   }
   const is_end=this.time_sec>=frames.at(-1).time_sec;
   this.trails[0].geometry.setDrawRange(0,lower+1);

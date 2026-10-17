@@ -1,6 +1,7 @@
 {
   "model": "long",
   "active_profile": "left_arm",
+  "trajectory_planner": "gng_chomp",
   "eef_link": "L_tcp",
   "frame": "base_link",
   "max_velocity": 2.0,

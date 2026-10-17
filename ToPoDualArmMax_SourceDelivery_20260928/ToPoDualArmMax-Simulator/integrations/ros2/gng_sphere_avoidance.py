@@ -57,14 +57,22 @@ def rotation_error(target, current):
 
 
 class cartesian_task:
-    """手先6次元の往復タスク。関節姿勢の復帰は零空間内の低優先度動作。"""
+    """手先6次元の到達判定と基準軌道の追従。基準未指定時だけの手先目標追従。"""
     def __init__(self, geometry, active, poses, eef_link='L_tcp', max_position_error_th=.015,
-                 max_orientation_error_rad_th=np.deg2rad(3.)):
+                 max_orientation_error_rad_th=np.deg2rad(3.), reference_path=None, reference_stats=None):
         self.geometry,self.active,self.poses = geometry,np.asarray(active),poses
         self.eef_link = eef_link
         self.eef_idx = geometry.link_indices[eef_link]
         self.goal = 'b'
         self.goals = dict(zip(poses,geometry.link_transforms(np.stack(list(poses.values())))[:,self.eef_idx]))
+        self.reference = None
+        self.reference_frames = None
+        self.reference_stats = reference_stats
+        if reference_path is not None:
+            from shuttle_trajectory import joint_path_reference
+            self.reference = joint_path_reference(np.asarray(reference_path)[:,self.active])
+            self.reference_frames = geometry.link_transforms(reference_path)[:,self.eef_idx]
+        self.reference_frame = self.goals[self.goal]
         self.max_position_error_th = float(max_position_error_th)
         self.max_orientation_error_rad_th = float(max_orientation_error_rad_th)
         if not 0 < self.max_position_error_th <= .1 or not 0 < self.max_orientation_error_rad_th <= .5:
@@ -79,8 +87,21 @@ class cartesian_task:
         return target[:3,3]-frames[...,:3,3],rotation_error(target[:3,:3],frames[...,:3,:3])
 
     def pose_cost(self, frames):
-        position,orientation = self.errors(frames)
+        if self.reference is None:
+            position,orientation = self.errors(frames)
+        else:
+            position = self.reference_frame[:3,3]-frames[...,:3,3]
+            orientation = rotation_error(self.reference_frame[:3,:3],frames[...,:3,:3])
         return self.cost_scale*(np.sum(position**2,axis=-1)/self.position_scale**2+np.sum(orientation**2,axis=-1)/self.orientation_scale**2)
+
+    def update_reference(self, positions):
+        """実姿勢に近い経路区間からの復帰目標。制御周期内の全候補で共用。"""
+        if self.reference is None:
+            return self.poses[self.goal]
+        self.reference.update(positions[self.active],self.goal)
+        target = positions.copy();target[self.active] = self.reference.target
+        self.reference_frame = self.geometry.link_transforms(target)[self.eef_idx]
+        return target
 
     def jacobian(self, probes, step=.002):
         linear = (probes[1:,:3,3]-probes[0,:3,3])/step
@@ -88,16 +109,18 @@ class cartesian_task:
         return np.concatenate((linear,angular),axis=-1).T
 
     def control(self, positions, frame, jacobian):
-        position,orientation = self.errors(frame)
-        linear = 3.*position;linear *= min(1.,1./max(float(np.linalg.norm(linear)),1e-9))
-        angular = 3.*orientation;angular *= min(1.,2./max(float(np.linalg.norm(angular)),1e-9))
         scale = np.array([1.,1.,1.,.2,.2,.2])
         scaled = scale[:,None]*jacobian
         left,values,right = np.linalg.svd(scaled,full_matrices=True)
-        # 減衰逆行列とSVD零空間への姿勢復帰の分離。
-        inverse = (right[:len(values)].T*(values/(values**2+.02**2)))@left[:,:len(values)].T
         rank = int(np.count_nonzero(values>max(float(values[0]),1e-9)*1e-3))
         basis = right[rank:]
+        if self.reference is not None:
+            return self.reference.velocity,basis[:2]
+        position,orientation = self.errors(frame)
+        linear = 3.*position;linear *= min(1.,1./max(float(np.linalg.norm(linear)),1e-9))
+        angular = 3.*orientation;angular *= min(1.,2./max(float(np.linalg.norm(angular)),1e-9))
+        # 減衰逆行列とSVD零空間への姿勢復帰の分離。
+        inverse = (right[:len(values)].T*(values/(values**2+.02**2)))@left[:,:len(values)].T
         recovery = .2*(self.poses[self.goal][self.active]-positions[self.active])
         nominal = inverse@(scale*np.r_[linear,angular])+basis.T@(basis@recovery)
         nominal *= min(1.,2./max(float(np.max(np.abs(nominal))),1e-9))
@@ -112,8 +135,11 @@ class cartesian_task:
 
     def metadata(self, mode):
         goals = {name:dict(position=frame[:3,3].tolist(),quaternion=Rotation.from_matrix(frame[:3,:3]).as_quat().tolist()) for name,frame in self.goals.items()}
-        return dict(mode=mode,eef_link=self.eef_link,frame='world',goals=goals,reference_kind='goal_line',
-                    reference_path=[goals[name]['position'] for name in ('a','b')],
+        return dict(mode=mode,eef_link=self.eef_link,frame='world',goals=goals,
+                    reference_kind='goal_line' if self.reference is None else 'joint_path',
+                    reference_path=([goals[name]['position'] for name in ('a','b')] if self.reference is None else
+                                    self.reference_frames[:,:3,3].tolist()),
+                    **({} if self.reference_stats is None else dict(planning=self.reference_stats)),
                     max_position_error_th=self.max_position_error_th,max_orientation_error_rad_th=self.max_orientation_error_rad_th)
 
 
@@ -355,6 +381,12 @@ class representative_index:
             is_clear &= np.all(geometry.environment_clearances(centers)>=margin,axis=-1)
         return is_clear
 
+    def reset_observation(self):
+        """静的索引を残した実験ごとの観測状態の初期化。"""
+        self.gaps.fill(np.inf)
+        self.labels.fill(1)
+        self.graph['labels'] = dict.fromkeys(self.ids,1)
+
     def update(self, center, radius, margin=.10, enable_graph_labels=True):
         self.query_sphere(center,radius,margin,(self.centers,self.lower,self.upper,self.gaps,self.labels))
         if enable_graph_labels:
@@ -430,6 +462,14 @@ class vlut_index(representative_index):
         if not self.handle:
             raise RuntimeError(self.library.gng_vlut_error().decode())
 
+    def reset_observation(self):
+        """読込済みVLUTの保持。初回の実観測で旧環境を完全置換する初期状態。"""
+        super().reset_observation()
+        self.raw_labels.fill(1)
+        self.stats.fill(0)
+        self.graph['labels'] = node_label_view(self.raw_labels,self.ids)
+        self.has_observation = False
+
     def update_field(self,field,margin=.10,node_indices=None):
         if not self.handle:
             raise RuntimeError('終了済みVLUT照会')
@@ -439,6 +479,10 @@ class vlut_index(representative_index):
             field.radius,margin,self.raw_labels,self.stats)
         if code:
             raise RuntimeError(self.library.gng_vlut_error().decode())
+        if not getattr(self,'has_observation',False):
+            # 初回観測の差分基準は空環境。前実験の差分カウンタの持越しなし。
+            self.stats[2:] = self.stats[:2]
+            self.has_observation = True
         self.labels[:] = self.raw_labels[self.node_ids]
 
     def close(self):

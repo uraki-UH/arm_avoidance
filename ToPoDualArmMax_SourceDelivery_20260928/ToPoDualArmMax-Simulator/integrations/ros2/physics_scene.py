@@ -1,5 +1,7 @@
 """ブラウザ配置からのMuJoCo接触モデルと固定刻みシミュレーション。"""
 import math
+import copy
+from functools import lru_cache
 import xml.etree.ElementTree as et
 import hashlib
 from pathlib import Path
@@ -26,8 +28,17 @@ def compiled_model(mujoco, root, cache_dir):
     xml = et.tostring(root,encoding='unicode')
     if cache_dir is None:
         return mujoco.MjModel.from_xml_string(xml)
+    assets = tuple((filename,Path(filename).stat().st_mtime_ns,Path(filename).stat().st_size)
+                   for filename in sorted({node.get('file') for node in root.findall('./asset/mesh')}))
+    # MjDataだけでなく可変のMjModelも実験間で分離。未変更メッシュの再読込なし。
+    return copy.copy(load_compiled_model(mujoco,xml,assets,str(cache_dir)))
+
+
+@lru_cache(maxsize=2)
+def load_compiled_model(mujoco, xml, assets, cache_dir):
+    """直近2形状の静的物理モデル。メッシュ更新情報によるキャッシュ失効。"""
     digest = hashlib.sha256((mujoco.__version__+xml).encode())
-    for filename in sorted({node.get('file') for node in root.findall('./asset/mesh')}):
+    for filename,_,_ in assets:
         digest.update(Path(filename).read_bytes())
     directory = Path(cache_dir)
     filename = directory/(digest.hexdigest()+'.mjb')

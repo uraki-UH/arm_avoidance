@@ -1,6 +1,7 @@
 """ブラウザと共通のMuJoCo・回避処理によるCLI実行。有限記録・連続表示の選択。"""
 import argparse
 import collections
+import copy
 import json
 import math
 import os
@@ -32,6 +33,7 @@ def parse_arguments():
     parser.add_argument('--scenario-file', type=Path, help='追跡球の試験設定JSON')
     parser.add_argument('--case-dir', type=Path, help='追跡球の結果保存先。省略時は日時付きの新規ディレクトリ')
     parser.add_argument('--stream-frames', dest='enable_frame_stream', action='store_true', help='追跡実験の実測フレームの逐次JSONL出力')
+    parser.add_argument('--experiment-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--target-link', help='追跡対象のURDFリンク名。追跡試験のみ、既定L_tcp')
     parser.add_argument('--target-offset', type=float, nargs=3, metavar=('X','Y','Z'), help='追跡リンク内の対象点 [m]')
     parser.add_argument('--model', choices=('long', 'standard'), default='long')
@@ -82,6 +84,8 @@ def parse_arguments():
         if args.duration is not None and not 1 <= args.duration <= 180:
             parser.error('追跡球の--durationは1～180 secです')
     else:
+        if args.experiment_worker:
+            parser.error('実験ワーカーは追跡実験専用です')
         if args.scenario_file or args.case_dir or args.target_link is not None or args.target_offset is not None or args.enable_frame_stream:
             parser.error('--scenario-fileと--case-dirは追跡球用です')
         if args.duration is None:
@@ -120,7 +124,7 @@ def read_pose(path):
 
 class shuttle_task:
     """実測手先の位置・姿勢・速度による二点往復。微小関節変位による往復数の代用なし。"""
-    def __init__(self, path, model, params_file=None):
+    def __init__(self, path, model, params_file=None, enable_reference=True):
         import numpy as np
         import yaml
         sys.path.insert(0, str(simulator_dir.parents[1]/'gng_vlut_system/scripts'))
@@ -130,7 +134,12 @@ class shuttle_task:
         if config.get('model') != model or set(config.get('poses_deg', {})) != {'a', 'b'}:
             raise ValueError('往復タスクの機体または二姿勢の指定不正')
         config_path = params_file or simulator_dir.parents[1]/('gng_vlut_system/config/topo_dual_arm_max'+('_long' if model == 'long' else '')+'.yaml')
+        self.params_file = config_path
         params = yaml.safe_load(config_path.read_text())['/**']['ros__parameters']
+        self.params,self.config,self.model = params,config,model
+        self.enable_reference = enable_reference
+        self.reference_path = self.reference_follower = None
+        self.reference_stats = None
         self.geometry = robot_geometry(params['urdf_path'], environment_shapes=())
         if config.get('frame') != self.geometry.root_link:
             raise ValueError('往復タスクの目標座標系がURDF基準と異なります')
@@ -163,6 +172,9 @@ class shuttle_task:
             link = parent
         if any(self.poses['a'][idx] != self.poses['b'][idx] for idx in range(len(names)) if idx not in active):
             raise ValueError('往復タスクの非操作関節に姿勢差あり')
+        active.reverse()
+        self.active = np.asarray(active)
+        self.geometry.active_joint_names = tuple(names[idx] for idx in active)
         self.task = cartesian_task(self.geometry, active, self.poses, config.get('eef_link', 'L_tcp'),
             config.get('max_eef_position_error_th', .015), math.radians(config.get('max_eef_orientation_error_deg_th', 3.)))
         first, second = (self.task.goals[key] for key in ('a', 'b'))
@@ -183,9 +195,81 @@ class shuttle_task:
 
     def attach(self, scene):
         """制御基台の配置に基づく目標座標系の確定。観測bagの基台姿勢の転用なし。"""
+        import numpy as np
         world_base = scene.link_transform(self.geometry.root_link)
-        self.task.goals = {key: world_base@value for key, value in self.task.goals.items()}
+        local_goals = self.geometry.link_transforms(np.stack([self.poses[key] for key in ('a','b')]))[:,self.task.eef_idx]
+        self.task.goals = {key:world_base@value for key,value in zip(('a','b'),local_goals)}
+        if self.enable_reference and self.reference_path is None:
+            self.plan_reference(world_base)
         self.reference = self.task.metadata('joint')
+        poses = self.reference_path if self.reference_path is not None else np.linspace(self.poses['a'], self.poses['b'], 65)
+        frames = self.geometry.link_transforms(poses)[:, self.geometry.link_indices[self.task.eef_link]]
+        points = frames[:, :3, 3]@world_base[:3, :3].T+world_base[:3, 3]
+        self.reference.update(reference_kind='joint_path', reference_path=points.tolist())
+        if self.reference_stats is not None:
+            self.reference['planning'] = self.reference_stats
+
+    def plan_reference(self, world_base):
+        """ブラウザ実験と共通の往復生成。制御基台座標の自己形状・床・固定禁止領域の照合。"""
+        import numpy as np
+        from gng_inputs import load_models
+        from gng_observation import workspace_mask
+        from gng_sphere_avoidance import load_graph, vlut_index
+        from sphere_chase import internal_clearance_checker
+        from shuttle_trajectory import shuttle_planner, joint_path_reference
+        geometry,active = self.geometry,self.active
+        geometry.environment_shapes = (('plane',world_base[:3,:3].T@(np.array([0.,0.,-.14])-world_base[:3,3]),
+                                        world_base[:3,:3].T,np.zeros(3)),)
+        checker = internal_clearance_checker(geometry,self.params['urdf_path'])
+        mask = workspace_mask(self.params,geometry.root_link)
+        seed_indices = []
+        def full_poses(values):
+            result = np.repeat(self.poses['a'][None],len(values),axis=0)
+            result[:,active] = values
+            return result
+        def is_clear(values):
+            poses = full_poses(values)
+            flags = np.asarray(checker.check(poses))
+            if mask.enable_mask:
+                flags &= [mask.can_bridge(geometry,pose,pose) for pose in poses]
+            return flags
+        def obstacle_cost(values):
+            gaps = geometry.internal_clearances(geometry.centers(full_poses(values)))
+            return .03*np.sum(np.maximum(0.,.03-gaps)**2,axis=-1)
+        def seed_graph():
+            _,models = load_models(Path(self.params_file))
+            metadata = models[self.active_profile]
+            if tuple(metadata['joint_names'])!=geometry.active_joint_names:
+                raise ValueError('往復軌道と保存GNGの操作軸の不一致')
+            config = self.params['gng']
+            directory = Path(config['data_directory'])/config['experiment_id']/self.active_profile
+            graph = load_graph(directory/metadata['gng_file'])
+            index = vlut_index(geometry,active,self.poses['a'],graph,directory/metadata['vlut_file'])
+            seed_indices.append(index)
+            checker.coarse_check = lambda centers,margin:index.internal_clear(geometry,centers,margin)
+            return graph
+        try:
+            planner = shuttle_planner(geometry.limits[active],is_clear,obstacle_cost)
+            values,self.reference_stats = planner.plan(self.poses['a'][active],self.poses['b'][active],
+                self.config.get('trajectory_planner','gng_chomp'),seed_graph)
+            self.reference_path = full_poses(values)
+            self.reference_follower = joint_path_reference(values)
+        finally:
+            for index in seed_indices:
+                index.close()
+
+    def reference_message(self):
+        """制御と描画で共用する固定基準。録画側の関節実測・指令とは独立。"""
+        return dict(format='topo-shuttle-reference/1',model=self.model,active_profile=self.active_profile,
+            joint_names=self.geometry.joint_names,positions=self.reference_path.tolist(),task=self.reference)
+
+    def follow_target(self, scene):
+        import numpy as np
+        state = scene.robot.state()
+        positions = np.array([state[name] for name in self.geometry.joint_names])
+        self.reference_follower.update(positions[self.active],self.task.goal)
+        positions[self.active] = self.reference_follower.target
+        return dict(zip(self.geometry.joint_names,map(float,positions)))
 
     def update(self, scene):
         import numpy as np
@@ -273,16 +357,43 @@ def read_chase_config(args):
     return config
 
 
-def run(args, emit, chase_config=None):
+def run_experiment_worker(args, emit):
+    """同じ表示サーバー内の実験資源の再利用。実行状態は依頼ごとの初期化。"""
+    from sphere_chase import experiment_resources
+    resources,stop_event = experiment_resources(),threading.Event()
+    previous = signal.signal(signal.SIGINT,lambda *_:stop_event.set())
+    try:
+        for line in sys.stdin:
+            request = json.loads(line)
+            job_id = request['job_id']
+            def tagged_emit(value):
+                emit({**value,'job_id':job_id})
+            current = copy.copy(args)
+            current.case_dir = Path(request['case_dir']) if request.get('case_dir') else None
+            stop_event.clear()
+            try:
+                code = run(current,tagged_emit,request['config'],resources,stop_event)
+                tagged_emit(dict(type='experiment_complete',exit_code=code))
+            except Exception as error:
+                tagged_emit(dict(type='error',message=str(error)))
+                tagged_emit(dict(type='experiment_complete',exit_code=2))
+    finally:
+        resources.close()
+        signal.signal(signal.SIGINT,previous)
+    return 0
+
+
+def run(args, emit, chase_config=None, resources=None, stop_event=None):
     if args.scenario == 'chasing_sphere':
         from sphere_chase import run_case
         config = chase_config if chase_config is not None else read_chase_config(args)
         if config.get('execution_mode')=='continuous':
-            stop_event = threading.Event()
-            handlers = {sig:signal.signal(sig,lambda *_:stop_event.set()) for sig in (signal.SIGINT,signal.SIGTERM)}
+            has_external_stop = stop_event is not None
+            stop_event = stop_event if has_external_stop else threading.Event()
+            handlers = {} if has_external_stop else {sig:signal.signal(sig,lambda *_:stop_event.set()) for sig in (signal.SIGINT,signal.SIGTERM)}
             try:
                 emit(dict(type='started',scenario=args.scenario,execution_mode='continuous',has_recording=False))
-                result = run_case(config,emit=emit if args.enable_frame_stream else None,stop_event=stop_event)
+                result = run_case(config,emit=emit if args.enable_frame_stream else None,stop_event=stop_event,resources=resources)
                 emit(dict(type='experiment_finished',metrics=result['metrics'],failure_reason=result['failure_reason'],
                           failure_details=result['failure_details'],is_valid_scenario=result['is_valid_scenario'],outcome=result['outcome']))
                 return 0
@@ -291,7 +402,7 @@ def run(args, emit, chase_config=None):
                     signal.signal(sig,handler)
         output_dir = args.case_dir or simulator_dir.parents[1]/'log/artifacts/chasing_sphere'/time.strftime('manual_%Y%m%d_%H%M%S')
         emit(dict(type='started',scenario=args.scenario,case_dir=str(output_dir)))
-        result = run_case(config,output_dir,emit=emit if args.enable_frame_stream else None)
+        result = run_case(config,output_dir,emit=emit if args.enable_frame_stream else None,stop_event=stop_event,resources=resources)
         from sphere_replay import export_catalog, export_recording
         try:
             export_catalog(output_dir)
@@ -311,7 +422,8 @@ def run(args, emit, chase_config=None):
     if args.nonstop_simulation and args.bag is None:
         import yaml
         args.bag = Path(yaml.safe_load((simulator_dir.parents[1]/'scripts/arm_avoidance_bag.yaml').read_text())['bag_path'])
-    task = shuttle_task(args.task_file, args.model, args.params_file) if args.task_file else None
+    task = shuttle_task(args.task_file,args.model,args.params_file,
+                        enable_reference=args.nonstop_simulation or args.avoidance=='none') if args.task_file else None
     pose = {name: math.radians(angle) for name, angle in presets[args.pose].items()}
     if task is not None:
         pose.update(task.initial_pose)
@@ -393,6 +505,7 @@ def run(args, emit, chase_config=None):
                     robot_config.update(command_source='ros', command_topic=args.command_topic)
                     if args.nonstop_simulation:
                         robot_config['enable_nonstop_simulation'] = True
+                        robot_config['enable_synchronized_position'] = True
                     session = physics_session(lambda bodies, robot, avoidance: PhysicsScene(bodies, robot, avoidance, node), node)
                     session.start(dict(bodies=[], robot=robot_config, avoidance=settings))
                     scene = session.scene
@@ -414,6 +527,12 @@ def run(args, emit, chase_config=None):
                     scene = PhysicsScene([], robot_config, settings, node)
                 if task is not None:
                     task.attach(scene)
+                    if task.reference_path is not None:
+                        from rclpy.qos import QoSProfile,DurabilityPolicy
+                        from std_msgs.msg import String
+                        reference_pub = node.create_publisher(String,'/sim/nonstop/reference',
+                            QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL))
+                        reference_pub.publish(String(data=json.dumps(task.reference_message(),allow_nan=False)))
                 if args.viewer_bridge_port and state_pub is None and args.avoidance == 'none':
                     from sensor_msgs.msg import JointState
                     from rclpy.qos import qos_profile_sensor_data
@@ -437,6 +556,7 @@ def run(args, emit, chase_config=None):
                 target = scene.robot.validate(goal or {}, base_pose=initial)
                 emit(dict(type='start', model=args.model, avoidance=args.avoidance, initial_joints=initial,
                           goal_joints=target, bag=str(args.bag) if args.bag else None,
+                          task_reference=task.reference if task is not None else None,
                           viewer_url=('http://127.0.0.1:8877/?model='+args.model+'&bridge=http://127.0.0.1:'
                                       +str(args.viewer_bridge_port)+'&state_source=simulation&joint_topic='+(scene.avoidance.runtime.status()['joint_state_topic'] if args.avoidance == 'gng' else args.state_topic)
                                       +('&observe=ws://127.0.0.1:'+str(args.viewer_observe_port)+'/observe' if observer is not None else ''))
@@ -462,7 +582,7 @@ def run(args, emit, chase_config=None):
                     if task is not None:
                         task_goal = task.update(scene)
                         if goal_pub is None:
-                            scene.set_goal(task_goal)
+                            scene.set_goal(task.follow_target(scene) if task.reference_follower is not None else task_goal)
                         elif task_goal != last_task_goal or now-last_task_goal_sec >= .2:
                             goal_pub.publish(JointState(name=list(task_goal), position=list(task_goal.values())))
                             last_task_goal = task_goal
@@ -525,7 +645,7 @@ def main():
     if os.environ.get('TOPO_ROS_SETUP_READY') != '1':
         os.execv('/bin/bash', ['bash', str(simulator_dir/'start_ros.sh'), '--simulate', *sys.argv[1:]])
     try:
-        chase_config = read_chase_config(args) if args.scenario=='chasing_sphere' else None
+        chase_config = read_chase_config(args) if args.scenario=='chasing_sphere' and not args.experiment_worker else None
         stream = args.output.open('x') if args.output else sys.stdout
     except (OSError,ValueError) as error:
         print(json.dumps(dict(type='error', message=str(error)), ensure_ascii=False), file=sys.stderr)
@@ -534,6 +654,8 @@ def main():
         def emit(value):
             print(json.dumps(value, ensure_ascii=False, allow_nan=False), file=stream, flush=True)
         try:
+            if args.experiment_worker:
+                return run_experiment_worker(args,emit)
             return run(args, emit, chase_config)
         except (ImportError, ValueError, RuntimeError, OSError) as error:
             emit(dict(type='error', message=str(error)))

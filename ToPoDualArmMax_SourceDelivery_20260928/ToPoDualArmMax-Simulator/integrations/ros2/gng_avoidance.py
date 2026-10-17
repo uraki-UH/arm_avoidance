@@ -15,6 +15,7 @@ from dual_arm_avoidance_geometry import robot_geometry, origin
 from gng_avoidance_planner import gng_path_search, has_stable_return_clearance
 from avoidance_motion import motion_kind
 from gng_prediction import streaming_predictor
+from shuttle_trajectory import joint_path_reference, nearest_path_points
 
 
 def finite_clearance(value):
@@ -523,9 +524,99 @@ class independent_policy:
 
 class nonstop_simulation_policy(independent_policy):
     """非停止の仮想実験。観測は選好、設定済み固定禁止領域は制約。実機使用禁止。"""
-    def propose(self, positions, home, cloud, graphs):
+    @staticmethod
+    def seed_waypoint(policy, positions, home):
+        """既存GNG接続・VLUT状態からの有界A*種経路。新規の形状照会・RRT展開なし。"""
+        route = getattr(policy, 'nonstop_route', [])
+        if any(policy.labels.get(idx) != 1 for idx in route):
+            route = []
+        while route and np.max(np.abs(policy.angles[route[0]]-positions[policy.arm_indices])) < .03:
+            route.pop(0)
+        if not route:
+            start = policy.nearest_node(positions)
+            _, indices = policy.angle_tree.query(home[policy.arm_indices], k=min(16, len(policy.angle_node_ids)))
+            goal = next((policy.angle_node_ids[int(idx)] for idx in np.atleast_1d(indices)
+                         if policy.labels.get(policy.angle_node_ids[int(idx)]) == 1), None)
+            if goal is None:
+                policy.nonstop_route = []
+                return None
+            def remaining(idx):
+                return float(np.linalg.norm(policy.angles[idx]-policy.angles[goal]))
+            queue, costs, previous = [(remaining(start), 0., start)], {start:0.}, {start:None}
+            deadline = time.monotonic()+.004
+            num_expansions = 0
+            while queue and num_expansions < 256 and time.monotonic() < deadline:
+                _, cost, idx = heapq.heappop(queue)
+                if cost != costs[idx]:
+                    continue
+                num_expansions += 1
+                if idx == goal:
+                    while idx is not None:
+                        route.append(idx)
+                        idx = previous[idx]
+                    route.reverse()
+                    break
+                for adjacent in policy.adjacency.get(idx, ()):
+                    if adjacent not in policy.angles or policy.labels.get(adjacent) != 1:
+                        continue
+                    value = cost+float(np.linalg.norm(policy.angles[adjacent]-policy.angles[idx]))
+                    if value < costs.get(adjacent, float('inf')):
+                        costs[adjacent], previous[adjacent] = value, idx
+                        heapq.heappush(queue, (value+remaining(adjacent), value, adjacent))
+            if route and (policy.labels.get(route[0]) != 1 or
+                          np.max(np.abs(policy.angles[route[0]]-positions[policy.arm_indices])) < .03):
+                route.pop(0)
+        policy.nonstop_route = route
+        if not route:
+            return None
+        target = positions.copy()
+        target[policy.arm_indices] = policy.angles[route[0]]
+        return target
+
+    @staticmethod
+    def can_follow_nominal(policy, positions, target, cloud, current_gap):
+        """名目区間の先読みと復帰ヒステリシス。無障害時の回避候補生成なし。"""
+        mask = getattr(policy, 'workspace_mask', None)
+        if mask is not None and not mask.can_bridge(policy.geometry, positions, target):
+            policy.nominal_clear_since_sec = None
+            return False
+        if not policy.cloud_tree.n:
+            policy.is_nonstop_avoiding = False
+            policy.nominal_clear_since_sec = None
+            return True
+        max_velocity = getattr(policy.geometry, 'max_velocity', np.full(len(positions), 3.))
+        duration = float(np.max(np.abs(target-positions)/max_velocity))
+        preview = positions+(target-positions)*min(1., .35/max(duration, 1e-9))
+        count = max(2, int(np.ceil(np.max(np.abs(preview-positions))/.05))+1)
+        poses = positions+(preview-positions)*np.linspace(0., 1., count)[:, None]
+        centers = policy.geometry.centers(poses)[:, policy.geometry.is_arm]
+        distances = policy.cloud_tree.query(centers.reshape(-1, 3))[0].reshape(count, -1)
+        gaps = np.min(distances-policy.geometry.radii[policy.geometry.is_arm]-policy.cell_radius, axis=1)
+        config = getattr(policy, 'config', {})
+        is_avoiding = getattr(policy, 'is_nonstop_avoiding', False)
+        margin = config.get('release_clearance_th', .14) if is_avoiding else config.get('trigger_clearance_th', .10)
+        padding = policy.retreat_padding() if hasattr(policy, 'retreat_padding') else 0.
+        # 近接中でも離隔の改善する名目軌道は優先。接近予測中の安易な復帰は不許可。
+        is_moving_away = (current_gap > .01 and padding < .01 and
+                         np.min(gaps) >= current_gap-.003 and gaps[-1] > current_gap+.02)
+        can_follow = bool(np.min(gaps) >= margin+padding or is_moving_away)
+        now = cloud[2]
+        previous = getattr(policy, 'nominal_check_sec', now)
+        policy.nominal_check_sec = now
+        if not can_follow:
+            policy.nominal_clear_since_sec = None
+            return False
+        if not is_avoiding:
+            return True
+        since = getattr(policy, 'nominal_clear_since_sec', None)
+        if since is None or now < previous or now-previous > .5:
+            policy.nominal_clear_since_sec = now
+            return False
+        return now-policy.nominal_clear_since_sec >= .2
+
+    def propose(self, positions, home, cloud, graphs, reference=None):
         target = home.copy()
-        phases, gaps, selected_nodes = [], [], {}
+        phases, gaps, selected_nodes, seed_sizes = [], [], {}, {}
         has_workspace_block = False
         for name, policy in self.policies.items():
             if name not in getattr(self, 'active_profiles', self.policies):
@@ -538,10 +629,37 @@ class nonstop_simulation_policy(independent_policy):
             gaps.append(gap)
             if hasattr(policy, 'observe_clearance'):
                 policy.observe_clearance(gap, cloud[2])
-                policy.observe(cloud, graphs[name])
             active = np.asarray(policy.arm_indices)
+            nominal = positions.copy()
+            has_reference = reference is not None and reference['profile']==name
+            nominal[active] = (reference['nominal'] if has_reference else home)[active]
+            previous_home = getattr(policy, 'nonstop_home', None)
+            if previous_home is None or not np.array_equal(previous_home[active], home[active]):
+                policy.nonstop_home = home.copy()
+                # 回避後の実測姿勢への基準線の漂流防止。往復の前回名目端点への固定。
+                policy.nominal_origin = positions.copy() if previous_home is None else previous_home.copy()
+                policy.nonstop_target = None
+                policy.nonstop_route = []
+            if self.can_follow_nominal(policy, positions, nominal, cloud, gap):
+                target[active] = nominal[active]
+                policy.is_nonstop_avoiding = False
+                policy.nonstop_target = nominal.copy()
+                policy.nonstop_route = []
+                phases.append(False)
+                continue
+            policy.is_nonstop_avoiding = True
+            if hasattr(policy, 'observe'):
+                policy.observe(cloud, graphs[name])
             # 探索用の絶対姿勢候補。固定時間ごとの微小角度指令への変換なし。
-            poses = [home.copy()]
+            poses = [nominal.copy()]
+            previous_target = getattr(policy, 'nonstop_target', None)
+            if previous_target is not None:
+                poses.append(previous_target.copy())
+            seed = self.seed_waypoint(policy, positions, home)
+            seed_sizes[name] = len(getattr(policy, 'nonstop_route', []))
+            seed_idx = len(poses) if seed is not None else None
+            if seed is not None:
+                poses.append(seed)
             for joint in active:
                 for delta in (-.6, .6):
                     pose = positions.copy()
@@ -549,6 +667,7 @@ class nonstop_simulation_policy(independent_policy):
                     poses.append(pose)
             _, indices = policy.angle_tree.query(positions[active], k=min(16, len(policy.angle_node_ids)))
             node_ids = [policy.angle_node_ids[int(idx)] for idx in np.atleast_1d(indices)]
+            node_start = len(poses)
             for node_id in node_ids:
                 pose = positions.copy()
                 pose[active] = policy.angles[node_id]
@@ -567,11 +686,23 @@ class nonstop_simulation_policy(independent_policy):
             obstacle_cost = 30.*np.mean(deficits**2, axis=(1, 2))+5.*np.max(deficits, axis=(1, 2))**2
             internal = policy.geometry.internal_clearances(centers).reshape(len(poses), len(ratios), -1)
             internal_cost = 500.*np.sum(np.maximum(0., .005-internal)**2, axis=(1, 2))
-            task_cost = .025*np.mean((poses[:, active]-home[active])**2, axis=1)
+            if has_reference:
+                projected = nearest_path_points(reference['path'][:,active],poses[:,active])
+            else:
+                span = home[active]-policy.nominal_origin[active]
+                progress = np.clip((poses[:,active]-policy.nominal_origin[active])@span/max(float(span@span),1e-12),0.,1.)
+                projected = policy.nominal_origin[active]+progress[:,None]*span
+            task_cost = (.025*np.mean((poses[:,active]-nominal[active])**2,axis=1)
+                         +.025*np.mean((poses[:,active]-projected)**2,axis=1))
             travel_cost = .005*np.mean((poses[:, active]-positions[active])**2, axis=1)
             costs = obstacle_cost+internal_cost+task_cost+travel_cost
+            if previous_target is not None:
+                # 目標切替えの抑制。幾何拘束より優先しない連続性の選好。
+                costs += .02*np.mean((poses[:, active]-previous_target[active])**2, axis=1)
+            if seed_idx is not None:
+                costs[seed_idx] -= .002
             # VLUT危険ラベル・予測リスクも停止条件ではなく候補の選好。
-            for idx, node_id in enumerate(node_ids, 1+2*len(active)):
+            for idx, node_id in enumerate(node_ids, node_start):
                 costs[idx] += .05*(policy.labels.get(node_id) == 2)
                 costs[idx] += .02*getattr(policy, 'node_risks', {}).get(node_id, 0.)
             has_motion = np.any(np.abs(poses[:, active]-positions[active]) > 1e-6, axis=1)
@@ -586,13 +717,15 @@ class nonstop_simulation_policy(independent_policy):
                 has_workspace_block = True
                 continue
             target[active] = poses[idx, active]
-            phases.append(idx != 0)
-            if idx >= 1+2*len(active):
-                selected_nodes[name] = node_ids[idx-1-2*len(active)]
+            policy.nonstop_target = poses[idx].copy()
+            phases.append(True)
+            if idx >= node_start:
+                selected_nodes[name] = node_ids[idx-node_start]
         phase = ('workspace_blocked' if has_workspace_block else
                  'simulation_avoiding' if any(phases) else 'simulation_task')
         return target, dict(mode='gng', phase=phase,
             profile='', clearance_m=finite_clearance(min(gaps)), selected_node_ids=selected_nodes,
+            seed_route_num_nodes=seed_sizes,
             is_nonstop_simulation=True, has_hardware_output=False)
 
 
@@ -620,6 +753,8 @@ class gng_filter:
         self.fixed = {name: value for model in self.models.values() for name, value in model['fixed_joints'].items()
                       if name in self.names and name not in active_names}
         self.home = dict(self.robot.targets)
+        self.model_id = robot_config['model']
+        self.reference_plan = None
         self.goal_generation = 0
         self.set_targets(self.home)
         policy_type = nonstop_simulation_policy if self.enable_nonstop_simulation else independent_policy
@@ -673,6 +808,54 @@ class gng_filter:
     def positions(self):
         state = self.robot.state()
         return np.array([state[name] for name in self.names])
+
+    def set_reference(self, value):
+        """MuJoCo専用の固定往復軌道。関節順・可動域・非操作軸の契約照合。"""
+        if not self.enable_nonstop_simulation:
+            raise ValueError('基準軌道の入力は非停止MuJoCo実験専用です')
+        if (not isinstance(value,dict) or value.get('format')!='topo-shuttle-reference/1'
+                or value.get('model')!=self.model_id or value.get('joint_names')!=self.names
+                or value.get('active_profile') not in self.policy.active_profiles):
+            raise ValueError('往復基準のモデル・関節名・操作グループの不一致')
+        path = np.asarray(value.get('positions'),dtype=float)
+        if (path.ndim!=2 or not 2<=len(path)<=257 or path.shape[1]!=len(self.names)
+                or not np.isfinite(path).all() or np.any(path<self.geometry.limits[:,0])
+                or np.any(path>self.geometry.limits[:,1])):
+            raise ValueError('往復基準の軌道形式・可動域の不正')
+        profile = value['active_profile']
+        active = np.asarray(self.policy.policies[profile].arm_indices)
+        inactive = np.setdiff1d(np.arange(len(self.names)),active)
+        if np.any(np.abs(path[:,inactive]-path[0,inactive])>1e-9):
+            raise ValueError('往復基準の非操作関節に姿勢差あり')
+        task = value.get('task')
+        planning = task.get('planning') if isinstance(task,dict) else None
+        method = planning.get('method') if isinstance(planning,dict) else None
+        if method not in ('gng_chomp','rrt_chomp','direct'):
+            raise ValueError('往復基準の生成方式の不正')
+        previous = self.reference_plan
+        if previous is not None and previous['profile']==profile and np.array_equal(previous['path'],path):
+            return
+        path.setflags(write=False)
+        self.reference_plan = dict(profile=profile,active=active,path=path,
+            follower=joint_path_reference(path[:,active]),
+            method=method)
+        self.goal_generation += 1
+
+    def reference_context(self, positions, home):
+        """制御スレッド内だけの位相更新。非同期候補照会への不変スナップショット。"""
+        plan = getattr(self,'reference_plan',None)
+        if plan is None:
+            return None
+        active,path = plan['active'],plan['path']
+        errors = np.max(np.abs(path[[0,-1]][:,active]-home[active]),axis=1)
+        if np.min(errors)>1e-5:
+            return None
+        goal = ('a','b')[int(np.argmin(errors))]
+        follower = plan['follower']
+        follower.update(positions[active],goal)
+        nominal = home.copy();nominal[active] = follower.target
+        return dict(profile=plan['profile'],path=path,nominal=nominal,
+            goal=goal,dev_rad=follower.dev_rad,method=plan['method'])
 
     def has_current_plan_state(self, status, plan_nodes, graphs, positions=None):
         """ノード列の最新状態・保存済み接続と、非操作腕の組合せノードの照合。"""
@@ -803,6 +986,12 @@ class gng_filter:
         if not np.isfinite(positions).all():
             raise ValueError('非停止シミュレーションの実測姿勢が非有限値です')
         self.is_ready = True
+        home = np.array([self.home[name] for name in self.names])
+        reference = self.reference_context(positions,home)
+        if reference is not None and getattr(self,'reference_generation',None)!=self.goal_generation:
+            # 目標反転直後・基準差替え直後も曲線上の目標。端点への直接指令の混入防止。
+            self.target = reference['nominal'].copy()
+            self.reference_generation = self.goal_generation
         if self.future is not None and self.future.done():
             target, status = self.future.result()
             self.future = None
@@ -811,18 +1000,22 @@ class gng_filter:
                     raise ValueError('非停止シミュレーションの計画姿勢が不正です')
                 self.target, self.status = target, status
         if snapshot is None:
-            self.target = np.array([self.home[name] for name in self.names])
+            self.target = home if reference is None else reference['nominal']
             self.status = dict(mode='gng', phase='simulation_open_loop', message=message,
                                is_nonstop_simulation=True, has_hardware_output=False)
         elif self.future is None and time.monotonic() >= self.next_plan_sec:
             self.requested_generation = self.goal_generation
             self.next_plan_sec = time.monotonic()+.05
-            self.future = self.pool.submit(self.policy.propose, positions,
-                np.array([self.home[name] for name in self.names]), *snapshot)
+            options = {} if reference is None else dict(reference=reference)
+            self.future = self.pool.submit(self.policy.propose,positions,home,*snapshot,**options)
         self.target = np.clip(self.target, self.geometry.limits[:, 0], self.geometry.limits[:, 1])
         self.target = self.apply_workspace_constraint(positions, self.target)
         self.robot.set_targets(dict(zip(self.names, map(float, self.target))))
         self.status.update(self.runtime.status())
+        self.status.update(has_reference=reference is not None)
+        if reference is not None:
+            self.status.update(reference_planner=reference['method'],reference_goal=reference['goal'],
+                               reference_dev_rad=reference['dev_rad'])
 
     def apply_workspace_constraint(self, positions, target):
         """通常回避・非停止実験で共通の固定制約。欠測時の名目指令にも同じ判定。"""

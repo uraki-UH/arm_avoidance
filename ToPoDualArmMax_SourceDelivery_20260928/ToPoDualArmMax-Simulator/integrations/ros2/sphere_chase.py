@@ -1,10 +1,12 @@
 """指定リンク追跡障害物の閉ループMuJoCo実験。制御への真値・将来軌道の受渡しなし。"""
 import argparse
 from collections import deque
-from itertools import count
+import copy
+from itertools import count, product
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -21,8 +23,58 @@ from gng_sphere_avoidance import (load_graph, motion_sequence_predictor, represe
 from physics_scene import PhysicsScene, compiled_model
 from physics_robot import origin as physics_origin
 from dual_arm_avoidance_geometry import robot_geometry, resolve_mesh_path, shape_vertices, origin as geometry_origin
-from pursuit_obstacle import pursuit_obstacle, capsule_field, shoulder_anchor
+from pursuit_obstacle import pursuit_obstacle, capsule_field, shoulder_anchor_candidates
 from pursuit_cbf import pursuit_cbf, angle_delta
+from shuttle_trajectory import shuttle_planner
+
+
+class experiment_resources:
+    """静的資源だけの保持。入力更新時の破棄、実験状態の保持なし。"""
+    def __init__(self):
+        self.key, self.values = None, {}
+
+    def prepare(self):
+        params,models = load_models(workspace/'gng_vlut_system/config/topo_dual_arm_max_long.yaml')
+        urdf = Path(params['urdf_path'])
+        files = {urdf, workspace/'benchmarks/shuttle_bag/task.json', Path(__file__).resolve().parents[2]/'app/source.urdf'}
+        files.update(resolve_mesh_path(mesh.get('filename'),urdf.parent) for mesh in et.parse(urdf).getroot().findall('.//mesh'))
+        directory = Path(params['gng']['data_directory'])/params['gng']['experiment_id']/'left_arm'
+        files.update(directory/models['left_arm'][name] for name in ('gng_file','vlut_file'))
+        files.update(Path(prefix)/'lib/gng_vlut_system/libgng_dynamic_kernel.so'
+                     for prefix in os.environ.get('AMENT_PREFIX_PATH','').split(os.pathsep)
+                     if prefix and (Path(prefix)/'lib/gng_vlut_system/libgng_dynamic_kernel.so').is_file())
+        key = (json.dumps((params,models),sort_keys=True),
+               tuple((str(path),path.stat().st_mtime_ns,path.stat().st_size) for path in sorted(files)))
+        if self.key != key:
+            self.close()
+            self.key = key
+        return params,models
+
+    def get(self, name, factory):
+        if name not in self.values:
+            self.values[name] = factory()
+        return self.values[name]
+
+    def close(self):
+        for value in self.values.values():
+            if hasattr(value,'close'):
+                value.close()
+        self.values.clear()
+
+    def __del__(self):
+        self.close()
+
+
+def robot_assets(params, models):
+    """再実行で共用する機体形状と内部離隔形状。動的状態を持たない初期形状。"""
+    check_kinematics(params['urdf_path'],'long')
+    geometry = robot_geometry(params['urdf_path'],environment_shapes=(
+        ('plane',np.array([0.,0.,-.14]),np.eye(3),np.zeros(3)),
+        ('box',np.array([0.,0.,-.07]),np.eye(3),np.array([.085,.085,.069]))))
+    arm = independent_policy(geometry,{'left_arm':models['left_arm']}).policies['left_arm']
+    geometry.is_arm = arm.geometry.is_arm.copy()
+    geometry.active_joint_names = tuple(arm.arm_names)
+    return geometry,internal_clearance_checker(geometry,params['urdf_path'])
 
 
 class internal_clearance_checker:
@@ -130,6 +182,30 @@ class internal_clearance_checker:
             self.world_boxes[len(transforms)+idx,:3,:3] = rotation
             self.world_boxes[len(transforms)+idx,:3,3] = position
         self.world_boxes[:,:3,3] += np.einsum('nij,nj->ni',self.world_boxes[:,:3,:3],self.box_centers)
+
+    def contact_points(self, link_indices, radius):
+        """実衝突形状の支持点に接する球中心の局所座標。初期化時だけの形状参照。"""
+        directions = np.array([value for value in product((-1.,0.,1.),repeat=3) if any(value)])
+        directions /= np.linalg.norm(directions,axis=1)[:,None]
+        links,points = [],[]
+        for link_idx in link_indices:
+            for geom_idx in self.link_geoms[link_idx]:
+                if geom_idx in self.polytope_vertices:
+                    vertices = self.polytope_vertices[geom_idx]
+                    support = vertices[np.argmax(vertices@directions.T,axis=0)]
+                elif self.model.geom_type[geom_idx] == self.mujoco.mjtGeom.mjGEOM_SPHERE:
+                    support = directions*self.model.geom_size[geom_idx,0]
+                else:
+                    # URDFの円柱面・端面上の支持点。外接箱の頂点による代用なし。
+                    size = self.model.geom_size[geom_idx]
+                    radial = directions[:,:2]/np.maximum(np.linalg.norm(directions[:,:2],axis=1)[:,None],1e-12)
+                    support = np.column_stack((radial*size[0],np.sign(directions[:,2])*size[1]))
+                frame = self.local_frames[geom_idx]
+                # 接触境界の丸め誤差用の1µm。禁止形状の追加膨張なし。
+                centers = support+directions*(radius-1e-6)
+                points.extend(centers@frame[:3,:3].T+frame[:3,3])
+                links.extend([link_idx]*len(centers))
+        return np.asarray(links,dtype=int),np.asarray(points).reshape(-1,3)
 
     def box_gap(self, first, second):
         """リンク包絡箱の分離軸による距離下界。近接対だけの凸形状照合。"""
@@ -416,7 +492,7 @@ def calibrate_reference(geometry, active, poses, duration_sec=8., drive_mode='po
     return max_speed
 
 
-def run_case(config, output_dir=None, emit=None, stop_event=None):
+def run_case(config, output_dir=None, emit=None, stop_event=None, resources=None):
     startup_begin = time.perf_counter()
     startup_stages_ms = {}
     def progress(stage):
@@ -455,11 +531,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     if not 0 < float(config.get('max_ball_acceleration',.8)) <= 30. or not 0 <= float(config.get('pursuit_delay_sec',0.)) <= .5 or not .25 <= float(config.get('start_dist_m',.45)) <= 2.:
         raise ValueError('追跡球の加速度・追従遅延・開始距離の範囲外')
     progress('robot_geometry')
-    params, models = load_models(workspace/'gng_vlut_system/config/topo_dual_arm_max_long.yaml')
-    check_kinematics(params['urdf_path'],'long')
-    geometry = robot_geometry(params['urdf_path'],environment_shapes=(
-        ('plane',np.array([0.,0.,-.14]),np.eye(3),np.zeros(3)),
-        ('box',np.array([0.,0.,-.07]),np.eye(3),np.array([.085,.085,.069]))))
+    resources = experiment_resources() if resources is None else resources
+    params,models = resources.prepare()
+    base_geometry,base_checker = resources.get('robot',lambda:robot_assets(params,models))
+    geometry = copy.deepcopy(base_geometry)
     profiles = independent_policy(geometry,{'left_arm':models['left_arm']})
     arm = profiles.policies['left_arm']
     geometry.is_arm = arm.geometry.is_arm.copy()
@@ -468,7 +543,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     if type(config.get('enable_periodic_angles',False)) is not bool:
         raise ValueError('連続関節の周期扱いは真偽値')
     joint_limit_sources = configure_position_limits(geometry,config)
-    internal_checker = internal_clearance_checker(geometry, params['urdf_path'])
+    internal_checker = copy.copy(base_checker)
+    internal_checker.geometry = geometry
+    internal_checker.data = copy.copy(base_checker.data)
+    internal_checker.last_violations = []
     target_link = config.get('target_link','L_tcp')
     if target_link not in geometry.link_indices:
         raise ValueError(f'追跡対象リンク名の不正: {target_link}')
@@ -491,8 +569,41 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     for pose in poses.values():
         if np.any(pose<geometry.limits[:,0]) or np.any(pose>geometry.limits[:,1]) or not internal_checker.check(pose):
             raise ValueError('開始・目標姿勢の位置制限または自己干渉')
+    progress('reference_trajectory')
+    trajectory_planner = config.get('trajectory_planner','gng_chomp')
+    if trajectory_planner not in ('gng_chomp','rrt_chomp','direct'):
+        raise ValueError('未対応の往復軌道生成方式')
+    directory = Path(params['gng']['data_directory'])/params['gng']['experiment_id']/'left_arm'
+    def seed_graph():
+        graph = resources.get('shuttle_graph',lambda:load_graph(directory/models['left_arm']['gng_file']))
+        seed_index = resources.get('vlut_index',lambda:vlut_index(geometry,active,poses['a'],graph,directory/models['left_arm']['vlut_file']))
+        internal_checker.coarse_check = lambda centers,margin:seed_index.internal_clear(geometry,centers,margin)
+        return graph
+    # 動的障害物の真値・将来軌跡を参照しない、自己形状・床・台座だけの事前計画。
+    def full_poses(values):
+        result = np.repeat(poses['a'][None],len(values),axis=0)
+        result[:,active] = values
+        return result
+    def obstacle_cost(values):
+        gaps = geometry.internal_clearances(geometry.centers(full_poses(values)))
+        # 形状近似の離隔ポテンシャル。採否は共通の実形状照合、目的値は実電力量ではない。
+        return .03*np.sum(np.maximum(0.,.03-gaps)**2,axis=-1)
+    reference_key = ('shuttle',trajectory_planner,poses['a'].tobytes(),poses['b'].tobytes(),geometry.limits.tobytes())
+    has_cached_reference = reference_key in resources.values
+    reference_started = time.perf_counter()
+    def build_reference():
+        planner = shuttle_planner(geometry.limits[active],lambda values:internal_checker.check(full_poses(values)),obstacle_cost)
+        values,stats = planner.plan(poses['a'][active],poses['b'][active],trajectory_planner,
+                                   seed_graph if trajectory_planner=='gng_chomp' else None)
+        return full_poses(values),stats
+    reference_path,reference_stats = resources.get(reference_key,build_reference)
+    for key in [key for key in resources.values if isinstance(key,tuple) and key[0]=='shuttle'][:-2]:
+        resources.values.pop(key)
+    reference_stats = dict(reference_stats,has_cached_reference=has_cached_reference,
+                          prepare_ms=(time.perf_counter()-reference_started)*1000)
     task_object = cartesian_task(geometry,active,poses,task.get('eef_link','L_tcp'),
-        float(task.get('max_eef_position_error_th',.015)),math.radians(float(task.get('max_eef_orientation_error_deg_th',3.))))
+        float(task.get('max_eef_position_error_th',.015)),math.radians(float(task.get('max_eef_orientation_error_deg_th',3.))),
+        reference_path=reference_path,reference_stats=reference_stats)
     control_task = task_object if task_mode=='cartesian' else None
     task_metadata = task_object.metadata(task_mode)
     progress('drive_calibration')
@@ -516,6 +627,12 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     start_dist = float(config.get('start_dist_m',.45))
     target_frames = geometry.link_transforms(np.stack(list(poses.values())))[:,geometry.link_indices[target_link]]
     target_positions = target_frames[:,:3,3]+np.einsum('nij,j->ni',target_frames[:,:3,:3],target_offset)
+    if config.get('obstacle_shape')=='linked_arm' and 'shoulder_position_m' in config:
+        anchor = np.asarray(config['shoulder_position_m'],dtype=float)
+        if anchor.shape!=(3,) or not np.isfinite(anchor).all():
+            raise ValueError('リンク原点の位置不正（world座標・m）')
+        if np.max(np.linalg.norm(target_positions-anchor,axis=1))>=sum(config.get('link_lengths_m',[.35,.35]))-.005:
+            raise ValueError('指定したリンク原点から往復対象に届きません。原点位置の変更が必要です')
     if config.get('pursuit_mode')=='random_walk':
         extent = config.get('random_walk_extent_m',.6)
         change_sec = config.get('random_walk_change_sec',.6)
@@ -532,7 +649,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
             try:
                 obstacle_config = {**config,'target_link':target_link}
                 if config.get('obstacle_shape')=='linked_arm' and 'shoulder_position_m' not in config:
-                    obstacle_config['shoulder_position_m'] = shoulder_anchor(target_positions,center,direction,
+                    obstacle_config['shoulder_candidates_m'] = shoulder_anchor_candidates(target_positions,center,direction,
                         np.asarray(config.get('link_lengths_m',[.35,.35]))).tolist()
                 obstacle = pursuit_obstacle(obstacle_config,center,direction,geometry,poses['a'],guard_geometry=internal_checker)
             except ValueError as error:
@@ -542,7 +659,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
             if np.min(obstacle.field().query(geometry.centers(poses['a']))[0]-geometry.radii)>.12:
                 break
     else:
-        raise ValueError('非接触の球開始位置なし')
+        raise ValueError('非接触の障害物開始位置なし。リンク型では原点位置の変更が必要です')
     initial_center = obstacle.center.copy()
     motion_metadata = dict(random_walk=dict(min_position_m=obstacle.min_random_walk_position_m.tolist(),
         max_position_m=obstacle.max_random_walk_position_m.tolist(),change_sec=obstacle.random_walk_change_sec)) if obstacle.pursuit_mode=='random_walk' else {}
@@ -557,10 +674,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     eef_body = scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_L_tcp')
     target_body = scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+target_link)
     anchor_bodies = [scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+name) for name in obstacle.guard_anchor_links]
-    guard_bodies = [scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+internal_checker.link_names[idx])
-                    for idx in obstacle.guard_box_links] if obstacle.guard_box_links is not None else []
-    if any(body<0 for body in guard_bodies):
-        raise ValueError('保護リンクと物理モデルの対応不一致')
+    link_bodies = [scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+internal_checker.link_names[idx])
+                   for idx in range(len(geometry.link_indices))]
+    if any(body<0 for body in link_bodies):
+        raise ValueError('リンクと物理モデルの対応不一致')
     protected_links = {geometry.spheres[idx][0] for idx in np.flatnonzero(obstacle.protected_mask)}
     active_links = {geometry.spheres[idx][0] for idx in np.flatnonzero(geometry.is_arm)}
     geom_links = [scene.mujoco.mj_id2name(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,int(body)) or 'world' for body in scene.model.geom_bodyid]
@@ -574,9 +691,13 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         memory.restore(json.loads(Path(config['memory_file']).read_text()))
     progress('cbf_solver' if is_cbf else 'gng_index')
     if not is_cbf:
-        graph = load_graph(directory/metadata['gng_file'])
-        index = (vlut_index(geometry,active,poses['a'],graph,directory/metadata['vlut_file']) if policy_name=='vlut_graph' else
-                 representative_index(geometry,active,poses['a'],graph))
+        def build_index():
+            graph = resources.get('shuttle_graph',lambda:load_graph(directory/metadata['gng_file']))
+            return (vlut_index(geometry,active,poses['a'],graph,directory/metadata['vlut_file']) if policy_name=='vlut_graph' else
+                    representative_index(geometry,active,poses['a'],graph))
+        index = resources.get('vlut_index' if policy_name=='vlut_graph' else 'representative_index',build_index)
+        index.reset_observation()
+        graph = index.graph
         internal_checker.coarse_check = lambda centers, margin:index.internal_clear(geometry,centers,margin)
         if policy_name=='vlut_graph':
             rollout = vlut_graph_policy(geometry,active,target_link,graph,node_index=index,memory=memory,
@@ -613,6 +734,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     max_ball_speed = max_eef_speed = max_joint_speed = 0.
     costs = deque(maxlen=1200) if is_continuous else []
     num_proposals = 0
+    reference_dev_squared = max_reference_dev_rad = 0.
     total_cost_ms = 0.
     node_query_total_ms = 0.
     rows = []
@@ -658,8 +780,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         followed = eef_history[0][1]
         speed = reference_speed*(min_ratio+(max_ratio-min_ratio)*min(now/ramp_sec,1.))
         obstacle.update_guard(actual_centers,[scene.data.xpos[body] for body in anchor_bodies])
-        if guard_bodies:
-            obstacle.update_box_guard(scene.data.xpos[guard_bodies],scene.data.xmat[guard_bodies].reshape(-1,3,3))
+        obstacle.update_link_frames(scene.data.xpos[link_bodies],scene.data.xmat[link_bodies].reshape(-1,3,3))
         achieved_speed = obstacle.advance(followed,speed,float(config.get('max_ball_acceleration',.8)),.01,config.get('enable_sidestep',False),now)
         center = obstacle.center.copy()
         max_ball_speed = max(max_ball_speed,achieved_speed)
@@ -674,6 +795,9 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
             observed = pending.popleft()[1]
         if frame%5==0 and observed is not None:
             begin = time.perf_counter()
+            motion_goal = task_object.update_reference(positions)
+            reference_dev_squared += task_object.reference.dev_rad**2
+            max_reference_dev_rad = max(max_reference_dev_rad,task_object.reference.dev_rad)
             # 遅延による不確かさの解析的な球半径への集約。方式間で共通の現観測。
             inflated_radius = radius+reference_speed*max_ratio*(now-observed['stamp'])+3*noise
             if obstacle.shape == 'sphere':
@@ -686,7 +810,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
                 previous_segments,previous_stamp = observed['segments'].copy(),observed['stamp']
             field.stamp_sec,field.eef_position = observed['stamp'],observed['eef']
             if cbf is not None:
-                command_velocity = cbf.propose_velocity(positions,velocity,poses[goal],field,observed['stamp'])
+                command_velocity = cbf.propose_velocity(positions,velocity,motion_goal,field,observed['stamp'])
                 phase = cbf.phase
             elif rollout is not None:
                 query_begin = time.perf_counter()
@@ -697,11 +821,11 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
                     _,nearest = graph['angle_tree'].query(positions[active],k=min(32,len(graph['angles'])))
                     index.update_field(field,node_indices=np.atleast_1d(nearest))
                 node_query_total_ms += (time.perf_counter()-query_begin)*1000
-                command_velocity = rollout.propose_velocity(positions,velocity,poses[goal],field,observed['stamp'])
+                command_velocity = rollout.propose_velocity(positions,velocity,motion_goal,field,observed['stamp'])
                 phase = rollout.phase
             else:
                 index.update_field(field)
-                legacy.positions,legacy.home = positions.copy(),poses[goal].copy()
+                legacy.positions,legacy.home = positions.copy(),motion_goal.copy()
                 legacy.cloud_tree,legacy.cell_radius = field,0.
                 for name in ('angles','adjacency','angle_node_ids','angle_tree','labels'):
                     setattr(legacy,name,graph[name])
@@ -709,7 +833,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
                     legacy.observe((field,0.,observed['stamp']),graph)
                     target,can_move = legacy.select_waypoint()
                 elif legacy.can_follow_task():
-                    target,can_move = poses[goal].copy(),True
+                    target,can_move = motion_goal.copy(),True
                     legacy.motion_phase = 'task'
                 else:
                     target,can_move = legacy.select_retreat()
@@ -863,6 +987,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
                    num_internal_shape_checks=internal_checker.num_shape_checks,
                    num_internal_distance_repairs=internal_checker.num_distance_repairs,
                    calibrated_reference_eef_speed_mps=calibrated_reference_speed,num_obstacle_route_recoveries=obstacle.num_route_recoveries)
+    metrics.update(reference_prepare_ms=reference_stats['prepare_ms'],reference_planning_ms=reference_stats['planning_ms'],
+        reference_path_length_rad=reference_stats['path_length_rad'],reference_num_checked_poses=reference_stats['num_checked_poses'],
+        reference_dev_rms_rad=math.sqrt(reference_dev_squared/num_proposals) if num_proposals else None,
+        max_reference_dev_rad=max_reference_dev_rad)
     metrics['obstacle_tip_blocked_sec'] = obstacle.tip_blocked_sec
     metrics.update(num_obstacle_configuration_plans=obstacle.num_configuration_plans,
         obstacle_configuration_plan_total_ms=obstacle.configuration_plan_ms)
@@ -905,12 +1033,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         cbf_diagnostics=cbf.diagnostics if cbf is not None else None,
         is_sphere_fully_observed=not(delay or noise),memory=memory.export(),
         source_sha256={name:hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()
-                       for name in ('sphere_chase.py','pursuit_obstacle.py','pursuit_cbf.py','gng_sphere_avoidance.py','gng_prediction.py','physics_scene.py','physics_robot.py','gng_avoidance.py')},
+                       for name in ('sphere_chase.py','shuttle_trajectory.py','pursuit_obstacle.py','pursuit_cbf.py','gng_sphere_avoidance.py','gng_prediction.py','physics_scene.py','physics_robot.py','gng_avoidance.py')},
         input_sha256={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                       for path in ([Path(params['urdf_path'])] if is_cbf else [Path(params['urdf_path']),directory/metadata['gng_file'],index.kernel_path]+
                                    ([directory/metadata['vlut_file']] if policy_name=='vlut_graph' else []))})
-    if policy_name=='vlut_graph':
-        index.close()
     if output_dir is not None:
         output_dir = Path(output_dir);output_dir.mkdir(parents=True,exist_ok=True)
         for name,value in (('metrics.json',metrics),('details.json',result),('memory.json',memory.export())):

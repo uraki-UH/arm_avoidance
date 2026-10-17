@@ -1,5 +1,6 @@
 {
   "policy": "vlut_graph",
+  "trajectory_planner": "gng_chomp",
   "execution_mode": "recorded",
   "duration_sec": 18,
   "obstacle_shape": "sphere",

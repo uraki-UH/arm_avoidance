@@ -62,7 +62,7 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate=false;host.appendChild(renderer.domElement);
 renderer.domElement.setAttribute('aria-label','3Dロボットと手先マーカー');
 const scene=new THREE.Scene(), overlay=new THREE.Scene();
-scene.background=new THREE.Color('#edf0ed');scene.fog=new THREE.Fog('#edf0ed',18,65);
+scene.background=new THREE.Color('#1e1e1e');scene.fog=new THREE.Fog('#1e1e1e',18,65);
 const camera=new THREE.PerspectiveCamera(34,1,.01,200);camera.up.set(0,0,1);
 // マウス位置を基準とした拡大と画面平面の移動。視点操作の慣性なし。
 const orbit=new OrbitControls(camera,renderer.domElement);orbit.enableDamping=false;orbit.zoomToCursor=true;orbit.screenSpacePanning=true;
@@ -71,7 +71,7 @@ camera.position.set(1.45,-1.15,1.0);orbit.target.set(.28,0,.22);orbit.update();
 
 const environment=new RoomEnvironment();
 const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(environment,.035).texture;
-scene.environmentRotation.set(Math.PI/2,0,.5);scene.environmentIntensity=.65;environment.dispose();pmrem.dispose();
+scene.environmentRotation.set(Math.PI/2,0,.5);scene.environmentIntensity=.6;environment.dispose();pmrem.dispose();
 const hemi=new THREE.HemisphereLight(0xffffff,0x777777,.9);hemi.position.set(0,0,3);scene.add(hemi);
 function areaKey(color,power,xyz,shadow=false){const l=new THREE.DirectionalLight(color,power);l.position.set(...xyz);l.target.position.set(0,0,.25);scene.add(l,l.target);l.castShadow=shadow;if(shadow){l.shadow.mapSize.set(2048,2048);Object.assign(l.shadow.camera,{left:-.85,right:.85,top:.95,bottom:-.7,near:.1,far:6});l.shadow.bias=-.00004;l.shadow.normalBias=.001;l.shadow.radius=3;}return l;}
 const vehicleLight=areaKey(0xffffff,.45,[6,-5,9],true);Object.assign(vehicleLight.shadow.camera,{left:-8,right:8,top:8,bottom:-8,near:.1,far:30});vehicleLight.shadow.camera.updateProjectionMatrix();vehicleLight.shadow.normalBias=.002;
@@ -80,7 +80,7 @@ areaKey(0xffffff,.8,[-.6,-1.6,1.4]);areaKey(0xffffff,.9,[-1,1,.9]);
 
 function material(color,metalness,roughness,extra={}) {return new THREE.MeshPhysicalMaterial({color,metalness,roughness,...extra});}
 const materials={black:material('#393f3b',.45,.36),green:material('#00ff00',0,.31,{emissive:'#00ff00',emissiveIntensity:.075,specularIntensity:.25,clearcoat:.22,clearcoatRoughness:.22,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}),silver:material('#a2abad',.92,.3),gray:material('#69716e',.65,.36),glass:material('#26383a',.65,.15,{transparent:true,opacity:.5}),blue:material('#235bdd',.15,.4),orange:material('#ed9b32',.1,.4)};
-const floor=new THREE.Mesh(new THREE.PlaneGeometry(200,200),material('#e0e3e0',.08,.7));floor.position.z=-.14;floor.receiveShadow=true;scene.add(floor);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(200,200),material('#292929',.08,.7));floor.position.z=-.14;floor.receiveShadow=true;scene.add(floor);
 const pedestal=new THREE.Mesh(new RoundedBoxGeometry(.17,.17,.138,5,.01),material('#424c45',.72,.29));pedestal.position.set(0,0,-.07);pedestal.castShadow=true;pedestal.receiveShadow=true;scene.add(pedestal);
 const mountPlate=new THREE.Mesh(new THREE.CylinderGeometry(.095,.097,.009,96),material('#626f64',.82,.25));mountPlate.rotation.x=Math.PI/2;mountPlate.position.z=-.0045;mountPlate.receiveShadow=true;mountPlate.castShadow=true;scene.add(mountPlate);
 for(const x of [-.063,.063])for(const y of [-.063,.063]){const bolt=new THREE.Mesh(new THREE.CylinderGeometry(.0045,.0045,.003,6),materials.silver);bolt.rotation.x=Math.PI/2;bolt.position.set(x,y,.001);scene.add(bolt);}
@@ -198,7 +198,7 @@ function bindUI(){
  document.querySelectorAll('[data-pose]').forEach(b=>b.onclick=()=>{animatePose(presetPose(b.dataset.pose));toast(b.textContent+'へ移動');});
  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));$('fit-view').onclick=()=>setView('perspective');
  $('photo').onclick=()=>setPhoto(!photoMode);$('screenshot').onclick=()=>{const prev=photoMode;setPhoto(true);draw();renderer.domElement.toBlob(b=>{if(b)download(model.exportName+'.png',b,'image/png');setPhoto(prev);},'image/png');};
- $('show-grid').onchange=e=>grid.visible=e.target.checked;$('show-trails').onchange=e=>{for(const t of Object.values(trails)){t.line.visible=e.target.checked;if(!e.target.checked){t.points=[];t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry();}}};
+ $('show-grid').onchange=e=>grid.visible=e.target.checked;
  $('show-markers').onchange=e=>{markersVisible=e.target.checked;updateMarkerVisibility();};
  $('studio').onclick=()=>{const is_dark=!document.body.classList.contains('dark-studio');document.body.classList.toggle('dark-studio',is_dark);$('studio').textContent=is_dark?'ダーク':'ライト';$('studio').setAttribute('aria-pressed',String(is_dark));$('studio').setAttribute('aria-label',is_dark?'背景をライトに切り替え':'背景をダークに切り替え');scene.background.set(is_dark?'#1e1e1e':'#edf0ed');scene.fog.color.copy(scene.background);floor.material.color.set(is_dark?'#292929':'#e0e3e0');scene.environmentIntensity=is_dark?.6:.65;renderer.shadowMap.needsUpdate=true;};
  $('enable-shadows').onclick=()=>{const enable_shadows=!renderer.shadowMap.enabled;renderer.shadowMap.enabled=enable_shadows;renderer.shadowMap.needsUpdate=enable_shadows;
@@ -243,8 +243,20 @@ function updateIK(dt){
  if((pos<.0004&&(!hold||ang<.007))||fraction===1)activeTarget=false;
  return before.some((q,i)=>Math.abs(q-chain[i].q)>1e-8);
 }
+function update_trail(side,position){
+ const trail=trails[side],has_replay_control=!!replay_panel?.has_pose_control,source=has_replay_control?'replay':robot.pose_source;
+ if(trail.source!==source){trail.source=source;trail.points=[];trail.has_pending_points=true;}
+ trail.line.visible=$('show-trails').checked&&!has_replay_control;
+ if(!has_replay_control&&(!trail.points.length||trail.points.at(-1).distanceTo(position)>.002)){
+  trail.points.push(position.clone());if(trail.points.length>1500)trail.points.shift();trail.has_pending_points=true;
+ }
+ // 非表示中も有界の履歴を保持。GPU資源更新は表示中の変更時だけ。
+ if(trail.line.visible&&trail.has_pending_points){
+  trail.line.geometry.dispose();trail.line.geometry=new THREE.BufferGeometry().setFromPoints(trail.points);trail.has_pending_points=false;
+ }
+}
 function updateLabels(){for(const side of ['L','R']){const tcp=robot.tcp(side),p=targets[side].position.clone().project(camera),label=$(`label-${side}`);label.style.left=((p.x*.5+.5)*host.clientWidth+(side==='L'?18:-96))+'px';label.style.top=((-p.y*.5+.5)*host.clientHeight+22)+'px';label.style.opacity=p.z>1||p.z< -1?'0':'1';const line=targets[side].userData.errorLine;line.geometry.setFromPoints([tcp.position,targets[side].position]);line.computeLineDistances();line.visible=markersVisible&&!photoMode&&tcp.position.distanceTo(targets[side].position)>.002;
- if($('show-trails').checked){const t=trails[side];if(!t.points.length||t.points.at(-1).distanceTo(tcp.position)>.002){t.points.push(tcp.position.clone());if(t.points.length>1500)t.points.shift();t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry().setFromPoints(t.points);}}}
+ update_trail(side,tcp.position);}
 }
 function updateUI(){const tcp=robot.tcp(activeSide),error=tcp.position.distanceTo(targets[activeSide].position)*1000,angle=orientationError(targets[activeSide].quaternion,tcp.quaternion).length()*DEG,hold=$('hold-orientation').checked,ok=error<1&&(!hold||angle<1);$('ik-state').textContent=playing?'ポーズを再生中':ok?'目標に到達':activeTarget&&solveFrames<40?'手先が追従中':'目標未到達';$('ik-error').textContent=error.toFixed(1)+' mm'+(hold?' / '+angle.toFixed(1)+'°':'');$('ik-dot').style.background=ok?'var(--green)':'var(--amber)';$('ik-state').style.color=ok?'#007700':'var(--amber)';$('actual-position').textContent='TCP '+tcp.position.toArray().map(v=>format_fixed(v*1000,1).padStart(6)).join(' / ')+' mm';syncControls();if(!gizmo.dragging)syncTargetInputs();if(window.simulator)document.documentElement.dataset.simState=JSON.stringify(window.simulator.getState());}
 // 標準品質では中間バッファと画面全体の後処理を省略
@@ -324,6 +336,8 @@ async function init(){
   const {avoidance_replay}=await import('./avoidance-replay.js');
   replay_panel=new avoidance_replay({robot,scene,renderer,camera,controls:orbit,on_pose:()=>{syncTargets();syncControls();}});
   window.simulator.avoidance_replay=replay_panel;
+  replay_panel.trajectory_layers.bind_control('eef',$('show-trails'));
+  for(const trail of Object.values(trails)){trail.line.layers.set(4);replay_panel.trajectory_layers.bind('eef',trail.line);}
   if(is_replay_view){
    document.querySelector('[data-panel=experiment]').click();
    await replay_panel.open(replay_request);

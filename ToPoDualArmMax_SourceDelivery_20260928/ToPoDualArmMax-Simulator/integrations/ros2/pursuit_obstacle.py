@@ -8,19 +8,29 @@ from scipy.optimize import minimize
 from gng_sphere_avoidance import sphere_field, unit_vector
 
 
-def shoulder_anchor(targets, wrist, direction, lengths):
+def shoulder_anchor_candidates(targets, wrist, direction, lengths):
     """初期手首・往復対象点を含む固定肩位置。試験中の肩移動なし。"""
     points = np.vstack((targets, wrist))
     center = np.mean(np.asarray(targets),axis=0)
     outward = unit_vector(np.r_[np.asarray(direction)[:2],0.])
     if np.linalg.norm(outward)<.5:
         outward = np.array([1.,0.,0.])
-    candidates = np.array([center+outward*offset+[0.,0.,height]
+    lateral = np.cross([0.,0.,1.],outward)
+    candidates = np.array([center+(np.cos(angle)*outward+np.sin(angle)*lateral)*offset+[0.,0.,height]
+                           for angle in (0.,np.pi/3,-np.pi/3,2*np.pi/3,-2*np.pi/3,np.pi)
                            for offset in (.35,.45,.25) for height in (.12,.24,0.)])
     radii = np.max(np.linalg.norm(candidates[:,None]-points,axis=-1),axis=1)
     costs = radii+.1*np.linalg.norm(candidates-(center+outward*.4+[0.,0.,.12]),axis=1)
     can_reach = radii<np.sum(lengths)-.04
-    return candidates[int(np.argmin(np.where(can_reach,costs,np.inf) if np.any(can_reach) else costs))]
+    order = np.argsort(costs)
+    if np.any(can_reach):
+        order = order[can_reach[order]]
+    return candidates[order[:24]]
+
+
+def shoulder_anchor(targets, wrist, direction, lengths):
+    """往復対象を含む肩候補の先頭。既存CLIとの共通入口。"""
+    return shoulder_anchor_candidates(targets,wrist,direction,lengths)[0]
 
 
 def segment_nearest(points, segments):
@@ -90,18 +100,15 @@ class pursuit_obstacle:
         self.enable_separate_response = 'max_ball_deceleration' in config or 'max_ball_turn_acceleration' in config
         if not np.isfinite([self.max_deceleration, self.max_turn_acceleration]).all() or not 0 < self.max_deceleration <= 30 or not 0 < self.max_turn_acceleration <= 30:
             raise ValueError('減速・方向転換加速度の範囲外')
-        self.enable_fixed_guard = config.get('enable_fixed_guard', True)
-        if type(self.enable_fixed_guard) is not bool:
-            raise ValueError('固定部ガードは真偽値')
-        self.enable_proximal_guard = config.get('enable_proximal_guard', True)
+        # 迂回条件の単一スイッチ。旧設定名は入力時だけの互換受付。
+        self.enable_proximal_guard = config.get('enable_proximal_guard', config.get('enable_fixed_guard', True))
         if type(self.enable_proximal_guard) is not bool:
             raise ValueError('近位部の迂回条件は真偽値')
-        self.enable_fixed_guard = self.enable_fixed_guard and self.enable_proximal_guard
-        self.margin = float(config.get('fixed_clearance_m', .025))
+        self.margin = 0.
         self.lengths = np.asarray(config.get('link_lengths_m', [.35, .35]), dtype=float)
         self.anchor = np.asarray(config.get('shoulder_position_m', np.asarray(center)-direction*.12+[0., 0., .15]), dtype=float)
-        if self.anchor.shape != (3,) or not np.isfinite(self.anchor).all() or self.lengths.shape != (2,) or not np.isfinite(self.lengths).all() or np.any(self.lengths < .15) or np.any(self.lengths > .6) or not .005 <= self.margin <= .1:
-            raise ValueError('追跡腕の肩位置・リンク寸法・固定部余裕の不正')
+        if self.anchor.shape != (3,) or not np.isfinite(self.anchor).all() or self.lengths.shape != (2,) or not np.isfinite(self.lengths).all() or np.any(self.lengths < .15) or np.any(self.lengths > .6):
+            raise ValueError('追跡腕の肩位置・リンク寸法の不正')
         self.fixed_centers = geometry.centers(positions)[~geometry.is_arm]
         self.fixed_radii = geometry.radii[~geometry.is_arm]
         self.fixed_shape_radii = self.fixed_radii.copy()
@@ -110,7 +117,8 @@ class pursuit_obstacle:
         self.guard_anchor_links, self.guard_anchor_radii = [], []
         self.target_links = {config.get('target_link','L_tcp')}
         self.target_mask = np.zeros(len(geometry.radii),dtype=bool)
-        self.target_radii = np.empty(0)
+        self.target_centers = np.empty((0,3))
+        self.target_contact_centers = None
         if hasattr(geometry, 'joints'):
             active_names = set(getattr(geometry, 'active_joint_names', ()))
             parents = {joint[2]: joint for joint in geometry.joints}
@@ -131,7 +139,6 @@ class pursuit_obstacle:
                     return name == target_root
                 self.target_links = {name for name in geometry.link_indices if is_distal(name)}
             self.target_mask = np.array([name in self.target_links for name,_,_ in geometry.spheres])
-            self.target_radii = geometry.radii[self.target_mask]
             proximal_roots, link = set(), target_root
             while link in parents:
                 link = parents[link][1]
@@ -140,12 +147,9 @@ class pursuit_obstacle:
                 # 指定リンクより近位の運動剛体群。固定結合のカバーも同一群。
                 self.protected_mask |= np.array([motion_root(name) in proximal_roots for name,_,_ in geometry.spheres])
                 self.protected_mask &= np.array([name not in self.target_links for name,_,_ in geometry.spheres])
+                # RRT・局所移動の禁止形状は保護リンクだけ。許可リンクの実接触判定とは独立。
                 self.fixed_mask = self.protected_mask.copy()
                 self.fixed_shape_radii = geometry.radii[self.fixed_mask].copy()
-                if self.pursuit_mode=='link_point':
-                    # 指定剛体以外への先当たりを防ぐ障害物側の経路条件。
-                    self.fixed_mask |= ~self.target_mask
-                    self.fixed_shape_radii = geometry.radii[self.fixed_mask].copy()
             radii_by_anchor = {}
             for idx,(name,point,radius) in enumerate(geometry.spheres):
                 if 'target_link' in config:
@@ -172,7 +176,8 @@ class pursuit_obstacle:
                 self.guard_box_links = np.unique(geometry.sphere_links[self.fixed_mask])
                 self.guard_box_local_centers = guard_geometry.box_centers[self.guard_box_links]
                 self.guard_box_halves = np.vstack((guard_geometry.box_halves[self.guard_box_links],[.085,.085,.069]))
-                self.update_box_guard(transforms[self.guard_box_links,:3,3],transforms[self.guard_box_links,:3,:3])
+                self.target_point_links,self.target_points = guard_geometry.contact_points(np.unique(geometry.sphere_links[self.target_mask]),self.radius)
+                self.update_link_frames(transforms[:,:3,3],transforms[:,:3,:3])
             anchors = [transforms[geometry.link_indices[name],:3,3] for name in self.guard_anchor_links]
             self.update_guard(geometry.centers(positions),anchors)
             self.target_groups = [np.array([idx for idx,(name,_,_) in enumerate(geometry.spheres) if name in self.target_links and motion_root(name)==root],dtype=int)
@@ -183,6 +188,8 @@ class pursuit_obstacle:
             raise ValueError('横切り対象の衝突形状なし')
         self.center = np.asarray(center, dtype=float).copy()
         self.segments = self.links(self.center)
+        if self.shape == 'linked_arm':
+            self.select_linked_start(config.get('shoulder_candidates_m',[self.anchor]))
         self.center = self.segments[-1,-1].copy()
         self.velocity = np.zeros(3)
         self.max_endpoint_speed = 0.
@@ -194,6 +201,9 @@ class pursuit_obstacle:
         self.configuration_plan_ms = 0.
         self.phase = 'pursuing'
         self.route_waypoint = None
+        self.route_points = np.empty((0,3))
+        self.route_target = None
+        self.route_rng = np.random.default_rng(int(config.get('seed',401)))
         self.route_history = []
         self.num_route_recoveries = 0
         self.next_route_sec = 0.
@@ -220,7 +230,7 @@ class pursuit_obstacle:
             if np.any(self.center<self.min_random_walk_position_m) or np.any(self.center>self.max_random_walk_position_m):
                 raise ValueError('障害物の開始位置がランダムウォーク範囲外')
         self.min_fixed_gap = self.fixed_gap(self.segments)
-        if self.enable_fixed_guard and (self.min_fixed_gap < self.margin or np.min(self.segments[...,2])-self.radius<-.10):
+        if self.enable_proximal_guard and (self.min_fixed_gap < self.margin or np.min(self.segments[...,2])-self.radius<-.10):
             raise ValueError('追跡障害物の開始位置が固定部の禁止領域内')
 
     def links(self, wrist, swivel_rad=0.,reference_segments=None):
@@ -246,6 +256,30 @@ class pursuit_obstacle:
         elbow = self.anchor+along*axis+np.sqrt(max(0., self.lengths[0]**2-along**2))*bend
         return np.asarray([[self.anchor, elbow], [elbow, wrist]])
 
+    def select_linked_start(self, anchors):
+        """固定肩候補と肘旋回の初期配置。周辺への可動余地と全端点の禁止域照合。"""
+        anchors = np.asarray(anchors,dtype=float)
+        if anchors.ndim!=2 or anchors.shape[1]!=3 or not 1<=len(anchors)<=24 or not np.isfinite(anchors).all():
+            raise ValueError('リンク原点候補の形式不正')
+        best = None
+        for anchor in anchors:
+            self.anchor = anchor
+            for angle in np.linspace(-np.pi,np.pi,8,endpoint=False):
+                candidate = self.links(self.center,angle)
+                if np.linalg.norm(candidate[-1,-1]-self.center)>1e-6 or np.min(candidate[...,2])-self.radius<-.10:
+                    continue
+                gap = self.fixed_gap(candidate) if self.enable_proximal_guard else 1.
+                if self.enable_proximal_guard and gap<self.margin:
+                    continue
+                probes = [self.links(self.center+axis*.06,reference_segments=candidate) for axis in np.vstack((np.eye(3),-np.eye(3)))]
+                num_directions = sum(not self.enable_proximal_guard or self.can_traverse(candidate,probe) for probe in probes)
+                score = .02*num_directions+min(gap,.15)
+                if best is None or score>best[0]:
+                    best = score,anchor.copy(),candidate.copy()
+        if best is None:
+            raise ValueError('リンク原点から追跡可能な非接触の開始位置なし。原点位置の変更が必要')
+        _,self.anchor,self.segments = best
+
     def fixed_gap(self, segments):
         if self.guard_box_links is not None:
             return float(np.min(self.path_gaps(segments[:,0],segments[:,1])))
@@ -258,13 +292,14 @@ class pursuit_obstacle:
         self.robot_centers = np.asarray(centers)
         self.fixed_centers = np.concatenate((np.asarray(centers)[self.fixed_mask],[[0.,0.,-.07]],np.asarray(anchors).reshape(-1,3)))
         self.target_centers = np.asarray(centers)[self.target_mask]
-        # 固定拘束の微小な追従ずれ用余裕 [m]。接触評価形状とは独立の禁止領域。
-        self.fixed_radii = np.r_[self.fixed_shape_radii,np.linalg.norm([.085,.085,.069]),self.guard_anchor_radii]+.005
+        self.fixed_radii = np.r_[self.fixed_shape_radii,np.linalg.norm([.085,.085,.069]),self.guard_anchor_radii]
 
-    def update_box_guard(self, positions, rotations):
-        """保護リンクの向き付き包絡箱。実測リンク変換の共用、形状の再生成なし。"""
-        self.guard_box_centers = np.vstack((positions+np.einsum('nij,nj->ni',rotations,self.guard_box_local_centers),[0.,0.,-.07]))
-        self.guard_box_axes = np.concatenate((rotations,np.eye(3)[None]))
+    def update_link_frames(self, positions, rotations):
+        """禁止形状と接触目標で共通の実測リンク変換。追加FK・形状再生成なし。"""
+        links = self.guard_box_links
+        self.guard_box_centers = np.vstack((positions[links]+np.einsum('nij,nj->ni',rotations[links],self.guard_box_local_centers),[0.,0.,-.07]))
+        self.guard_box_axes = np.concatenate((rotations[links],np.eye(3)[None]))
+        self.target_contact_centers = positions[self.target_point_links]+np.einsum('nij,nj->ni',rotations[self.target_point_links],self.target_points)
 
     def can_traverse(self, previous, candidate):
         if self.guard_box_links is not None:
@@ -311,9 +346,9 @@ class pursuit_obstacle:
         lower,upper = np.min(local,axis=1),np.max(local,axis=1)
         gaps = np.max(np.maximum(lower-self.guard_box_halves,-upper-self.guard_box_halves),axis=-1)
         # 角部の斜め分離方向。任意軸の支持区間による保守下界、経路点の間引きなし。
-        paths,boxes = np.nonzero(gaps<self.margin+self.radius+.005)
+        paths,boxes = np.nonzero(gaps<self.margin+self.radius)
         if not len(paths):
-            return (gaps if enable_pair_bounds else np.min(gaps,axis=1))-self.radius-.005
+            return (gaps if enable_pair_bounds else np.min(gaps,axis=1))-self.radius
         near = np.transpose(local,(0,2,1,3))[paths,boxes]
         halves = self.guard_box_halves[boxes]
         directions = [np.mean(near,axis=1)]
@@ -328,7 +363,7 @@ class pursuit_obstacle:
             bound = np.min(np.einsum('kvi,ki->kv',near,direction),axis=1)-np.sum(halves*np.abs(direction),axis=-1)
             bound[lengths<1e-12] = -np.inf
             gaps[paths,boxes] = np.maximum(gaps[paths,boxes],bound)
-        return (gaps if enable_pair_bounds else np.min(gaps,axis=1))-self.radius-.005
+        return (gaps if enable_pair_bounds else np.min(gaps,axis=1))-self.radius
 
     def sweep_goal(self, now, speed):
         """末端側剛体の横切り目標。世界座標で保持する進入点・通過点と固定上限の再計画。"""
@@ -356,7 +391,7 @@ class pursuit_obstacle:
                 directions = np.vstack((forward,unit_vector(self.sweep_rng.normal(size=3)),np.eye(3),-np.eye(3),-forward))
                 entries,exits = aim-directions*.16,aim+directions*.22
                 is_valid = np.minimum(entries[:,2],exits[:,2])-self.radius>=-.10
-                if self.enable_fixed_guard:
+                if self.enable_proximal_guard:
                     is_valid &= self.path_gaps(entries,exits)>=self.margin
                 if not np.any(is_valid):
                     continue
@@ -372,104 +407,132 @@ class pursuit_obstacle:
                 break
             self.sweep_cost_ms += (time.perf_counter()-begin)*1000.
         if self.sweep_exit is None:
-            # 許容経路不在時の待機。禁止部を横切る代替目標なし。
-            return self.center.copy()
+            # 横切り候補の更新中も対象範囲への追跡継続。近位部の経路制約は後段で共通適用。
+            centers = self.target_centers
+            return centers[int(np.argmin(np.linalg.norm(centers-self.center,axis=1)))].copy()
         return self.sweep_exit if self.is_crossing else self.sweep_entry
 
+    def plan_route(self, goal):
+        """固定上限の双方向RRT-Connect。禁止形状全体の照合と可視ショートカット。"""
+        start = self.center.copy()
+        min_position_m = np.minimum(start,goal)-.6
+        max_position_m = np.maximum(start,goal)+.6
+        waypoints = np.empty((0,3))
+        if self.guard_box_links is not None:
+            extents = np.einsum('mij,mj->mi',np.abs(self.guard_box_axes),self.guard_box_halves)
+            is_near = self.box_path_gaps(np.array([[start,goal]]),True)[0]<self.margin+.15
+            if np.any(is_near):
+                min_position_m = np.minimum(min_position_m,np.min((self.guard_box_centers-extents)[is_near],axis=0)-.2)
+                max_position_m = np.maximum(max_position_m,np.max((self.guard_box_centers+extents)[is_near],axis=0)+.2)
+                signs = np.array([value for value in product((-1.,0.,1.),repeat=3) if any(value)])
+                local = signs[None]*(self.guard_box_halves[is_near,None]+self.radius+self.margin+.04)
+                waypoints = (self.guard_box_centers[is_near,None]+np.einsum('mvi,mji->mvj',local,self.guard_box_axes[is_near])).reshape(-1,3)
+                can_sample = waypoints[:,2]>=self.radius-.10+.005
+                can_sample &= self.path_gaps(waypoints,waypoints)>=self.margin
+                waypoints = waypoints[can_sample]
+        min_position_m[2] = max(min_position_m[2],self.radius-.10+.005)
+        initial_gap = self.path_gaps([start],[start])[0]
+        trees = [[start],[np.asarray(goal).copy()]]
+        parents = [[-1],[-1]]
+
+        def extend(side, target):
+            points = np.asarray(trees[side])
+            idx = int(np.argmin(np.linalg.norm(points-target,axis=1)))
+            delta = target-points[idx]
+            candidate = points[idx]+delta*min(1.,.28/max(float(np.linalg.norm(delta)),1e-9))
+            if candidate[2]<min_position_m[2]:
+                return None
+            if self.shape=='linked_arm' and np.linalg.norm(candidate-self.anchor)>=np.sum(self.lengths)-.005:
+                return None
+            gap = self.path_gaps([points[idx]],[candidate])[0]
+            can_escape = side==0 and idx==0 and initial_gap<self.margin and gap>=initial_gap-1e-9
+            if gap<self.margin and not can_escape:
+                return None
+            if np.linalg.norm(candidate-points[idx])<1e-8:
+                return idx
+            trees[side].append(candidate);parents[side].append(idx)
+            return len(trees[side])-1
+
+        def branch(side, idx):
+            result = []
+            while idx>=0:
+                result.append(trees[side][idx]);idx=parents[side][idx]
+            return result[::-1]
+
+        path = None
+        for turn in range(128):
+            side = turn%2
+            if len(waypoints) and turn%4<2:
+                sample = waypoints[int(self.route_rng.integers(len(waypoints)))]
+            else:
+                sample = self.route_rng.uniform(min_position_m,max_position_m) if turn%5 else trees[1-side][0]
+            idx = extend(side,sample)
+            if idx is None:
+                continue
+            target = trees[side][idx]
+            for _ in range(16):
+                other = extend(1-side,target)
+                if other is None:
+                    break
+                if np.linalg.norm(trees[1-side][other]-target)<1e-8:
+                    first,second = (idx,other) if side==0 else (other,idx)
+                    path = branch(0,first)+branch(1,second)[-2::-1]
+                    break
+            if path is not None:
+                break
+        if path is None:
+            # 未到達時も探索済みの安全な枝への移動。遮断された目標への直進反復なし。
+            points = np.asarray(trees[0])
+            can_select = np.linalg.norm(points-start,axis=1)>.06
+            if self.route_history:
+                recent = np.min(np.linalg.norm(points[:,None]-self.route_history,axis=-1),axis=1)
+                if np.any(can_select&(recent>.08)):
+                    can_select &= recent>.08
+            if not np.any(can_select):
+                return np.empty((0,3))
+            idx = int(np.argmin(np.where(can_select,np.linalg.norm(points-goal,axis=1),np.inf)))
+            path = branch(0,idx)
+            self.num_route_recoveries += 1
+        # 線分全体の照合による短絡。未照合の曲線補間なし、旋回平滑化は速度応答側。
+        path = np.asarray(path)
+        result,idx = [],0
+        while idx<len(path)-1:
+            gaps = self.path_gaps(np.broadcast_to(path[idx],path[idx+1:].shape),path[idx+1:])
+            valid = np.flatnonzero(gaps>=self.margin)
+            idx += int(valid[-1])+1 if len(valid) else 1
+            result.append(path[idx])
+        return np.asarray(result).reshape(-1,3)
+
     def route_goal(self, followed, now):
-        """直進可能時の即時追跡、遮蔽時だけの小規模3D可視グラフ。"""
-        if self.enable_fixed_guard and self.path_gaps([followed],[followed])[0]<self.margin and len(getattr(self,'target_centers',())):
-            # 関節原点が近位部内の場合の対象剛体内への狙点移動。対象外リンクへの切替なし。
-            centers = self.target_centers
+        """直進追跡と保持済み迂回経路。目標・禁止域の変化または停滞時だけの再探索。"""
+        centers = self.target_centers if self.target_contact_centers is None else self.target_contact_centers
+        if self.enable_proximal_guard and len(centers) and self.path_gaps([followed],[followed])[0]<self.margin:
+            # 近位部内の関節原点に代わる実衝突形状への接触目標。外接球周囲への膨張なし。
             can_approach = self.path_gaps(centers,centers)>=self.margin
-            if not np.any(can_approach):
-                directions = np.array([value for value in product((-1.,0.,1.),repeat=3) if any(value)])
-                directions /= np.linalg.norm(directions,axis=1)[:,None]
-                offsets = self.radius*.5+self.target_radii
-                centers = (centers[:,None]+directions[None]*offsets[:,None,None]).reshape(-1,3)
-                can_approach = self.path_gaps(centers,centers)>=self.margin
             if np.any(can_approach):
                 candidates = centers[can_approach]
-                followed = candidates[np.argmin(np.linalg.norm(candidates-followed,axis=1)+.2*np.linalg.norm(candidates-self.center,axis=1))]
-        if not self.enable_fixed_guard or self.path_gaps([self.center],[followed])[0]>=self.margin:
+                followed = candidates[np.argmin(np.linalg.norm(candidates-self.center,axis=1))]
+        if not self.enable_proximal_guard or self.path_gaps([self.center],[followed])[0]>=self.margin:
             self.route_waypoint = None
+            self.route_points = np.empty((0,3))
             self.phase = 'pursuing'
             return followed
-        if self.route_waypoint is not None and np.linalg.norm(self.route_waypoint-self.center)<.03:
-            self.route_history.append(self.route_waypoint.copy())
-            self.route_history = self.route_history[-8:]
-            self.route_waypoint = None
-            self.next_route_sec = now
-        if now < self.next_route_sec:
-            self.phase = 'detouring' if self.route_waypoint is not None else 'route_blocked'
-            return followed if self.route_waypoint is None else self.route_waypoint
-        begin = time.perf_counter()
-        self.next_route_sec = now+.2
-        self.num_route_plans += 1
-        # 近接する禁止球3個×26方向。探索量の固定上限、同一経路の側替わり抑制。
-        nearest = segment_nearest(self.fixed_centers,np.array([[self.center,followed]]))[:,0]
-        gaps = np.linalg.norm(nearest-self.fixed_centers,axis=1)-self.fixed_radii-self.radius
-        indices = np.argsort(gaps)[:3]
-        directions = np.array([value for value in product((-1.,0.,1.),repeat=3) if any(value)])
-        directions /= np.linalg.norm(directions,axis=1)[:,None]
-        nodes = [self.center,followed]
-        if self.route_waypoint is not None:
-            nodes.append(self.route_waypoint)
-        for idx in indices:
-            extent = (self.fixed_radii[idx]+self.radius+self.margin+.025)*1.3
-            nodes.extend(self.fixed_centers[idx]+directions*extent)
-        nodes = np.asarray(nodes)
-        is_valid = nodes[:,2]-self.radius>=-.10
-        is_valid &= self.path_gaps(nodes,nodes)>=self.margin
-        if self.shape=='linked_arm':
-            is_valid &= np.linalg.norm(nodes-self.anchor,axis=1)<np.sum(self.lengths)-.005
-        is_valid[0] = True
-        # 追跡点自体が近位球内の場合も、禁止域手前までの到達経路を探索。
-        nodes = nodes[np.r_[True,True,is_valid[2:]]]
-        first,second = np.triu_indices(len(nodes),1)
-        distances = np.linalg.norm(nodes[first]-nodes[second],axis=1)
-        edge_gaps = self.path_gaps(nodes[first],nodes[second])
-        can_connect = edge_gaps>=self.margin
-        initial_gap = self.path_gaps([self.center],[self.center])[0]
-        if initial_gap<self.margin:
-            # 保護部の移動による侵入後も、初期離隔を悪化させない出発辺だけの接続。
-            can_connect |= (first==0)&(edge_gaps>=initial_gap-1e-9)
-        weights = np.full((len(nodes),len(nodes)),np.inf)
-        weights[first[can_connect],second[can_connect]] = distances[can_connect]
-        weights = np.minimum(weights,weights.T)
-        costs = np.full(len(nodes),np.inf);costs[0] = 0.
-        parents = np.full(len(nodes),-1,dtype=int)
-        is_visited = np.zeros(len(nodes),dtype=bool)
-        for _ in range(len(nodes)):
-            idx = int(np.argmin(np.where(is_visited,np.inf,costs)))
-            if is_visited[idx] or not np.isfinite(costs[idx]):
-                break
-            is_visited[idx] = True
-            candidate = costs[idx]+weights[idx]
-            has_lower_cost = candidate<costs
-            parents[has_lower_cost] = idx;costs[has_lower_cost] = candidate[has_lower_cost]
-        if np.isfinite(costs[1]):
-            chosen = 1
-        else:
-            # 未到達点への直進反復の回避。到達可能な境界候補への接近。
-            remaining = np.linalg.norm(nodes-followed,axis=1)
-            chosen = int(np.argmin(np.where(is_visited,remaining+.12*costs,np.inf)))
-            if chosen==0:
-                # 局所最短方向が行き止まりの場合の有限バックトラック。停止点の再選択なし。
-                candidates = is_visited & (np.linalg.norm(nodes-self.center,axis=1)>.04)
-                if self.route_history:
-                    recent = np.min(np.linalg.norm(nodes[:,None]-self.route_history,axis=-1),axis=1)
-                    if np.any(candidates & (recent>.06)):
-                        candidates &= recent>.06
-                if np.any(candidates):
-                    chosen = int(np.argmin(np.where(candidates,remaining+.12*costs,np.inf)))
-                    self.num_route_recoveries += 1
-        while parents[chosen]>0:
-            chosen = int(parents[chosen])
-        self.route_waypoint = nodes[chosen].copy() if chosen else None
-        self.route_cost_ms += (time.perf_counter()-begin)*1000
+        while len(self.route_points) and np.linalg.norm(self.route_points[0]-self.center)<.04:
+            self.route_history = (self.route_history+[self.route_points[0].copy()])[-8:]
+            self.route_points = self.route_points[1:]
+        has_path = bool(len(self.route_points))
+        can_follow = has_path and self.path_gaps([self.center],[self.route_points[0]])[0]>=self.margin
+        has_changed = self.route_target is None or np.linalg.norm(self.route_target-followed)>.1
+        if now>=self.next_route_sec and (not can_follow or has_changed or self.tip_stalled_sec>.12):
+            begin = time.perf_counter()
+            self.route_points = self.plan_route(followed)
+            self.route_target = np.asarray(followed).copy()
+            self.next_route_sec = now+.2
+            self.num_route_plans += 1
+            self.route_cost_ms += (time.perf_counter()-begin)*1000
+        self.route_waypoint = self.route_points[0].copy() if len(self.route_points) else None
         self.phase = 'detouring' if self.route_waypoint is not None else 'route_blocked'
-        return followed if self.route_waypoint is None else self.route_waypoint
+        return self.center.copy() if self.route_waypoint is None else self.route_waypoint
 
     def random_walk_target(self, now):
         """固定間隔のランダム目標点。最大8候補、追加FK・ボクセル登録・経路探索なし。"""
@@ -479,7 +542,7 @@ class pursuit_obstacle:
         padding = min(.1,self.random_walk_extent_m*.2)
         points = self.random_walk_rng.uniform(self.min_random_walk_position_m+padding,self.max_random_walk_position_m-padding,size=(8,3))
         can_reach = np.linalg.norm(points-self.center,axis=1)>.04
-        if self.enable_fixed_guard:
+        if self.enable_proximal_guard:
             can_reach &= self.path_gaps(np.broadcast_to(self.center,points.shape),points)>=self.margin
         indices = np.flatnonzero(can_reach)
         self.random_walk_goal = points[indices[0]].copy() if len(indices) else self.center.copy()
@@ -490,7 +553,7 @@ class pursuit_obstacle:
         """移動範囲と既存固定部ガードの共通採用条件。"""
         if self.pursuit_mode == 'random_walk' and (np.any(candidate<self.min_random_walk_position_m) or np.any(candidate>self.max_random_walk_position_m)):
             return False
-        return not self.enable_fixed_guard or self.can_traverse(previous,candidate)
+        return not self.enable_proximal_guard or self.can_traverse(previous,candidate)
 
     def can_steps(self,previous,candidates,current_gap):
         """縮小候補の一括掃引照合。既存の余裕・床・単調回復条件の保持。"""
@@ -500,7 +563,7 @@ class pursuit_obstacle:
         is_valid = np.ones(len(candidates),dtype=bool)
         if self.pursuit_mode=='random_walk':
             is_valid &= np.all((candidates>=self.min_random_walk_position_m)&(candidates<=self.max_random_walk_position_m),axis=(1,2,3))
-        if not self.enable_fixed_guard:
+        if not self.enable_proximal_guard:
             return is_valid
         previous = np.broadcast_to(previous,candidates.shape)
         swept = np.concatenate((previous,candidates),axis=2).reshape(-1,4,3)
@@ -528,7 +591,7 @@ class pursuit_obstacle:
 
     def configuration_options(self,goal,speed,period,now):
         """境界付近の手首・肘旋回の連動候補。9姿勢の距離差分と4変数の有限最適化。"""
-        if self.shape!='linked_arm' or self.guard_box_links is None or not self.enable_fixed_guard:
+        if self.shape!='linked_arm' or self.guard_box_links is None or not self.enable_proximal_guard:
             return []
         if self.tip_stalled_sec<.05 and self.fixed_gap(self.segments)>self.margin+.04:
             return []
@@ -579,12 +642,13 @@ class pursuit_obstacle:
         coupled=self.configuration_options(route_goal,speed,period,now)
         options=[(self.slew_velocity(value,acceleration,period),swivel) for value,swivel in coupled]+options
         current_fixed_gap = self.fixed_gap(self.segments)
-        is_guard_recovery = self.enable_fixed_guard and current_fixed_gap<self.margin
-        if self.enable_fixed_guard:
+        is_guard_recovery = self.enable_proximal_guard and current_fixed_gap<self.margin
+        is_route_recovery = self.enable_proximal_guard and self.phase=='route_blocked'
+        if self.enable_proximal_guard:
             for axis in np.eye(3):
                 tangent = unit_vector(np.cross(direction, axis))
                 options.extend((self.slew_velocity(unit_vector(direction+sign*2*tangent)*speed, acceleration, period),0.) for sign in (-1., 1.))
-            if is_guard_recovery:
+            if is_guard_recovery or self.tip_stalled_sec>.08 or self.route_waypoint is None:
                 # 行き止まりから離れる並進。追跡方向に限定しない、既存加減速制限内の候補。
                 options.extend((self.slew_velocity(axis*speed,acceleration,period),0.) for axis in np.vstack((np.eye(3),-np.eye(3),-direction)))
         if self.shape=='linked_arm':
@@ -614,6 +678,9 @@ class pursuit_obstacle:
                 segments = reduced[accepted[0]]
             min_gap = self.fixed_gap(segments)
             cost = np.linalg.norm(segments[-1, -1]-route_goal)
+            if is_route_recovery:
+                # 探索予算内の未発見と停止の分離。安全な移動候補の継続選択。
+                cost = -np.linalg.norm(segments[-1,-1]-old[-1,-1])+.01*np.linalg.norm(segments[-1,-1]-followed)
             if is_guard_recovery:
                 cost = -min_gap+.01*cost
             if self.shape=='linked_arm':

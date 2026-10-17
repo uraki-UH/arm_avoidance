@@ -14,7 +14,7 @@ bash scripts/dual_arm_cpu.sh check
 
 リポジトリ全体を配置。Simulator単体では共有UI・独自メッセージが不足。
 checkは依存・点群処理・短時間MuJoCoの確認で、回避性能の判定ではない。
-構成は[dual_arm_cpu.sh](scripts/dual_arm_cpu.sh)・[Compose](docker/compose.simulator_cpu.yaml)を参照。
+構成は[Compose](../docker/compose.simulator_cpu.yaml)の`x-cpu-workflow`を参照。起動窓口は[dual_arm_cpu.sh](../scripts/dual_arm_cpu.sh)。
 
 ## ブラウザとROS 2の起動・終了
 
@@ -36,14 +36,10 @@ shellはROS環境読込み済み。ブラウザのセンサ送信は明示的に
 
 ## GNG／VLUT回避まで使う場合
 
-```bash
-bash scripts/dual_arm_cpu.sh build-gng
-bash scripts/dual_arm_cpu.sh check-gng
-```
-
-腕のGNG/VLUT・Viewerを追加構築。AIS-GNGライブ学習は対象外。
+`x-cpu-workflow.enable_gng: true`に設定し、同じ`build`／`check`を使用。機体・ビルド対象・確認時間も同じYAMLで設定。
+腕のGNG/VLUT・Viewerが構築・確認の対象。AIS-GNGライブ学習は対象外。
 Longの学習バイナリはGitに未収録。機体URDF・設定に対応する左右のgng.bin／vlut.binを別途配置。
-設定・生成は[学習手順](gng_vlut_system/README.md#双腕学習viewerの既定モデル)、実行は[共通ROS回避](gng_vlut_system/docs/dual_arm_simulation.md#センシング--ros回避--実行先)を参照。
+設定・生成は[学習手順](../gng_vlut_system/README.md#双腕学習viewerの既定モデル)、実行は[共通ROS回避](../gng_vlut_system/docs/dual_arm_simulation.md#センシング--ros回避--実行先)を参照。
 
 ## 起動できない場合
 
@@ -52,7 +48,7 @@ Longの学習バイナリはGitに未収録。機体URDF・設定に対応する
 | Docker接続失敗 | ホストのDocker起動・利用権限 |
 | WebGL初期化失敗 | ブラウザGPU設定。画面なしcheckで切り分け |
 | ポート競合 | 8877・8879・8880の既存サービス |
-| 学習データ不足 | check-gng |
+| 学習データ不足 | YAMLのGNG有効設定とcheck |
 | UIソース更新が未反映 | shell内のSimulatorルートでnpm ci && npm run build |
 
 CPUアーキテクチャ差・実機回避は未検証。機能別依存は[ROS連携](ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md)を参照。

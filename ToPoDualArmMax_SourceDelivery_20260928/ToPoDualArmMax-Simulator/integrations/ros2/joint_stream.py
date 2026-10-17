@@ -37,6 +37,8 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
         def open(self):
             self.set_nodelay(True)
             self.subscription = None
+            self.reference_subscription = None
+            self.latest_reference = self.last_reference = None
             self.latest = None
             self.last_sent = None
             self.is_writing = False
@@ -73,6 +75,11 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
                     self.max_state_age_sec = max_age
                     if data.get('receive') is True:
                         self.subscription = node.create_subscription(JointState, topic, self.receive, qos_profile_sensor_data)
+                        if self.is_read_only and topic=='/sim/joint_states':
+                            from std_msgs.msg import String
+                            from rclpy.qos import QoSProfile,DurabilityPolicy
+                            self.reference_subscription = node.create_subscription(String,'/sim/nonstop/reference',self.receive_reference,
+                                QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL))
                     self.timer = tornado.ioloop.PeriodicCallback(self.flush_latest, 1000 / hz)
                     self.timer.start()
                     self.write_message({'type': 'ready'})
@@ -142,15 +149,36 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
                 self.latest = {'type': 'joints', 'pose': pose, 'motion': motion,
                                'received': time.monotonic(), 'stamp_sec': stamp_sec}
 
+        def receive_reference(self, message):
+            """CLIと同じ保持付き基準の表示専用転送。FK・ボクセル化の再実行なし。"""
+            try:
+                if len(message.data)>262144:
+                    return
+                value = json.loads(message.data)
+                if (not isinstance(value,dict) or value.get('format')!='topo-shuttle-reference/1'
+                        or value.get('model')!=self.model or not isinstance(value.get('task'),dict)):
+                    return
+                with self.data_lock:
+                    self.latest_reference = dict(type='task_reference',task=value['task'])
+            except (ValueError,TypeError):
+                return
+
         async def flush_latest(self):
             with self.data_lock:
                 latest = self.latest
-            if self.is_writing or latest is None or latest is self.last_sent or time.monotonic() - latest['received'] > max(.5, 2 / self.hz):
+                reference = self.latest_reference
+            has_reference = reference is not None and reference is not self.last_reference
+            has_joints = latest is not None and latest is not self.last_sent and time.monotonic()-latest['received']<=max(.5,2/self.hz)
+            if self.is_writing or not (has_reference or has_joints):
                 return
             self.is_writing = True
             try:
-                await self.write_message(latest)
-                self.last_sent = latest
+                if has_reference:
+                    await self.write_message(reference)
+                    self.last_reference = reference
+                if has_joints:
+                    await self.write_message(latest)
+                    self.last_sent = latest
             except tornado.websocket.WebSocketClosedError:
                 pass
             finally:
@@ -164,6 +192,9 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
             if self.subscription is not None:
                 node.destroy_subscription(self.subscription)
                 self.subscription = None
+            if self.reference_subscription is not None:
+                node.destroy_subscription(self.reference_subscription)
+                self.reference_subscription = None
             context['clients'].discard(self)
 
     def run():
