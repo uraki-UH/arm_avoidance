@@ -374,7 +374,10 @@ def run_experiment_worker(args, emit):
             current.case_dir = Path(request['case_dir']) if request.get('case_dir') else None
             stop_event.clear()
             try:
-                code = run(current,tagged_emit,request['config'],resources,stop_event)
+                if 'input_binding' in request['config']:
+                    code = run_input_experiment(current,tagged_emit,request['config'],job_id,stop_event)
+                else:
+                    code = run(current,tagged_emit,request['config'],resources,stop_event)
                 tagged_emit(dict(type='experiment_complete',exit_code=code))
             except Exception as error:
                 tagged_emit(dict(type='error',message=str(error)))
@@ -383,6 +386,35 @@ def run_experiment_worker(args, emit):
         resources.close()
         signal.signal(signal.SIGINT,previous)
     return 0
+
+
+def run_input_experiment(args, emit, config, job_id, stop_event):
+    """共通入力プラグインと既存CLI回避の接続。実機出力・入力元の起動停止なし。"""
+    from ros_plugins import bind_input, definition
+    keys = {'input_binding', 'policy', 'trajectory_planner', 'execution_mode', 'duration_sec'}
+    strategies = dict(vlut_graph='graph', avoidance_first='avoidance_first', vrm_predictive='vrm_predictive')
+    if (set(config) != keys or config['policy'] not in strategies or config['execution_mode'] != 'continuous'
+            or config['duration_sec'] != 0 or config['trajectory_planner'] not in ('gng_chomp', 'rrt_chomp')):
+        raise ValueError('ROS入力はGNG系の連続実験専用です')
+    _, source = bind_input(definition('gng'), {}, config['input_binding'])
+    args = copy.copy(args)
+    args.scenario, args.avoidance, args.duration, args.report_sec = 'live', 'gng', 0., .05
+    args.task_file = simulator_dir.parents[1]/'benchmarks/shuttle_bag/task.json'
+    args.gng_strategy = strategies[config['policy']]
+    args.input_binding = config['input_binding']
+    args.input_source = source
+    args.trajectory_planner = config['trajectory_planner']
+    args.runtime_namespace = 'experiment_'+''.join(char for char in job_id if char.isalnum())
+    args.domain_id = source['parameters'].get('domain_id', int(os.environ.get('ROS_DOMAIN_ID', '0')))
+    previous_domain = os.environ.get('ROS_DOMAIN_ID')
+    emit(dict(type='experiment_progress', stage='robot_geometry', elapsed_ms=0))
+    try:
+        return run(args, emit, stop_event=stop_event)
+    finally:
+        if previous_domain is None:
+            os.environ.pop('ROS_DOMAIN_ID', None)
+        else:
+            os.environ['ROS_DOMAIN_ID'] = previous_domain
 
 
 def run(args, emit, chase_config=None, resources=None, stop_event=None):
@@ -424,8 +456,11 @@ def run(args, emit, chase_config=None, resources=None, stop_event=None):
     if args.nonstop_simulation and args.bag is None:
         import yaml
         args.bag = Path(yaml.safe_load((simulator_dir.parents[1]/'scripts/arm_avoidance_bag.yaml').read_text())['bag_path'])
+    has_input_binding = hasattr(args, 'input_binding')
     task = shuttle_task(args.task_file,args.model,args.params_file,
-                        enable_reference=args.nonstop_simulation or args.avoidance=='none') if args.task_file else None
+                        enable_reference=args.nonstop_simulation or args.avoidance=='none' or has_input_binding) if args.task_file else None
+    if task is not None and has_input_binding:
+        task.config['trajectory_planner'] = args.trajectory_planner
     pose = {name: math.radians(angle) for name, angle in presets[args.pose].items()}
     if task is not None:
         pose.update(task.initial_pose)
@@ -437,10 +472,11 @@ def run(args, emit, chase_config=None, resources=None, stop_event=None):
     if args.domain_id is not None:
         os.environ['ROS_DOMAIN_ID'] = str(args.domain_id)
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
-    node = rclpy.create_node('dual_arm_simulation_cli')
+    node = rclpy.create_node(args.runtime_namespace+'_simulation' if has_input_binding else 'dual_arm_simulation_cli')
     executor = SingleThreadedExecutor()
     executor.add_node(node)
-    stop_event = threading.Event()
+    has_external_stop = stop_event is not None
+    stop_event = stop_event if has_external_stop else threading.Event()
     errors = []
 
     def spin():
@@ -452,7 +488,7 @@ def run(args, emit, chase_config=None, resources=None, stop_event=None):
 
     thread = threading.Thread(target=spin, name='simulation-ros')
     thread.start()
-    handlers = {sig: signal.signal(sig, lambda *_: stop_event.set()) for sig in (signal.SIGINT, signal.SIGTERM)}
+    handlers = {} if has_external_stop else {sig: signal.signal(sig, lambda *_: stop_event.set()) for sig in (signal.SIGINT, signal.SIGTERM)}
     scene, bag, bridge, observer, controller = None, None, None, None, None
     session, state_pub, goal_pub = None, None, None
     latest_avoidance = {}
@@ -493,6 +529,8 @@ def run(args, emit, chase_config=None, resources=None, stop_event=None):
                                     roi_topic=args.roi_topic, recorded_self_topic=args.recorded_self_topic)
                 if args.bag:
                     settings.update(recorded_tf_topic=prefix+'/tf', recorded_static_tf_topic=prefix+'/tf_static')
+                if has_input_binding:
+                    settings.update(input_binding=args.input_binding, runtime_namespace=args.runtime_namespace)
                 robot_config = dict(model=args.model, pose=pose, position=[0, 0, 0], quaternion=[0, 0, 0, 1])
                 if args.avoidance == 'ros':
                     from physics_stream import physics_session
@@ -529,7 +567,7 @@ def run(args, emit, chase_config=None, resources=None, stop_event=None):
                     scene = PhysicsScene([], robot_config, settings, node)
                 if task is not None:
                     task.attach(scene)
-                    if task.reference_path is not None:
+                    if task.reference_path is not None and args.nonstop_simulation:
                         from rclpy.qos import QoSProfile,DurabilityPolicy
                         from std_msgs.msg import String
                         reference_pub = node.create_publisher(String,'/sim/nonstop/reference',
@@ -556,6 +594,15 @@ def run(args, emit, chase_config=None, resources=None, stop_event=None):
                         return 0
                 initial = scene.robot.state()
                 target = scene.robot.validate(goal or {}, base_pose=initial)
+                if has_input_binding:
+                    limits = {}
+                    for name, joint in scene.robot.independent.items():
+                        limit = joint.find('limit')
+                        if limit is not None and limit.get('lower') is not None and limit.get('upper') is not None:
+                            limits[name] = dict(min_position_rad=float(limit.get('lower')), max_position_rad=float(limit.get('upper')), source='urdf')
+                    emit(dict(type='experiment_ready', recording=dict(format='topo-avoidance-replay/1', model=args.model,
+                        input_source='ros2', input_binding=args.input_source, policy=args.gng_strategy,
+                        failure_reason='', joint_position_limits=limits, task=task.reference)))
                 emit(dict(type='start', model=args.model, avoidance=args.avoidance, initial_joints=initial,
                           goal_joints=target, bag=str(args.bag) if args.bag else None,
                           task_reference=task.reference if task is not None else None,
@@ -610,12 +657,25 @@ def run(args, emit, chase_config=None, resources=None, stop_event=None):
                                      if name.startswith(('L_joint', 'R_joint')))
                     max_motion_deg = max(max_motion_deg, motion_deg)
                     if now >= next_report_sec:
+                        if has_input_binding:
+                            state = result.get('avoidance') or {}
+                            names = scene.robot.independent
+                            frame = dict(time_sec=result['time_sec'], joints={name:value for name,value in result['joints'].items() if name in names},
+                                eef=scene.link_transform('L_tcp')[:3,3].tolist(), phase=phase, has_contact=None,
+                                proxy_gap_m=state.get('clearance_m'),
+                                input_status=dict(num_points=state.get('num_points', 0), message=state.get('message', '')),
+                                motion={field:{name:value for name,value in values.items() if name in names} for field,values in result['motion'].items() if field in ('velocity', 'effort', 'current_a')},
+                                task_goal=task.task.goal, num_arrivals=task.num_arrivals)
+                            emit(dict(type='experiment_frame', frame=frame))
                         emit(dict(result, type='state', elapsed_sec=now-started, max_joint_motion_deg=max_motion_deg))
                         next_report_sec = now+args.report_sec
                     # 1呼出し5ステップ×2 ms。処理超過時の遅延蓄積・追付き連打なし。
                     stop_event.wait(max(0., .01-(time.monotonic()-now)))
                 if errors:
                     raise errors[0]
+                if has_input_binding:
+                    emit(dict(type='experiment_finished', metrics=dict(num_arrivals=task.num_arrivals,
+                        num_frames=num_frames, simulation_sec=float(scene.data.time), max_joint_motion_deg=max_motion_deg), failure_reason=''))
                 emit(dict(type='summary', is_ready=is_ready, num_frames=num_frames, elapsed_sec=time.monotonic()-started,
                           simulation_sec=float(scene.data.time), max_joint_motion_deg=max_motion_deg,
                           phases=dict(phases), joints=scene.robot.state(),

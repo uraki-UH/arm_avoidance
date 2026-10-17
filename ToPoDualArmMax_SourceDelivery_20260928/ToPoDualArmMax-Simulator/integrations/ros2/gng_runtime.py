@@ -227,7 +227,7 @@ class gng_runtime:
                 static_topic = settings['recorded_static_tf_topic']
                 for topic in (recorded_tf_topic, static_topic):
                     validate_full_topic_name(topic)
-                    if topic in ('/tf', '/tf_static'):
+                    if self.input_kind == 'voxel' and topic in ('/tf', '/tf_static'):
                         raise ValueError('記録TF入力と配信先の循環は禁止です')
                 self.subscriptions.append(node.create_subscription(TFMessage, recorded_tf_topic,
                     lambda msg: self.on_recorded_tf(msg, False), qos_profile_sensor_data))

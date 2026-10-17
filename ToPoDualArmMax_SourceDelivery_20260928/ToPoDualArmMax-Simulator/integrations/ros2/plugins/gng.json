@@ -10,6 +10,7 @@
   "adapter": "gng_avoidance:gng_adapter",
   "settings_id": "physics-gng-settings",
   "capabilities": {
+    "input_contract": "pointcloud_tf",
     "pose_sources": [
       "simulator"
     ],
@@ -63,6 +64,7 @@
       "ui_id": "physics-gng-roi"
     },
     "points_topic": {
+      "is_hidden": true,
       "type": "topic",
       "label": "点群トピック",
       "default": "/livox/lidar",
@@ -97,6 +99,11 @@
       "type": "topic",
       "is_hidden": true
     }
+  },
+  "input_bindings": {
+    "points": {"parameter": "points_topic", "message_type": "sensor_msgs/msg/PointCloud2"},
+    "tf": {"parameter": "recorded_tf_topic", "message_type": "tf2_msgs/msg/TFMessage"},
+    "static_tf": {"parameter": "recorded_static_tf_topic", "message_type": "tf2_msgs/msg/TFMessage"}
   },
   "launch": {
     "package": "gng_vlut_system",

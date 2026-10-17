@@ -3,6 +3,7 @@
 !Dockerfile
 !docker/
 !docker/ros2_pointcloud_defaults.sh
+!docker/ros2_workspace.sh
 !ToPoFuzzy-Viewer/
 !ToPoFuzzy-Viewer/frontend/
 !ToPoFuzzy-Viewer/frontend/package.json

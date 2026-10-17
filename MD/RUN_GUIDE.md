@@ -13,6 +13,7 @@ bash scripts/dual_arm_cpu.sh check
 ```
 
 リポジトリ全体を配置。Simulator単体では共有UI・独自メッセージが不足。
+中核の構成は[workspace.yaml](../workspace.yaml)、構築対象はCompose側の部品指定。任意機能の外部リポジトリは通常構築に不要。
 checkはCPU依存・点群処理・短時間MuJoCoの確認で、回避性能の判定ではない。
 構成は[Compose](../docker/compose.simulator_cpu.yaml)の`x-cpu-workflow`を参照。起動窓口は[dual_arm_cpu.sh](../scripts/dual_arm_cpu.sh)。
 旧固定版`v0.1.0-cpu-preview.1`はCPU基本構成のみ。以下の`demo`操作は未収録。

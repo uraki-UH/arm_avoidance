@@ -104,15 +104,15 @@ RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_c
 
 # bashrc 設定
 COPY docker/ros2_pointcloud_defaults.sh /etc/profile.d/ros2_pointcloud_defaults.sh
+COPY docker/ros2_workspace.sh /etc/profile.d/ros2_workspace.sh
 RUN echo '. /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'export ROS2_WS=ros2_ws' >> /root/.bashrc && \
     echo "alias sh='source /opt/ros/humble/setup.bash'" >> /root/.bashrc && \
     echo "alias sw='source /ros2_ws/install/setup.bash'" >> /root/.bashrc && \
     echo 'function cw() { cd /${ROS2_WS}; }' >> /root/.bashrc && \
     echo 'function cs() { cd /${ROS2_WS}/src; }' >> /root/.bashrc && \
-    echo 'function cb() { cd /${ROS2_WS}; if [ $# -eq 0 ]; then colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release; else colcon build --symlink-install --packages-up-to "$@" --cmake-args -DCMAKE_BUILD_TYPE=Release; fi; . install/setup.bash && cd -; }' >> /root/.bashrc && \
+    echo '. /etc/profile.d/ros2_workspace.sh' >> /root/.bashrc && \
     echo 'function cg() { cb "$@"; }' >> /root/.bashrc && \
-    echo 'function cbd() { cd /${ROS2_WS}; if [ -z $1 ]; then colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug; else colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug --packages-up-to $1; fi; . install/setup.bash && cd -; }' >> /root/.bashrc && \
     echo 'function ws() { if [ $1 ]; then ROS2_WS=$1_ws && echo "switch ${ROS2_WS}" && . /${ROS2_WS}/install/setup.bash; fi; }' >> /root/.bashrc && \
     echo "alias cl='cw && rm -rf ./build ./install ./log && cd -'" >> /root/.bashrc && \
     echo 'if [ -f /ros2_ws/install/setup.bash ]; then . /ros2_ws/install/setup.bash; fi' >> /root/.bashrc && \

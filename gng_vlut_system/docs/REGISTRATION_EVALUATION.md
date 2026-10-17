@@ -30,14 +30,15 @@ nvidia-smi
 
 ## 共通の取得手順
 
-ワークスペースを汚さないため、取得先は一時領域に限定する。
+補助コードは`extensions/registration`、外部実装は本体外へ配置。通常構築から独立した任意導入。
 
 ```bash
 eval_root=/tmp/registration_eval_$(date +%Y%m%d)
-./gng_vlut_system/tools/registration_eval/clone_registration_repositories.sh "$eval_root"
+bash extensions/registration/tools/clone_registration_repositories.sh "$eval_root"
 ```
 
-このスクリプトはTEASER++、G3Reg、SC2-PCR、TurboReg、FoundationPose、FilterReg、FlashRegを取得する。TEASER++だけはsubmoduleを含めて取得する。
+取得定義は[upstream.repos](../../extensions/registration/upstream.repos)。新規取得は固定commit・submodule込み、既存checkoutは維持。
+FlashRegは実装・HEADの存在を確認できないため取得対象外。固定commitは取得再現用であり、以下の過去の性能検証と同一版を保証するものではない。
 
 ## 共通の自動化スクリプト
 
@@ -67,7 +68,7 @@ eval_root=/tmp/registration_eval_$(date +%Y%m%d)
 スクリプトはワークスペースのルートから実行する。GPUを使うSC2-PCRとTurboRegは、取得後に次で導入確認する。
 
 ```bash
-./gng_vlut_system/tools/registration_eval/setup_sc2_turboreg.sh \
+bash extensions/registration/tools/setup_sc2_turboreg.sh \
   "$eval_root/py_sc2" "$eval_root/SC2-PCR" "$eval_root/TurboReg"
 ```
 
@@ -76,7 +77,7 @@ eval_root=/tmp/registration_eval_$(date +%Y%m%d)
 対応点に外れ値が多い場合のロバスト姿勢解。CMakeでビルドする。
 
 ```bash
-./gng_vlut_system/tools/registration_eval/build_teaser.sh \
+bash extensions/registration/tools/build_teaser.sh \
   "$eval_root/TEASER-plusplus"
 ```
 
@@ -99,7 +100,7 @@ eval_root=/tmp/registration_eval_$(date +%Y%m%d)
 
 SC2-PCRはGPU上で対応点の二次互換性から外れ値を除外して姿勢を解く。公式環境は古いPyTorch版を固定しているが、CUDA対応PyTorchで動作確認できる。
 
-導入条件は[setup_sc2_turboreg.sh](../tools/registration_eval/setup_sc2_turboreg.sh)を参照。
+導入条件は[setup_sc2_turboreg.sh](../../extensions/registration/tools/setup_sc2_turboreg.sh)を参照。
 
 公式実装の`post_refinement`は、`inlier_threshold == 0.10`以外を1.2 mとして扱う固定値を持つ。数十cmの物体でそのまま使うと不適切なので、利用前にスケール依存の閾値へ修正し、単体テストを追加する。
 
@@ -116,7 +117,7 @@ FoundationPoseはRGB、深度、カメラ内部パラメータ、CAD、対象物
 `ObjectGngDatasetExporter`は、organized RGB-D点群と対応する`CameraInfo`を受信して保存した場合、`rgbd_png`形式のdepth PNG、color PNG、内部パラメータをGNGデータセットへ記録する。次の準備器は、その保存物と外部マスクをFoundationPoseの`run_demo.py`が読む単一フレーム構成へ変換する。
 
 ```bash
-python3 gng_vlut_system/tools/registration_eval/prepare_foundation_pose_input.py \
+python3 extensions/registration/tools/prepare_foundation_pose_input.py \
   /datasets/basket_gng_template.json.gz \
   --mesh-file /datasets/basket.obj \
   --mask-file /datasets/basket_mask.png \
@@ -160,24 +161,24 @@ G3Regは平面・クラスタ・線分をGaussian Ellipsoid Modelとして表し
 
 ```bash
 docker build -t registration_eval_g3reg:local "$eval_root/G3Reg"
-support_root="$(pwd)/gng_vlut_system"
+support_root="$(pwd)/extensions/registration"
 docker run --rm -it \
   -v "$eval_root/G3Reg:/G3Reg" \
   -v "$support_root:/evaluation_support:ro" -w /G3Reg \
   registration_eval_g3reg:local bash
 ```
 
-このコマンドはワークスペースのルートで実行する。`support_root`は本リポジトリの`gng_vlut_system`への絶対パス。
+このコマンドはワークスペースのルートで実行。`support_root`は`extensions/registration`への絶対パス。
 
 コンテナ内でビルドする。
 
 ```bash
 git -C /G3Reg apply \
-  /evaluation_support/tools/registration_eval/g3reg_headless.patch
-cp /evaluation_support/tools/registration_eval/g3reg_correspondence.cpp \
+  /evaluation_support/tools/g3reg_headless.patch
+cp /evaluation_support/tools/g3reg_correspondence.cpp \
   /G3Reg/examples/headless_corresp.cpp
 git -C /G3Reg apply \
-  /evaluation_support/tools/registration_eval/g3reg_correspondence.patch
+  /evaluation_support/tools/g3reg_correspondence.patch
 cmake -S /G3Reg -B /G3Reg/build
 cmake --build /G3Reg/build -j"$(nproc)"
 ```

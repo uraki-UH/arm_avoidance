@@ -7,8 +7,32 @@ import {isDeepStrictEqual} from 'node:util';
 
 const allowed_keys=['policy','trajectory_planner','obstacle_shape','pursuit_mode','target_link','target_offset_m','duration_sec','seed','radius_m','speed_ratios','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration','execution_mode','speed_ramp_sec','enable_proximal_guard','random_walk_extent_m','random_walk_change_sec','shoulder_position_m'];
 const policies=['vlut_graph','rollout_cv','rollout_reactive','cbf_qp','oscbf'];
+const input_policies=['vlut_graph','avoidance_first','vrm_predictive'];
 
-export function validate_experiment(value,link_names){
+export function validate_input_binding(binding,specs,contract){
+ if(!binding||typeof binding!=='object'||Array.isArray(binding)||Object.keys(binding).sort().join(',')!=='parameters,plugin_id')throw Error('ROS入力プラグインの指定不正');
+ const spec=specs.find(spec=>spec.id===binding.plugin_id&&spec.category==='input');
+ if(!Object.hasOwn(spec?.interfaces?.contracts??{},contract))throw Error('未対応・未登録のROS入力プラグイン');
+ const values=binding.parameters,fields=spec.parameters??{};
+ if(!values||typeof values!=='object'||Array.isArray(values)||Object.keys(values).some(name=>!Object.hasOwn(fields,name)))throw Error('未登録のROS入力設定');
+ const result={};
+ for(const [name,field] of Object.entries(fields)){
+  const value=Object.hasOwn(values,name)?values[name]:field.default;
+  if(value===undefined){if(field.is_required)throw Error('ROS入力設定の不足: '+name);continue;}
+  let is_valid=field.type==='bool'?typeof value==='boolean':['number','integer'].includes(field.type)?typeof value==='number'&&Number.isFinite(value)&&value>=(field.min??-Infinity)&&value<=(field.max??Infinity)&&(field.type!=='integer'||Number.isInteger(value)):typeof value==='string'&&value.length<=(field.max_length??2048)&&!/[\0\r\n]/.test(value);
+  if(field.type==='topic')is_valid=is_valid&&/^\/[A-Za-z_][A-Za-z0-9_/]*$/.test(value)&&!value.includes('//')&&!value.endsWith('/');
+  if(!is_valid||field.choices&&!field.choices.includes(value))throw Error('ROS入力設定の値不正: '+name);
+  result[name]=value;
+ }
+ return {plugin_id:spec.id,parameters:result};
+}
+
+export function validate_experiment(value,link_names,input_specs=[]){
+ if(value&&Object.hasOwn(value,'input_binding')){
+  const keys=['input_binding','policy','trajectory_planner','execution_mode','duration_sec'];
+  if(Object.keys(value).some(key=>!keys.includes(key))||value.execution_mode!=='continuous'||value.duration_sec!==0||!input_policies.includes(value.policy)||!['gng_chomp','rrt_chomp'].includes(value.trajectory_planner))throw Error('ROS入力はGNG系の連続実験専用です');
+  return {...value,input_binding:validate_input_binding(value.input_binding,input_specs,'pointcloud_tf')};
+ }
  if(!value||Array.isArray(value)||typeof value!=='object'||Object.keys(value).some(key=>!allowed_keys.includes(key)))throw Error('未対応の実験設定');
  const config={policy:'rollout_cv',trajectory_planner:'gng_chomp',obstacle_shape:'sphere',target_link:'L_tcp',target_offset_m:[0,0,0],duration_sec:18,seed:401,radius_m:.06,speed_ratios:[.4,1.3],max_ball_acceleration:3,max_ball_deceleration:8,max_ball_turn_acceleration:10,execution_mode:'recorded',...value};
  if(!['gng_chomp','rrt_chomp'].includes(config.trajectory_planner))throw Error('往復軌道の生成方式の不正');
@@ -132,7 +156,7 @@ export function create_experiment_service(root,port){
   job.state='stopping';job.stop_reason=reason;
   try{process.kill(-child.pid,'SIGINT');}catch(error){if(error.code!=='ESRCH')throw error;}
   const owned=child;
-  kill_timer=setTimeout(()=>{try{process.kill(-owned.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')console.error(error);}},3000);kill_timer.unref();
+  kill_timer=setTimeout(()=>{try{process.kill(-owned.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')console.error(error);}},job.config.input_binding?20000:3000);kill_timer.unref();
  };
  const read_body=req=>new Promise((resolve,reject)=>{
   let body='';req.setEncoding('utf8');req.on('data',chunk=>{body+=chunk;if(Buffer.byteLength(body)>8192){reject(Error('実験設定の容量超過'));req.destroy();}});
@@ -163,8 +187,9 @@ export function create_experiment_service(root,port){
   const owned=child;
   if(!owned)return;
   const completed=new Promise(resolve=>owned.once('close',resolve));
+  if(owned.exitCode!==null||owned.signalCode!==null)return;
   owned.stdin.end();
-  const forced=setTimeout(()=>{try{process.kill(-owned.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')console.error(error);}},3000);forced.unref();
+  const forced=setTimeout(()=>{try{process.kill(-owned.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')console.error(error);}},20000);forced.unref();
   try{await completed;}finally{clearTimeout(forced);}
  };
  const ensure_worker=async()=>{
@@ -249,7 +274,9 @@ export function create_experiment_service(root,port){
     if(pathname!=='/api/avoidance-experiments'){reply(res,404,{message:'未対応の操作'});return;}
     if(!is_available){reply(res,503,{message:'実験の実行にはROSコンテナ内の画面サーバーが必要です'});return;}
     if(job&&['running','stopping'].includes(job.state)){reply(res,409,{message:'実験を実行中です。終了後に開始してください'});return;}
-    await start(validate_experiment(value,link_names));reply(res,202,snapshot());
+    const directory=path.join(simulator,'integrations/ros2/plugins');
+    const specs=fs.readdirSync(directory).filter(name=>name.endsWith('.json')).map(name=>JSON.parse(fs.readFileSync(path.join(directory,name),'utf8')));
+    await start(validate_experiment(value,link_names,specs));reply(res,202,snapshot());
    }catch(error){if(!res.destroyed)reply(res,400,{message:error.message});}
   },
   async close(){stop('server_shutdown');await close_worker();}

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "id": "ros2_topics",
+  "category": "input",
+  "label": "ROS 2トピック",
+  "parameters": {
+    "domain_id": {"type": "integer", "label": "ROS domain", "default": 0, "min": 0, "max": 232},
+    "points_topic": {"type": "topic", "label": "点群", "default": "/livox/lidar"},
+    "tf_topic": {"type": "topic", "label": "TF", "default": "/tf"},
+    "static_tf_topic": {"type": "topic", "label": "固定TF", "default": "/tf_static"}
+  },
+  "interfaces": {
+    "contracts": {
+      "pointcloud_tf": {
+        "points": {"parameter": "points_topic", "message_type": "sensor_msgs/msg/PointCloud2"},
+        "tf": {"parameter": "tf_topic", "message_type": "tf2_msgs/msg/TFMessage"},
+        "static_tf": {"parameter": "static_tf_topic", "message_type": "tf2_msgs/msg/TFMessage"}
+      }
+    }
+  }
+}

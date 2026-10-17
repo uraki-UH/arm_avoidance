@@ -2,6 +2,14 @@ import {format_fixed} from './display-format.js';
 import {bridge_socket_url} from './robot-ros-state.js';
 
 let loaded_catalog=[];
+let input_panel=null;
+export const input_plugins=()=>loaded_catalog.filter(spec=>spec.category==='input');
+export function input_selection(contract){
+ if(!input_panel)throw Error('ROS入力プラグインを読み込み中です');
+ const binding=input_panel.read(),spec=plugin_definition(binding.plugin_id);
+ if(!Object.hasOwn(spec?.interfaces?.contracts??{},contract))throw Error('選択中のROS入力はこの機能に未対応です');
+ return binding;
+}
 const catalog_request=()=>fetch('/api/plugins',{cache:'no-store'}).then(async response=>{
  if(!response.ok)throw Error('プラグイン一覧を取得できません。ブラウザサーバーを更新してください');
  const data=await response.json();if(data.version!==1||!Array.isArray(data.plugins))throw Error('プラグイン一覧の形式不正');
@@ -55,6 +63,7 @@ export class physics_plugins{
     details.id=spec.settings_id??'physics-plugin-'+spec.id;summary.textContent=spec.label+'の設定';details.append(summary,fields.element);this.container.append(details);this.fields.set(spec.id,{...fields,details});
    }
    this.launch_panel=new launch_plugins_panel(catalog.filter(spec=>spec.category==='launch'),()=>this.panel.robot().modelId);
+   input_panel=new input_plugins_panel(input_plugins(),()=>panel.stop());
    this.update();
   }).catch(error=>{document.getElementById('physics-status').textContent=error.message;});
  }
@@ -65,10 +74,42 @@ export class physics_plugins{
   if(this.select.selectedOptions[0]?.disabled)this.select.value='none';
   for(const [id,fields] of this.fields){fields.details.hidden=id!==this.select.value;for(const input of fields.inputs.values())input.disabled=!this.panel.enable_robot_physics;}
  }
- settings(){const spec=this.definition();return spec?{mode:spec.id,...this.fields.get(spec.id).read()}:{mode:'none'};}
+ settings(){
+  const spec=this.definition();if(!spec)return {mode:'none'};
+  const values=this.fields.get(spec.id).read();
+  return {mode:spec.id,...values,...(spec.capabilities?.input_contract&&values.input_kind!=='voxel'?{input_binding:input_selection(spec.capabilities.input_contract)}:{})};
+ }
  can_set_goal(){return this.definition()?.capabilities?.can_set_goal_pose===true;}
  validate_source(source){const spec=this.definition();if(spec?.capabilities?.pose_sources&&!spec.capabilities.pose_sources.includes(source))throw Error(spec.label+'はシミュレータ操作の姿勢で開始してください');}
  format(frame){return format_plugin_status(frame,this.specs.find(spec=>spec.id===frame.avoidance.mode));}
+}
+
+// 全利用側で共通の接続設定。実行中セッションは開始時の設定を保持。
+export class input_plugins_panel{
+ constructor(specs,on_change){
+  this.specs=specs;this.on_change=on_change;this.saved={};
+  try{this.saved=JSON.parse(localStorage.getItem('ros-input-plugins')??'{}')??{};}catch{}
+  const section=this.section=document.createElement('section');section.className='ros-launch-plugins';
+  section.innerHTML='<h3>ROS入力プラグイン</h3><label>入力<select data-field="plugin"></select></label><div data-field="parameters"></div>';
+  document.getElementById('ros-panel').append(section);this.select=section.querySelector('select');
+  for(const spec of specs){const option=document.createElement('option');option.value=spec.id;option.textContent=spec.label;this.select.append(option);}
+  if(specs.some(spec=>spec.id===this.saved.plugin_id))this.select.value=this.saved.plugin_id;
+  this.select.onchange=()=>{this.show();this.save();};this.show();
+ }
+ show(){
+  const spec=this.specs.find(spec=>spec.id===this.select.value);
+  this.fields=spec?parameter_fields(spec,()=>this.save()):null;
+  for(const [name,input] of this.fields?.inputs??[]){
+   const value=this.saved.parameters?.[spec.id]?.[name];if(value===undefined)continue;
+   if(spec.parameters[name].type==='bool')input.checked=value===true;else input.value=value;
+  }
+  this.section.querySelector('[data-field=parameters]').replaceChildren(...(this.fields?[this.fields.element]:[]));
+ }
+ read(){if(!this.fields)throw Error('登録済みROS入力プラグインなし');return {plugin_id:this.select.value,parameters:this.fields.read()};}
+ save(){
+  this.on_change();
+  try{const value=this.read();this.saved={plugin_id:value.plugin_id,parameters:{...this.saved.parameters,[value.plugin_id]:value.parameters}};localStorage.setItem('ros-input-plugins',JSON.stringify(this.saved));}catch{}
+ }
 }
 
 export class launch_plugins_panel{

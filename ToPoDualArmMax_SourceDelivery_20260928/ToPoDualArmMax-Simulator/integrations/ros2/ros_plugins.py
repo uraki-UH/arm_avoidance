@@ -26,7 +26,7 @@ def definitions(directory=None):
         name = value.get('id')
         if not isinstance(name, str) or not identifier_pattern.fullmatch(name) or name in result:
             raise ValueError('プラグインIDが不正または重複です')
-        if value.get('version') != 1 or value.get('category') not in ('launch', 'physics'):
+        if value.get('version') != 1 or value.get('category') not in ('launch', 'physics', 'input'):
             raise ValueError('プラグインの形式・分類が不正です')
         if not isinstance(value.get('label'), str) or not isinstance(value.get('parameters', {}), dict):
             raise ValueError('プラグインの表示名・引数定義が不正です')
@@ -87,6 +87,40 @@ def public_definition(value):
     return {key: copy.deepcopy(value[key]) for key in ('version', 'id', 'label', 'description', 'category', 'models', 'parameters', 'capabilities', 'settings_id', 'display', 'interfaces') if key in value}
 
 
+def resolve_input(binding, contract, directory=None):
+    """登録済み入力の型付きチャネル解決。任意コード・launch指定の受付なし。"""
+    if not isinstance(binding, dict) or set(binding) != {'plugin_id', 'parameters'}:
+        raise ValueError('ROS入力プラグインの指定不正')
+    spec = definition(binding['plugin_id'], directory)
+    if spec['category'] != 'input' or contract not in spec.get('interfaces', {}).get('contracts', {}):
+        raise ValueError('ROS入力プラグインの接続契約が不一致です')
+    values = parameters(spec, binding['parameters'])
+    channels = {}
+    for name, channel in spec['interfaces']['contracts'][contract].items():
+        field = channel.get('parameter')
+        if spec.get('parameters', {}).get(field, {}).get('type') != 'topic' or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*/msg/[A-Za-z][A-Za-z0-9_]*', channel.get('message_type', '')):
+            raise ValueError('ROS入力チャネルの型・対応付けが不正です')
+        channels[name] = dict(topic=values[field], message_type=channel['message_type'])
+    return dict(plugin_id=spec['id'], parameters=values, channels=channels)
+
+
+def bind_input(spec, values, binding):
+    """入力契約から利用側パラメータへの対応付け。利用側ごとの計算処理なし。"""
+    contract = spec.get('capabilities', {}).get('input_contract')
+    if not contract:
+        raise ValueError('このプラグインはROS入力の差替えに未対応です')
+    source = resolve_input(binding, contract)
+    result = dict(values)
+    bindings = spec.get('input_bindings', {})
+    if set(bindings) != set(source['channels']):
+        raise ValueError('ROS入力チャネルの構成が不一致です')
+    for name, field in bindings.items():
+        if field['message_type'] != source['channels'][name]['message_type']:
+            raise ValueError('ROS入力チャネルの型が不一致です: '+name)
+        result[field['parameter']] = source['channels'][name]['topic']
+    return result, source
+
+
 def launch_command(spec, values=None, context=None):
     values = parameters(spec, values)
     launch = spec.get('launch')
@@ -126,11 +160,16 @@ def launch_command(spec, values=None, context=None):
 def physics_adapter(settings, robot):
     settings = dict(settings or {})
     plugin_id = settings.pop('mode', 'none')
+    binding = settings.pop('input_binding', None)
     if plugin_id == 'none':
         return None, {}, None
     spec = definition(plugin_id)
     if spec['category'] != 'physics' or not robot or robot['model'] not in spec.get('models', [robot['model']]):
         raise ValueError('プラグインの対象モデル・分類が不一致です')
+    if binding is not None:
+        settings, source = bind_input(spec, settings, binding)
+        if source['parameters'].get('domain_id', int(os.environ.get('ROS_DOMAIN_ID', '0'))) != int(os.environ.get('ROS_DOMAIN_ID', '0')):
+            raise ValueError('ROS入力と物理ブリッジのROS domainが異なります')
     values = parameters(spec, settings)
     try:
         module, name = spec['adapter'].split(':')

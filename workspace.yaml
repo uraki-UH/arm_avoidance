@@ -1,0 +1,68 @@
+# ソースの責務・構築範囲・任意依存の正本。Gitリポジトリ分割とは独立した構成。
+version: 1
+components:
+  interfaces:
+    label: ROSメッセージ
+    kind: core
+    paths: [MSG]
+    ros_base_paths: [MSG]
+  shared:
+    label: 共通ライブラリ
+    kind: core
+    paths: [libs]
+    ros_base_paths: [libs/arrow_visualization, libs/voxel_idx]
+  perception:
+    label: 点群学習・登録
+    kind: core
+    paths: [ais_gng_cpu, pointcloud_sampling]
+    ros_base_paths: [ais_gng_cpu/src, pointcloud_sampling]
+  planning:
+    label: 姿勢GNG・回避・把持
+    kind: core
+    paths: [gng_vlut_system, grasping_system]
+    ros_base_paths: [grasping_system, gng_vlut_system]
+  viewer:
+    label: ROS結果表示
+    kind: core
+    paths: [ToPoFuzzy-Viewer]
+    ros_base_paths: [ToPoFuzzy-Viewer/backend/src]
+  simulator:
+    label: ブラウザ・物理シミュレーション
+    kind: core
+    paths: [ToPoDualArmMax_SourceDelivery_20260928]
+  robot_description:
+    label: ロボット形状・関節定義
+    kind: core
+    paths: [urdf]
+  hardware:
+    label: 実機ドライバ・入出力
+    kind: optional
+    paths: [hardware]
+    ros_base_paths: [hardware]
+  web_tools:
+    label: WASM・bag変換
+    kind: optional
+    paths: [gng_web_tools]
+    ros_base_paths: [gng_web_tools]
+  classification:
+    label: クラスタ分類
+    kind: optional
+    paths: [FuzzyClassifier]
+    ros_base_paths: [FuzzyClassifier]
+  mobile_robot:
+    label: FuzzBot
+    kind: optional
+    paths: [fuzzbot_gng]
+    ros_base_paths: [fuzzbot_gng/fuzzbot/fuzzbot_description]
+  fuzzy_voxels:
+    label: ファジィボクセル
+    kind: optional
+    paths: [fuzzy_voxel_grid]
+    ros_base_paths: [fuzzy_voxel_grid]
+  registration:
+    label: 3D位置合わせ比較
+    kind: optional
+    paths: [extensions/registration]
+    repositories: extensions/registration/upstream.repos
+# 独立プロジェクトのローカル配置。未配置を許容、共有ソースへの包含なし。
+local_projects: [codex-desktop-linux, dataset_pointcloud_player, simulation, topo_tamp]

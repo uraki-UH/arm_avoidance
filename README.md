@@ -40,11 +40,15 @@ arm_avoidance/
 │       ├── app/, src/          ロボット・センサ表示、Viewer埋込み
 │       └── integrations/ros2/  MuJoCo・回避方式・ROS接続アダプタ
 ├── urdf/                       ロボット形状・関節定義
+├── extensions/registration/     任意の3D位置合わせ比較・外部取得定義
 ├── benchmarks/cpu_demo/        共有可能な最小実験設定
+├── workspace.yaml              中核・任意機能・独立プロジェクトの構成
 ├── docker/                     Docker・Compose構成
 ├── scripts/dual_arm_cpu.*      ホスト／コンテナ共通の操作入口
 ├── .github/workflows/cpu.yml   PR・mainのCPU動作確認
 └── MD/RUN_GUIDE.md             取得・構築・起動手順
 ```
 
-構成は既存のROSパッケージ境界を維持。Git管理外の実験データ・個人用プロジェクトは共有範囲外。
+中核・任意機能の範囲は[workspace.yaml](workspace.yaml)。通常構築は指定した中核部品のみ、外部ライブラリの取得なし。
+[3D位置合わせ](extensions/registration/README.md)は任意機能へ分離。独立Gitリポジトリへの切出し・公開は未実施。
+`local_projects`の独立プロジェクトと実験データは本体Gitの共有範囲外。既存のローカル配置・各Git履歴は維持。

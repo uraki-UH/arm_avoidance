@@ -63,9 +63,15 @@ ROS側の相互接続は同一`ROS_DOMAIN_ID`。従来VM・AI経路ではAI・ob
 
 - launch拡張: [plugins](../integrations/ros2/plugins/)の登録JSON。例は`robot_tf.json`、型・起動管理は[ros_plugins.py](../integrations/ros2/ros_plugins.py)。ROS package・launchは事前導入、選択肢追加だけならJS分岐の追加不要。
 - 物理方式: 登録JSONとPythonアダプタ。`prepare`・`create`、生成オブジェクトの`update`・`apply`・`status`・`close`、目標設定の`set_targets`。例は[gng_avoidance.py](../integrations/ros2/gng_avoidance.py)・[OSCBF](../integrations/ros2/oscbf_avoidance/README.md)。
+- ROS入力: `category: input`の登録JSON。例は[ros2_topics.json](../integrations/ros2/plugins/ros2_topics.json)。`interfaces.contracts`で役割・ROSメッセージ型・トピック引数を宣言し、利用側の`input_bindings`で既存アダプタへ対応付け。設定欄は定義から生成、共通APIは`resolve_input`・`bind_input`。
+- 入力設定の所有者: `ros-plugins.js`。ブラウザ内に保存、物理GNGと実験が開始時の`{plugin_id, parameters}`を参照。実験側へのトピック設定の複製なし。物理ブリッジは起動時のdomain、実験ワーカーは依頼ごとのdomainと専用namespace。
 - launch所有権: 停止・切断・ページ再読込みで所有子ノードも終了。外部プロセスは対象外。APIは`GET /api/plugins`・WebSocket `/plugins`、登録外の任意コマンド実行は非対応。
 - 姿勢配信: ブリッジHTTPポート+1の`/joints`、1～200 Hz。MuJoCo実行中は位置・速度・駆動トルク、物理OFFでは位置のみ。電流・接触力・clockの配信なし。実測表示と駆動指令は別トピック。実装は[joint_stream.py](../integrations/ros2/joint_stream.py)。
 - VM入出力: [protocol.py](../integrations/ros2/protocol.py)・[compact_frame.py](../integrations/ros2/compact_frame.py)。stamp・frame・sequenceが揃った結果だけを表示、欠落時は更新待ち。HTTP・形式解析だけではAI処理を実行不可。
+
+ROS入力実験は`simulate.py`の既存往復・GNG回避処理を使用。入力元bag・センサドライバは起動停止の対象外。
+生成障害物との切替は同じワーカー、ROSコンテキストと所有launchは実験ごとに終了。
+逐次表示は既存の有界フレーム窓を共用。`input_source: ros2`では球の座標は不要、`has_contact: null`は実接触未判定。
 
 ## 往復基準の接続契約
 

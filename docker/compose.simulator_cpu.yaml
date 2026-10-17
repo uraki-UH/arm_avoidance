@@ -9,15 +9,8 @@ x-cpu-workflow:
   build:
     build_type: Release
     executor: sequential
-    base_paths:
-      - MSG
-      - ais_gng_cpu/src
-      - libs/arrow_visualization
-      - libs/voxel_idx
-      - pointcloud_sampling
-      - grasping_system
-      - gng_vlut_system
-      - ToPoFuzzy-Viewer/backend/src
+    # ROS探索範囲はworkspace.yamlの部品定義からの解決。
+    components: [interfaces, perception, shared, planning, viewer]
     base_packages: [ais_gng_feature_msgs, ais_gng_msgs, gng_control_msgs, voxel_msgs]
     gng_packages: [gng_vlut_system, topo_fuzzy_viewer]
   check:

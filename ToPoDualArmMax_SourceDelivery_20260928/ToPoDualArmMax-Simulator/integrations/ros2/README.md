@@ -111,6 +111,10 @@ bag設定は[arm_avoidance_bag.yaml](../../../../scripts/arm_avoidance_bag.yaml)
 実測とノード間の接続は近似で、動的障害物に対する連続区間の保証なし。
 対象bagでの全身重なり解消・往復タスク完遂は未達。
 
+ROS入力の登録定義は[ros2_topics.json](plugins/ros2_topics.json)。物理GNGとGUI実験で共用、入力元のbag・センサドライバは別起動。
+GUIのROS入力実験はLong・GNG系の連続実行／記録なしのみ。学習済みGNG/VLUTが必要、実機出力なし。
+点群からの実接触確定は非対応。視野外・遮蔽等による保持を含み、回避・往復完遂の保証なし。
+
 #### 回避優先方策（実験）
 
 選択は`avoidance_first`。退避→保持→復帰の局所探索。

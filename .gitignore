@@ -25,6 +25,12 @@ build/
 
 ToPoDualArm/
 
+# 独立したローカルプロジェクト。各配置先のGit管理との分離。
+/codex-desktop-linux/
+/dataset_pointcloud_player/
+/simulation/
+/topo_tamp/
+
 # 実験の生成物・生ログ・生データ。再現資料と保存済み集計は benchmarks/ に分離。
 !/log/
 /log/*

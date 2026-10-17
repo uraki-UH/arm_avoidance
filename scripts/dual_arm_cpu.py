@@ -10,6 +10,7 @@ import sys
 import time
 
 import yaml
+from workspace_layout import check_layout, ros_base_paths
 
 
 workspace_dir = Path(__file__).resolve().parents[1]
@@ -39,20 +40,19 @@ def load_config(path=config_path):
         raise ValueError('demoの設定項目が不正です')
     source_path(config['demo']['scenario_file'])
     build, check = config['build'], config['check']
-    if not isinstance(build, dict) or set(build) != {'build_type', 'executor', 'base_paths', 'base_packages', 'gng_packages'}:
+    if not isinstance(build, dict) or set(build) != {'build_type', 'executor', 'components', 'base_packages', 'gng_packages'}:
         raise ValueError('buildの設定項目が不正です')
     if build['build_type'] not in ('Release', 'RelWithDebInfo', 'Debug', 'MinSizeRel') or build['executor'] not in ('sequential', 'parallel'):
         raise ValueError('ビルド方式が不正です')
-    for key in ('base_paths', 'base_packages', 'gng_packages'):
+    ros_base_paths(build['components'])
+    for key in ('components', 'base_packages', 'gng_packages'):
         values = build[key]
         if not isinstance(values, list) or not values or any(not isinstance(value, str) or not value for value in values):
             raise ValueError('ビルド対象の配列が不正です: '+key)
         if len(values) != len(set(values)):
             raise ValueError('ビルド対象の重複: '+key)
         for value in values:
-            if key == 'base_paths':
-                source_path(value)
-            elif re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', value) is None:
+            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', value) is None:
                 raise ValueError('パッケージ名が不正です: '+value)
     if not isinstance(check, dict) or set(check) != {'duration_sec'}:
         raise ValueError('checkの設定項目が不正です')
@@ -66,7 +66,7 @@ def build_command(config):
     build = config['build']
     packages = build['base_packages']+(build['gng_packages'] if config['enable_gng'] else [])
     return ['colcon', 'build', '--symlink-install', '--executor', build['executor'],
-            '--base-paths', *(str(source_path(value)) for value in build['base_paths']),
+            '--base-paths', *(str(source_path(value)) for value in ros_base_paths(build['components'])),
             '--packages-up-to', *dict.fromkeys(packages), '--cmake-args',
             '-DCMAKE_BUILD_TYPE='+build['build_type'], '-DBUILD_TESTING=OFF']
 
@@ -96,6 +96,8 @@ def build_workspace(config):
 
 
 def check_workspace(config):
+    # Gitメタデータの未マウントを許容するソース構成確認。追跡照合はホスト側のcheck。
+    check_layout(enable_git_check=False)
     execute([sys.executable, '-c',
              'import rclpy, tornado, scipy, mujoco, osqp; '
              'import ais_gng_msgs.msg, ais_gng_feature_msgs.msg, gng_control_msgs.srv, voxel_msgs.msg; '

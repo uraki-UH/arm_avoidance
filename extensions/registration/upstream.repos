@@ -1,0 +1,27 @@
+# 任意取得用の固定commit。取得版の固定とアルゴリズム性能の検証は別。
+# 実装・HEADの存在しないFlashRegは取得対象外。
+repositories:
+  TEASER-plusplus:
+    type: git
+    url: https://github.com/MIT-SPARK/TEASER-plusplus.git
+    version: 52a9c52ee7d4c838c5e8a75458c33178be5bfb70
+  G3Reg:
+    type: git
+    url: https://github.com/HKUST-Aerial-Robotics/G3Reg.git
+    version: 9da58bf0f61a107ca54d0763ef02c281cd09935f
+  SC2-PCR:
+    type: git
+    url: https://github.com/ZhiChen902/SC2-PCR.git
+    version: 19961eae0a4789442652bfd681589115dc6f0570
+  TurboReg:
+    type: git
+    url: https://github.com/Laka-3DV/TurboReg.git
+    version: 827025f370d3dbf4fd7ae35b3c9a21d25d24043e
+  FoundationPose:
+    type: git
+    url: https://github.com/NVlabs/FoundationPose.git
+    version: a1b694b83e633c2cb6115b9063d940a687759392
+  FilterReg:
+    type: git
+    url: https://github.com/bhsphd/FilterReg.git
+    version: 4638e4c476e2095a588c64470a280bb946a659a7

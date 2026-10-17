@@ -1,5 +1,6 @@
 import {format_fixed} from './display-format.js';
 import {observe_balanced_layout} from './balanced-layout.js';
+import {input_plugins,input_selection,plugin_definition,format_plugin_status} from './ros-plugins.js';
 import * as THREE from 'three';
 import {Line2} from 'three/addons/lines/Line2.js';
 import {LineGeometry} from 'three/addons/lines/LineGeometry.js';
@@ -110,6 +111,8 @@ async function load_json(value) {
 export function validate_recording(value,joint_names,model='long',min_num_frames=value?.is_partial===true?1:2,allow_live_time=false) {
  if(value?.format!=='topo-avoidance-replay/1'||value.model!=='long'||value.model!==model||!Array.isArray(value.frames)||value.frames.length<min_num_frames||value.frames.length>20000)throw Error('LongモデルとLong用の回避実験記録が必要です');
  if(typeof value.failure_reason!=='string')throw Error('失敗状態の形式が不正です');
+ const has_ros_input=value.input_source==='ros2';
+ if(has_ros_input&&(!value.input_binding||typeof value.input_binding.plugin_id!=='string'))throw Error('ROS入力の形式不正');
  if(value.task!==undefined){
   const task=value.task,is_point=point=>Array.isArray(point)&&point.length===3&&point.every(v=>Number.isFinite(v)&&Math.abs(v)<100);
   if(!task||!['cartesian','joint'].includes(task.mode)||task.eef_link!=='L_tcp'||task.frame!=='world'||!['goal_line','joint_path'].includes(task.reference_kind)||!Array.isArray(task.reference_path)||task.reference_path.length<2||task.reference_path.length>2049||(task.reference_kind==='goal_line'&&task.reference_path.length!==2)||!task.reference_path.every(is_point))throw Error('往復タスクの形式不正');
@@ -137,13 +140,15 @@ export function validate_recording(value,joint_names,model='long',min_num_frames
   const names=Object.keys(frame.joints||{});
   if(!Number.isFinite(frame.time_sec)||frame.time_sec<0||frame.time_sec>(allow_live_time?Number.MAX_SAFE_INTEGER:180)||frame.time_sec<=last_sec)throw Error('記録時刻の形式が不正です');
   if(names.length!==joint_names.length||joint_names.some(name=>!Object.hasOwn(frame.joints,name)||!Number.isFinite(frame.joints[name])||Math.abs(frame.joints[name])>100*Math.PI))throw Error('記録の関節構成が一致しません');
-  for(const key of ['eef','sphere'])if(!Array.isArray(frame[key])||frame[key].length!==3||!frame[key].every(v=>Number.isFinite(v)&&Math.abs(v)<100))throw Error('記録位置の形式が不正です');
+  for(const key of has_ros_input?['eef']:['eef','sphere'])if(!Array.isArray(frame[key])||frame[key].length!==3||!frame[key].every(v=>Number.isFinite(v)&&Math.abs(v)<100))throw Error('記録位置の形式が不正です');
   if(value.random_walk&&frame.sphere.some((v,idx)=>v<value.random_walk.min_position_m[idx]-1e-6||v>value.random_walk.max_position_m[idx]+1e-6))throw Error('ランダムウォーク範囲外の記録');
   const is_point=point=>Array.isArray(point)&&point.length===3&&point.every(v=>Number.isFinite(v)&&Math.abs(v)<100);
   if(Object.hasOwn(frame,'target')!==Object.hasOwn(value.frames[0],'target')||(Object.hasOwn(frame,'target')&&!is_point(frame.target)))throw Error('追跡点の形式が不正です');
   if(Object.hasOwn(frame,'obstacle_segments')!==Object.hasOwn(value.frames[0],'obstacle_segments'))throw Error('障害物形状の不一致');
   if(Object.hasOwn(frame,'obstacle_segments')&&(!Array.isArray(frame.obstacle_segments)||frame.obstacle_segments.length!==2||!frame.obstacle_segments.every(segment=>Array.isArray(segment)&&segment.length===2&&segment.every(is_point))))throw Error('リンク障害物の形式が不正です');
-  if(!Number.isFinite(frame.sphere_radius_m)||frame.sphere_radius_m<=0||frame.sphere_radius_m>2||typeof frame.has_contact!=='boolean'||typeof frame.phase!=='string'||!Number.isFinite(frame.proxy_gap_m))throw Error('記録状態の形式が不正です');
+  if(has_ros_input){
+   if(frame.has_contact!==null||typeof frame.phase!=='string'||frame.proxy_gap_m!==null&&!Number.isFinite(frame.proxy_gap_m)||!Number.isSafeInteger(frame.input_status?.num_points)||frame.input_status.num_points<0||typeof frame.input_status.message!=='string')throw Error('ROS観測状態の形式不正');
+  }else if(!Number.isFinite(frame.sphere_radius_m)||frame.sphere_radius_m<=0||frame.sphere_radius_m>2||typeof frame.has_contact!=='boolean'||typeof frame.phase!=='string'||!Number.isFinite(frame.proxy_gap_m))throw Error('記録状態の形式が不正です');
   if(frame.obstacle_phase!==undefined&&(!Object.hasOwn(obstacle_phase_names,frame.obstacle_phase)||!Number.isFinite(frame.obstacle_speed_mps)||frame.obstacle_speed_mps<0))throw Error('障害物状態の形式が不正です');
   if(frame.obstacle_trail_sec!==undefined&&(!Number.isFinite(frame.obstacle_trail_sec)||frame.obstacle_trail_sec<0||frame.obstacle_trail_sec>2))throw Error('障害物軌跡の時間幅が不正です');
   if(frame.task_goal!==undefined&&(!value.task||!['a','b'].includes(frame.task_goal)))throw Error('往復目標の形式不正');
@@ -379,8 +384,9 @@ export class avoidance_replay {
    #experiment-form .anchor-row input[type=number]{border:1px solid #bbc0c7;border-radius:4px}
    #experiment-start:not(:disabled){background:#96e6ac;color:#153820;border-color:#53a86f}#experiment-stop:not(:disabled){background:#ffe1df;color:#7e2420;border-color:#d58984}#experiment-status{white-space:pre-wrap;font-size:13px;margin:8px 0}
    </style><form id="experiment-form"><div class="experiment-grid">
+   <label>入力<select name="input_source"><option value="generated">生成障害物</option><option value="ros2">ROS入力プラグイン</option></select></label>
    <label>実行方式<select name="execution_mode"><option value="continuous" selected>連続・記録なし</option><option value="recorded">時間指定・記録あり</option></select></label>
-   <label>回避方式<select name="policy"><option value="vlut_graph">GNG-VLUT</option><option value="rollout_cv">幾何候補・等速予測</option><option value="rollout_reactive">幾何候補・現在観測</option><option value="cbf_qp">関節CBF-QP</option><option value="oscbf">OSCBF</option></select></label>
+   <label>回避方式<select name="policy"><option value="vlut_graph">GNG-VLUT</option><option value="avoidance_first">回避優先</option><option value="vrm_predictive">予測・不一致適応</option><option value="rollout_cv">幾何候補・等速予測</option><option value="rollout_reactive">幾何候補・現在観測</option><option value="cbf_qp">関節CBF-QP</option><option value="oscbf">OSCBF</option></select></label>
    <label>往復軌道<select name="trajectory_planner"><option value="gng_chomp">GNG＋CHOMP</option><option value="rrt_chomp">RRT＋CHOMP</option></select></label>
    <label>障害物<select name="obstacle_shape"><option value="sphere">球</option><option value="linked_arm">二節腕・球関節×2</option></select></label>
    <label>動き<select name="pursuit_mode"><option value="distal_sweep">末端側を横切る</option><option value="link_point">リンクを追跡</option><option value="random_walk">ランダムウォーク</option></select></label>
@@ -392,6 +398,23 @@ export class avoidance_replay {
   this.controls.prepend(panel);this.experiment_panel=panel;
   for(const container of panel.querySelectorAll('.replay-actions'))observe_balanced_layout(container);
   const form=panel.querySelector('form'),links=form.elements.namedItem('target_link');
+  this.update_input_source=()=>{
+   const has_ros_input=form.elements.namedItem('input_source').value==='ros2';
+   for(const name of ['execution_mode','obstacle_shape','pursuit_mode','target_link','duration_sec','seed','radius_m','speed_start','speed_end','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration','random_walk_extent_m','random_walk_change_sec']){
+    const field=form.elements.namedItem(name);field.closest('label').hidden=has_ros_input;
+    if(has_ros_input)field.disabled=true;
+    else if(!['random_walk_extent_m','random_walk_change_sec','pursuit_mode'].includes(name))field.disabled=false;
+   }
+   if(has_ros_input){
+    panel.querySelector('#experiment-anchor-position').hidden=true;this.anchor_preview.visible=false;this.link_preview.visible=false;
+    for(const axis of ['x','y','z'])for(const suffix of ['','_range'])form.elements.namedItem('anchor_'+axis+suffix).disabled=true;
+   }
+   const allowed=has_ros_input?['vlut_graph','avoidance_first','vrm_predictive']:this.supported_policies??['vlut_graph','rollout_cv','rollout_reactive','cbf_qp','oscbf'];
+   const policy=form.elements.namedItem('policy');
+   for(const option of policy.options){option.hidden=!allowed.includes(option.value);option.disabled=option.hidden;}
+   if(policy.selectedOptions[0]?.disabled)policy.value=has_ros_input?'vlut_graph':'rollout_cv';
+   form.elements.namedItem('input_source').querySelector('[value=ros2]').disabled=!input_plugins().some(spec=>Object.hasOwn(spec.interfaces?.contracts??{},'pointcloud_tf'));
+  };
   this.update_anchor_preview=()=>{
    const is_linked=form.elements.namedItem('obstacle_shape').value==='linked_arm';
    panel.querySelector('#experiment-anchor-position').hidden=!is_linked;
@@ -431,10 +454,11 @@ export class avoidance_replay {
    if(links.selectedOptions[0]?.disabled)links.value='L_link4';
    this.update_anchor_preview();
   };
-  this.update_pursuit_mode=update_pursuit_mode;
+  this.update_pursuit_mode=()=>{update_pursuit_mode();this.update_input_source();};
+  form.elements.namedItem('input_source').onchange=this.update_pursuit_mode;
   form.elements.namedItem('pursuit_mode').onchange=update_pursuit_mode;
   form.elements.namedItem('obstacle_shape').onchange=()=>{form.elements.namedItem('radius_m').value=form.elements.namedItem('obstacle_shape').value==='linked_arm'?.035:.06;update_pursuit_mode();};
-  update_pursuit_mode();
+  this.update_pursuit_mode();
   this.owned_job_id=sessionStorage.getItem('avoidance-experiment-job');
   const request=async(pathname,config)=>{
    const response=await fetch(pathname,{method:config===undefined?'GET':'POST',headers:config===undefined?{}:{'Content-Type':'application/json','X-Topo-Experiment':'1'},body:config===undefined?undefined:JSON.stringify(config),signal:AbortSignal.timeout(15000),cache:'no-store'});
@@ -446,7 +470,7 @@ export class avoidance_replay {
    event.preventDefault();if(this.is_archive_busy||!form.reportValidity())return;
    const fields=new FormData(form),number=name=>Number(fields.get(name));
    const pursuit_mode=form.elements.namedItem('pursuit_mode').value;
-   const config={execution_mode:fields.get('execution_mode'),policy:fields.get('policy'),trajectory_planner:fields.get('trajectory_planner'),obstacle_shape:fields.get('obstacle_shape'),pursuit_mode,target_link:fields.get('target_link'),target_offset_m:[0,0,0],speed_ratios:[number('speed_start'),number('speed_end')]};
+   let config={execution_mode:fields.get('execution_mode'),policy:fields.get('policy'),trajectory_planner:fields.get('trajectory_planner'),obstacle_shape:fields.get('obstacle_shape'),pursuit_mode,target_link:fields.get('target_link'),target_offset_m:[0,0,0],speed_ratios:[number('speed_start'),number('speed_end')]};
    if(config.obstacle_shape==='linked_arm')config.shoulder_position_m=['x','y','z'].map(axis=>number('anchor_'+axis));
    if(pursuit_mode==='random_walk')for(const name of ['random_walk_extent_m','random_walk_change_sec'])config[name]=number(name);
    for(const name of ['duration_sec','seed','radius_m','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration'])config[name]=number(name);
@@ -454,7 +478,8 @@ export class avoidance_replay {
    document.getElementById('experiment-start').disabled=true;this.pause();
    ++this.experiment_generation;clearTimeout(this.experiment_timer);
    try{
-    if(pursuit_mode==='link_point'&&!this.supported_pursuit_modes)delete config.pursuit_mode;
+    if(fields.get('input_source')==='ros2')config={input_binding:input_selection('pointcloud_tf'),execution_mode:'continuous',duration_sec:0,policy:fields.get('policy'),trajectory_planner:fields.get('trajectory_planner')};
+    else if(pursuit_mode==='link_point'&&!this.supported_pursuit_modes)delete config.pursuit_mode;
     else if(!this.supported_pursuit_modes?.includes(pursuit_mode))throw Error('選択した動きは画面サーバー未対応です');
     const result=await request('/api/avoidance-experiments',config);this.owned_job_id=result.job.job_id;sessionStorage.setItem('avoidance-experiment-job',this.owned_job_id);this.begin_live(result.job);await this.refresh_experiment();
    }
@@ -477,10 +502,7 @@ export class avoidance_replay {
    if(generation!==this.experiment_generation||this.is_closed)return;
    if(result.live_protocol_version!==1)throw Error('実行中表示には画面サーバーの更新が必要です');
    this.supported_pursuit_modes=result.pursuit_modes;
-   const policies=result.policies??['rollout_cv','rollout_reactive','cbf_qp','oscbf'];
-   const policy=this.experiment_panel.querySelector('form').elements.namedItem('policy');
-   for(const option of policy.options)option.disabled=!policies.includes(option.value);
-   if(policy.selectedOptions[0]?.disabled)policy.value='rollout_cv';
+   this.supported_policies=result.policies??['rollout_cv','rollout_reactive','cbf_qp','oscbf'];
    const is_running=job&&['running','stopping'].includes(job.state);
    if(is_running&&job.config.execution_mode==='continuous'){
     this.owned_job_id=job.job_id;sessionStorage.setItem('avoidance-experiment-job',this.owned_job_id);
@@ -544,6 +566,7 @@ export class avoidance_replay {
    this.recording.frames.splice(0,num_removed);this.display_frame_idx=Math.max(0,(this.display_frame_idx??0)-num_removed);
   }
   for(const [idx,key] of ['eef','sphere'].entries()){
+   if(!this.recording.frames[0][key]){this.trails[idx].geometry.setDrawRange(0,0);continue;}
    const attribute=this.trails[idx].geometry.getAttribute('position');
    const appended=this.is_continuous?this.recording.frames:value.frames,start_idx=this.is_continuous?0:first_idx;
    appended.forEach((frame,offset)=>attribute.setXYZ(start_idx+offset,...frame[key]));
@@ -603,7 +626,7 @@ export class avoidance_replay {
   this.recording=data;this.motion_sample=null;this.root.visible=!!this.is_active;
   this.set_task_reference(data.task);
   for(const [idx,key] of ['eef','sphere'].entries()){
-   const geometry=new THREE.BufferGeometry().setFromPoints(data.frames.map(frame=>new THREE.Vector3(...frame[key])));
+   const geometry=new THREE.BufferGeometry().setFromPoints(data.frames.filter(frame=>frame[key]).map(frame=>new THREE.Vector3(...frame[key])));
    this.trails[idx].geometry.dispose();this.trails[idx].geometry=geometry;
    this.trails[idx].frustumCulled=true;
   }
@@ -619,7 +642,7 @@ export class avoidance_replay {
   if((!this.is_active&&!this.is_live)||!this.recording||!this.camera||!this.orbit)return;
   const bounds=new THREE.Box3().setFromObject(this.robot);
   let radius=0;
-  for(const frame of this.recording.frames){bounds.expandByPoint(new THREE.Vector3(...frame.eef));bounds.expandByPoint(new THREE.Vector3(...frame.sphere));for(const point of frame.obstacle_segments?.flat()||[])bounds.expandByPoint(new THREE.Vector3(...point));radius=Math.max(radius,frame.sphere_radius_m);}
+  for(const frame of this.recording.frames){bounds.expandByPoint(new THREE.Vector3(...frame.eef));if(frame.sphere)bounds.expandByPoint(new THREE.Vector3(...frame.sphere));for(const point of frame.obstacle_segments?.flat()||[])bounds.expandByPoint(new THREE.Vector3(...point));radius=Math.max(radius,frame.sphere_radius_m??0);}
   for(const point of this.recording.task?.reference_path||[])bounds.expandByPoint(new THREE.Vector3(...point));
   bounds.expandByScalar(radius);
   const ball=bounds.getBoundingSphere(new THREE.Sphere()),direction=this.camera.position.clone().sub(this.orbit.target).normalize();
@@ -657,9 +680,11 @@ export class avoidance_replay {
   // 記録の非ラップ角の補間。IK・関節指令・物理積分なし。
   this.robot.set_received_pose(pose);
   this.motion_sample={model:this.recording.model,pose,motion:interpolate_joint_motion(first,second,fraction,frames[lower-1]),time_ms:this.time_sec*1000,is_simulation_input:true};
-  this.sphere.position.fromArray(first.sphere).lerp(new THREE.Vector3(...second.sphere),fraction);
-  this.sphere.scale.setScalar(first.sphere_radius_m+(second.sphere_radius_m-first.sphere_radius_m)*fraction);
-  this.sphere.visible=!first.obstacle_segments;
+  this.sphere.visible=!!first.sphere&&!first.obstacle_segments;
+  if(first.sphere){
+   this.sphere.position.fromArray(first.sphere).lerp(new THREE.Vector3(...second.sphere),fraction);
+   this.sphere.scale.setScalar(first.sphere_radius_m+(second.sphere_radius_m-first.sphere_radius_m)*fraction);
+  }
   for(const [idx,capsule] of this.capsules.entries()){
    capsule.group.visible=!!first.obstacle_segments;if(!capsule.group.visible)continue;
    const points=first.obstacle_segments[idx].map((point,end)=>new THREE.Vector3(...point).lerp(new THREE.Vector3(...second.obstacle_segments[idx][end]),fraction));
@@ -705,6 +730,12 @@ export class avoidance_replay {
   const limit_note=has_fallback?'\n可動域: 暫定値あり・実機未照合':this.recording.has_unbounded_joint_limits?'\n旧記録: 一部の角度制限が未反映':'';
   const live=this.is_live?this.live_clock.status(now_ms):null;
   const live_note=live?`\n表示: ${live.is_stalled?'受信停滞・保持':live.is_resync?'再同期':this.recording.frames.length<2?'補間待ち':'補間'} · 受信差 ${live.display_gap_ms.toFixed(0)} ms（試験時刻） · 更新 ${live.receive_age_ms.toFixed(0)} ms前`:'';
+  if(this.recording.input_source==='ros2'){
+   const frame=this.is_live?latest:first,source=this.recording.input_binding;
+   const control=format_plugin_status({avoidance:{...frame.input_status,phase:frame.phase},motion:frame.motion},plugin_definition('gng'));
+   this.element('status').textContent=`入力: ${source.plugin_id} · ${source.channels.points.topic}\n状態: ${this.is_live?'実行中':'終了'}\n${control}\n受信点数: ${frame.input_status.num_points} 点\n到達: ${frame.num_arrivals??0} 回\n接触: 未判定${live_note}`;
+   this.on_pose?.();return;
+  }
   const contact=has_latest_contact?'あり（最新受信）':first.has_contact?'あり':'なし';
   const gap=this.is_live?latest.proxy_gap_m:first.proxy_gap_m;
   const phase=this.is_live?latest.phase:first.phase;

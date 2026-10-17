@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GNGデータセットをFoundationPoseの単一フレーム入力へ変換する。"""
+"""GNGデータセットからFoundationPoseの単一フレーム入力への変換。"""
 
 import argparse
 import gzip
