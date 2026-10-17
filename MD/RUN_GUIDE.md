@@ -6,7 +6,7 @@
 ## ソース取得・基本構築
 
 ```bash
-git clone --depth 1 --branch grasp_new4 https://github.com/uraki-UH/arm_avoidance.git
+git clone --depth 1 --branch main https://github.com/uraki-UH/arm_avoidance.git
 cd arm_avoidance
 bash scripts/dual_arm_cpu.sh build
 bash scripts/dual_arm_cpu.sh check
