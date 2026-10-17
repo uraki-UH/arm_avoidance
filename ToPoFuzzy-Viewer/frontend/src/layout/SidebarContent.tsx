@@ -1,3 +1,4 @@
+import type { sensor_calibration_state } from '../types';
 import { is_grasp_candidate_array, marker_arrow_options } from '../features/visualization/arrows';
 import { ArrowStyleControls } from '../features/visualization/SharedRenderers';
 import React, { useState } from 'react';
@@ -95,6 +96,8 @@ interface SidebarContentProps {
     stopGng: () => Promise<{ success: boolean }>;
     getGngStatus: () => Promise<GngStatus>;
     listGngConfigs: () => Promise<{ name: string; path: string }[]>;
+    get_calibration: (source_frame: string) => Promise<sensor_calibration_state>;
+    apply_calibration: (mount_id: string, revision: number, source_frame: string, delta: { pos: number[]; rot_deg: number[]; scl: number[] }, operation_id: string) => Promise<sensor_calibration_state>;
     getParameters: () => Promise<NodeParameters>;
     setParameter: (paramName: string, value: number | string | boolean) => Promise<SetParameterResult>;
     getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
@@ -572,7 +575,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </div>
             ) : null}
 
-            {props.selectedCloud && props.isEditMode && (
+            {props.selectedCloud && !props.is_read_only && (
                 <CollapsibleSection title="Transform" icon={<Move size={16} />} defaultOpen={true}>
                 <GenericTransformPanel
                     title="Active Transform"
@@ -594,6 +597,16 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         });
                     }}
                 />
+                </CollapsibleSection>
+            )}
+
+            {!props.is_read_only && props.selectedCloud && (
+                <CollapsibleSection title="ROS取付校正" icon={<Move size={16} />} defaultOpen={true}>
+                    <TfCalibrationPanel is_connected={props.isConnected} cloud={props.selectedCloud}
+                        get_calibration={props.get_calibration} apply_calibration={props.apply_calibration}
+                        on_applied={(id) => props.onUpdateTransform(id, {
+                            position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1],
+                        })} />
                 </CollapsibleSection>
             )}
 
@@ -633,13 +646,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 </div>
                             </div>
 
-                            <CollapsibleSection title="TF Calibration (Real-time)" icon={<Move size={16} />} defaultOpen={true}>
-                                <TfCalibrationPanel
-                                    isConnected={props.isConnected}
-                                    getParameters={props.getParameters}
-                                    setParameter={props.setParameter}
-                                />
-                            </CollapsibleSection>
+
 
                             <button
                                 onClick={props.onAddRegion}

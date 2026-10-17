@@ -22,6 +22,7 @@ class joint_command_output(Node):
     def __init__(self):
         super().__init__('joint_command_output')
         defaults = {'backend': 'viewer', 'urdf_path': '', 'target_topic': 'active_joint_commands',
+                    'target_message_type': 'joint_state',
                     'state_topic': 'joint_states', 'viewer_topic': 'viewer_joint_states',
                     'trajectory_topic': 'dual_arm_controller/joint_trajectory',
                     'dynamixel_topic': '/dynamixel/command/goal', 'mapping_file': '',
@@ -60,7 +61,12 @@ class joint_command_output(Node):
             self.command_pub = self.create_publisher(DynamixelGoal, self.config['dynamixel_topic'], 1)
         self.viewer_pub = self.create_publisher(JointState, self.config['viewer_topic'], 10)
         self.status_pub = self.create_publisher(String, 'joint_control/status', 10)
-        self.create_subscription(JointState, self.config['target_topic'], self.on_command, 10)
+        if self.config['target_message_type'] == 'joint_state':
+            self.create_subscription(JointState, self.config['target_topic'], self.on_command, 10)
+        elif self.config['target_message_type'] == 'joint_trajectory':
+            self.create_subscription(JointTrajectory, self.config['target_topic'], self.on_trajectory, 10)
+        else:
+            raise ValueError('指令型はjoint_state・joint_trajectoryのいずれかが必要です')
         self.create_subscription(JointState, self.config['state_topic'], self.on_state, qos_profile_sensor_data)
         self.timer = self.create_timer(1.0/self.config['publish_hz'], self.tick,
                                       clock=Clock(clock_type=ClockType.STEADY_TIME))
@@ -85,6 +91,21 @@ class joint_command_output(Node):
             return
         self.targets = targets
         self.last_command_sec = time.monotonic()
+
+    def on_trajectory(self, message):
+        """共通回避の単一点位置指令。時間付き軌道・速度・トルク指令の暗黙な破棄なし。"""
+        stamp = message.header.stamp.sec+message.header.stamp.nanosec*1e-9
+        if stamp and not 0 <= self.get_clock().now().nanoseconds*1e-9-stamp <= self.config['max_command_age_sec']:
+            self.report('rejected', '即時関節指令の時刻が不正です')
+            return
+        if len(message.points) != 1:
+            self.report('rejected', '即時関節指令には1点が必要です')
+            return
+        point = message.points[0]
+        if point.time_from_start.sec or point.time_from_start.nanosec or point.velocities or point.accelerations or point.effort:
+            self.report('rejected', '即時位置指令だけに対応しています')
+            return
+        self.on_command(JointState(header=message.header, name=message.joint_names, position=point.positions))
 
     def on_state(self, msg):
         try:

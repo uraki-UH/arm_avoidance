@@ -1,0 +1,18 @@
+{
+  "policy": "vlut_graph",
+  "execution_mode": "recorded",
+  "duration_sec": 18,
+  "obstacle_shape": "sphere",
+  "pursuit_mode": "distal_sweep",
+  "target_link": "L_link4",
+  "radius_m": 0.06,
+  "seed": 401,
+  "speed_ratios": [0.4, 1.0],
+  "speed_ramp_sec": 18,
+  "max_ball_acceleration": 3,
+  "max_ball_deceleration": 8,
+  "max_ball_turn_acceleration": 10,
+  "enable_learning": false,
+  "enable_proximal_guard": true,
+  "enable_fixed_guard": true
+}

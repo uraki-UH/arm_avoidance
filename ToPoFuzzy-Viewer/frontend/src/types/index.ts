@@ -453,3 +453,24 @@ export interface ClippingBounds {
     minZ: number;
     maxZ: number;
 }
+
+// ROS側の取付校正。表示補正と校正済み基準姿勢の分離
+export interface sensor_calibration_mount {
+    mount_id: string;
+    parent_frame: string;
+    child_frame: string;
+    revision: number;
+    pos: number[];
+    quat: number[];
+    status: 'ready' | 'conflict' | 'pending' | 'blocked';
+    reason: string;
+    can_apply: boolean;
+    last_operation_id: string;
+    is_tf_applied: boolean;
+}
+
+export interface sensor_calibration_state {
+    mounts: sensor_calibration_mount[];
+    store_file: string;
+    is_tf_applied?: boolean;
+}

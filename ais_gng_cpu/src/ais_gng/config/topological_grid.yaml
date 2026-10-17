@@ -80,8 +80,7 @@
     depth_visibility_unit_scale: 0.001
     depth_visibility_relative_tolerance: 0.02
     depth_visibility_tf_enabled: true
-    # Fallback matches pointcloud_transformer_cpp/realsense_calibration.yaml
-    # when the recording has no usable base_link -> camera TF.
+    # 録画にbase_linkとカメラのTFがない場合のViewer校正。Rx*Ry*Rz、位置[m]・角度[deg]
     depth_visibility_fallback_transform_enabled: true
     depth_visibility_fallback_map_frame: "base_link"
     camera_to_map.x: 0.434

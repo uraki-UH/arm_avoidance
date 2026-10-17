@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-17",
+  "model": "topo_dual_arm_max_long",
+  "manifest": "cases.json",
+  "report": "../../log/artifacts/command_route/batch_04/report.json",
+  "commands": "../../log/artifacts/command_route/batch_04/001_bag_raw_inputs/commands.json",
+  "checks": {"observation": 9, "bag_player": 19, "visibility": 35, "self_filter": 20},
+  "num_errors": 0,
+  "live": {
+    "num_states": 1463,
+    "num_commands": 201,
+    "num_roi_updates": 95,
+    "num_recorded_derived_publishers": 0,
+    "input_loss_phase": "blocked_clearance",
+    "input_loss_message": "姿勢保持: 入力待ち: /livox/lidar",
+    "has_hardware_output": false,
+    "is_collision_free_success_confirmed": false
+  },
+  "roi_self_generation": {
+    "num_updates": 96,
+    "build_mean_ms": 1.6771355406793493,
+    "build_max_ms": 4.326391004724428,
+    "scope": "C++格子登録・自己マスク配置・Voxelメッセージ生成",
+    "excluded": ["初回URDF読込み", "TF取得", "PointCloud2のXYZ抽出", "境界分類", "視野判定", "回避計算", "駆動"]
+  },
+  "cleanup": {
+    "has_owned_processes": false,
+    "has_existing_process_stop": false,
+    "external_changes": "別作業によるセンサ校正ビルドと点群ブリッジの更新あり。未操作"
+  },
+  "limitations": ["障害物・視野外による保持と重なりが残存", "接触なし回避・往復タスク完遂は未達", "実機駆動・移動基台は未検証"]
+}

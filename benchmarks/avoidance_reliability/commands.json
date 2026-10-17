@@ -1,0 +1,34 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "environment": "gng_cpu_container / ROS Humble / MuJoCo / 実機出力なし",
+  "docker_prefix": "docker exec -w /ros2_ws/src -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 -e ROS_DOMAIN_ID=222 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -c",
+  "ros_prefix": "source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash",
+  "batch_commands": [
+    "timeout --signal=INT --kill-after=5 300 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/before.json --output log/artifacts/avoidance_reliability/before_run --repeats 1 --timeout-sec 55 --max-total-sec 270 --estimate-sec 12 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 300 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/after.json --output log/artifacts/avoidance_reliability/after_run --repeats 1 --timeout-sec 55 --max-total-sec 270 --estimate-sec 10 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 300 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/after.json --output log/artifacts/avoidance_reliability/after_boxes_run --repeats 1 --timeout-sec 55 --max-total-sec 270 --estimate-sec 9 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 300 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/after.json --output log/artifacts/avoidance_reliability/velocity_run --repeats 1 --timeout-sec 55 --max-total-sec 270 --estimate-sec 10 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 300 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/after.json --output log/artifacts/avoidance_reliability/final_run --repeats 1 --timeout-sec 55 --max-total-sec 270 --estimate-sec 10 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 410 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/heldout.json --output log/artifacts/avoidance_reliability/heldout_run --repeats 1 --timeout-sec 55 --max-total-sec 380 --estimate-sec 11 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 230 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/controller.json --output log/artifacts/avoidance_reliability/controller_run --repeats 1 --timeout-sec 55 --max-total-sec 210 --estimate-sec 12 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 230 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/controller.json --output log/artifacts/avoidance_reliability/corner_run --repeats 1 --timeout-sec 55 --max-total-sec 210 --estimate-sec 12 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 330 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/after.json --output log/artifacts/avoidance_reliability/verified_run --repeats 1 --timeout-sec 55 --max-total-sec 310 --estimate-sec 12 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 150 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/validation.json --output log/artifacts/avoidance_reliability/validation_run --repeats 1 --timeout-sec 45 --max-total-sec 130 --estimate-sec 14 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 150 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/avoidance_reliability/validation.json --output log/artifacts/avoidance_reliability/validation_batch_run --repeats 1 --timeout-sec 45 --max-total-sec 130 --estimate-sec 14 --continue-on-error"
+  ],
+  "unit_command": "timeout --signal=INT --kill-after=5 100 python3 -m unittest log.artifacts.avoidance_reliability.check_reliability log.artifacts.internal_clearance_fix.check_internal log.artifacts.coordinated_avoidance.check_coordinated log.artifacts.left_front_shuttle.check_candidates log.artifacts.cartesian_shuttle.check_task log.artifacts.pursuit_v2.check_pursuit log.artifacts.pursuit_fixes.check_fixes log.artifacts.pursuit_target.check_target log.artifacts.pursuit_smooth.check_qp log.artifacts.random_walk.check_walk",
+  "targeted_unit_commands": [
+    "timeout --signal=INT --kill-after=5 30 python3 -m unittest log.artifacts.avoidance_reliability.check_reliability",
+    "python3 -m unittest log.artifacts.pursuit_v2.check_pursuit log.artifacts.avoidance_reliability.check_reliability"
+  ],
+  "continuous_command": "timeout --signal=INT --kill-after=5 30 python3 log/artifacts/internal_clearance_fix/check_continuous.py",
+  "node_command": "timeout --signal=TERM --kill-after=5 30 node --test log/artifacts/pursuit_smooth/check_clock.mjs log/artifacts/pursuit_smooth/check_client.mjs",
+  "summary_command": "docker exec -w /ros2_ws/src -e PYTHONDONTWRITEBYTECODE=1 gng_cpu_container python3 log/artifacts/avoidance_reliability/summarize.py",
+  "profile_commands": [
+    "docker exec -i -w /ros2_ws/src -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && exec timeout --signal=INT --kill-after=5 30 python3 -'",
+    "docker exec -i -w /ros2_ws/src -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && exec timeout --signal=INT --kill-after=5 25 python3 -'"
+  ],
+  "assembly": "docker_prefixの末尾に、ros_prefix && 実行コマンドを単一引用符で接続。複数の有限試験は&&で順次実行、最終コマンドはexec。プロファイルは1秒のOSCBF条件を標準入力から実行",
+  "cancelled_run": "after_runは途中実装の時間超過により所有runnerのみにSIGINT。子プロセスの停止確認済み",
+  "runtime_policy": "新規ROSノード・bag・サーバー・コンテナの起動なし。試験終了後の既存状態の確認が完了条件"
+}

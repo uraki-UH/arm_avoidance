@@ -1,11 +1,13 @@
 # 2026-10-01 - 回避後の復帰・再監視
 
+検証ログ: 旧artifacts参照先の一部は未同梱。本文の数値は当時の記録。
+
 - 対象: ToPoDualArm前方伸展設定のC++計画接続。A開始時の実測姿勢を復帰先として保持。
 - 動作: 点群接近時の`avoiding`、復帰先・経路が塞がれた場合の`waiting_for_clearance`、経路の安全確認後の`returning`、開始姿勢到達後の`monitoring`。再接近時は再び回避。停止ラッチ中の自動復帰なし。
 - 判定設定: 退避の点群余裕0.18 m、復帰先の点群余裕0.22 m、開始姿勢への関節誤差0.015 rad。現在姿勢の安全確認後も、復帰経路の停止余裕検査を継続。
-- 初回失敗: 退避余裕0.10 m・復帰余裕0.12 mでは0.53 m / 8 sの合成接近に追従できず、停止距離に到達。上記余裕へ変更。停止距離・失効・速度制限の緩和なし。[初回結果](../../../artifacts/gng_base_frame_20261001/avoid_return/report.json)。
+- 初回失敗: 退避余裕0.10 m・復帰余裕0.12 mでは0.53 m / 8 sの合成接近に追従できず、停止距離に到達。上記余裕へ変更。停止距離・失効・速度制限の緩和なし。初回結果。
 - 単体: 回避→安全待ち→復帰→監視→再接近を含む関連124件成功。
-- 通し試験: 成功、84.17 s。全4動作状態を通過して`monitoring`へ復帰。最大関節変位0.56545 rad、最大実測速度0.22412 rad/s、最小点群余裕0.10563 m。Viewer姿勢・自己ボクセル追従、実機関節入力・点群入力の欠測停止成功。QPは既定OFF。全所有試験停止済み。[結果](../../../artifacts/gng_base_frame_20261001/avoid_return_early/report.json)。
+- 通し試験: 成功、84.17 s。全4動作状態を通過して`monitoring`へ復帰。最大関節変位0.56545 rad、最大実測速度0.22412 rad/s、最小点群余裕0.10563 m。Viewer姿勢・自己ボクセル追従、実機関節入力・点群入力の欠測停止成功。QPは既定OFF。全所有試験停止済み。結果。
 - 反映条件: Gazebo launchの再起動。稼働中のユーザープロセスへの停止・再起動操作なし。
 
 通し試験コマンド（コンテナ内・source済み、終了済み）:
@@ -16,7 +18,6 @@ python3 /ros2_ws/src/gng_vlut_system/test/check_viewer_environment_gazebo.py \
   --enable-left-forward --approach-sec 8 --withdraw-sec 8 \
   --output /ros2_ws/src/artifacts/gng_base_frame_20261001/avoid_return_early
 ```
-
 
 ## 続報: 退避先の直接隣接安全
 

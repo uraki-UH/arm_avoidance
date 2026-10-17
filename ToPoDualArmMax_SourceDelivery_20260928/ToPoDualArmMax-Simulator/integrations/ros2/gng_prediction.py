@@ -137,7 +137,14 @@ class streaming_predictor:
             difference = np.where(has_distance_pair, close-previous[1], label_close-previous[4])
             speed = np.clip(difference/elapsed, -4., 4.)
             trend = np.where(speed > .02, np.clip(close+speed*self.horizon_sec, 0., 1.), 0.)
-        self.history.append((now, close, neighbors, np.isfinite(gaps), label_close))
+            # 正規化前の離隔差分。近接度が飽和する遠方での接近見落としの防止。
+            gap_change = np.zeros_like(gaps)
+            np.subtract(previous[5], gaps, out=gap_change, where=has_distance_pair)
+            closing_rate = np.clip(gap_change/elapsed, -4., 4.)
+            predicted_gap = gaps-np.maximum(0., closing_rate)*self.horizon_sec
+            distance_trend = np.where(closing_rate > .01, np.clip(1.-np.maximum(0., predicted_gap)/.12, 0., 1.), 0.)
+            trend = np.maximum(trend, np.where(has_distance_pair, distance_trend, 0.))
+        self.history.append((now, close, neighbors, np.isfinite(gaps), label_close, gaps.copy()))
         features = self.features()
         has_training = self.num_batches >= 8 and self.num_positive >= 16 and self.num_negative >= 16
         # 根拠のない一様な危険視の抑制。現在の不安全判定は既存VLUTの管轄。

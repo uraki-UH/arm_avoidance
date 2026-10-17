@@ -64,20 +64,6 @@ eval_root=/tmp/registration_eval_$(date +%Y%m%d)
 | Generalized ICP | 点の共分散を使う局所精密化 | 平面クラスタの分散情報を活かせる可能性があるが、やはり初期姿勢が必要 | 中 |
 | DGR | 対応の信頼度推定、重み付きProcrustes、姿勢精密化 | 点群対応を大量に作れる場合に有効。MinkowskiEngine等のGPU依存が重い | 低〜中 |
 
-調査根拠は、GeoTransformerが低重なり向けの幾何特徴とRANSAC不要の姿勢推定を提案していること、PREDATORが重なり領域を明示的に推定すること、RoITrがPPFベースの回転不変表現を使うこと、PointDSCが空間整合性を使って外れ値を除去すること、Super4PCSが部分重なりを扱うCPU方式であることによる。Open3D FGRは対応点入力にも使える実装があり、DGRは対応信頼度と重み付きProcrustesを一体化している。
-調査根拠は、GeoTransformerが低重なり向けの幾何特徴とRANSAC不要の姿勢推定を提案していること、PREDATORが重なり領域を明示的に推定すること、RoITrがPPFベースの回転不変表現を使うこと、PointDSCが空間整合性を使って外れ値を除去すること、Super4PCSが部分重なりを扱うCPU方式であることによる。Open3D FGRは対応点入力にも使える実装があり、DGRは対応信頼度と重み付きProcrustesを一体化している。Open3Dの標準構成でもFPFH対応を使ったRANSAC/FGRを大域初期化に、point-to-plane ICPを局所精密化に使う。
-
-## 追加候補の優先順
-
-1. `FPFH + RANSAC`を学習なしの大域基準として追加
-2. `Open3D FGR`を対応点入力の簡易CPU基準として追加
-3. `Super4PCS`を対応点生成なしのCPU大域基準として追加
-4. 各大域方式の出力を`ICP point-to-plane`で精密化して比較
-5. `PointDSC`を既存matcherの対応点後段として評価
-6. GPU環境を整えた後、`GeoTransformer`または`PREDATOR`を低重なり対応生成器として評価
-7. yaw総当たり削減が必要になった場合に`RoITr`を評価
-8. 対応数が多い条件だけ`DGR`を評価
-
 スクリプトはワークスペースのルートから実行する。GPUを使うSC2-PCRとTurboRegは、取得後に次で導入確認する。
 
 ```bash
@@ -113,24 +99,13 @@ eval_root=/tmp/registration_eval_$(date +%Y%m%d)
 
 SC2-PCRはGPU上で対応点の二次互換性から外れ値を除外して姿勢を解く。公式環境は古いPyTorch版を固定しているが、CUDA対応PyTorchで動作確認できる。
 
-```bash
-python3 -m pip install --target "$eval_root/py_sc2" --upgrade torch \
-  --index-url https://download.pytorch.org/whl/cu128
-PYTHONPATH="$eval_root/py_sc2" python3 -c \
-  'import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))'
-```
+導入条件は[setup_sc2_turboreg.sh](../tools/registration_eval/setup_sc2_turboreg.sh)を参照。
 
 公式実装の`post_refinement`は、`inlier_threshold == 0.10`以外を1.2 mとして扱う固定値を持つ。数十cmの物体でそのまま使うと不適切なので、利用前にスケール依存の閾値へ修正し、単体テストを追加する。
 
 ## TurboReg
 
 TurboRegはGPUで多数の対応点の最大クリークを探索する後段方式。対応点生成には、同梱例と同様にFPFHなどを使用する。
-
-```bash
-PYTHONPATH="$eval_root/py_sc2" python3 -m pip install \
-  --target "$eval_root/py_sc2" --no-deps --no-build-isolation \
-  "$eval_root/TurboReg/bindings"
-```
 
 `TurboRegGPU`はCUDAデバイスを要求する。小物体ではFPFHの法線半径・記述子半径・対応許容距離を物体寸法と点密度に合わせる。大規模対応では有望だが、数十件程度の非平面成分に対してはGPU起動や特徴抽出の固定費が支配的になり得る。
 
@@ -239,17 +214,4 @@ cmake --build /G3Reg/build -j"$(nproc)"
 
 ## ライセンスと導入上の注意
 
-| 方式 | 用途 | 導入判断 |
-| --- | --- | --- |
-| TEASER++ | 対応点後段のロバスト姿勢解 | 直近の比較候補 |
-| G3Reg | 形状セグメントからの大域照合 | 非平面成分との統合候補 |
-| SC2-PCR | 少数〜中規模対応のGPU後段 | 閾値修正後に限定評価 |
-| TurboReg | 多数対応のGPU最大クリーク | FPFH等の対応生成と一体で評価 |
-| FoundationPose | RGB-D・CAD・物体マスクによる6D姿勢 | GPU環境とモデル重みの整備後 |
-| FilterReg | 確率的レジストレーション | 旧CUDA/PCL依存のため優先度低 |
-| FPFH + RANSAC | 学習なしの大域姿勢推定 | 標準比較基準。対応数と試行回数を固定して評価 |
-| Open3D FGR | 高速大域姿勢推定 | CPU基準。対応点またはFPFHを入力 |
-| Super4PCS | 対応点なしの大域姿勢推定 | CPU基準。部分重なりの評価に使用 |
-| ICP / Generalized ICP | 局所姿勢精密化 | 大域推定結果を初期値として比較 |
-
-方式ごとにライセンスと再配布条件を公式リポジトリで再確認する。ベンチマークの公称値を小物体・遮蔽環境の性能として扱わない。
+ライセンス・再配布条件は各取得元で確認。公称ベンチマークを小物体・遮蔽環境の性能として扱わないこと。

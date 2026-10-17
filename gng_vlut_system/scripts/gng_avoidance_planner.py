@@ -139,6 +139,9 @@ class gng_path_search:
             self.num_representative_collision_rejections = getattr(
                 self, 'num_representative_collision_rejections', 0)+1
             return False
+        mask = getattr(self, 'workspace_mask', None)
+        if mask is not None and not mask.can_bridge(self.geometry, first, second):
+            return False
         visibility = getattr(self, 'visibility', None)
         if visibility is not None and not visibility.can_bridge(self.geometry, first, second):
             return False

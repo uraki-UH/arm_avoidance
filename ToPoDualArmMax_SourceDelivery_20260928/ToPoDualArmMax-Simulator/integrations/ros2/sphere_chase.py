@@ -16,11 +16,12 @@ import numpy as np
 from gng_inputs import workspace, load_models
 from gng_avoidance import independent_policy, check_kinematics
 from gng_sphere_avoidance import (load_graph, motion_sequence_predictor, representative_index,
-                                  sphere_field, sphere_rollout_policy, cartesian_task, joint_velocity_command)
+                                  sphere_field, sphere_rollout_policy, cartesian_task, joint_velocity_command,
+                                  vlut_index, vlut_graph_policy)
 from physics_scene import PhysicsScene, compiled_model
 from physics_robot import origin as physics_origin
-from dual_arm_avoidance_geometry import robot_geometry, resolve_mesh_path
-from pursuit_obstacle import pursuit_obstacle, capsule_field
+from dual_arm_avoidance_geometry import robot_geometry, resolve_mesh_path, shape_vertices, origin as geometry_origin
+from pursuit_obstacle import pursuit_obstacle, capsule_field, shoulder_anchor
 from pursuit_cbf import pursuit_cbf, angle_delta
 
 
@@ -33,17 +34,25 @@ class internal_clearance_checker:
         self.min_clearance_th = min_clearance_th
         self.coarse_check = None
         self.num_refined_poses = self.num_shape_checks = 0
+        self.num_distance_repairs = 0
         self.last_violations = []
         root = et.Element('mujoco', model='internal_clearance')
         et.SubElement(root, 'compiler', angle='radian')
         asset, world = et.SubElement(root, 'asset'), et.SubElement(root, 'worldbody')
         self.link_geoms = {}
+        num_links = len(geometry.link_indices)+len(geometry.environment_shapes)
+        self.box_centers = np.zeros((num_links,3))
+        self.box_halves = np.zeros((num_links,3))
         geom_links = []
         path = Path(urdf_path)
         for link in et.parse(path).getroot().findall('link'):
             link_idx = geometry.link_indices[link.get('name')]
             self.link_geoms[link_idx] = []
+            link_vertices = []
             for shape_idx, shape in enumerate(link.findall('collision') or link.findall('visual')):
+                vertices = shape_vertices(shape,path.parent,link.get('name'))
+                placement = geometry_origin(shape.find('origin'))
+                link_vertices.append(vertices@placement[:3,:3].T+placement[:3,3])
                 form = shape.find('geometry')
                 mesh = form.find('mesh')
                 if mesh is not None:
@@ -63,6 +72,10 @@ class internal_clearance_checker:
                 self.link_geoms[link_idx].append(len(geom_links))
                 geom_links.append(link_idx)
                 et.SubElement(world, 'geom', **attrs, **physics_origin(shape, mujoco), contype='0', conaffinity='0')
+            if link_vertices:
+                vertices = np.concatenate(link_vertices)
+                lower,upper = vertices.min(axis=0),vertices.max(axis=0)
+                self.box_centers[link_idx],self.box_halves[link_idx] = (lower+upper)/2,(upper-lower)/2
         self.num_robot_geoms = len(geom_links)
         self.environment_names = {}
         for env_idx, (kind, position, rotation, half_size) in enumerate(geometry.environment_shapes):
@@ -74,9 +87,19 @@ class internal_clearance_checker:
             self.link_geoms[link_idx] = [len(geom_links)]
             geom_links.append(-1)
             self.environment_names[link_idx] = 'environment_'+kind
+            self.box_halves[link_idx] = half_size
         self.model = compiled_model(mujoco, root, workspace/'docker/runtime/pursuit-clearance')
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
+        self.polytope_vertices = {}
+        box_signs = np.array([[x,y,z] for x in (-1.,1.) for y in (-1.,1.) for z in (-1.,1.)])
+        for idx in range(self.model.ngeom):
+            if self.model.geom_type[idx] == mujoco.mjtGeom.mjGEOM_MESH:
+                mesh_idx = self.model.geom_dataid[idx]
+                begin = self.model.mesh_vertadr[mesh_idx]
+                self.polytope_vertices[idx] = self.model.mesh_vert[begin:begin+self.model.mesh_vertnum[mesh_idx]]
+            elif self.model.geom_type[idx] == mujoco.mjtGeom.mjGEOM_BOX:
+                self.polytope_vertices[idx] = box_signs*self.model.geom_size[idx]
         self.geom_links = np.asarray(geom_links[:self.num_robot_geoms])
         self.local_frames = np.repeat(np.eye(4)[None], self.num_robot_geoms, axis=0)
         for idx in range(self.num_robot_geoms):
@@ -90,6 +113,125 @@ class internal_clearance_checker:
         self.gap_pairs = np.concatenate([pairs, *env_pairs])
         self.link_names = {idx:name for name,idx in geometry.link_indices.items()}
         self.link_names.update(self.environment_names)
+        self.can_control_links = np.zeros(num_links,dtype=bool)
+        active = {geometry.joint_names.index(name) for name in getattr(geometry,'active_joint_names',geometry.joint_names)}
+        for operation in geometry.operations:
+            parent,child,_,_,_,idx = operation[:6]
+            self.can_control_links[child] = self.can_control_links[parent] or idx in active
+
+    def set_shape_frames(self, transforms):
+        """照合専用データの形状配置。既存FKの共用。"""
+        frames = transforms[self.geom_links]@self.local_frames
+        self.data.geom_xpos[:self.num_robot_geoms] = frames[:,:3,3]
+        self.data.geom_xmat[:self.num_robot_geoms] = frames[:,:3,:3].reshape(-1,9)
+        self.world_boxes = np.repeat(np.eye(4)[None],len(self.box_centers),axis=0)
+        self.world_boxes[:len(transforms)] = transforms
+        for idx,(_,position,rotation,_) in enumerate(self.geometry.environment_shapes):
+            self.world_boxes[len(transforms)+idx,:3,:3] = rotation
+            self.world_boxes[len(transforms)+idx,:3,3] = position
+        self.world_boxes[:,:3,3] += np.einsum('nij,nj->ni',self.world_boxes[:,:3,:3],self.box_centers)
+
+    def box_gap(self, first, second):
+        """リンク包絡箱の分離軸による距離下界。近接対だけの凸形状照合。"""
+        a,b = self.world_boxes[first],self.world_boxes[second]
+        if self.environment_names.get(second)=='environment_plane':
+            normal = b[:3,2]
+            return normal@(a[:3,3]-b[:3,3])-np.abs(normal@a[:3,:3])@self.box_halves[first]
+        delta = b[:3,3]-a[:3,3]
+        rotation = np.abs(a[:3,:3].T@b[:3,:3])
+        first_gaps = np.abs(a[:3,:3].T@delta)-self.box_halves[first]-rotation@self.box_halves[second]
+        second_gaps = np.abs(b[:3,:3].T@delta)-self.box_halves[second]-rotation.T@self.box_halves[first]
+        return max(float(np.max(first_gaps)),float(np.max(second_gaps)))
+
+    def separation_proof(self, first, second, points):
+        """異常距離値用の分離平面証明。凸多面体の支持頂点による保守距離。"""
+        if first not in self.polytope_vertices or second not in self.polytope_vertices:
+            return None
+        rotations = self.data.geom_xmat[[first,second]].reshape(2,3,3)
+        positions = self.data.geom_xpos[[first,second]]
+        axes = np.vstack((points[3:]-points[:3],positions[1]-positions[0],rotations[0].T,rotations[1].T))
+        axes = np.vstack((axes,-axes))
+        lengths = np.linalg.norm(axes,axis=1)
+        axes = axes[lengths>1e-10]/lengths[lengths>1e-10,None]
+        if not len(axes):
+            return None
+        projected = [self.polytope_vertices[idx]@(rotation.T@axes.T) for idx,rotation in zip((first,second),rotations)]
+        first_idx,second_idx = np.argmax(projected[0],axis=0),np.argmin(projected[1],axis=0)
+        gaps = (positions[1]-positions[0])@axes.T+projected[1][second_idx,np.arange(len(axes))]-projected[0][first_idx,np.arange(len(axes))]
+        idx = int(np.argmax(gaps))
+        if gaps[idx]<=1e-8:
+            return None
+        anchors = np.concatenate((positions[0]+rotations[0]@self.polytope_vertices[first][first_idx[idx]],
+                                  positions[1]+rotations[1]@self.polytope_vertices[second][second_idx[idx]]))
+        return float(gaps[idx]),anchors,axes[idx]
+
+    def pair_gap(self, first, second, max_dist, closest_points=None, separating_normal=None):
+        """指定リンク対の凸形状間距離 [m]。複数形状の最小値。"""
+        gap = max_dist
+        if self.box_gap(first,second)>=max_dist:
+            return gap
+        for first_geom in self.link_geoms[first]:
+            for second_geom in self.link_geoms[second]:
+                self.num_shape_checks += 1
+                points = np.zeros(6)
+                has_swapped_order = self.model.geom_type[first_geom]>self.model.geom_type[second_geom]
+                args = (second_geom,first_geom) if has_swapped_order else (first_geom,second_geom)
+                value = self.mujoco.mj_geomDistance(self.model,self.data,*args,max_dist,points)
+                if has_swapped_order:
+                    points = np.r_[points[3:],points[:3]]
+                normal = points[3:]-points[:3]
+                length = float(np.linalg.norm(normal))
+                normal = normal/max(length,1e-9)*(-1. if value<0 else 1.)
+                # 接触値・証人点不整合時の支持平面照合。接触値の無条件無視なし。
+                if value<max_dist and (value<=0. or abs(abs(value)-length)>1e-6):
+                    repair = self.separation_proof(first_geom,second_geom,points)
+                    if repair is None and value<=0.:
+                        # 独立な証人方向の取得だけ。別解法の距離値への置換なし。
+                        saved_flags = self.model.opt.disableflags
+                        fallback_points = np.zeros(6)
+                        try:
+                            self.model.opt.disableflags |= int(self.mujoco.mjtDisableBit.mjDSBL_NATIVECCD)
+                            self.mujoco.mj_geomDistance(self.model,self.data,*args,max_dist,fallback_points)
+                        finally:
+                            self.model.opt.disableflags = saved_flags
+                        if has_swapped_order:
+                            fallback_points = np.r_[fallback_points[3:],fallback_points[:3]]
+                        repair = self.separation_proof(first_geom,second_geom,fallback_points)
+                    if repair is not None and repair[0]>value+1e-6:
+                        value,points,normal = repair
+                        self.num_distance_repairs += 1
+                if value<gap:
+                    gap = value
+                    if closest_points is not None:
+                        closest_points[:] = points
+                    if separating_normal is not None:
+                        separating_normal[:] = normal
+        return gap
+
+    def linear_samples(self, positions, centers, link_frames, max_dist_th=.08):
+        """現姿勢の最近点と既存FKによる距離の一次標本。差分姿勢のメッシュ再照合なし。"""
+        gaps = self.geometry.internal_clearances(centers[0])
+        pairs = np.unique(self.gap_pairs[gaps<max_dist_th],axis=0)
+        pairs = pairs[np.any(self.can_control_links[pairs],axis=1)]
+        self.set_shape_frames(link_frames[0])
+        values = []
+        for first,second in pairs:
+            points = np.zeros(6)
+            normal = np.zeros(3)
+            gap = self.pair_gap(first,second,max_dist_th,points,separating_normal=normal)
+            if gap>=max_dist_th:
+                continue
+            sampled = []
+            for idx,point in ((first,points[:3]),(second,points[3:])):
+                if idx>=len(self.geometry.link_indices):
+                    sampled.append(np.broadcast_to(point,(len(positions),3)))
+                    continue
+                base = link_frames[0,idx]
+                local = base[:3,:3].T@(point-base[:3,3])
+                sampled.append(np.einsum('nij,j->ni',link_frames[:,idx,:3,:3],local)+link_frames[:,idx,:3,3])
+            delta = sampled[1]-sampled[0]
+            values.append(gap+(delta-delta[0])@normal)
+        return np.stack(values,axis=1) if values else np.empty((len(positions),0))
 
     def check(self, positions, centers=None, link_frames=None):
         """単一姿勢・姿勢列の共通距離基準。物理シーンへの書込みなし。"""
@@ -109,19 +251,12 @@ class internal_clearance_checker:
         values = np.asarray(centers).reshape(-1, len(self.geometry.radii),3)[rows]
         for row, transforms, sphere_centers in zip(rows, frames, values):
             self.num_refined_poses += 1
-            world_frames = transforms[self.geom_links]@self.local_frames
-            self.data.geom_xpos[:self.num_robot_geoms] = world_frames[:,:3,3]
-            self.data.geom_xmat[:self.num_robot_geoms] = world_frames[:,:3,:3].reshape(-1,9)
+            self.set_shape_frames(transforms)
             gaps = self.geometry.internal_clearances(sphere_centers)
             pairs = np.unique(self.gap_pairs[gaps<self.min_clearance_th], axis=0)
             flags[row] = True
             for first, second in pairs:
-                gap = self.min_clearance_th
-                for first_geom in self.link_geoms[first]:
-                    for second_geom in self.link_geoms[second]:
-                        self.num_shape_checks += 1
-                        gap = min(gap, self.mujoco.mj_geomDistance(self.model, self.data,
-                            first_geom, second_geom, self.min_clearance_th, None))
+                gap = self.pair_gap(first,second,self.min_clearance_th)
                 if gap<self.min_clearance_th:
                     flags[row] = False
                     if positions.ndim==1:
@@ -131,14 +266,14 @@ class internal_clearance_checker:
         return bool(flags[0]) if positions.ndim==1 else flags.reshape(positions.shape[:-1])
 
 
-def make_scene(pose, names, active, bodies=None, position_limits=None):
+def make_scene(pose, names, active, bodies=None, position_limits=None, drive_mode='position'):
     locked = [name for idx,name in enumerate(names) if idx not in active]
     body = dict(id='pursuer',mode='kinematic',mass=.2,position=[3.,0.,3.],quaternion=[0,0,0,1],
                 geoms=[dict(type='sphere',radius=.06,position=[0,0,0],quaternion=[0,0,0,1])])
     pedestal = dict(id='experiment_pedestal',mode='static',mass=1.,position=[0,0,-.07],quaternion=[0,0,0,1],
         geoms=[dict(type='box',size=[.085,.085,.069],position=[0,0,0],quaternion=[0,0,0,1])])
     scene = PhysicsScene([*([body] if bodies is None else bodies),pedestal],dict(model='long',pose=dict(zip(names,map(float,pose))),
-        position=[0,0,0],quaternion=[0,0,0,1],locked_joints=locked),dict(mode='none'),model_cache_dir=workspace/'docker/runtime/pursuit-model')
+        position=[0,0,0],quaternion=[0,0,0,1],locked_joints=locked,control_mode=drive_mode),dict(mode='none'),model_cache_dir=workspace/'docker/runtime/pursuit-model')
     scene.robot.control_entries = [(name,idx,dof,min(limit,2.)) for name,idx,dof,limit in scene.robot.control_entries]
     if position_limits is None:
         position_limits = [(-np.pi,np.pi) if scene.robot.joints[name].get('type')=='continuous' else
@@ -199,22 +334,31 @@ def position_limit_status(positions, names, limits):
     return ('physical_joint_limit' if len(violated) else ''),joints
 
 
-def apply_target(scene, names, active, positions, velocity, target):
-    limits = scene.model.jnt_range[[scene.robot.ids[names[idx]] for idx in active]]
-    desired = joint_velocity_command(positions[active], velocity[active], (target[active]-positions[active])/.1, limits)
-    command = positions.copy()
-    command[active] = np.clip(positions[active]+desired*.1,limits[:,0],limits[:,1])
-    scene.robot.set_targets(dict(zip(names,map(float,command))))
+def apply_velocity(scene, names, active, command_velocity):
+    """速度解の直接送信 [rad/s]。角度目標・換算時間・位置駆動への代替なし。"""
+    values = np.asarray(command_velocity,dtype=float)
+    if scene.robot.control_mode.value!='velocity' or values.shape!=(len(active),) or not np.isfinite(values).all():
+        raise ValueError('速度駆動と制御対象軸の有限速度解が必要')
+    scene.robot.set_command(dict(mode='velocity',velocity={names[idx]:float(value) for idx,value in zip(active,values)}))
 
 
-def calibrate(geometry, active, poses, duration_sec=8., cache_dir=None):
+def apply_position(scene, names, target):
+    """旧位置経由点方式の絶対姿勢。固定角度刻み・速度解との往復変換なし。"""
+    values = np.asarray(target,dtype=float)
+    if scene.robot.control_mode.value!='position' or values.shape!=(len(names),) or not np.isfinite(values).all():
+        raise ValueError('位置駆動と全軸の有限な絶対姿勢が必要')
+    limits = scene.model.jnt_range[[scene.robot.ids[name] for name in names]]
+    scene.robot.set_targets(dict(zip(names,map(float,np.clip(values,limits[:,0],limits[:,1])))))
+
+
+def calibrate(geometry, active, poses, duration_sec=8., cache_dir=None, drive_mode='position'):
     """同一物理モデル・姿勢・有限可動域の速度校正値の再利用。"""
     source = Path(__file__).parent
     urdf = source.parents[1]/'app/source.urdf'
     files = [source/name for name in ('sphere_chase.py','physics_scene.py','physics_robot.py')]+[urdf]
     files.extend(sorted({urdf.parent/node.get('filename') for node in et.parse(urdf).findall('.//collision/geometry/mesh')}))
     import mujoco
-    signature = dict(mujoco_version=mujoco.__version__,numpy_version=np.__version__,duration_sec=duration_sec,
+    signature = dict(mujoco_version=mujoco.__version__,numpy_version=np.__version__,duration_sec=duration_sec,drive_mode=drive_mode,
         names=geometry.joint_names,active=np.asarray(active).tolist(),limits=geometry.limits.tolist(),poses={name:value.tolist() for name,value in poses.items()},
         files={str(path.relative_to(source.parents[1])):hashlib.sha256(path.read_bytes()).hexdigest() for path in files})
     key = hashlib.sha256(json.dumps(signature,sort_keys=True).encode()).hexdigest()
@@ -228,7 +372,7 @@ def calibrate(geometry, active, poses, duration_sec=8., cache_dir=None):
             return float(value)
     except (OSError,ValueError,KeyError,TypeError):
         pass
-    value = calibrate_reference(geometry,active,poses,duration_sec)
+    value = calibrate_reference(geometry,active,poses,duration_sec,drive_mode)
     geometry.calibration_source = 'computed'
     temporary = None
     try:
@@ -247,8 +391,8 @@ def calibrate(geometry, active, poses, duration_sec=8., cache_dir=None):
     return value
 
 
-def calibrate_reference(geometry, active, poses, duration_sec=8.):
-    scene = make_scene(poses['a'],geometry.joint_names,active,position_limits=geometry.limits)
+def calibrate_reference(geometry, active, poses, duration_sec=8., drive_mode='position'):
+    scene = make_scene(poses['a'],geometry.joint_names,active,position_limits=geometry.limits,drive_mode=drive_mode)
     body = scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_L_tcp')
     previous = scene.data.xpos[body].copy()
     max_speed = 0.
@@ -256,7 +400,12 @@ def calibrate_reference(geometry, active, poses, duration_sec=8.):
         positions, velocity = state(scene,geometry.joint_names)
         target = poses['b' if int(frame*.01/2)%2==0 else 'a']
         if frame%5==0:
-            apply_target(scene,geometry.joint_names,active,positions,velocity,target)
+            if drive_mode=='velocity':
+                desired = 3.*angle_delta(target,positions,geometry.is_periodic)[active]
+                command_velocity = joint_velocity_command(positions[active],velocity[active],desired,geometry.limits[active])
+                apply_velocity(scene,geometry.joint_names,active,command_velocity)
+            else:
+                apply_position(scene,geometry.joint_names,target)
         scene.step()
         current = scene.data.xpos[body].copy()
         if frame > 20:
@@ -284,7 +433,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     if output_dir is not None and any((Path(output_dir)/name).exists() for name in ('metrics.json','details.json','trajectory.jsonl')):
         raise ValueError('既存の試験結果への上書き禁止。新しい出力先の指定')
     policy_name = config.get('policy','rollout_cv')
-    if policy_name not in ('avoidance_first','vrm_predictive','rollout_reactive','rollout_cv','rollout_sequence','cbf_qp','oscbf'):
+    if policy_name not in ('vlut_graph','avoidance_first','vrm_predictive','rollout_reactive','rollout_cv','rollout_sequence','cbf_qp','oscbf'):
         raise ValueError('未対応の球回避方式')
     duration = float(config.get('duration_sec',0. if is_continuous else 20.))
     if is_continuous and duration!=0.:
@@ -331,7 +480,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     task = json.loads((workspace/'benchmarks/shuttle_bag/task.json').read_text())
     poses = {key:np.asarray([math.radians(value.get(name,0.)) for name in geometry.joint_names])
              for key,value in task['poses_deg'].items()}
-    task_mode = config.get('task_mode','cartesian' if policy_name.startswith('rollout_') or policy_name in ('cbf_qp','oscbf') else 'joint')
+    task_mode = config.get('task_mode','cartesian' if policy_name.startswith('rollout_') or policy_name in ('vlut_graph','cbf_qp','oscbf') else 'joint')
     if task_mode not in ('cartesian','joint') or (task_mode=='cartesian' and policy_name in ('avoidance_first','vrm_predictive')):
         raise ValueError('未対応のタスク方式。旧経由点方式はjointのみ')
     offset_deg = config.get('goal_offset_deg',{})
@@ -347,7 +496,16 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     control_task = task_object if task_mode=='cartesian' else None
     task_metadata = task_object.metadata(task_mode)
     progress('drive_calibration')
-    reference_speed = calibrate(geometry,active,poses)
+    # 連続速度提案と駆動の整合。旧位置経由点方式の位置駆動は保持。
+    has_velocity_proposal = policy_name.startswith('rollout_') or policy_name in ('vlut_graph','cbf_qp','oscbf')
+    required_drive_mode = 'velocity' if has_velocity_proposal else 'position'
+    drive_mode = config.get('drive_mode',required_drive_mode)
+    if drive_mode!=required_drive_mode:
+        raise ValueError('方式と駆動の不一致。速度解方式はvelocity、旧位置経由点方式はposition専用')
+    calibrated_reference_speed = calibrate(geometry,active,poses,drive_mode=drive_mode)
+    reference_speed = float(config.get('reference_eef_speed_mps',calibrated_reference_speed))
+    if not math.isfinite(reference_speed) or not .01<=reference_speed<=10.:
+        raise ValueError('障害物の基準速度の範囲外')
     progress('obstacle_setup')
     transform = geometry.link_transforms(poses['a'])[geometry.link_indices[target_link]]
     followed = transform[:3,3]+transform[:3,:3]@target_offset
@@ -356,6 +514,8 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     if initial is not None and (np.asarray(initial).shape!=(3,) or not np.isfinite(initial).all() or np.linalg.norm(initial)<1e-8):
         raise ValueError('開始方向は非ゼロの有限3次元ベクトル')
     start_dist = float(config.get('start_dist_m',.45))
+    target_frames = geometry.link_transforms(np.stack(list(poses.values())))[:,geometry.link_indices[target_link]]
+    target_positions = target_frames[:,:3,3]+np.einsum('nij,j->ni',target_frames[:,:3,:3],target_offset)
     if config.get('pursuit_mode')=='random_walk':
         extent = config.get('random_walk_extent_m',.6)
         change_sec = config.get('random_walk_change_sec',.6)
@@ -370,7 +530,11 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         gap = np.min(np.linalg.norm(geometry.centers(poses['a'])-center,axis=1)-geometry.radii-radius)
         if gap>.12 and center[2]>radius:
             try:
-                obstacle = pursuit_obstacle({**config,'target_link':target_link},center,direction,geometry,poses['a'])
+                obstacle_config = {**config,'target_link':target_link}
+                if config.get('obstacle_shape')=='linked_arm' and 'shoulder_position_m' not in config:
+                    obstacle_config['shoulder_position_m'] = shoulder_anchor(target_positions,center,direction,
+                        np.asarray(config.get('link_lengths_m',[.35,.35]))).tolist()
+                obstacle = pursuit_obstacle(obstacle_config,center,direction,geometry,poses['a'],guard_geometry=internal_checker)
             except ValueError as error:
                 if '開始位置' not in str(error):
                     raise
@@ -382,7 +546,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     initial_center = obstacle.center.copy()
     motion_metadata = dict(random_walk=dict(min_position_m=obstacle.min_random_walk_position_m.tolist(),
         max_position_m=obstacle.max_random_walk_position_m.tolist(),change_sec=obstacle.random_walk_change_sec)) if obstacle.pursuit_mode=='random_walk' else {}
-    scene = make_scene(poses['a'],geometry.joint_names,active,obstacle.bodies(),geometry.limits)
+    scene = make_scene(poses['a'],geometry.joint_names,active,obstacle.bodies(),geometry.limits,drive_mode)
     obstacle.move_scene(scene)
     obstacle_bodies = {value for name,value in scene.body_ids.items() if name.startswith('pursuer_')}
     obstacle_geoms = {idx for idx in range(scene.model.ngeom) if scene.model.geom_bodyid[idx] in obstacle_bodies}
@@ -393,6 +557,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     eef_body = scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_L_tcp')
     target_body = scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+target_link)
     anchor_bodies = [scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+name) for name in obstacle.guard_anchor_links]
+    guard_bodies = [scene.mujoco.mj_name2id(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,'robot_'+internal_checker.link_names[idx])
+                    for idx in obstacle.guard_box_links] if obstacle.guard_box_links is not None else []
+    if any(body<0 for body in guard_bodies):
+        raise ValueError('保護リンクと物理モデルの対応不一致')
     protected_links = {geometry.spheres[idx][0] for idx in np.flatnonzero(obstacle.protected_mask)}
     active_links = {geometry.spheres[idx][0] for idx in np.flatnonzero(geometry.is_arm)}
     geom_links = [scene.mujoco.mj_id2name(scene.model,scene.mujoco.mjtObj.mjOBJ_BODY,int(body)) or 'world' for body in scene.model.geom_bodyid]
@@ -407,24 +575,30 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     progress('cbf_solver' if is_cbf else 'gng_index')
     if not is_cbf:
         graph = load_graph(directory/metadata['gng_file'])
-        index = representative_index(geometry,active,poses['a'],graph)
+        index = (vlut_index(geometry,active,poses['a'],graph,directory/metadata['vlut_file']) if policy_name=='vlut_graph' else
+                 representative_index(geometry,active,poses['a'],graph))
         internal_checker.coarse_check = lambda centers, margin:index.internal_clear(geometry,centers,margin)
-        if policy_name.startswith('rollout_'):
+        if policy_name=='vlut_graph':
+            rollout = vlut_graph_policy(geometry,active,target_link,graph,node_index=index,memory=memory,
+                margin=float(config.get('margin_m',.08)),task_weight=float(config.get('task_weight',.12)),
+                target_offset=target_offset,task=control_task,internal_checker=internal_checker)
+        elif policy_name.startswith('rollout_'):
             rollout = sphere_rollout_policy(geometry,active,target_link,graph,
                 mode=dict(rollout_reactive='reactive',rollout_cv='constant_velocity',rollout_sequence='sequence')[policy_name],
                 candidate_metric=config.get('candidate_metric','joint'),memory=memory,node_index=index,
                 horizon_sec=float(config.get('horizon_sec',.4)),margin=float(config.get('margin_m',.08)),
                 task_weight=float(config.get('task_weight',.12)),target_offset=target_offset,task=control_task,
                 internal_checker=internal_checker)
-            if is_continuous:
-                rollout.samples_ms = deque(maxlen=1200)
         else:
             legacy = independent_policy(geometry,{'left_arm':metadata},strategy='vrm_predictive' if policy_name=='vrm_predictive' else 'avoidance_first').policies['left_arm']
             legacy.clock_sec = lambda:float(scene.data.time)
             legacy.positions = poses['a'].copy()
             legacy.config.update(max_bridge_step=.025,min_clearance_th=.01,min_planning_clearance_th=.005,
                 trigger_clearance_th=.10,release_clearance_th=.14,return_clear_sec=.5,max_state_age_sec=.3,max_local_step=.12)
-    cbf = pursuit_cbf(geometry,active,scene,policy_name,float(config.get('margin_m',.08)),task=control_task) if is_cbf else None
+        if rollout is not None and is_continuous:
+            rollout.samples_ms = deque(maxlen=1200)
+    cbf = pursuit_cbf(geometry,active,scene,policy_name,float(config.get('margin_m',.08)),task=control_task,
+                      internal_checker=internal_checker) if is_cbf else None
     progress('ready')
     pending, eef_history = deque(),deque()
     goal, arrivals, first_contact = 'b',0,None
@@ -440,6 +614,7 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     costs = deque(maxlen=1200) if is_continuous else []
     num_proposals = 0
     total_cost_ms = 0.
+    node_query_total_ms = 0.
     rows = []
     observed = None
     target = poses['a'].copy()
@@ -483,6 +658,8 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         followed = eef_history[0][1]
         speed = reference_speed*(min_ratio+(max_ratio-min_ratio)*min(now/ramp_sec,1.))
         obstacle.update_guard(actual_centers,[scene.data.xpos[body] for body in anchor_bodies])
+        if guard_bodies:
+            obstacle.update_box_guard(scene.data.xpos[guard_bodies],scene.data.xmat[guard_bodies].reshape(-1,3,3))
         achieved_speed = obstacle.advance(followed,speed,float(config.get('max_ball_acceleration',.8)),.01,config.get('enable_sidestep',False),now)
         center = obstacle.center.copy()
         max_ball_speed = max(max_ball_speed,achieved_speed)
@@ -509,11 +686,18 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
                 previous_segments,previous_stamp = observed['segments'].copy(),observed['stamp']
             field.stamp_sec,field.eef_position = observed['stamp'],observed['eef']
             if cbf is not None:
-                target = cbf.propose(positions,velocity,poses[goal],field,observed['stamp'])
+                command_velocity = cbf.propose_velocity(positions,velocity,poses[goal],field,observed['stamp'])
                 phase = cbf.phase
-            elif policy_name.startswith('rollout_'):
-                index.update_field(field)
-                target = rollout.propose(positions,velocity,poses[goal],field,observed['stamp'])
+            elif rollout is not None:
+                query_begin = time.perf_counter()
+                if policy_name=='vlut_graph':
+                    index.update_field(field)
+                else:
+                    # 連続候補方式で参照する近傍32ノードだけの照合。グラフ探索方式は全ノード更新。
+                    _,nearest = graph['angle_tree'].query(positions[active],k=min(32,len(graph['angles'])))
+                    index.update_field(field,node_indices=np.atleast_1d(nearest))
+                node_query_total_ms += (time.perf_counter()-query_begin)*1000
+                command_velocity = rollout.propose_velocity(positions,velocity,poses[goal],field,observed['stamp'])
                 phase = rollout.phase
             else:
                 index.update_field(field)
@@ -530,7 +714,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
                 else:
                     target,can_move = legacy.select_retreat()
                 phase = legacy.motion_phase if can_move else 'holding'
-            apply_target(scene,geometry.joint_names,active,positions,velocity,target)
+            if has_velocity_proposal:
+                apply_velocity(scene,geometry.joint_names,active,command_velocity)
+            else:
+                apply_position(scene,geometry.joint_names,target)
             cost_ms = (time.perf_counter()-begin)*1000
             costs.append(cost_ms)
             total_cost_ms += cost_ms
@@ -669,9 +856,25 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         first_qp_no_solution_sec=cbf.first_no_solution_sec if cbf is not None and cbf.first_no_solution_sec is not None else (None if is_continuous else duration),
         max_num_consecutive_qp_no_solution=cbf.max_num_consecutive_no_solution if cbf is not None else 0,
         num_qp_recoveries=cbf.num_recoveries if cbf is not None else 0,
+        num_qp_relaxed_solutions=cbf.num_relaxed_solutions if cbf is not None else 0,
+        qp_constraint_recovery_sec=phase_sec.get('constraint_recovery',0.),
         num_coordinated_selections=rollout.num_coordinated_selections if rollout is not None else 0)
     metrics.update(startup_ms=startup_stages_ms['ready'],num_internal_refined_poses=internal_checker.num_refined_poses,
-                   num_internal_shape_checks=internal_checker.num_shape_checks)
+                   num_internal_shape_checks=internal_checker.num_shape_checks,
+                   num_internal_distance_repairs=internal_checker.num_distance_repairs,
+                   calibrated_reference_eef_speed_mps=calibrated_reference_speed,num_obstacle_route_recoveries=obstacle.num_route_recoveries)
+    metrics['obstacle_tip_blocked_sec'] = obstacle.tip_blocked_sec
+    metrics.update(num_obstacle_configuration_plans=obstacle.num_configuration_plans,
+        obstacle_configuration_plan_total_ms=obstacle.configuration_plan_ms)
+    if cbf is not None:
+        metrics.update({'num_qp_'+key+'_rejections':value for key,value in cbf.diagnostics['num_no_solution_by_reason'].items()})
+        metrics['num_qp_numerical_recoveries'] = cbf.diagnostics['num_numerical_recoveries']
+    if rollout is not None:
+        metrics['vlut_query_mean_ms' if policy_name=='vlut_graph' else 'representative_query_mean_ms'] = node_query_total_ms/num_proposals if num_proposals else None
+        metrics.update({name+'_mean_ms':value/num_proposals if num_proposals else None for name,value in getattr(rollout,'timing_totals_ms',{}).items()})
+    if policy_name=='vlut_graph':
+        metrics.update(num_vlut_obstacle_voxels=int(index.stats[0]),num_vlut_danger_voxels=int(index.stats[1]),
+            num_vlut_obstacle_changes=int(index.stats[2]),num_vlut_danger_changes=int(index.stats[3]))
     num_evaluated = int(round(evaluated_sec/.01))
     metrics.update(num_arrivals_with_posture_dev=num_arrivals_with_posture_dev,
         task_position_rms_error_m=math.sqrt(position_error_squared/num_evaluated) if num_evaluated else None,
@@ -686,6 +889,8 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
     if not max_ball_speed <= reference_speed*max_ratio+1e-8:
         raise RuntimeError('障害物速度上限の超過')
     result = dict(config=config,metrics=metrics,phase_sec=phase_sec,failure_reason=failure_reason,failure_details=failure_details,
+        drive_mode=drive_mode,
+        collision_backend='continuous_cbf' if is_cbf else 'vlut' if policy_name=='vlut_graph' else 'representative_geometry',
         execution_mode=execution_mode,has_recording=not is_continuous,cost_window_size=len(costs),
         is_valid_scenario=outcome!='attacker_loss',outcome=outcome,contact_rule='target_tip',
         target_contact_links=sorted(obstacle.target_links),task=task_metadata,arrival_events=list(arrival_events),**motion_metadata,
@@ -702,7 +907,10 @@ def run_case(config, output_dir=None, emit=None, stop_event=None):
         source_sha256={name:hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()
                        for name in ('sphere_chase.py','pursuit_obstacle.py','pursuit_cbf.py','gng_sphere_avoidance.py','gng_prediction.py','physics_scene.py','physics_robot.py','gng_avoidance.py')},
         input_sha256={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
-                      for path in ([Path(params['urdf_path'])] if is_cbf else [Path(params['urdf_path']),directory/metadata['gng_file'],index.kernel_path])})
+                      for path in ([Path(params['urdf_path'])] if is_cbf else [Path(params['urdf_path']),directory/metadata['gng_file'],index.kernel_path]+
+                                   ([directory/metadata['vlut_file']] if policy_name=='vlut_graph' else []))})
+    if policy_name=='vlut_graph':
+        index.close()
     if output_dir is not None:
         output_dir = Path(output_dir);output_dir.mkdir(parents=True,exist_ok=True)
         for name,value in (('metrics.json',metrics),('details.json',result),('memory.json',memory.export())):

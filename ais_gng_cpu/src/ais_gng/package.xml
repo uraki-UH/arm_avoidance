@@ -8,6 +8,7 @@
   <license>FuzzRoBo</license>
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>rclcpp</depend>
   <depend>arrow_visualization</depend>

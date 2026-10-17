@@ -48,7 +48,7 @@ case "$command_name" in
             cd /ros2_ws
             colcon build --symlink-install --executor sequential \
                 --base-paths src/MSG src/ais_gng_cpu/src src/libs/arrow_visualization \
-                    src/voxel_idx src/pointcloud_sampling src/grasping_system \
+                    src/libs/voxel_idx src/pointcloud_sampling src/grasping_system \
                     src/gng_vlut_system src/ToPoFuzzy-Viewer/backend/src \
                 --packages-up-to gng_vlut_system topo_fuzzy_viewer \
                 --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF

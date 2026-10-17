@@ -65,10 +65,10 @@ GNG生成、平面クラスタ生成、JSON・Marker・Graph生成、ROS配送�
 
 実行時パラメータでOFF/ONを確認。両条件で表示曲面0件、ONの候補0点。ライブ2条件は異なる点群フレームのため参考比較。
 GNG欄は別処理で40〜60msの行も継続。初回probeはHumble非対応APIのimportで失敗し、修正後2/2成功。
-`at128.yaml`を試験済みON設定へ更新し、install参照先との内容一致を確認。[ライブの条件・起動コマンド・終了確認](../../../artifacts/surface_local_20260929/live/README.md)。
+`at128.yaml`を試験済みON設定へ更新し、install参照先との内容一致を確認。[ライブの条件・起動コマンド・終了確認](../../../log/artifacts/surface_local_20260929/live/README.md)。
 
 小幅なgraph構築・曲率数値計算の試作は今回の本番反映を見送り。[判断](../reject.md)。
 起動した試験・ビルド・比較プロセスはすべて終了済み。既存プロセスの停止なし。
 外部で作業中に起動されたfrontendはそのまま維持。
 
-根拠：[性能・入力来歴・再現手順](../../../benchmarks/surface_local_20260929/README.md)、[起動コマンド](../../../artifacts/surface_local_20260929/commands.md)、[集計](../../../artifacts/surface_local_20260929/perf/summary.csv)、[ROS試験](../../../artifacts/surface_local_20260929/ros_smoke/result.json)。
+根拠：[性能・入力来歴・再現手順](../../../benchmarks/surface_local_20260929/README.md)、[起動コマンド](../../../log/artifacts/surface_local_20260929/commands.md)、[集計](../../../log/artifacts/surface_local_20260929/perf/summary.csv)、[ROS試験](../../../log/artifacts/surface_local_20260929/ros_smoke/result.json)。

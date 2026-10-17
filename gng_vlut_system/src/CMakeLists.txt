@@ -35,6 +35,13 @@ add_library(robot_model_lib STATIC
 target_link_libraries(robot_model_lib common_lib kinematics_lib)
 ament_target_dependencies(robot_model_lib urdf urdfdom urdfdom_headers Eigen3)
 
+# 観測専用URDFキャッシュ。ROS指令・関節実測との接続なし。
+add_library(gng_observation_kernel SHARED core/indexing/sensor_observation_kernel.cpp)
+target_compile_features(gng_observation_kernel PRIVATE cxx_std_17)
+target_link_libraries(gng_observation_kernel robot_model_lib)
+ament_target_dependencies(gng_observation_kernel Eigen3)
+install(TARGETS gng_observation_kernel LIBRARY DESTINATION lib/${PROJECT_NAME} COMPONENT observation_kernel)
+
 # Safety Engine (Old: safety_engine)
 add_library(safety_engine STATIC
     core/gng/GrowingNeuralGas.cpp
@@ -106,6 +113,13 @@ add_executable(topofuzzy_bridge_node nodes/bridge/topofuzzy_bridge_node.cpp)
 add_executable(independent_arm_pair_node nodes/planning/independent_arm_pair_node.cpp)
 add_executable(world_index_to_voxel_node nodes/bridge/world_index_to_voxel_node.cpp)
 target_link_libraries(world_index_to_voxel_node voxel_idx::point_cloud_store)
+# 変換済み点群が必要な接続向けのTF変換。計画・衝突計算ライブラリへの依存なし
+add_executable(pointcloud_tf_transformer_node nodes/bridge/pointcloud_tf_transformer_node.cpp)
+ament_target_dependencies(pointcloud_tf_transformer_node rclcpp sensor_msgs tf2 tf2_ros tf2_geometry_msgs)
+install(TARGETS pointcloud_tf_transformer_node DESTINATION lib/${PROJECT_NAME})
+add_executable(sensor_calibration_tf_observer nodes/bridge/sensor_calibration_tf_observer.cpp)
+ament_target_dependencies(sensor_calibration_tf_observer rclcpp std_msgs tf2_msgs nlohmann_json)
+install(TARGETS sensor_calibration_tf_observer DESTINATION lib/${PROJECT_NAME})
 add_library(world_index_to_voxel_component SHARED nodes/bridge/world_index_to_voxel_node.cpp)
 target_link_libraries(world_index_to_voxel_component voxel_idx::point_cloud_store ${EXTRA_LIBS})
 ament_target_dependencies(world_index_to_voxel_component ${DEPS_ROS})

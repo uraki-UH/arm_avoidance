@@ -3,29 +3,34 @@ set -euo pipefail
 
 # 従来の回避bag用入口。選択・再生処理はplay_bag.shへ集約
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-bag_path='/rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23'
+config_file="$script_dir/arm_avoidance_bag.yaml"
+bag_arguments=()
 enable_joint_states=0
-enable_roi_voxels=1
-enable_camera_tf=1
+enable_roi_voxels=0
+enable_camera_tf=0
 is_dry_run=0
 has_play_arguments=0
 play_arguments=()
 selection_arguments=()
 while (( $# > 0 )); do
     case "$1" in
+        --config)
+            if (( $# < 2 )); then printf '%s に値が必要です\n' "$1" >&2; exit 2; fi
+            config_file="$2"; shift 2 ;;
         --joint-states) enable_joint_states=1; shift ;;
         --roi-voxels) enable_roi_voxels=1; shift ;;
         --dry-run) is_dry_run=1; selection_arguments+=(--dry-run); shift ;;
         --no-camera-tf) enable_camera_tf=0; shift ;;
+        --camera-tf) enable_camera_tf=1; shift ;;
         --topics-file|--topic)
             if (( $# < 2 )); then printf '%s に値が必要です\n' "$1" >&2; exit 2; fi
             selection_arguments+=("$1" "$2"); shift 2 ;;
         --) shift; play_arguments+=("$@"); break ;;
         -h|--help)
-            printf '%s\n' '使い方: bash scripts/play_arm_avoidance_bag.sh [--roi-voxels] [--joint-states] [--no-camera-tf] [--dry-run] [bagディレクトリ] [--loop] [再生オプション]' 'カメラ取付TFも同時起動。配信済みの場合は --no-camera-tf。bagの変更は再生オプションより前。汎用入口: bash scripts/play_bag.sh BAG --help'
+            printf '%s\n' '使い方: bash scripts/play_arm_avoidance_bag.sh [--config YAML] [--dry-run] [bagディレクトリ] [再生オプション]' '既定設定: scripts/arm_avoidance_bag.yaml。カメラ取付TFの補完は --camera-tf。追加選択は --topic・--joint-states・--roi-voxels。汎用入口: bash scripts/play_bag.sh --help'
             exit 0 ;;
         -*) play_arguments+=("$1"); has_play_arguments=1; shift ;;
-        *) if (( has_play_arguments )); then play_arguments+=("$1"); else bag_path="$1"; fi; shift ;;
+        *) if (( has_play_arguments )); then play_arguments+=("$1"); else bag_arguments+=("$1"); fi; shift ;;
     esac
 done
 if (( enable_roi_voxels )); then
@@ -35,7 +40,7 @@ fi
 if (( enable_joint_states )); then
     selection_arguments+=(--topic /topo_dual_arm_max_long/joint_states)
 fi
-bag_command=(bash "$script_dir/play_bag.sh" "$bag_path" "${selection_arguments[@]}" -- "${play_arguments[@]}")
+bag_command=(bash "$script_dir/play_bag.sh" --config "$config_file" "${bag_arguments[@]}" "${selection_arguments[@]}" -- "${play_arguments[@]}")
 if (( ! enable_camera_tf )); then exec "${bag_command[@]}"; fi
 # 起動前の選択検証。bag不正・dry-run時の補完TF配信防止
 if (( is_dry_run )); then
@@ -43,7 +48,7 @@ if (( is_dry_run )); then
     printf '%s\n' '同時起動: ros2 launch gng_vlut_system realsense_mount_tf.launch.py parent_frame:=topo_dual_arm_max_long/camera_link child_frame:=camera_link'
     exit 0
 fi
-bash "$script_dir/play_bag.sh" "$bag_path" "${selection_arguments[@]}" --dry-run -- "${play_arguments[@]}" >/dev/null
+bash "$script_dir/play_bag.sh" --config "$config_file" "${bag_arguments[@]}" "${selection_arguments[@]}" --dry-run -- "${play_arguments[@]}" >/dev/null
 if ! command -v ros2 >/dev/null 2>&1; then
     set +u
     if [[ -r "/opt/ros/${ROS_DISTRO:-humble}/setup.bash" ]]; then source "/opt/ros/${ROS_DISTRO:-humble}/setup.bash"; fi

@@ -2,9 +2,9 @@
 
 記録日：2026-09-06。実学習の比較を2026-09-07に追記。
 
-葉容量の追加比較により、最新版の既定値は **分割32・統合8**。同じ比較器内の20/4に対し、実bag2回の探索＋更新は5.431→4.796 ms（約11.7%短縮）。探索アルゴリズムの変更なし。[容量の比較記録](../tmp/gng_spatial_20260906/compact_plane/capacity/report.md)
+葉容量の追加比較により、最新版の既定値は **分割32・統合8**。同じ比較器内の20/4に対し、実bag2回の探索＋更新は5.431→4.796 ms（約11.7%短縮）。探索アルゴリズムの変更なし。[容量の比較記録](../../tmp/gng_spatial_20260906/compact_plane/capacity/report.md)
 
-これは索引単体での選定。固有の補助処理を外した[基本学習比較](../tmp/gng_spatial_20260906/compact_plane/learning_compare/basic/report.md)では、同じ初期状態・学習入力・5,000ノードでボクセル5.913→木4.524 ms（23.5%短縮）。`attention()` 等を含む[元の仕様での比較](../tmp/gng_spatial_20260906/compact_plane/learning_compare/report.md)は学習7.301 / 7.616 ms、GNG全体25.367 / 38.341 msであり、別条件。通常ROSパッケージはボクセル版を維持。
+これは索引単体での選定。固有の補助処理を外した[基本学習比較](../../tmp/gng_spatial_20260906/compact_plane/learning_compare/basic/report.md)では、同じ初期状態・学習入力・5,000ノードでボクセル5.913→木4.524 ms（23.5%短縮）。`attention()` 等を含む[元の仕様での比較](../../tmp/gng_spatial_20260906/compact_plane/learning_compare/report.md)は学習7.301 / 7.616 ms、GNG全体25.367 / 38.341 msであり、別条件。通常ROSパッケージはボクセル版を維持。
 
 ## 1. 対象と全体像
 
@@ -39,7 +39,7 @@ flowchart TD
 
 ## 2. 記録した実装構成
 
-対象ソース：[compact_plane/search_tree.hpp](../tmp/gng_spatial_20260906/compact_plane/search_tree.hpp)。旧最速版は[child_search/search_tree.hpp](../tmp/gng_spatial_20260906/child_search/search_tree.hpp)に保存。
+対象ソース：[compact_plane/search_tree.hpp](../../tmp/gng_spatial_20260906/compact_plane/search_tree.hpp)。旧最速版は[child_search/search_tree.hpp](../../tmp/gng_spatial_20260906/child_search/search_tree.hpp)に保存。
 
 ```cpp
 using fastest_tree = compact_spatial::AdaptiveTree<indexed_node, float, 3>;
@@ -367,7 +367,7 @@ root
 
 ## 8. 過去の計測結果：葉容量20/4での実装比較
 
-以下は葉容量を20/4に固定した前段階の比較。[未使用データ削除とセル距離計算の簡略化](../tmp/gng_spatial_20260906/compact_plane/report.md)。容量32/8の最新結果は12節を参照。
+以下は葉容量を20/4に固定した前段階の比較。[未使用データ削除とセル距離計算の簡略化](../../tmp/gng_spatial_20260906/compact_plane/report.md)。容量32/8の最新結果は12節を参照。
 
 指定bag：`/rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed`
 
@@ -382,7 +382,7 @@ Release、`-O3 -DNDEBUG`、C++20。各フレーム10万入力点、学習5000回
 | 索引更新 | 1.392 ms/フレーム | 1.509 ms/フレーム |
 | 探索と索引更新の合計 | 6.216 ms/フレーム | 6.129 ms/フレーム |
 
-探索は約4.2%、合計は約1.4%短縮した。索引更新はこの実bag比較では増加している。保存列や合成条件の結果も含めて[検証記録](../tmp/gng_spatial_20260906/compact_plane/report.md)に示す。セル縮小だけでは合計6.308 msとなり、軸距離項の簡略化を組み合わせた構成を採用した。
+探索は約4.2%、合計は約1.4%短縮した。索引更新はこの実bag比較では増加している。保存列や合成条件の結果も含めて[検証記録](../../tmp/gng_spatial_20260906/compact_plane/report.md)に示す。セル縮小だけでは合計6.308 msとなり、軸距離項の簡略化を組み合わせた構成を採用した。
 
 この時間はGNG処理全体や点群のボクセル化を含まない。学習を駆動する勝者は従来グリッドで求め、各検証索引に同じ更新列を適用した比較である。複数索引の比較と検証に時間がかかるため、フレームをキューに保持して処理しており、単独GNGの30 Hz動作を示す数字ではない。
 
@@ -416,11 +416,11 @@ b6114d83d6a190432e61bf079d5b69d73bfb64bc3a2f676a885bfd92fed8b65e
 | 占有数・ビット更新 | `Cell::decrement_count`、`Cell::add` |
 | 分割・統合 | `Cell::shouldSubdivide`、`Cell::subdivide`、`Cell::shouldMerge`、`Cell::merge` |
 
-構成の呼び出しは[compact_plane/benchmark.cpp](../tmp/gng_spatial_20260906/compact_plane/benchmark.cpp)の`child_tree`と`mode == 3`、実bag試験は[compact_plane/live.cpp](../tmp/gng_spatial_20260906/compact_plane/live.cpp)を参照。
+構成の呼び出しは[compact_plane/benchmark.cpp](../../tmp/gng_spatial_20260906/compact_plane/benchmark.cpp)の`child_tree`と`mode == 3`、実bag試験は[compact_plane/live.cpp](../../tmp/gng_spatial_20260906/compact_plane/live.cpp)を参照。
 
-8節の実装比較は[summary.json](../tmp/gng_spatial_20260906/compact_plane/summary.json)、フレーム別計測は[live_run_1/comparison.csv](../tmp/gng_spatial_20260906/compact_plane/live_run_1/comparison.csv)と[live_run_2/comparison.csv](../tmp/gng_spatial_20260906/compact_plane/live_run_2/comparison.csv)。最新の容量比較は[capacity/summary.json](../tmp/gng_spatial_20260906/compact_plane/capacity/summary.json)と、その隣の `live_run_1/2` に保存。
+8節の実装比較は[summary.json](../../tmp/gng_spatial_20260906/compact_plane/summary.json)、フレーム別計測は[live_run_1/comparison.csv](../../tmp/gng_spatial_20260906/compact_plane/live_run_1/comparison.csv)と[live_run_2/comparison.csv](../../tmp/gng_spatial_20260906/compact_plane/live_run_2/comparison.csv)。最新の容量比較は[capacity/summary.json](../../tmp/gng_spatial_20260906/compact_plane/capacity/summary.json)と、その隣の `live_run_1/2` に保存。
 
-参照先の`tmp/`はGit管理外の実験保存先である。この文書自体は通常の文書として保存し、本文だけでも探索・更新の手順と計測対象を追えるようにしている。今回の変更は`compact_plane`内の検証版であり、通常GNG・SpatialTree2原本・旧最速版など185ソースファイルは退避・一致・復元を確認済み。変更前の文書は[algorithm_before.md](../tmp/gng_spatial_20260906/compact_plane/algorithm_before.md)に保存。
+参照先の`tmp/`はGit管理外の実験保存先である。この文書自体は通常の文書として保存し、本文だけでも探索・更新の手順と計測対象を追えるようにしている。今回の変更は`compact_plane`内の検証版であり、通常GNG・SpatialTree2原本・旧最速版など185ソースファイルは退避・一致・復元を確認済み。変更前の文書は[algorithm_before.md](../../tmp/gng_spatial_20260906/compact_plane/algorithm_before.md)に保存。
 
 ## 10. 過去の比較：占有隣接葉の優先探索と入力葉を使う移動判定
 
@@ -448,10 +448,9 @@ b6114d83d6a190432e61bf079d5b69d73bfb64bc3a2f676a885bfd92fed8b65e
 
 最終2回の755万入力探索と75500回の総当たり照合で距離不一致0。境界・分割統合・深さ32と、統合で解放された入力葉の参照の棄却をASan/UBSanで確認した。通常GNG・SpatialTree2原本・保存した最速版など177ファイルの一致と、退避アーカイブからの復元を確認済み。詳細と実行コマンドは[検証記録](gng_spatial_development_notes.md)を参照。
 
-
 ## 11. 派生版の整理と開発記録
 
-展開した探索実装は最新版 `compact_plane` と比較基準 `child_search` の2版。2ヘッダの内容は整理前と同一で、比較プログラムの過去版へのinclude依存を除去した。採用・不採用の理由と未検証事項は[開発メモ](gng_spatial_development_notes.md)、旧版の実装・詳細レポートの復元と再実行は[実験README](../tmp/gng_spatial_20260906/README.md)を参照。過去の章の保存件数は各試作時点の記録であり、今回の整理は全履歴3,106ファイルをアーカイブ化したもの。
+展開した探索実装は最新版 `compact_plane` と比較基準 `child_search` の2版。2ヘッダの内容は整理前と同一で、比較プログラムの過去版へのinclude依存を除去した。採用・不採用の理由と未検証事項は[開発メモ](gng_spatial_development_notes.md)、旧版の実装・詳細レポートの復元と再実行は[実験README](../../tmp/gng_spatial_20260906/README.md)を参照。過去の章の保存件数は各試作時点の記録であり、今回の整理は全履歴3,106ファイルをアーカイブ化したもの。
 
 ## 12. 葉容量の追加比較：32/8の選定
 
@@ -468,4 +467,4 @@ b6114d83d6a190432e61bf079d5b69d73bfb64bc3a2f676a885bfd92fed8b65e
 
 32/8では保存列の点検査は約43%増えるが、セル判定と軸距離項は約22%減る。実bagの合計短縮は20/4比11.7%。32/4との差は約0.3%で、統合8の効果は小さい。環境変化の再確認では1軸大移動が24.400→16.112 ms。一方、入力乖離のp95は5.459→5.505 ms、最大は5.521→5.726 msへ増加し、全フレーム改善を保証しない。
 
-別比較器の8節の絶対時間とは直接比較しない。コストモデル、条件、全CSV、復元、起動・終了の記録は[容量比較レポート](../tmp/gng_spatial_20260906/compact_plane/capacity/report.md)を参照。
+別比較器の8節の絶対時間とは直接比較しない。コストモデル、条件、全CSV、復元、起動・終了の記録は[容量比較レポート](../../tmp/gng_spatial_20260906/compact_plane/capacity/report.md)を参照。

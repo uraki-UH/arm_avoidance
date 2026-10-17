@@ -1,107 +1,23 @@
-# ToPoFuzzyViewer Frontend Architecture
+# Frontend構成
 
-This document provides an overview of the frontend architecture, including directory structure and the role of key files.
+Frontendは表示と入力操作を担当。点群の削除・フィルタ・座標変換の計算はバックエンドへ依頼。
+通信契約は[WS v2](../common/ws_protocol_v2.md)、全体構成は[Architecture](ARCHITECTURE.md)。
 
-## Directory Structure
+| 責務 | 実装 |
+| --- | --- |
+| 画面・状態の組立て | [App.tsx](../frontend/src/App.tsx) |
+| パネル・タブ | [layout](../frontend/src/layout/) |
+| 共通入力部品 | [SharedControls.tsx](../frontend/src/components/ui/SharedControls.tsx) |
+| WS接続・受信・RPC | [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts) |
+| 点群・Graph・ロボット描画 | [visualization](../frontend/src/features/visualization/) |
+| 表示設定・ラベル優先順位 | [graphLayerSettings.ts](../frontend/src/features/visualization/graphLayerSettings.ts) |
+| 矢印・楕円体の共通描画 | [SharedRenderers.tsx](../frontend/src/features/visualization/SharedRenderers.tsx) |
+| 編集操作 | [manipulation](../frontend/src/features/manipulation/) |
+| 入出力・ROS入力選択 | [io](../frontend/src/features/io/) |
+| 監視・分析 | [analysis](../frontend/src/features/analysis/) |
+| テンプレート照合UI | [templateMatching](../frontend/src/features/templateMatching/) |
+| 車両位置合わせUI | [vehicleRegistration](../frontend/src/features/vehicleRegistration/) |
+| 型・バイナリ復号 | [types](../frontend/src/types/)・[utils](../frontend/src/utils/) |
 
-```
-frontend/src/
-├── components/         # Reusable UI components
-│   └── ui/             # 共通入力部品（レイヤー操作、トグル、スライダー）
-├── features/           # Feature-specific components
-│   ├── analysis/       # Analysis tools (Zone monitoring)
-│   ├── io/             # Input/Output (File loading, ROS integration)
-│   ├── manipulation/   # Interaction tools (Clipping, Transformation, Selection)
-│   └── visualization/  # Rendering components (Point clouds, GNG graph)
-├── hooks/              # Custom React hooks (WebSocket, Selection, Clipping)
-├── layout/             # Layout components (Sidebar, MainLayout)
-├── types/              # TypeScript type definitions
-├── utils/              # Utility functions and file loaders
-├── App.tsx             # Main application entry point
-└── main.tsx            # React DOM rendering
-```
-
-## Core Components
-
-### App.tsx
-The main application component that orchestrates:
-- Global state management (point clouds, selected items)
-- WebSocket connection initialization
-- 3D Canvas setup with `@react-three/fiber`
-- Integration of `Sidebar` and `MainLayout`
-- Event handling for scene interactions
-
-### Layout
-- **SidebarContent.tsx**: Manages the content within the sidebar tabs. It orchestrates sub-components for layers, display settings, editing tools, and analysis features.
-- **MainLayout.tsx**: 画面・パネル構成。`MainLayout`、`Sidebar`、`Tabs`、`CollapsibleSection`を同居。
-- **components/ui/SharedControls.tsx**: 共通入力部品。レイヤー操作、トグル、単値・範囲スライダーを同居。
-
-## Features
-
-### Visualization
-- **PointCloudRenderer.tsx**: Renders point cloud data using Three.js points. Supports different visualization modes (RGB, Height Heatmap, etc.). RGB vertex colors are interpreted as sRGB, converted to the linear working space in the vertex shader, and rendered without tone mapping.
-- **GraphRenderer.tsx**: Renders the GNG (Growing Neural Gas) topological graph, including nodes, edges, and clusters.
-- **GngLayerControls.tsx**: Controls for the GNG layer, including visibility toggles for graph elements, clusters, normals, and label filtering.
-- **HeatmapControls.tsx**: UI controls for configuring heatmap color schemes and value ranges.
-- **SharedRenderers.tsx**: 共通座標系、矢印・楕円体描画、矢印設定UI、再描画要求フック。
-- **arrows.ts**: 矢印の寸法・姿勢計算、入力変換、設定保存。
-- **graphLayerSettings.ts**: グラフ表示設定とラベル定義・優先順位・配色規則。
-- **gngGraphics.ts**: ノード・辺の描画計算とクラスタ所属色。
-- **ellipsoid.ts**: 共分散・姿勢からの楕円体変換と描画行列の更新。
-
-### Manipulation
-- **SelectionHandler.tsx**: Handles the logic for selecting points within the 3D scene using a selection rectangle.
-- **GenericTransformPanel.tsx**: 位置・回転・縮尺の操作パネルと、そのダイアログ。
-- **ClippingControls.tsx**: Manages clipping planes to slice the view of the point cloud.
-- **SelectionToolbar.tsx**: Toolbar for selection-related actions (Select Rectangle, Delete, Clear).
-
-### I/O (Input/Output)
-- **SourceSelector.tsx**: Manages data sources (WebSocket connection, ROS topics).
-- **ServerFileBrowser.tsx**: Interface for browsing and loading point cloud files from the server.
-- **RosbagPlayer.tsx**: Controls for playing back ROS bag files.
-- **ExportPanel.tsx**: Functionality to export point cloud data to various formats (PCD, PLY, LAS).
-
-### Template Matching
-- **ObjectTemplateMatchTuner.tsx**: テンプレート照合の設定パネルと、そのダイアログ。
-- **types.ts**: 通信とUIで共有する設定型・既定値。
-
-### Analysis
-- **ZoneMonitorPanel.tsx**: UI for defining monitoring zones and displaying cluster counts within those zones.
-- **ZoneVisualizer.tsx**: Renders the monitoring zone in the 3D scene.
-- **useZoneMonitor.ts**: Hook managing the logic for zone creation and point containment checks.
-
-## Key Hooks
-
-### useWebSocket.ts
-Manages the WebSocket connection to the backend. It provides:
-- Real-time data streaming (PointCloud, Graph)
-- RPC (Remote Procedure Call) methods for backend operations
-- Connection state management
-
-### usePointSelection.ts
-Implements frustum-based point selection logic. It converts 2D screen coordinates from a selection rectangle into a 3D frustum to identify selected points.
-
-### useClippingPlanes.ts
-Manages the state and logic for global clipping planes used to inspect the interior of point clouds.
-
-## Utilities
-
-### Protocol (protocol.ts)
-Handles the binary protocol for deserializing point cloud data transferred over WebSocket.
-
-### File Loaders
-- **lasLoader.ts**, **pcdLoader.ts**, **plyLoader.ts**, **landxmlLoader.ts**: Parsers for different point cloud file formats.
-
-### Math & Helpers
-- **bounds.ts**: Utility to calculate bounding boxes for point clouds.
-- **transformUtils.ts**: Helper functions for 3D transformations.
-- **heatmapShaders.ts**: Custom WebGL shaders for efficient heatmap rendering.
-
-## Type Definitions
-
-### types/index.ts
-Centralized location for shared TypeScript interfaces and types, such as:
-- `PointCloudData`: Structure for point cloud data.
-- `GraphData`: Structure for GNG graph data.
-- `DataSource`: Definition of available data sources.
-- `GngStatus`: Status of the GNG process.
+点群のRGBはsRGB入力からlinear作業色空間へ変換し、tone mappingなしで描画。
+矢印の寸法・姿勢・基準位置は[共通仕様](../common/arrow_visual_spec.md)。

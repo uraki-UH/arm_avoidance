@@ -1,12 +1,6 @@
 # 局所平面クラスタを利用した上方把持候補推定
 
-作成日: 2026-09-11 / 実装確認基準: `grasp_new4`, `1524208`
-
-2026-09-11追記: 上方方式の既定出力を `/grasp_pose_cands` 系へ統一。候補推定アルゴリズムの変更なし。
-
-同日追記: Viewerが `/grasp_pose_cands` を直接受信して表示。ROS Marker変換と計画launchへの表示依存を解消。
-
-本資料は、現行コードに基づく発表・デモ用のアルゴリズム説明。実機把持成功の報告ではない。2026-09-11に上面法線・非平面付属ノード・簡易進入障害物の判定を追加し、Docker内の合成入力で検証。動画撮影・実機把持は未実施。
+GNG平面クラスタからの幾何候補生成。実機把持成功の報告ではない。
 
 ## 1. 要旨
 
@@ -238,35 +232,8 @@ GNGエッジからクラスタ隣接集合を構築
 
 ## 4. 現在の設定と数値例
 
-以下は `ToPoDualArm.yaml` をlaunchから読み込む場合。C++の単体既定値とは異なるため、発表では実際の設定を併記。
-
-| 既存パラメータ名 | 現在値 | 役割 |
-| --- | --- | --- |
-| `up_axis` | `[0,0,1]` | 上方向 |
-| `minimum_region_nodes` | `4` | 候補領域のノード数下限 |
-| `grasp_size_x`, `grasp_size_y` | 各 `0.15 m` | 設定上の把持面寸法 |
-| `minimum_protrusion_distance` | `0.01 m` | 隣接平面距離の下限 |
-| `tcp_standoff` | `0 m` | 最高位置からの上方オフセット |
-| `maximum_candidates` | `20` | 出力件数上限 |
-| `candidate_confirm_updates` | `5` | 公開前の連続有効更新数 |
-| `candidate_missing_update_allowance` | `2` | 確定候補の短期欠測保持更新数 |
-| `candidate_position_ema_alpha`, `candidate_orientation_ema_alpha` | 各 `0.35` | TCP位置・姿勢の平滑化係数 |
-| `candidate_track_reset_dist` | `0.10 m` | 再確認へ戻すTCP位置差 |
-| `max_surface_tilt_deg` | `90 deg` | 上方向に対する平面傾斜角 |
-| `enable_approach_check` | `false` | 上方観測障害物の確認 |
-| `approach_height`, `approach_margin` | `0.10 / 0.01 m` | 簡易進入領域の高さ・開口外側余白 |
-
-ここでのパラメータ名は現行実装の引用。本資料では名称変更なし。把持面寸法は実ハンドメッシュからこの推定器が自動取得した値ではなく、YAML設定値。
-
-**説明用の計算例であり、実測結果ではない:**
-
-- 採用した投影矩形の寸法が `80 x 40 mm`、使用可能寸法が `150 x 150 mm` なら、両方向ともサイズ条件を通過。膨張や固定余白の補正なし。
-- 面積比は `(80 x 40) / (150 x 150) = 約0.142`。
-- `120 x 120 mm` の正方形が45度回転していても、辺に沿った寸法で包含可能と判定。評価座標系のXY外接箱による約170 mmへの過大評価なし。
-- 有効な隣接平面への距離が `20 mm` と `15 mm` なら最小値は `15 mm` で突出条件を通過。
-- どれか1面との距離が `5 mm` なら、他面から離れていても突出不足で棄却。
-- 重心が隣接平面上にある場合は距離 `0 mm` で棄却。ただし接続エッジが消えて隣接なしになると、この棄却根拠も消失。
-- 領域の最高位置が `120 mm` ならTCP高さも `120 mm`。この値を対象物の全高とは解釈しない。
+設定は[ToPoDualArm.yaml](../../gng_vlut_system/config/ToPoDualArm.yaml)を参照。
+数値例を他機体の推奨値として流用しないこと。
 
 ## 5. 計算コストと方式の特徴
 
@@ -289,57 +256,19 @@ $$
 
 ## 6. ROS出力と起動
 
-| トピック | 型 | 内容 |
-| --- | --- | --- |
-| `/grasp_pose_cands` | `gng_control_msgs/msg/GraspCandidateArray` | update_id、平面クラスタID由来の候補id、pose、shape_score、state。入力グラフのheaderを継承 |
-| `/grasp_pose_cands/summary` | `std_msgs/msg/String` | 件数、棄却理由、処理時間、候補別寸法などのJSON |
-| `/grasp_pose_cands/Tmap` | `ais_gng_msgs/msg/TopologicalMap` | 採用候補の平面・非平面付属ノードと候補内の元GNGエッジ。候補の位置到達性で色分け |
-
-候補矢印の重複Marker配信はなし。Viewerで `/grasp_pose_cands` を選択するとgatewayが描画用データへ変換し、ローカルZ軸を表示。計画launchは不要。候補評価座標系を維持し、空候補は旧表示を消去。
-
-対象ノードは`/grasp_pose_cands/Tmap`をConnection StreamsでONにして表示。`candidate_graph_topic`で出力先を指定し、点サイズ・Edge WidthはViewer側で設定。旧`candidate_nodes_topic`と通常候補のMarker配信は廃止。`candidate_node_diameter`は非平面領域の試験Marker専用。
-
-1候補を1clusterとして表現し、`cluster.id`は`GraspCandidate.id`、`cluster.nodes`は出力内ノードID。平面と付属非平面を合わせ、重複所属は候補内で除外。`edges`は元GNGに存在し、両端が同じ候補に所属する接続のみ。候補間接続や推測エッジは追加しない。候補が重なる場合も各候補に独立したノードIDを割り当て、接続の混線を防止。IDとedges添字は出力内で再採番するため、元環境ノードIDとの同一視は禁止。clusterの位置・大きさは対象ノード群のAABB、姿勢は単位Quaternion。
-
-環境`label`は維持し、候補ノードとclusterの`semantic_label`に所属候補TCPの位置到達性を設定。`SEMANTIC_GRASP_UNKNOWN=2`は灰青`#708090`、`SEMANTIC_GRASP_INSIDE=3`は水色`#00d1ff`、`SEMANTIC_GRASP_OUTSIDE=4`は青`#2a7898`。Viewerの共通ラベル設定で表示・色・優先順位を変更可能。入力グラフ停止中も到達mapやTFによる状態変更を反映し、保存済みノード位置・エッジは再抽出しない。各ノード個別の到達性、姿勢・衝突・把持成功の保証ではない。矢印側の配色は変更なし。
-
-ノード位置・法線は候補評価座標系へ一度だけ変換したグラフから取得。確定候補の短期欠測中はノード・エッジを一緒に保持。配信は毎回全置換で、空候補・TF取得失敗時は空のnodes/edges/clusters。QoSはreliable/transient_local・depth 1で、遅延購読でも最新集合を取得。入力停止時の自動失効は従来どおりなし。
-参照面と探索条件を満たす付属ノードがある場合は非平面ノードも表示。参照面がない場合は平面ノードのみ表示。
-
-到達性は候補生成側の共通処理で評価。`state`は未評価=0（黄）、範囲内=1（緑）、範囲外=2（灰）。`reachability_map_topic`のTCP登録セルと候補観測時刻のTFを使用し、状態だけの変化では`update_id`と候補`id`を維持。上方把持方式の候補IDは同一平面クラスタの存続中に維持し、他方式のID規約は各候補生成器に従う。位置の到達範囲であり、姿勢到達性や把持成功の保証ではない。
-
-TFの遅着対策として、`reachability_tf_timeout_sec`（既定0.05秒）を上限とする観測時刻の変換待機。TF受信は専用スレッドで継続。TFが既に揃った場合、同一座標系、空候補では待機不要。時間切れは未評価であり、過去の到達状態の流用や最新TFへの代替なし。時刻ゼロの入力だけは従来どおり最新TFを使用。既定の待機を無効化する場合は0を指定。
-
-summaryの候補別情報は `cluster_id`、`node_count`、`adjacent_region_count`、`minimum_neighbor_plane_distance`、`extent_x/y`、`surface_height`、`footprint_fill_ratio`に加え、`attached_node_num`、`attached_component_num`、`target_extent_x/y`。`raw_candidate_count`は時系列確定前の生候補数、`candidate_count`は確定・短期欠測保持後の公開候補数。有効な隣接平面がない場合の距離は `null`。棄却された領域は理由別の総数のみで、個別候補としては出力しない。件数上限による切り捨て数も独立した棄却項目ではない。
-
-`processing_ms` は `estimate()` の実行時間。publish、JSON整形、前段処理、通信、描画を含まない。
-
-ビルドとROS環境設定済みの端末で実行。Docker内のソース配置を `/ros2_ws/src` とし、点群は別途 `/semantic_points` に送信。既存の稼働ノードは重複起動しない。
-
-```bash
-ros2 launch ais_gng ais_gng.launch.py \
-  backend:=cpu lidar:=graspnet.yaml input_topic:=/semantic_points
-```
-
-別端末:
-
 ```bash
 ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-候補根拠の確認:
+出力はGraspCandidateArrayの/grasp_pose_cands、診断は同接頭辞のsummary。
+入力は同一frame・更新番号のグラフと平面クラスタ。node_indicesは永続IDではない配列添字。
+旧綴りのplanar_clusters_topicは[launch](../launch/top_grasp_pose_candidates.launch.py)を参照。
+入力停止時の旧候補の自動失効はないため、stamp・更新番号を併せて確認。
 
-```bash
-ros2 topic echo /grasp_pose_cands/summary \
-  --qos-durability transient_local --once
-```
-
-現行launchは入力を `/plane_clusters` に設定し、追加のクラスタ可視化ノードは既定で起動しない。C++単体の入力既定値には旧トピック名が残っているため、上記launchを利用。現行launch・C++での入力パラメータ名も旧綴りの `planar_clusters_topic` であり、独自設定時は `plane_clusters_topic` との混同に注意。
-
-候補出力は `grasp_joint_candidates.launch.py` の既定入力と共通。候補生成方式は上方方式かボクセル方式の一方だけ起動し、比較時はトピックを分離。名前付きYAMLの出力値がlaunch引数より優先されるため、個別トピック指定時は両者を同じ値へ変更。自動的な発行者排他や候補統合は未実装。計画launchは候補経路・候補関節角度の出力専用であり、動作指令を配信しない。
-
-ROSノードは最新のグラフとクラスタを各1件保持する方式。更新番号不一致では待機し、履歴を探索して組み合わせない。入力停止や不一致だけでは旧候補の失効出力は行わないため、撮影時は時刻・更新番号も確認。互換用スコア配列はheaderを持たないため、厳密な対応には候補内の`shape_score`を使用。
+到達性はTCP位置の登録範囲で、姿勢や把持成功の保証ではない。
+形状スコアの対応には候補内shape_scoreを使用。候補生成方式の同時配信はトピックを分離。
+計画ノードは候補軌道・関節角の出力専用で、ロボット駆動は別接続。
 
 ## 7. 検証済み範囲と注意点
 
@@ -369,18 +298,8 @@ ROSノードは最新のグラフとクラスタを各1件保持する方式。�
 
 ## 8. 発表・デモ構成案
 
-1. **目的**: 点群から「どこを・どの向きで・どの大きさの領域として」把持候補にするか。
-2. **入力表現**: 点群、GNG、局所平面クラスタの重ね合わせ。
-3. **サイズ評価**: 水平投影凸包・回転矩形と把持面の比較。平面の斜め配置と合算後の向きの再評価を図示。
-4. **隣接関係評価**: 候補矩形を壁と統合せず、重心と隣接平面の距離で突出を判定。
-5. **結果**: TCP位置・下向き姿勢、局所寸法、採用・棄却件数の表示。
-6. **限界**: 欠損・分割・接続への依存、実機把持成功とは異なることの説明。
-
-撮影例は「採用候補」「過大領域」「隣接する同一平面の小片」「孤立領域」を比較。誤採用し得る孤立領域も含めることで、隣接関係の役割と現状の限界を説明可能。候補計算・Viewer表示に軌道生成・ロボット駆動は不要。ただし任意で到達性評価を追加する現行の `grasp_joint_candidates.launch.py` は経路計算と候補ロボットのViewer召喚を含む。
-
-発表用の短い説明:
-
-> 局所平面クラスタを把持対象領域の候補とし、水平投影した凸包が設定した把持面へ収まる向きを評価する。複合候補は平面を追加するたびに向きを再評価し、GNGエッジから得た隣接平面との距離で同一平面上の小片などを除外する。採用領域の矩形中心・最高位置から、上方進入のTCP姿勢と局所寸法を出力する。
+入力平面・投影寸法・隣接判定・TCP候補と、過大面／孤立領域による失敗例を比較。
+全機能の位置付けは[GRASP_STATUS](../../GRASP_STATUS.md)を参照。
 
 ## 9. 実装対応表
 

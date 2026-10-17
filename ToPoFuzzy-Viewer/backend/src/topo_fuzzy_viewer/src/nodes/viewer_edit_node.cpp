@@ -637,14 +637,23 @@ private:
         const float sz = std::sin(userTransform.rotation[2]);
 
         const float r00 = cy * cz * userTransform.scale[0];
-        const float r01 = (sx * sy * cz - cx * sz) * userTransform.scale[1];
-        const float r02 = (cx * sy * cz + sx * sz) * userTransform.scale[2];
-        const float r10 = cy * sz * userTransform.scale[0];
-        const float r11 = (sx * sy * sz + cx * cz) * userTransform.scale[1];
-        const float r12 = (cx * sy * sz - sx * cz) * userTransform.scale[2];
-        const float r20 = -sy * userTransform.scale[0];
-        const float r21 = sx * cy * userTransform.scale[1];
+        // Three.js Euler XYZと共通のRx*Ry*Rz。各列へのスケール適用
+        const float r01 = -cy * sz * userTransform.scale[1];
+        const float r02 = sy * userTransform.scale[2];
+        const float r10 = (cx * sz + sx * sy * cz) * userTransform.scale[0];
+        const float r11 = (cx * cz - sx * sy * sz) * userTransform.scale[1];
+        const float r12 = -sx * cy * userTransform.scale[2];
+        const float r20 = (sx * sz - cx * sy * cz) * userTransform.scale[0];
+        const float r21 = (sx * cz + cx * sy * sz) * userTransform.scale[1];
         const float r22 = cx * cy * userTransform.scale[2];
+
+        tf2::Matrix3x3 output_rotation(r00, r01, r02, r10, r11, r12, r20, r21, r22);
+        tf2::Vector3 output_pos(userTransform.position[0], userTransform.position[1], userTransform.position[2]);
+        if (hasSourceToTarget) {
+            // DisplayFrameと共通のTF*手動補正。点ごとの行列合成なし
+            output_rotation = sourceToTarget.getBasis() * output_rotation;
+            output_pos = sourceToTarget * output_pos;
+        }
 
         constexpr uint32_t kProgressStep = 25000;
         for (uint32_t i = 0; i < pointCount; ++i) {
@@ -675,9 +684,11 @@ private:
                 continue;
             }
 
-            const float tx = r00 * x + r01 * y + r02 * z + userTransform.position[0];
-            const float ty = r10 * x + r11 * y + r12 * z + userTransform.position[1];
-            const float tz = r20 * x + r21 * y + r22 * z + userTransform.position[2];
+            const auto transformed_point = output_rotation * tf2::Vector3(
+                positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]) + output_pos;
+            const float tx = static_cast<float>(transformed_point.x());
+            const float ty = static_cast<float>(transformed_point.y());
+            const float tz = static_cast<float>(transformed_point.z());
 
             if (!isFinitePoint(tx, ty, tz)) {
                 continue;

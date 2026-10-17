@@ -1,0 +1,3 @@
+# 公称取付に対する補正の正本。ROS側の校正APIによる更新
+schema_version: 1
+calibrations: {}

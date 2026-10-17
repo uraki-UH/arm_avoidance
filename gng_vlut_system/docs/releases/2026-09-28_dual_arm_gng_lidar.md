@@ -102,4 +102,4 @@ SciPyのNumPyバージョン警告あり、試験は成功。
 ただし試験全体は起動直後の速度上限超過で失敗。L_joint2はJointState最大8.974 rad/s、上限3 rad/s。
 記録した超過7件は時刻0.730～0.733 s、回避状態の初回受信前。原因の確定・物理系の修正は未実施。
 後続の欠測停止検査へは未到達。試験launch・Gazebo・探索子プロセスは終了済み。
-詳細・実行コマンドは[再生成資料](../../../artifacts/effectivity_refresh_20260928/README.md)。
+詳細・実行コマンドは[再生成資料](../../../log/artifacts/effectivity_refresh_20260928/README.md)。

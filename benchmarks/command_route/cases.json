@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {"name": "unit", "argv": ["python3", "-B", "/ros2_ws/src/log/artifacts/command_route/check_route.py"], "timeout_sec": 30},
+    {"name": "bag_player", "argv": ["python3", "-B", "/ros2_ws/src/scripts/check_play_bag.py"], "timeout_sec": 50},
+    {"name": "visibility", "argv": ["python3", "-B", "/ros2_ws/src/log/artifacts/roi_visibility/check_visibility.py"], "timeout_sec": 30},
+    {"name": "self_filter", "argv": ["python3", "-B", "/ros2_ws/src/log/artifacts/self_filter/check_filter.py"], "timeout_sec": 30},
+    {"name": "bag_raw_inputs", "argv": ["python3", "-B", "/ros2_ws/src/log/artifacts/command_route/check_route.py", "live", "@case_dir@"],
+     "env": {"ROS_DOMAIN_ID": "168"}, "timeout_sec": 95}
+  ]
+}

@@ -16,6 +16,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake_auto REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(arrow_visualization REQUIRED)
 include_directories(${arrow_visualization_INCLUDE_DIRS})
 find_package(voxel_msgs REQUIRED)
@@ -265,6 +266,8 @@ endforeach()
 if(_available_gng_backends STREQUAL "")
   message(WARNING "ais_gng: no libgng backend components were built")
 endif()
+
+ament_python_install_module(scripts/ais_gng_transform_config.py)
 
 install(
  DIRECTORY include config launch

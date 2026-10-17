@@ -1,110 +1,30 @@
-# System Architecture & Node Interactions
+# Viewer構成
 
-This document outlines the architecture of the **ToPo Fuzzy Viewer** after refactoring based on `RDD.md`. The system is divided into a React frontend (organized by feature modules) and a ROS2-integrated backend.
-
-## 1. High-Level System Overview
-
-```mermaid
-graph TD
-    subgraph Production_Environment [Field / Production]
-        LiDAR[LiDAR Sensor] --> |Points| ROS[ROS2 Node Graph]
-        GNG[AiS-GNG Node] --> |Graph/Clusters| ROS
-    end
-
-    subgraph Backend [Viewer Backend (C++)]
-        ROS2Bridge[ROS2 Bridge\n(Listener)]
-        SourceMgr[Source Manager]
-        ParamMgr[Parameter Manager]
-        WSServer[Viewer Server\n(uWebSockets)]
-
-        ROS --> |Topics| ROS2Bridge
-        ROS2Bridge --> |Internal Data| WSServer
-        SourceMgr --> |Topic List| WSServer
-        ParamMgr <--> |Get/Set| ROS
-    end
-
-    subgraph Frontend [Web Frontend (React)]
-        WSClient[WebSocket Client\n(useWebSocket)]
-        App[App Controller]
-        Layout[Main Layout]
-        
-        subgraph Features [Feature Modules]
-            IO[IO (Input/Output)]
-            VZ[Visualization]
-            MN[Manipulation]
-            AN[Analysis]
-        end
-
-        WSClient <--> |JSON protocols| WSServer
-        App --> Layout
-        Layout --> VZ
-        Layout --> MN
-    end
-```
-
-## 2. Frontend Component Interactions
-
-The frontend is refactored into domain-specific modules to ensure extensibility. `App.tsx` acts as the composition layer, injecting state into the `Layout` and `Features`.
+Frontendは表示・入力、WebSocket gatewayは通信、ROS側の分割ノードは処理を担当。
+起動構成は[viewer_stack.launch.py](../backend/src/topo_fuzzy_viewer/launch/viewer_stack.launch.py)。
 
 ```mermaid
-classDiagram
-    class App {
-        -pointClouds: PointCloudData[]
-        -graphData: GraphData
-        -wsConnection: WebSocket
-        +render()
-    }
-
-    class MainLayout {
-        +Sidebar
-        +CanvasArea
-    }
-
-    namespace Features {
-        class IO {
-            FileUploader
-            ExportPanel
-            SourceSelector
-        }
-        class Visualization {
-            PointCloudRenderer
-            GraphRenderer
-            HeatmapControls
-        }
-        class Manipulation {
-            TransformPanel
-            ClippingControls
-            SelectionHandler
-        }
-        class Analysis {
-            ParameterConfigurator
-        }
-    }
-
-    App --> MainLayout : Composes
-    App --> IO : State & Props
-    App --> Visualization : Data Stream
-    App --> Manipulation : State Changes
-    App --> Analysis : Config Data
-
-    IO ..> App : Adds/Removes Data
-    Manipulation ..> App : Updates Transforms
-    Visualization ..> App : Renders Data
+flowchart LR
+    Browser[React / Three.js] <-->|WS v2| Gateway[viewer_ws_gateway_node]
+    Gateway <--> Source[viewer_source_node]
+    Gateway <--> Edit[viewer_edit_node]
+    Gateway <--> Services[File / Rosbag / GNG / Parameter]
+    Source <--> ROS[ROS 2 topics / TF]
+    Edit --> ROS
 ```
 
-## 3. Directory Structure
+| ノード | 責務 |
+| --- | --- |
+| viewer_ws_gateway_node | 接続・要求振分け・配信制御 |
+| viewer_source_node | ROS入力の購読・変換 |
+| viewer_edit_node | map座標系のAABB編集・非同期ジョブ・候補抽出 |
+| viewer_file_node | 点群ファイル操作 |
+| viewer_rosbag_node | bag再生操作 |
+| viewer_gng_node | GNGプロセス操作 |
+| viewer_param_node | ROSパラメータ操作 |
+| viewer_template_match_node / viewer_vehicle_registration_node | テンプレート照合・車両位置合わせ |
 
-The codebase is organized by functionality (`Features`) rather than technical type (`Components`), making it easy to add new capabilities (e.g., adding a new tool to `MN` or a new analysis view to `AN`).
+編集でTFが欠ける場合は失敗。Frontendによる点単位の代替処理なし。
+Simulatorの`/observe`は表示専用入口。[許可操作・通信契約](../common/ws_protocol_v2.md)。
 
-```
-frontend/src/
-├── features/           # Feature Modules (Domain Logic + UI)
-│   ├── io/             # [IO-xx] Import/Export, Source Selection
-│   ├── visualization/  # [VZ-xx] Renderers, Heatmaps
-│   ├── manipulation/   # [MN-xx] Transforms, Clipping, Selection
-│   └── analysis/       # [AN-xx] Parameters, Future Analytics
-├── layout/             # [UI-xx] Sidebar, MainLayout
-├── hooks/              # Shared logic (WebSocket, State)
-├── types/              # Domain Types (PointCloud, Graph)
-└── App.tsx             # Composition Root
-```
+実装: [backend](../backend/src/topo_fuzzy_viewer/src/)・[Frontend責務](frontend_api.md)。

@@ -230,3 +230,36 @@ def environment_danger_inflation(environment):
     except ValueError as error:
         raise ValueError("environment_voxelization.danger_sourceにはenvironment_inflationまたはvlut_distanceが必要です") from error
     return 0.0 if source == danger_source.vlut_distance else float(config_value(environment, "danger_inflation", 0.05))
+
+
+def realsense_mount(config, parent_frame='', child_frame='', camera_mount_pose=''):
+    """RealSense取付の公称姿勢。校正管理ノードへの入力契約。"""
+    from ais_gng_transform_config import read_pose
+    if not isinstance(config, dict):
+        raise ValueError('取付設定には親子frameと姿勢が必要です')
+    config = dict(config)
+    parent = parent_frame or config.get('parent_frame', '')
+    child = child_frame or config.get('child_frame', '')
+    if camera_mount_pose:
+        config['camera_mount_pose'] = yaml.safe_load(camera_mount_pose)
+    pos, quat = read_pose(config)
+    return dict(mount_id=child, parent_frame=parent, child_frame=child, pos=pos, quat=quat,
+                imu_topics=config.get('imu_topics', []))
+
+
+def sensor_calibration_action(pkg_share, mounts, store_file=''):
+    """取付TFの単一配信元と、機体間で共通の永続校正ストア。"""
+    from launch_ros.actions import Node
+    from launch.actions import GroupAction
+    from launch_ros.parameter_descriptions import ParameterValue
+    import json
+    default_store = (Path(pkg_share) / 'config/sensor_calibration.yaml').resolve()
+    manager = Node(package='gng_vlut_system', executable='sensor_calibration.py',
+                name='sensor_calibration', output='screen', parameters=[{
+                    'mounts_json': ParameterValue(json.dumps(mounts), value_type=str),
+                    'store_file': store_file or str(default_store),
+                    'runtime_dir': str(default_store.parents[2] / 'docker/runtime/sensor_calibration'),
+                }])
+    observer = Node(package='gng_vlut_system', executable='sensor_calibration_tf_observer',
+                    name='sensor_calibration_tf_observer', output='screen')
+    return GroupAction([observer, manager])

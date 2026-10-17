@@ -1,4 +1,4 @@
-"""記録ROIとMuJoCo実測を接続する、シミュレータ専用GNG/VLUT実行環境。"""
+"""観測入力と制御対象の実測を分離したGNG/VLUT実行環境。"""
 import copy
 from pathlib import Path
 from ros_plugins import launch_runtime
@@ -11,7 +11,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 import yaml
 
-from gng_observation import recorded_self_filter, environment_observation, select_voxels
+from gng_observation import recorded_self_filter, environment_observation, select_voxels, sensor_observation, stamp_sec
 
 
 runtime_lock = threading.Lock()
@@ -38,7 +38,7 @@ def source_world_tf(buffer, source_frame, world_source):
         existing = None
     if existing is not None:
         if not np.allclose(transform_matrix(existing.transform), world_source, atol=1e-6, rtol=0):
-            raise ValueError('記録基台のworld配置とシミュレーション基台が異なります。ROIの重畳はできません')
+            raise ValueError('入力基台と制御対象のworld配置が異なります。ROIの重畳はできません')
         return None
     frames = yaml.safe_load(buffer.all_frames_as_yaml()) or {}
     root, seen = source_frame, set()
@@ -80,8 +80,33 @@ def simulation_parameters(params, namespace):
     return result
 
 
+def observed_world_base(buffer, frame, params, stamp):
+    """観測時刻の基台TF。world未接続時だけ、観測機体の明示固定配置による補完。"""
+    from tf2_ros import TransformException
+    try:
+        return transform_matrix(buffer.lookup_transform('world', frame, stamp).transform)
+    except TransformException:
+        frames = yaml.safe_load(buffer.all_frames_as_yaml()) or {}
+        root, seen = frame, set()
+        while root in frames and root not in seen:
+            seen.add(root)
+            root = frames[root]['parent']
+        config = params['environment_voxelization']
+        base = config.get('base_frame', 'base_link')
+        if (root == 'world' or root in seen or not config.get('enable_static_tf')
+                or config.get('static_tf_parent_frame', 'world') != 'world'
+                or config.get('static_tf_child_frame', base) != base
+                or frame != params['robot_name']+'/'+base):
+            raise
+        result = np.eye(4)
+        result[:3, 3] = [config.get('static_tf_'+axis, 0.) for axis in 'xyz']
+        result[:3, :3] = Rotation.from_euler('xyz', [config.get('static_tf_'+axis, 0.)
+            for axis in ('roll', 'pitch', 'yaw')]).as_matrix()
+        return result
+
+
 class gng_runtime:
-    """一物理セッションによるライブ姿勢・入力再時刻化・所有launchの管理。"""
+    """制御対象の実測姿勢・入力再時刻化・所有launchの管理。"""
     def __init__(self, node, params, settings, scene, root_link):
         from sensor_msgs.msg import JointState, PointCloud2
         from voxel_msgs.msg import Voxel
@@ -89,9 +114,22 @@ class gng_runtime:
         from geometry_msgs.msg import TransformStamped
         from gng_control_msgs.srv import CheckArmPair
         from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
-        self.node, self.scene = node, scene
-        self.namespace = 'sim_'+params['robot_name']
+        self.node, self.scene, self.root_link = node, scene, root_link
+        self.namespace = settings.get('runtime_namespace') or 'sim_'+params['robot_name']
+        from rclpy.validate_namespace import validate_namespace
+        validate_namespace('/'+self.namespace)
+        if self.namespace == params['robot_name']:
+            raise ValueError('回避計算とセンシングには別の名前空間が必要です')
         self.params = simulation_parameters(params, self.namespace)
+        self.source_params = params
+        self.input_kind = settings.get('input_kind', 'pointcloud')
+        if self.input_kind not in ('pointcloud', 'voxel'):
+            raise ValueError('観測入力はpointcloud・voxelの選択です')
+        self.sensor_input = None
+        self.pending_points = None
+        self.last_points_stamp_sec = None
+        self.observation_generation = 0
+        self.input_error = ''
         self.frame = self.namespace+'/'+root_link
         source_frame = params['robot_name']+'/'+params['environment_voxelization'].get('base_frame', root_link)
         self.source_frame = settings.get('source_frame', source_frame)
@@ -115,11 +153,11 @@ class gng_runtime:
         self.visibility = None
         if enable_visibility:
             from gng_visibility import roi_visibility
-            from tf2_ros import Buffer
             self.visibility = roi_visibility(settings)
-            self.source_tf = Buffer()
-            self.source_tf_lock = threading.Lock()
-            self.source_static_tf = {}
+        from tf2_ros import Buffer
+        self.source_tf = Buffer()
+        self.source_tf_lock = threading.Lock()
+        self.source_static_tf = {}
         self.lock = threading.Lock()
         self.subscriptions = []
         self.publishers = []
@@ -143,6 +181,10 @@ class gng_runtime:
                 raise ValueError('同じ機体のGNG回避セッションが既に存在します')
             active_runtimes.add(self.namespace)
         try:
+            if self.input_kind == 'pointcloud':
+                if not self.enable_recorded_self_filter:
+                    raise ValueError('生点群の観測側自己除去は無効化できません')
+                self.sensor_input = sensor_observation(params, settings)
             self.pair_client = node.create_client(CheckArmPair, '/'+self.namespace+'/check_arm_pair')
             qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.voxels = node.create_publisher(Voxel, '/'+self.namespace+'/roi_voxels', qos)
@@ -162,25 +204,26 @@ class gng_runtime:
             self.publishers.append(self.joints)
             self.static_tf = node.create_publisher(TFMessage, '/tf_static', qos)
             self.publishers.append(self.static_tf)
-            for kind, topic, callback in ((Voxel, self.roi_topic, self.on_roi),
-                                          (PointCloud2, self.points_topic, self.on_points)):
-                self.subscriptions.append(node.create_subscription(kind, topic, callback, qos_profile_sensor_data))
-            if self.enable_recorded_self_filter:
+            self.subscriptions.append(node.create_subscription(PointCloud2, self.points_topic, self.on_points, qos_profile_sensor_data))
+            if self.input_kind == 'voxel':
+                self.subscriptions.append(node.create_subscription(Voxel, self.roi_topic, self.on_roi, qos_profile_sensor_data))
+            if self.input_kind == 'voxel' and self.enable_recorded_self_filter:
                 self.subscriptions.append(node.create_subscription(Voxel, self.mask_topic, self.on_mask, qos_profile_sensor_data))
             tf = TransformStamped()
             tf.header.stamp = node.get_clock().now().to_msg()
             tf.header.frame_id, tf.child_frame_id = 'world', self.frame
-            base = scene.mujoco.mj_name2id(scene.model, scene.mujoco.mjtObj.mjOBJ_BODY, 'robot_base')
-            tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z = map(float, scene.data.xpos[base])
-            q = scene.data.xquat[base]
-            tf.transform.rotation.w, tf.transform.rotation.x, tf.transform.rotation.y, tf.transform.rotation.z = map(float, q)
+            world_base = scene.link_transform(root_link)
+            tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z = map(float, world_base[:3, 3])
+            q = Rotation.from_matrix(world_base[:3, :3]).as_quat()
+            tf.transform.rotation.x, tf.transform.rotation.y, tf.transform.rotation.z, tf.transform.rotation.w = map(float, q)
             self.base_transforms = [tf]
             self.static_tf.publish(TFMessage(transforms=self.base_transforms))
             recorded_tf_topic = settings.get('recorded_tf_topic')
             if recorded_tf_topic:
                 # bagループの時刻巻戻しを隔離。座標値・親子関係を保持したROS現在時刻への対応。
-                self.dynamic_tf = node.create_publisher(TFMessage, '/tf', 10)
-                self.publishers.append(self.dynamic_tf)
+                if self.input_kind == 'voxel':
+                    self.dynamic_tf = node.create_publisher(TFMessage, '/tf', 10)
+                    self.publishers.append(self.dynamic_tf)
                 static_topic = settings['recorded_static_tf_topic']
                 for topic in (recorded_tf_topic, static_topic):
                     validate_full_topic_name(topic)
@@ -191,19 +234,14 @@ class gng_runtime:
                 self.subscriptions.append(node.create_subscription(TFMessage, static_topic,
                     lambda msg: self.on_recorded_tf(msg, True),
                     QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL)))
-            elif self.visibility is not None:
+            else:
                 for topic, enable_static in (('/tf', False), ('/tf_static', True)):
                     self.subscriptions.append(node.create_subscription(TFMessage, topic,
                         lambda msg, is_static=enable_static: self.on_source_tf(msg, is_static),
                         QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL)
                         if enable_static else qos_profile_sensor_data))
             source_link = params['environment_voxelization'].get('base_frame', root_link)
-            body = scene.mujoco.mj_name2id(scene.model, scene.mujoco.mjtObj.mjOBJ_BODY, 'robot_'+source_link)
-            if body < 0:
-                raise ValueError('記録基台に対応するURDFリンクがありません: '+source_link)
-            self.world_source = np.eye(4)
-            self.world_source[:3, 3] = scene.data.xpos[body]
-            self.world_source[:3, :3] = Rotation.from_quat(scene.data.xquat[body][[1, 2, 3, 0]]).as_matrix()
+            self.world_source = scene.link_transform(source_link)
             self.directory = tempfile.TemporaryDirectory(prefix='topo-gng-simulation-')
             params_file = Path(self.directory.name) / 'params.yaml'
             params_file.write_text(yaml.safe_dump({'/**': {'ros__parameters': self.params}}, allow_unicode=True))
@@ -220,17 +258,24 @@ class gng_runtime:
             if not self.is_closed:
                 self.points_received_sec = time.monotonic()
                 self.num_points = message.width*message.height
-                if self.visibility is not None and self.visibility.add_points(message):
+                has_rollback = self.last_points_stamp_sec is not None and stamp_sec(message) < self.last_points_stamp_sec-1.
+                self.last_points_stamp_sec = stamp_sec(message)
+                if self.visibility is not None:
+                    self.visibility.add_points(message)
+                if has_rollback:
+                    self.observation_generation += 1
                     # 記録時刻巻戻し時の動的TF破棄。静的なセンサ取付条件だけの保持。
                     with self.source_tf_lock:
                         self.source_tf.clear()
                         for tf in self.source_static_tf.values():
                             self.source_tf.set_transform_static(tf, 'recorded')
+                    self.pending_roi = None
+                    self.observation = environment_observation()
+                if self.input_kind == 'pointcloud':
+                    self.pending_points = message
 
     def on_source_tf(self, message, enable_static):
         """光線用の記録時刻TF。Viewer配信用の再時刻化との分離。"""
-        if self.visibility is None:
-            return
         with self.source_tf_lock:
             for tf in message.transforms:
                 if enable_static:
@@ -301,6 +346,9 @@ class gng_runtime:
             if self.is_closed:
                 return
             self.on_source_tf(message, enable_static)
+            if self.input_kind == 'pointcloud':
+                # bag側TFの現在時刻化・グローバル再配信なし。制御対象TFとの混在防止。
+                return
             result = copy.deepcopy(message)
             stamp = self.node.get_clock().now().to_msg()
             for tf in result.transforms:
@@ -334,6 +382,47 @@ class gng_runtime:
         self.has_source_world_tf = True
         return True
 
+    def update_sensor_input(self):
+        """観測時刻TFからのROI生成。観測基台と制御基台のworld配置の独立。"""
+        from rclpy.time import Time
+        from tf2_ros import TransformException
+        from gng_visibility import cloud_points
+        with self.lock:
+            cloud, received = self.pending_points, self.points_received_sec
+            generation = self.observation_generation
+        if cloud is None or time.monotonic()-received > .3:
+            return
+        if stamp_sec(cloud) <= 0:
+            self.input_error = '観測時刻のない点群'
+            return
+        stamp = Time.from_msg(cloud.header.stamp)
+        try:
+            with self.source_tf_lock:
+                sensor = transform_matrix(self.source_tf.lookup_transform(
+                    self.source_frame, cloud.header.frame_id, stamp).transform)
+                links = [transform_matrix(self.source_tf.lookup_transform(
+                    self.source_frame, self.source_params['robot_name']+'/'+name, stamp).transform)
+                    for name in self.sensor_input.links]
+                world_source = observed_world_base(self.source_tf, self.source_frame, self.source_params, stamp)
+            target_source = np.linalg.inv(self.scene.link_transform(self.root_link)) @ world_source
+            sensor = target_source @ sensor
+            links = np.asarray([target_source @ tf for tf in links])
+            points = cloud_points(cloud)
+            roi, mask = self.sensor_input.build(cloud, points, sensor, links, self.frame)
+        except (TransformException, LookupError) as error:
+            self.input_error = '観測時刻のロボット・センサTF待機: '+str(error).split('\n')[0]
+            return
+        with self.lock:
+            if generation != self.observation_generation:
+                return
+            if self.pending_points is cloud:
+                self.pending_points = None
+            self.pending_roi, self.recorded_mask = roi, mask
+            self.roi_received_sec = self.mask_received_sec = received
+            self.recorded_filter.add_mask(mask)
+            self.input_error = ''
+        return cloud, points, sensor, received
+
     def update(self, positions, names, buffer):
         from sensor_msgs.msg import JointState
         now = time.monotonic()
@@ -347,10 +436,11 @@ class gng_runtime:
             message.header.frame_id = self.frame
             message.name, message.position = list(names), list(map(float, positions))
             motion = self.scene.robot.motion_state()
-            message.velocity = [motion['velocity'][name] for name in names]
-            message.effort = [motion['effort'][name] for name in names]
+            message.velocity = [motion['velocity'][name] for name in names] if all(name in motion['velocity'] for name in names) else []
+            message.effort = [motion['effort'][name] for name in names] if all(name in motion['effort'] for name in names) else []
             self.joints.publish(message)
             self.last_feedback_sec = now
+        sensor_frame = self.update_sensor_input() if self.input_kind == 'pointcloud' else None
         with self.lock:
             roi = self.pending_roi
             mask = self.recorded_filter.match(roi) if roi is not None and self.enable_recorded_self_filter else None
@@ -362,9 +452,9 @@ class gng_runtime:
             if self.enable_recorded_self_filter:
                 if mask is None:
                     return
-        if roi.header.frame_id.lstrip('/') != self.source_frame:
+        if self.input_kind == 'voxel' and roi.header.frame_id.lstrip('/') != self.source_frame:
             raise ValueError('記録ROIの基台フレームが設定と異なります: '+roi.header.frame_id)
-        if not self.ensure_world_tf(buffer):
+        if self.input_kind == 'voxel' and not self.ensure_world_tf(buffer):
             return
         # 記録基台と仮想基台を重ねる、明示的な基台座標対応。入力データの保持。
         with self.lock:
@@ -388,7 +478,11 @@ class gng_runtime:
             self.observation_publishers['recorded_self_boundary_voxels'].publish(boundary)
             self.publish_contacts()
             if self.visibility is not None:
-                self.update_visibility(roi, supported, mask=mask, control=raw)
+                if sensor_frame is not None:
+                    cloud, points, sensor, received = sensor_frame
+                    self.visibility.build(roi, supported, cloud, sensor, received, self_mask=mask, control=raw, points=points)
+                else:
+                    self.update_visibility(roi, supported, mask=mask, control=raw)
                 publisher = self.observation_publishers['observed_free_voxels']
                 if publisher.get_subscription_count():
                     publisher.publish(self.visibility.free_message(raw))
@@ -400,14 +494,21 @@ class gng_runtime:
         """入力欠落・停止・記録自己マスクの同期不成立の表示。"""
         now = time.monotonic()
         with self.lock:
-            topics = [(self.points_topic, self.points_received_sec), (self.roi_topic, self.roi_received_sec)]
-            if self.enable_recorded_self_filter:
+            topics = [(self.points_topic, self.points_received_sec)]
+            if self.input_kind == 'voxel':
+                topics.append((self.roi_topic, self.roi_received_sec))
+            if self.input_kind == 'voxel' and self.enable_recorded_self_filter:
                 topics.append((self.mask_topic, self.mask_received_sec))
             missing = [topic for topic, received_sec in topics if received_sec is None or now-received_sec > 1.]
             if missing:
                 return '入力待ち: '+', '.join(missing)
             if not self.num_points:
                 return '空の点群: '+self.points_topic
+            # 新しい点群のTF到着待ちと、直近の有効観測の失効の分離。古いTFによる補完なし。
+            if self.input_error and (self.roi_received_sec is None or now-self.roi_received_sec > .3):
+                return self.input_error
+            if self.input_kind == 'pointcloud' and (self.roi_received_sec is None or now-self.roi_received_sec > .3):
+                return '観測時刻のROI生成待ち'
             if self.enable_recorded_self_filter and self.pending_roi is not None and self.recorded_mask is not None:
                 if self.recorded_filter.match(self.pending_roi) is None:
                     return '記録ROIと自己マスクの時刻不一致'
@@ -441,7 +542,9 @@ class gng_runtime:
         if launch_state.get('phase') in ('failed', 'exited'):
             raise RuntimeError('GNG launchが終了しました')
         return dict(launch=launch_state, namespace=self.namespace, joint_state_topic='/'+self.namespace+'/joint_states',
-                    roi_topic=self.roi_topic, num_points=self.num_points,
+                    input_kind=self.input_kind, points_topic=self.points_topic,
+                    roi_topic=self.roi_topic if self.input_kind == 'voxel' else '/'+self.namespace+'/roi_voxels', num_points=self.num_points,
+                    sensor_input=dict(self.sensor_input.details) if self.sensor_input is not None else {},
                     num_input_voxels=self.num_input_voxels, num_environment_voxels=self.num_environment_voxels,
                     recorded_self_filter=dict(self.recorded_filter.details),
                     roi_visibility=self.visibility.status() if self.visibility is not None else dict(is_enabled=False),
@@ -466,5 +569,7 @@ class gng_runtime:
                 self.log.close()
             if self.directory is not None:
                 self.directory.cleanup()
+            if self.sensor_input is not None:
+                self.sensor_input.close()
             with runtime_lock:
                 active_runtimes.discard(self.namespace)

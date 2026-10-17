@@ -63,7 +63,7 @@ else:
     def run_player(self, *arguments, wrapper=False):
         script = scripts_dir/('play_arm_avoidance_bag.sh' if wrapper else 'play_bag.sh')
         environment = dict(self.environment)
-        if wrapper and '--no-camera-tf' not in arguments:
+        if wrapper and '--camera-tf' in arguments:
             environment['BAG_TEST_EXPECT_MOUNT'] = '1'
         return subprocess.run(['bash', str(script), str(self.bag), *arguments],
                               env=environment, text=True, capture_output=True, timeout=15)
@@ -73,7 +73,7 @@ else:
             os.kill(pid, 0)
 
     def test_mount_start_and_normal_cleanup(self):
-        result = self.run_player('--loop', wrapper=True)
+        result = self.run_player('--camera-tf', '--loop', wrapper=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         mount = json.loads(self.capture.with_suffix('.mount.json').read_text())
         self.assertEqual(mount['args'], ['launch', 'gng_vlut_system', 'realsense_mount_tf.launch.py',
@@ -90,7 +90,7 @@ else:
 
     def test_mount_failure_stops_bag(self):
         self.environment.update(BAG_TEST_MOUNT_FAIL='1', BAG_TEST_KEEP_PLAYING='1')
-        result = self.run_player(wrapper=True)
+        result = self.run_player('--camera-tf', wrapper=True)
         self.assertEqual(result.returncode, 5, result.stderr)
         self.assert_stopped(json.loads(self.capture.with_suffix('.mount.json').read_text())['pid'])
         pid_file = self.capture.with_suffix('.bag.pid')
@@ -98,7 +98,7 @@ else:
 
     def test_ctrl_c_stops_both_children(self):
         self.environment.update(BAG_TEST_KEEP_PLAYING='1', BAG_TEST_EXPECT_MOUNT='1')
-        process = subprocess.Popen(['bash', str(scripts_dir/'play_arm_avoidance_bag.sh'), str(self.bag), '--loop'],
+        process = subprocess.Popen(['bash', str(scripts_dir/'play_arm_avoidance_bag.sh'), str(self.bag), '--camera-tf', '--loop'],
                                    env=self.environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             deadline = time.monotonic()+5
@@ -139,8 +139,11 @@ else:
             with self.subTest(wrapper=wrapper):
                 result = self.run_player(wrapper=wrapper)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn('/topo_dual_arm_max_long/roi_voxels', self.selected())
-                self.assertEqual('/topo_dual_arm_max_long/self_voxel' in self.selected(), wrapper)
+                if wrapper:
+                    self.assertNotIn('/topo_dual_arm_max_long/roi_voxels', self.selected())
+                else:
+                    self.assertIn('/topo_dual_arm_max_long/roi_voxels', self.selected())
+                self.assertNotIn('/topo_dual_arm_max_long/self_voxel', self.selected())
                 for suffix in ('self_filter_roi_voxels', 'occupied_voxels'):
                     self.assertNotIn('/topo_dual_arm_max_long/'+suffix, self.selected())
 
@@ -169,7 +172,7 @@ else:
     def test_legacy_flags_after_direct_loop(self):
         result = self.run_player('--loop', '--roi-voxels', '--joint-states', wrapper=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(self.selected()), 7)
+        self.assertEqual(len(self.selected()), 6)
         self.assertIn('--loop', json.loads(self.capture.read_text()))
 
     def test_mixed_direct_and_separator_options(self):
@@ -209,6 +212,47 @@ else:
         self.assertEqual(self.selected()[-3:], ['/topo_dual_arm_max_long/roi_voxels',
                                                '/topo_dual_arm_max_long/self_voxel',
                                                '/topo_dual_arm_max_long/joint_states'])
+
+    def test_yaml_selection_remap_and_relative_path(self):
+        config = self.folder/'play.yaml'
+        config.write_text(yaml.safe_dump(dict(bag_path=self.bag.name, topics=['/livox/lidar', '/tf'],
+            enable_loop=True, remap={'/tf': '/recorded/tf'})))
+        result = subprocess.run(['bash', str(scripts_dir/'play_bag.sh'), '--config', str(config), '--rate', '0.5'],
+            env=self.environment, capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(self.capture.read_text()), ['bag', 'play', str(self.bag),
+            '--read-ahead-queue-size', '50', '--loop', '--remap', '/tf:=/recorded/tf', '--rate', '0.5',
+            '--topics', '/livox/lidar', '/tf'])
+
+    def test_default_wrapper_uses_yaml_and_no_camera(self):
+        result = self.run_player(wrapper=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = yaml.safe_load((scripts_dir/'arm_avoidance_bag.yaml').read_text())
+        self.assertEqual(self.selected(), config['topics'])
+        self.assertIn('/tf_static:=/recorded/tf_static', json.loads(self.capture.read_text()))
+        self.assertFalse(self.capture.with_suffix('.mount.json').exists())
+
+    def test_yaml_disables_loop_and_allows_topic_override(self):
+        config = self.folder/'play.yaml'
+        config.write_text(yaml.safe_dump(dict(bag_path='/missing', topics=['/livox/lidar'], enable_loop=False)))
+        topics = self.folder/'topics.txt'
+        topics.write_text('/tf\n')
+        result = self.run_player('--config', str(config), '--topics-file', str(topics), '--rate', '0.5')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.selected(), ['/tf'])
+        self.assertNotIn('--loop', json.loads(self.capture.read_text()))
+
+    def test_invalid_yaml_never_starts_ros(self):
+        config = self.folder/'invalid.yaml'
+        for change in [dict(topics=[]), dict(topics='/tf'), dict(enable_loop='false'),
+                       dict(remap={'/tf': 'relative'}), dict(remap=[]), dict(unrecognized=True)]:
+            with self.subTest(change=change):
+                settings = dict(bag_path=str(self.bag), topics=['/tf'])
+                settings.update(change)
+                config.write_text(yaml.safe_dump(settings))
+                result = self.run_player('--config', str(config))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.capture.exists())
 
 
 if __name__ == '__main__':

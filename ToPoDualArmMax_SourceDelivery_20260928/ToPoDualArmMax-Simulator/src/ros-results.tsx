@@ -17,6 +17,11 @@ export function create_ros_results(options: scene_options) {
         if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); void open().catch(() => {}); }
     });
     observer.observe(container);
+    // CLI表示URLの明示レイヤー指定時だけの先行接続。ROSタブ選択前の環境表示。
+    if (new URLSearchParams(location.search).has('layer')) {
+        observer.disconnect();
+        void open().catch(() => {});
+    }
     return { open, get api() { return viewer?.api; }, get scene() { return viewer?.scene; },
         tick(now: number) { viewer?.tick(now); }, dispose() { has_disposed = true; observer.disconnect(); viewer?.dispose(); container.remove(); } };
 }

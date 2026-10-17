@@ -1,0 +1,11 @@
+# 回避用の観測入力。ROI・自己マスクは再生成、関節実測・指令は再生対象外
+bag_path: /rosbag/fuzzy/arm_avoidance/rosbag2_2026_10_09-22_01_23-20261012T015534Z-1-002/rosbag2_2026_10_09-22_01_23
+topics:
+  - /livox/lidar
+  - /tf
+  - /tf_static
+enable_loop: true
+# 記録TFと制御対象のTFの分離
+remap:
+  /tf: /recorded/tf
+  /tf_static: /recorded/tf_static

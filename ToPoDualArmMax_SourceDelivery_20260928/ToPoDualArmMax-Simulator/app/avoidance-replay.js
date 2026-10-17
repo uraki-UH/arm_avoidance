@@ -5,12 +5,12 @@ import {Line2} from 'three/addons/lines/Line2.js';
 import {LineGeometry} from 'three/addons/lines/LineGeometry.js';
 import {LineMaterial} from 'three/addons/lines/LineMaterial.js';
 
-const policy_names = {avoidance_first:'回避優先',vrm_predictive:'予測・不一致適応',rollout_reactive:'現在観測',rollout_cv:'等速予測',rollout_sequence:'時系列記憶',cbf_qp:'関節CBF-QP',oscbf:'OSCBF'};
+const policy_names = {vlut_graph:'GNG-VLUT',avoidance_first:'回避優先',vrm_predictive:'予測・不一致適応',rollout_reactive:'幾何候補・現在観測',rollout_cv:'幾何候補・等速予測',rollout_sequence:'時系列記憶',cbf_qp:'関節CBF-QP',oscbf:'OSCBF'};
 const failure_names = {physical_contact:'接触',internal_interference:'内部干渉',abnormal_joint_speed:'異常速度',joint_limit:'試験可動域の超過（旧記録）',planning_domain_exit:'旧計画域の超過',physical_joint_limit:'関節可動域の超過',invalid_obstacle_trajectory:'障害物の禁止域侵入・評価対象外',qp_infeasible:'QP実行不能・試験停止',qp_no_solution:'QP解未成立・試験停止'};
-const phase_names = {task:'往復',avoiding:'回避',holding:'保持',waiting:'待機',returning:'復帰',monitoring:'待機',waiting_for_clearance:'離隔待ち',qp_no_solution:'QP不成立・減速保持／再計算'};
+const phase_names = {task:'往復',avoiding:'回避',holding:'保持',waiting:'待機',returning:'復帰',monitoring:'待機',waiting_for_clearance:'離隔待ち',qp_no_solution:'QP不成立・減速保持／再計算',constraint_recovery:'制約回復'};
 const obstacle_phase_names = {pursuing:'追跡',sweep_approach:'通過点へ接近',sweeping:'横切り',random_walking:'ランダム移動',random_waiting:'ランダム移動・次の方向待ち',detouring:'迂回',route_blocked:'経路制約・移動困難',target_out_of_reach:'腕の到達域外'};
 Object.assign(failure_names,{target_touch:'指定リンク接触',attacker_protected_contact:'近位部接触・評価対象外',attacker_off_target_contact:'指定外接触・評価対象外',attacker_shaft_contact:'先端以外の接触・評価対象外',attacker_environment_contact:'接触',robot_environment_contact:'接触'});
-const startup_stage_names = {robot_geometry:'ロボット形状',drive_calibration:'速度基準',obstacle_setup:'障害物配置',cbf_solver:'QP初期化・コンパイル',gng_index:'GNG索引',ready:'計算開始'};
+const startup_stage_names = {robot_geometry:'ロボット形状',drive_calibration:'速度基準',obstacle_setup:'障害物配置',cbf_solver:'QP初期化',gng_index:'GNG索引',ready:'計算開始'};
 const max_file_size = 16*1024*1024;
 
 export class live_playback_clock {
@@ -313,7 +313,7 @@ export class avoidance_replay {
    #experiment-start:not(:disabled){background:#96e6ac;color:#153820;border-color:#53a86f}#experiment-stop:not(:disabled){background:#ffe1df;color:#7e2420;border-color:#d58984}#experiment-status{white-space:pre-wrap;font-size:13px;margin:8px 0}
    </style><form id="experiment-form"><div class="experiment-grid">
    <label>実行方式<select name="execution_mode"><option value="continuous" selected>連続・記録なし</option><option value="recorded">時間指定・記録あり</option></select></label>
-   <label>回避方式<select name="policy"><option value="rollout_cv">GNG候補・等速予測</option><option value="rollout_reactive">GNG候補・現在観測</option><option value="cbf_qp">関節CBF-QP</option><option value="oscbf">OSCBF</option></select></label>
+   <label>回避方式<select name="policy"><option value="vlut_graph">GNG-VLUT</option><option value="rollout_cv">幾何候補・等速予測</option><option value="rollout_reactive">幾何候補・現在観測</option><option value="cbf_qp">関節CBF-QP</option><option value="oscbf">OSCBF</option></select></label>
    <label>障害物<select name="obstacle_shape"><option value="sphere">球</option><option value="linked_arm">二節腕・球関節×2</option></select></label>
    <label>球の動き<select name="pursuit_mode"><option value="distal_sweep">末端側を横切る</option><option value="link_point">リンク点を追跡</option><option value="random_walk">ランダムウォーク</option></select></label>
    <label>移動経路<select name="enable_proximal_guard"><option value="true">近位部を迂回</option><option value="false">迂回制約なし</option></select></label>
@@ -394,6 +394,10 @@ export class avoidance_replay {
    if(generation!==this.experiment_generation||this.is_closed)return;
    if(result.live_protocol_version!==1)throw Error('実行中表示には画面サーバーの更新が必要です');
    this.supported_pursuit_modes=result.pursuit_modes;
+   const policies=result.policies??['rollout_cv','rollout_reactive','cbf_qp','oscbf'];
+   const policy=this.experiment_panel.querySelector('form').elements.namedItem('policy');
+   for(const option of policy.options)option.disabled=!policies.includes(option.value);
+   if(policy.selectedOptions[0]?.disabled)policy.value='rollout_cv';
    const is_running=job&&['running','stopping'].includes(job.state);
    if(is_running&&job.config.execution_mode==='continuous'){
     this.owned_job_id=job.job_id;sessionStorage.setItem('avoidance-experiment-job',this.owned_job_id);

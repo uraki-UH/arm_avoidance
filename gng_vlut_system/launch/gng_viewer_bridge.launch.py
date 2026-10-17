@@ -22,6 +22,7 @@ from launch_config import (
     namespaced_frame, namespaced_topic, roi_filter_parameters, world_index_parameters,
     environment_danger_inflation, node_parameter_source, static_tf_arguments,
     is_enabled, mobile_gng_actions, mobile_gng_launch_defaults,
+    sensor_calibration_action, realsense_mount,
 )
 
 
@@ -82,7 +83,7 @@ def mid360_input(config, robot_name):
     topic = config.get('points_topic', '/livox/lidar')
     from rclpy.validate_full_topic_name import validate_full_topic_name
     validate_full_topic_name(topic)
-    actions = []
+    mounts = []
     if safe_bool(config.get('enable_mount_tf'), True):
         parent = config.get('parent_frame_id', 'chest_lidar_link')
         child = config.get('frame_id', 'mid360_link')
@@ -100,17 +101,17 @@ def mid360_input(config, robot_name):
                 type(v) not in (int, float) or not math.isfinite(v) for v in vector
             ):
                 raise ValueError('MID-360の位置・角度には有限値3個が必要です')
-        values = pos + [math.radians(v) for v in rot]
-        arguments = [item for key, value in zip(('x', 'y', 'z', 'roll', 'pitch', 'yaw'), values)
-                     for item in ('--' + key, str(float(value)))]
-        arguments += ['--frame-id', parent, '--child-frame-id', child]
-        actions.append(Node(package='tf2_ros', executable='static_transform_publisher',
-                            name='mid360_mount_tf', arguments=arguments, output='screen'))
-    return topic, actions
+        from ais_gng_transform_config import read_pose
+        pos, quat = read_pose({'camera_mount_pose': pos + [math.radians(v) for v in rot]})
+        mounts.append(dict(mount_id=robot_name + '/mid360', parent_frame=parent, child_frame=child,
+                           pos=pos, quat=quat, imu_topics=config.get('imu_topics', ['/livox/imu'])))
+    return topic, mounts
+
 
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
+    enable_pose_gng = safe_bool(LaunchConfiguration('enable_pose_gng').perform(context), True)
     enable_shared_roi_gng = safe_bool(LaunchConfiguration('enable_shared_roi_gng').perform(context), False)
     joint_control_backend = LaunchConfiguration("joint_control_backend").perform(context)
     yaml_joint_control_backend = "viewer"
@@ -521,7 +522,7 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package="gng_vlut_system",
             executable="topofuzzy_bridge_node",
-            condition=IfCondition(str(has_learning_data and not enable_independent_arms).lower()),
+            condition=IfCondition(str(enable_pose_gng and has_learning_data and not enable_independent_arms).lower()),
             name="topofuzzy_bridge_node",
             namespace=robot_name,
             parameters=[
@@ -565,7 +566,7 @@ def launch_setup(context, *args, **kwargs):
         )
     ]
 
-    if enable_independent_arms and has_learning_data:
+    if enable_pose_gng and enable_independent_arms and has_learning_data:
         for profile in independent_profiles:
             name = profile["profile"]
             actions.append(Node(
@@ -599,7 +600,7 @@ def launch_setup(context, *args, **kwargs):
                 "urdf_path": urdf_path, "resource_root_dir": resource_root, "mesh_root_dir": mesh_root,
             }]))
 
-    if not has_learning_data:
+    if enable_pose_gng and not has_learning_data:
         message = "ロボット姿勢GNG・VLUTデータ不足のため、姿勢GNG配信を省略します。"
         message += ("移動状態GNGとロボット本体を表示します。" if enable_mobile_gng else
                     "ロボット本体を表示します。学習後にこのlaunchを再起動してください。")
@@ -716,8 +717,7 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
-    mid360_topic, mid360_actions = mid360_input(yaml_mid360, robot_name)
-    actions.extend(mid360_actions)
+    mid360_topic, sensor_mounts = mid360_input(yaml_mid360, robot_name)
     enable_environment_voxelization = safe_bool(
         LaunchConfiguration('enable_environment_voxelization').perform(context),
         yaml_enable_environment_voxelization or bool(mid360_topic),
@@ -860,15 +860,18 @@ def launch_setup(context, *args, **kwargs):
     if enable_realsense_mount_tf:
         mount_config = LaunchConfiguration('realsense_mount_config').perform(context).strip()
         mount_config = resolve_package_uri(mount_config or yaml_realsense_mount_config)
-        actions.append(IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(pkg_share, 'launch', 'realsense_mount_tf.launch.py')),
-            launch_arguments={'mount_config': mount_config}.items(),
-        ))
+        with open(mount_config, encoding='utf-8') as stream:
+            sensor_mounts.append(realsense_mount(yaml.safe_load(stream)))
+    if sensor_mounts:
+        actions.append(sensor_calibration_action(pkg_share, sensor_mounts,
+            resolve_package_uri(root_ros_params.get('sensor_calibration_file', ''))))
     return actions + mobile_actions
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
+        DeclareLaunchArgument('enable_pose_gng', default_value='true',
+                              description='姿勢GNG・VLUTの起動。センシング前処理だけの場合はfalse'),
         DeclareLaunchArgument("enable_independent_arms", default_value=""),
         DeclareLaunchArgument('enable_mobile_gng', default_value='',
                               description='移動状態GNGの同時起動。未指定時は機体YAMLのmobile_gng設定から選択'),

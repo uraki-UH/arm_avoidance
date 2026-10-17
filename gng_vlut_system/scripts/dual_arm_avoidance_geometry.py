@@ -125,14 +125,16 @@ def shape_vertices(shape, mesh_directory, link_name):
 
 
 def enclosing_spheres(link_name, vertices):
-    """リンク座標の頂点群を覆うAABB球列。長軸方向の記載順。"""
+    """頂点群の凸包を覆う長軸方向の外接球列。断面外接箱の空隅の除外。"""
     lower, upper = vertices.min(axis=0), vertices.max(axis=0)
     axis = int(np.argmax(upper-lower))
     center = (lower+upper)/2
     half = (upper-lower)/2
     count = max(1, int(np.ceil(half[axis]*2/0.035)))
     spacing = half[axis]*2/count
-    radius = float(np.sqrt(np.sum(np.delete(half, axis)**2)+(spacing/2)**2))
+    # 直交半径のノルム凸性と軸区間の被覆。任意の凸結合でも r²+h² による距離上界。
+    radial = np.delete(vertices-center, axis, axis=1)
+    radius = float(np.nextafter(np.sqrt(np.max(np.sum(radial*radial, axis=1))+(spacing/2)**2), np.inf))
     spheres = []
     for part in range(count):
         point = center.copy()
@@ -227,11 +229,12 @@ def build_collision_pairs(spheres, centers, radii, is_arm, parents, link_groups)
             np.asarray(inter_arm_pairs, dtype=int).reshape(-1, 2))
 
 
-def calculate_link_transforms(positions, operations):
-    """単一姿勢・姿勢列のリンク変換。同じ接続順による一括計算。"""
+def calculate_link_transforms(positions, operations, reference=None):
+    """単一姿勢・姿勢列のリンク変換。基準変換指定時は可動部分だけの更新。"""
     positions = np.asarray(positions)
     batch_shape = positions.shape[:-1]
-    transforms = np.empty((*batch_shape, len(operations)+1, 4, 4))
+    transforms = (np.empty((*batch_shape, len(operations)+1,4,4)) if reference is None else
+                  np.broadcast_to(reference,(*batch_shape,*np.asarray(reference).shape)).copy())
     identity = np.eye(4)
     transforms[..., 0, :, :] = identity
     for parent, child, kind, fixed, axis, idx, multiplier, offset, cross, square in operations:
@@ -258,6 +261,9 @@ class robot_geometry:
         path = Path(urdf_path)
         root = ET.parse(path).getroot()
         self.joints, self.joint_names, self.limits, self.parents = read_joint_geometry(root)
+        joint_elements = {item.get('name'): item for item in root.findall('joint')}
+        self.max_velocity = np.array([float(joint_elements[name].find('limit').get('velocity'))
+                                      for name in self.joint_names])
         self.arm_indices = [i for i, name in enumerate(self.joint_names)
                             if name.startswith(('L_joint', 'R_joint'))]
         self.spheres = read_link_spheres(root, path.parent)

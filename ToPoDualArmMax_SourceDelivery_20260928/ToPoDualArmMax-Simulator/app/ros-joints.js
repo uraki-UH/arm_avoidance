@@ -51,6 +51,8 @@ export class RosJointStream {
   this.panel.stop();window.simulator?.physics_panel?.stop();
   if(endpoint){$('ros-endpoint').value=endpoint;$('ros-endpoint').dispatchEvent(new Event('change'));}
   this.is_simulation_input=is_simulation_input;
+  // CLI実測表示での既定デモ物体の混在防止。削除なし、環境設定からの再表示可能。
+  if(is_simulation_input)window.simulator?.workspace.set_default_objects(false);
   $('robot-pose-source').value=pose_sources.ros;$('ros-joints-topic').value=topic;
   $('ros-state-all').checked=false;$('ros-joints-receive').checked=true;this.connect();
  }
@@ -103,7 +105,7 @@ export class RosJointStream {
    }catch(error){fail(error.message);}
   };
   socket.onerror=()=>fail('関節WebSocketへ接続できません。ブリッジの更新と起動を確認してください');
-  socket.postMessage({type:'connect',url:url.href,send:this.outputs().length>0,config:{type:'config',model,hz,receive:$('ros-joints-receive').checked,topic:this.topic_input().value,enable_fresh_input:this.panel.rgbd.robot.pose_source===pose_sources.leader,max_state_age_sec:window.simulator?.physics_panel?.max_leader_age_ms/1000}});
+  socket.postMessage({type:'connect',url:url.href,send:this.outputs().length>0,config:{type:'config',model,hz,is_read_only:this.outputs().length===0,receive:$('ros-joints-receive').checked,topic:this.topic_input().value,enable_fresh_input:this.panel.rgbd.robot.pose_source===pose_sources.leader,max_state_age_sec:window.simulator?.physics_panel?.max_leader_age_ms/1000}});
   this.tick();
  }
  // 描画側の状態取得。通信上限より低頻度の設定では不要なTF計算とWorker転送を省略

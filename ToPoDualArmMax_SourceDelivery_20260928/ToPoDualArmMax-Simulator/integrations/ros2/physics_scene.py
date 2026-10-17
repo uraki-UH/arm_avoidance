@@ -170,6 +170,28 @@ class PhysicsScene:
         self.mujoco.mj_forward(self.model, self.data)
         return self.state()
 
+    def set_goal(self, joints):
+        """入力元共通の名目目標。回避ありの場合は回避側だけへの受渡し。"""
+        if self.robot is None:
+            raise ValueError('物理ロボットがありません')
+        if self.avoidance is not None:
+            if not callable(getattr(self.avoidance, 'set_targets', None)):
+                raise ValueError('この回避モジュールは名目目標の更新に未対応です')
+            self.avoidance.set_targets(joints)
+        else:
+            self.robot.set_targets(joints)
+
+    def link_transform(self, name):
+        """実測リンクのworld変換。回避処理からMuJoCo内部配列を隠す参照窓口。"""
+        import numpy as np
+        idx = self.mujoco.mj_name2id(self.model, self.mujoco.mjtObj.mjOBJ_BODY, 'robot_'+name)
+        if idx < 0:
+            raise ValueError('物理ロボットのリンクがありません: '+name)
+        result = np.eye(4)
+        result[:3, :3] = self.data.xmat[idx].reshape(3, 3)
+        result[:3, 3] = self.data.xpos[idx]
+        return result
+
     def place(self, pose):
         """対象物体だけの直接配置。速度・拘束変位の初期化、他物体・ロボット・時刻の保持。"""
         name = pose['id']

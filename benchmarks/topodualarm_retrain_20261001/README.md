@@ -1,12 +1,14 @@
 # ToPoDualArmの再学習・自己干渉監査
 
+検証ログ: 旧artifacts参照先の一部は未同梱。本文の数値は当時の記録。
+
 - 対象: `urdf/dual_arm_urdf/dual_arm_robot.urdf`、左腕7自由度。右腕・腰・首・グリッパーの関節値は0固定。
 - 出力: `gng_vlut_system/gng_results/ToPoDualArm10000_selfchecked_20261001/`。既存`ToPoDualArm10000/`は保持。
 - 探索条件: 上限11,000ノード、探索2,200,000反復、補充600,000反復。TCP範囲は元YAMLを維持。
 - 自己干渉: 全身の元メッシュ表面交差＋1 mm占有内包。既存の固定剛体・直接関節対と左右の指対だけを除外。辺は最大関節刻み0.025 radの離散検査。
 - VLUT解像度: 0.02 m。自己干渉検査の1 mm占有とは別用途。
 - 結果・失敗・制限: [リリースノート](../../gng_vlut_system/docs/releases/2026-10-01_topodualarm_gng_retrain.md)。
-- 結果資料: [artifacts](../../log/artifacts/topodualarm_retrain_20261001/)。開始時YAMLは`input_params.yaml`、旧入力は`input_sha256.txt`、最終モデルは`final_output_sha256.txt`。修正前の新GNGは`gng_before_edge_repair.bin`として保持。
+- 結果資料: artifacts。開始時YAMLは`input_params.yaml`、旧入力は`input_sha256.txt`、最終モデルは`final_output_sha256.txt`。修正前の新GNGは`gng_before_edge_repair.bin`として保持。
 - 監査条件: 別プロセスで保存値を再読込し、現行の同じ幾何判定器で全姿勢・各層の全辺を照合。異なる幾何アルゴリズムによる二重証明ではない。
 - 制限: 内包・BOX近似と離散辺検査。非学習関節の別姿勢、連続時間の非干渉、実機動作は保証対象外。
 

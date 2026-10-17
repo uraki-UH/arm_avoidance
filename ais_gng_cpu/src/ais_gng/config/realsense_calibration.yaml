@@ -1,0 +1,7 @@
+# 録画時の固定カメラ校正。移動カメラや別の取付条件への流用不可
+# parent_frameは位置合わせ先、child_frameは入力点群のframe_id
+parent_frame: base_link
+child_frame: camera_depth_optical_frame
+# Viewerコピー値と共通の位置[m]・Euler XYZ角度[deg]。回転はRx*Ry*Rz
+pos: [0.434, -0.693, 0.279]
+rot_deg: [-103.8, -28.9, -3.4]

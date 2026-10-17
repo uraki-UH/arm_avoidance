@@ -16,6 +16,12 @@
     "can_set_goal_pose": true
   },
   "parameters": {
+    "input_kind": {
+      "type": "string",
+      "default": "pointcloud",
+      "choices": ["pointcloud", "voxel"],
+      "label": "観測入力形式"
+    },
     "enable_roi_visibility": {
       "type": "bool",
       "label": "遮蔽・視野外への進入制限",
@@ -53,6 +59,7 @@
       "type": "topic",
       "label": "ROIトピック",
       "default": "/topo_dual_arm_max_long/roi_voxels",
+      "is_hidden": true,
       "ui_id": "physics-gng-roi"
     },
     "points_topic": {
@@ -67,6 +74,10 @@
       "is_hidden": true
     },
     "source_frame": {
+      "type": "string",
+      "is_hidden": true
+    },
+    "runtime_namespace": {
       "type": "string",
       "is_hidden": true
     },
@@ -152,11 +163,6 @@
         "name": "点群",
         "parameter": "points_topic",
         "message_type": "sensor_msgs/msg/PointCloud2"
-      },
-      {
-        "name": "ROI",
-        "parameter": "roi_topic",
-        "message_type": "voxel_msgs/msg/Voxel"
       }
     ],
     "outputs": [

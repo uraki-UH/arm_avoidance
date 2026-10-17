@@ -17,6 +17,9 @@ export function mount_viewer(container: HTMLElement, options: scene_options) {
     shadow.append(style, panel);
     const scene = new graph_scene(options);
     let api: ReturnType<typeof useWebSocket> | undefined;
+    const requested_layers = new Set(new URLSearchParams(location.search).getAll('layer'));
+    const applied_layers = new Set<string>();
+    let has_initial_focus = false;
     function FrameSelector({ fixed_frame, on_select_frame }: { fixed_frame: string; on_select_frame: (frame: string) => void }) {
         const [frames, set_frames] = useState<string[]>(() => scene.frames.available_frames);
         useEffect(() => {
@@ -42,7 +45,20 @@ export function mount_viewer(container: HTMLElement, options: scene_options) {
                 set_inspection_picker: (picker: ((client_x: number, client_y: number) => boolean) | null) => scene.set_inspection_picker(picker) };
             return { endpoint, environment, scene_surface: scene.surface(environment), layout: embedded_layout, sidebar: embedded_sidebar,
                 on_transforms: (items, is_static) => scene.frames.update(items, is_static),
-                on_clear: () => scene.frames.clear(), on_state: state => { api = state; } };
+                on_clear: () => scene.frames.clear(), on_state: state => {
+                    api = state;
+                    if (!state.isConnected) { applied_layers.clear(); return; }
+                    // 接続ごとの初期表示指定。ユーザーによる非表示操作後の再有効化なし。
+                    for (const source of state.sources) {
+                        if ((!requested_layers.has(source.id) && !requested_layers.has(source.name)) || applied_layers.has(source.id)) continue;
+                        applied_layers.add(source.id);
+                        if (!source.active) void state.subscribeSource(source.id).catch(error => set_error(String(error)));
+                    }
+                    if (!has_initial_focus && requested_layers.size && Object.keys(state.voxelData).length) {
+                        has_initial_focus = true;
+                        scene.request_focus();
+                    }
+                } };
         }, [endpoint]);
         return <section className="viewer-shell">
             <details className="viewer-connection">

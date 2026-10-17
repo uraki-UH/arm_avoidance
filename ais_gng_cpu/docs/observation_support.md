@@ -103,7 +103,7 @@ input.observation_origin: [0.434, -0.693, 0.279]
 input.observation_origin_frame: base_link
 ```
 
-この原点はpointcloud_transformer_cppの既知の変換に対応する位置。
+この原点は[固定カメラ校正](../src/ais_gng/config/realsense_calibration.yaml)の位置。
 input.observation_sensor_frameとの同時指定は禁止。入力フレームが一致しない場合は無効化。
 固定原点は移動するカメラに流用不可。点群へのtransformer回転の再適用はなし。
 既存の入力点群からGNG座標への変換がある場合、その変換は原点にも同様に適用。

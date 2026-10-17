@@ -17,7 +17,7 @@
 一致率の分母は独立検査で自己衝突なし・範囲内となった姿勢数。空間体積の割合ではない。
 maxの旧調査と同じ50,000手先点では、最寄り点が5 cm以内の割合が旧24.91% / 26.63%から
 新99.928% / 99.956%へ改善。ただし旧クエリには衝突姿勢を含み、経路実行可能率ではない。
-[XY比較図](../../artifacts/max_reachability_generation_20260928/coverage.png)。
+[XY比較図](../../log/artifacts/max_reachability_generation_20260928/coverage.png)。
 
 | 管理場所 | 内容 |
 | --- | --- |
@@ -58,4 +58,4 @@ ros2 launch gng_vlut_system dual_arm_reachability.launch.py \
 
 表示トピックは`/sim_topo_dual_arm_max/reachability_left_arm_Tmap`と`reachability_right_arm_Tmap`。
 longはモデルディレクトリ・namespace・frameをlong側へ変更。
-生成・検証の正本：[実行スクリプトと結果](../../artifacts/max_reachability_generation_20260928/README.md)。
+生成・検証の正本：[実行スクリプトと結果](../../log/artifacts/max_reachability_generation_20260928/README.md)。

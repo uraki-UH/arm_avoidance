@@ -21,7 +21,14 @@ add_library(gng_dynamic_kernel SHARED src/core/planning/dynamic_avoidance_kernel
 target_compile_features(gng_dynamic_kernel PRIVATE cxx_std_17)
 install(TARGETS gng_dynamic_kernel LIBRARY DESTINATION lib/${PROJECT_NAME} COMPONENT dynamic_kernel)
 option(enable_region_kernel_only "連続占有領域の数値部品だけのビルド" OFF)
+option(enable_vlut_kernel "単独ビルドへの保存済みVLUT照会の同梱" OFF)
 if(enable_region_kernel_only)
+  if(enable_vlut_kernel)
+    find_package(Eigen3 REQUIRED)
+    target_link_libraries(gng_dynamic_kernel PRIVATE Eigen3::Eigen)
+    target_include_directories(gng_dynamic_kernel PRIVATE src/core ../libs/voxel_idx/include)
+    target_compile_definitions(gng_dynamic_kernel PRIVATE GNG_ENABLE_VLUT)
+  endif()
   return()
 endif()
 
@@ -118,6 +125,7 @@ find_package(std_srvs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_msgs REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
@@ -138,6 +146,8 @@ find_package(nlohmann_json REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(voxel_idx REQUIRED)
+target_compile_definitions(gng_dynamic_kernel PRIVATE GNG_ENABLE_VLUT)
+target_include_directories(gng_dynamic_kernel PRIVATE src/core)
 find_package(pointcloud_sampling REQUIRED)
 include_directories(${pointcloud_sampling_INCLUDE_DIRS})
 find_package(grasping_system REQUIRED)
@@ -355,6 +365,7 @@ install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
 )
 
 install(PROGRAMS
+  scripts/sensor_calibration.py
   scripts/gng_edge_vlut.py
   scripts/gng_region_vlut.py
   scripts/object_class_recognition_node.py
@@ -384,7 +395,7 @@ install(PROGRAMS
   scripts/dual_arm_control_keyboard.py
   scripts/video_file_publisher.py
   scripts/yolo_person_detector.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/../dummy_joint_pub.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/dummy_joint_pub.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

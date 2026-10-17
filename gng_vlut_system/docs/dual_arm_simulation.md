@@ -1,233 +1,164 @@
-# 双腕シミュレーションの制御・物理設定
+# 双腕シミュレーション
 
-実機MID-360の接続・点群入力: [専用Dockerと取付TFの設定](../../hardware/mid360/README.md)。
+既定はLong。機体設定は[topo_dual_arm_max_long.yaml](../config/topo_dual_arm_max_long.yaml)を参照。
+実機MID-360は[専用手順](../../hardware/mid360/README.md)、ブラウザ操作は[Simulator](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md)を参照。
+
+## センシング → ROS回避 → 実行先
+
+bag／実センサの点群・ロボットTF・センサTF → ROI生成・観測側自己除去 → 共通ROS回避 → MuJoCo／実機。
+回避計算の現在姿勢は制御対象の実測JointState。self_voxelとブラウザ表示も実測に追従。
+以下は`docker compose exec gng_cpu bash`内、ROS環境をsource済みの端末。
+
+### 1. 入力の起動
+
+bag:
+
+```bash
+bash /ros2_ws/src/scripts/play_arm_avoidance_bag.sh
+```
+
+設定は[arm_avoidance_bag.yaml](../../scripts/arm_avoidance_bag.yaml)を参照。
+再生対象は`/livox/lidar`・`/tf`・`/tf_static`だけ。記録済みの関節値・ROI・自己マスク・指令は不要。
+自己マスクはURDFの形状キャッシュと観測時刻TFから再生成。点群はVLUTと同じ格子へ1回登録。
+
+実センサは専用ドライバと、観測ロボットの実測に基づくTF・校正済み取付TFを使用。
+既存のTF配信は重複起動しないこと。ROI・自己マスクの別生成は不要。
+
+### 2. 共通回避と実行先
+
+bag → MuJoCo:
+
+```bash
+ros2 launch gng_vlut_system sensing_avoidance.launch.py \
+  execution_backend:=mujoco \
+  source_tf_topic:=/recorded/tf source_static_tf_topic:=/recorded/tf_static
+```
+
+実センサではTF引数2個を省略。ブラウザ内物理は別途開始しないこと。
+
+| 実行先 | 用途 |
+| --- | --- |
+| `mujoco` | MuJoCoも起動。実測は`/sim/joint_states` |
+| `external` | ROS回避指令まで。外部ドライバは別起動 |
+| `dynamixel` | 既存ID変換を使用。実機出力は明示許可時のみ |
+
+実機用の共通実測変換を使う場合は`state_topic:=/follower/joint_states`。
+指令は`/avoidance/joint_command`のJointTrajectory、即時1点・絶対関節角の経由点[rad]。
+区間照合を通る名目目標へは直接追従。遮断時は保存済みGNGによる経路探索。
+速度から仮の角度刻みへの変換なし。実機出力は既定OFF、実機駆動は未検証。
+名目目標の部分関節指定:
+
+```bash
+ros2 topic pub --once /avoidance/goal sensor_msgs/msg/JointState \
+  '{name: [L_joint1, L_joint2, L_joint4], position: [-1.0, -1.0, -0.9]}'
+```
+
+設定は[機体YAML](../config/topo_dual_arm_max_long.yaml)の`avoidance`を参照。
+制御基台は`avoidance.base_pos`・`base_rot_deg`、観測基台はbagのworld接続TFを使用。
+world未接続時だけ`environment_voxelization`の明示固定配置を使用。観測側TFの現在時刻化・全体への再配信なし。
+制御対象の移動基台は未対応。記録ボクセルを使う旧経路は`input_kind:=voxel`＋bag再生の`--roi-voxels`。
+
+### 3. 表示・判定
+
+表示: `http://127.0.0.1:8877/?model=long&joint_topic=/sim/joint_states&state_source=simulation`。
+入力・回避・ROSブリッジのdomainを統一。終了は各起動元でCtrl+C。
+
+TF不足・観測停止時は姿勢保持。自己除去はURDFボクセル近似、境界候補は制御側で要確認として保持。
+生点群・TFだけの実bagでROI生成・往復動作・予測方式の局所退避指令・入力停止時の保持を確認済み。
+視野外・遮蔽による保持と点群の重なりが残存。無接触での往復継続は未達。bagは仮想ロボット姿勢による観測更新なし。
+
+### 机・床などの固定禁止領域
+
+設定は[機体YAML](../config/topo_dual_arm_max_long.yaml)の`workspace_mask`（既定: 無効）。座標は制御ロボットの`base_link`、単位はm。
+机の範囲だけの箱形マスクにより、後方の張り出した空間は固定マスク上は利用可能。全面の高さ制限は任意で併用可能。
+寸法は実測値へ置換。変更の反映は回避ノードの再起動、GNG学習・VLUT再構築は不要。
+
+固定禁止状態はセンサの`unknown`と独立、観測の消去による解除なし。
+代表姿勢は既存VLUTで判定、移動区間は外接球列・直線補間・各軸の速度上限による近似照合。実測速度による減速余地の予測を併用。
+実機の制動性能・追従誤差を含む連続衝突回避は未検証。
+
+### 非停止のbag往復実験（MuJoCo専用）
+
+ホストの元workspaceで:
+
+```bash
+bash scripts/run_dual_arm_simulation.sh --nonstop-simulation --gng-strategy vrm_predictive
+```
+
+bag・左腕往復・回避計算・表示を一括起動。タスクは[task.json](../../benchmarks/shuttle_bag/task.json)、bagは[arm_avoidance_bag.yaml](../../scripts/arm_avoidance_bag.yaml)を参照。
+表示URLは起動ログ。終了はCtrl+C、時間指定は`--duration`。
+視野外・遮蔽・欠測・接触・経路なしによる保持なし。欠測時は名目往復、観測時は退避先の選好コストへ反映。
+有効な固定禁止領域は例外。禁止領域を避ける候補がない場合は、その領域への指令を棄却。
+URDF可動域は維持。無接触保証なし、実機使用禁止。指令は`/sim/nonstop/joint_command`、通常の実機指令経路とは分離。
 
 ## Gazebo Harmonicの標準effort制御
 
-新しい駆動検証の入口: `launch/dual_arm_gz.launch.py`。ROS 2 Jazzy＋Gazebo Harmonic＋標準`gz_ros2_control/GazeboSimSystem`を使用。自作モータプラグインへの依存なし。
-制御経路は`JointTrajectory`の位置・速度目標 → `JointTrajectoryController`のPID → 制限付きeffort → Gazeboの物理更新 → 実測位置・速度。
+ROS 2 Jazzy＋Harmonic＋標準gz_ros2_control。JointTrajectory→PID→制限付きeffort。
+設定は[dual_arm_effort.yaml](../config/dual_arm_effort.yaml)を参照。
 
-- 設定: `config/dual_arm_effort.yaml`。1 ms周期に合わせた関節別PIDゲイン。元URDFの変更なし。
-- トルク上限: URDFの`limit effort`をeffortインターフェースとPIDの`u_clamp_min/max`へ反映。検証軌道のeffortフィードフォワードは未使用。
-- 停止: 軌道トピックへの現在位置・終端速度ゼロの保持指令。トルク制限内での減速。停止ラッチとは別の機能。
-- 適用範囲: max／longの標準駆動バックエンド。既存のGNG/VLUT点群処理・統合キーボード・ソフト停止ラッチは新入口に未接続。Viewerの実測表示は標準JointStateで接続可能。実機パラメータ同定前。
-- 実行環境: `gz_ros2_control` 1.2.20、`joint_trajectory_controller` 4.42.1、`ros_gz_sim` 1.0.24。Gazebo Classicの起動なし。
-
-ワークスペースルートでの環境構築:
+ホストのworkspaceルートで:
 
 ```bash
 docker build -f docker/Dockerfile.gazebo_harmonic -t uraki-gazebo-harmonic:local .
-```
-
-ビルドコンテキストはworkspaceルートの`.`。旧イメージは再ビルドが必要。
-Harmonic専用の`enable_harmonic_runtime_only=ON`で、launch・Pythonノード・設定・max／longのURDFとメッシュを正規amentパッケージとしてインストール。
-イメージ内の配置先は`/opt/gng_harmonic`、起動時に自動読込み。既定のHumble／Classicビルドは変更なし。
-この構成にC++ GNGや実機ドライバーは含まない。コード・組込み設定・資産の更新後は再ビルドが必要。
-
-headless起動（終了はCtrl+C）:
-
-```bash
 docker run --rm -it -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
   -e GZ_PARTITION=uraki_harmonic uraki-gazebo-harmonic:local \
   ros2 launch gng_vlut_system dual_arm_gz.launch.py
 ```
 
-検証コマンド（`fixture`を`max`／`long`へ変更可能。出力先は未使用のディレクトリ）:
-
-```bash
-docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
-  -e GZ_PARTITION=uraki_motor_check -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/workspace \
-  uraki-gazebo-harmonic:local bash -c \
-  'source /opt/ros/jazzy/setup.bash; python3 gng_vlut_system/test/check_sim_motor.py --model fixture --output /workspace/log/artifacts/gz_motor_check/fixture'
-```
-
-検証条件: 重力あり、実URDFの左右`joint4`を同時駆動、各速度は軌道のピーク値。速度誤差RMS判定値0.05 rad/s、最大位置誤差判定値0.05 rad。停止試験では0.4 rad／0.8秒の別軌道の途中で、実測角速度0.2 rad/sを確認して保持指令を送信。全関節が0.02 rad/s未満で落ち着く時刻を停止時間とする。無制限トルク・直接速度設定による追従ではないことを、既知慣性モデルでも確認。
-
-| 対象 | ピーク0.2 rad/sでの速度誤差RMS [rad/s] | ピーク0.5 rad/sでの速度誤差RMS [rad/s] | 運動中保持指令からの停止時間 [s] |
-| --- | --- | --- | --- |
-| max | 0.01192 | 0.01907 | 0.294 |
-| long | 0.02412 | 0.03833 | 0.555 |
-
-既知慣性モデル: 慣性0.1 kg m²、トルク上限0.5 N m。飽和中の実測角加速度5.000 rad/s²、慣性×角加速度0.500 N m。標準コントローラの出力も上限内。
-実URDFの最大出力／URDF上限比: max 0.4014、long 0.5175。位置誤差最大値: max 0.00242 rad、long 0.00548 rad。合否と生波形は`log/artifacts/gz_motor_20261003/{fixture_02,max_final,long_final}/`の`report.json`、`joint_samples.json`、`controller_samples.json`。所有プロセスの終了確認も`report.json`へ保存。
+max／longの駆動・トルク上限・停止を検証済み。実機パラメータは未同定。
+この入口に旧Classicの点群回避・ソフト停止ラッチ・実機出力は未接続。
+再現入口は[check_sim_motor.py](../test/check_sim_motor.py)、結果は`log/artifacts/gz_motor_20261003/`。
 
 ## タスクの組替えと方式選択
-
-入口: [dual_arm_tasks.launch.py](../launch/dual_arm_tasks.launch.py)。Gazeboとタスク実行器の一括起動。
-既定機体: `topo_dual_arm_max_long`。設定: [task_program.yaml](../config/simulation/task_program.yaml)。
-環境配置は`scenario`、作業順序は`task_file`。両設定の独立した変更が可能。
-
-| 種別 `kind` | 方式 `method` | 目標の指定 |
-| --- | --- | --- |
-| `move` | `joint_move`（設定例の既定）、`direct`（互換） | `target: <posesの名前>` |
-| `move` | `joint_path`（設定例）、`waypoints`（互換） | `path: <pathsの名前>` |
-| `hold` | `position`（既定） | `duration_sec: <保持秒数>` |
-
-`defaults`で種別ごとの方式、各タスクの`method`で個別上書き。
-`methods.<種別>.<方式名>`で部品を構成。`targets`（目標解釈）→`route`（経路生成）→
-`refiners`（順序付き経路補正、省略時は空）→`trajectory`（軌道化）→`validators`（順序付き検査、省略時は空）。
-設定例の`joint_move`は`direct`＋`straight`＋`quintic`、`joint_path`は目標解釈だけ`waypoints`。
-組込み部品・互換方式への上書き、未登録名・未知キーは起動前に拒否。失敗時の暗黙の別方式への切替なし。
-未指定関節は前回の指令位置を保持し、最初だけ開始時の実測位置を採用。
-経由点間は停止姿勢間の5次補間。設定例は左右`joint4`の移動→1秒保持→経由点→復帰。
-未知キー・方式・姿勢名・関節名・非有限値・関節目標の制限違反は起動前に拒否。
-
-### 追加の経路計画（任意依存）
-
-選択場所: [task_program.yaml](../config/simulation/task_program.yaml)の`tasks[].method`。既定は従来の`joint_move`。
-
-| `method` / `route` | 計画器 |
-| --- | --- |
-| `bit_star` | BIT* |
-| `rrt` / `rrt_connect` / `rrt_star` | RRT / RRTConnect / RRT* |
-| `informed_rrt_star` | Informed RRT* |
-| `chomp` / `stomp` | CHOMP / STOMP |
-
-設定場所: `methods.move.<方式>.route_options`。`service_namespace`は計画サーバーの名前空間、
-`group_name`は`dual_arm`・`left_arm`・`right_arm`。独自グループは`joint_names`も指定。
-計画時間: `max_plan_sec`（設定例5秒）。通信待ち: `max_wait_sec`（設定例5秒）。
-グループ外の関節は実測保持。グループ外への移動要求は拒否。
-
-追加依存: 実行時だけの`moveit_msgs`・MoveIt計画サーバー・選択プラグイン。
-通常ビルドでの依存追加なし。BIT* / Informed RRT*の登録拡張は`enable_optional_motion_planners=ON`でビルド。
-依存未配置時は拡張だけを省略し、通常ビルドを継続。使用時の不足・未登録・計画失敗は明示的なエラー。
-
-Dockerの追加計画器を含むイメージ:
-
-```bash
-docker build -f docker/Dockerfile.gazebo_harmonic \
-  --build-arg enable_optional_motion_planners=ON \
-  -t uraki-gazebo-harmonic:planners .
-```
-
-計画サーバー入口: [dual_arm_planners.launch.py](../launch/dual_arm_planners.launch.py)。
-同じROS版・`ROS_DOMAIN_ID`の環境で`ros2 launch gng_vlut_system dual_arm_planners.launch.py planners:=bit_star`。
-複数方式はカンマ区切り。選択方式のプラグインだけを読込。
-タスク実行器も上記イメージで再ビルドされた部品を使用。
-ソース環境のビルド指定は`colcon build --packages-select gng_vlut_system --cmake-args -Denable_optional_motion_planners=ON`。
-計画サーバーからの軌道実行なし。実行は従来のタスク実行器と`FollowJointTrajectory`。
-
-軌道化: 各経由点で停止する既存の`quintic`と、位置・速度・加速度・時間の共通検査。
-CHOMP / STOMPの時間付けや通過速度は引継がない。
-STOMPの端点接続: 最大0.005、干渉検査間隔0.0005（関節座標単位）。元経路を保持し、
-実測始点・要求終点との追加接続を再検査。大きなずれ・干渉・検査サービス不足は拒否。
-計画待ちは別スレッド。受信・中断を継続し、中断後の遅延結果は破棄。
-
-障害物入力: MoveItの`planning_scene` / `collision_object`。Gazeboの物体やGNG点群との自動同期は未接続。
-干渉検査は離散検査。計画可能性・時間は機体形状と計画予算に依存。
-検証環境のMoveIt 2.12.4では、標準STOMP単独でもサーバー終了時のSIGSEGVを観測。
-[STOMPの端点ずれの上流報告](https://github.com/moveit/moveit2/issues/2554)、
-[OMPLの公式設定](https://moveit.picknik.ai/main/doc/examples/ompl_interface/ompl_interface_tutorial.html)。
-
-### ロボット姿勢グラフの接続とオンライン更新
-
-経路部品名はGNGではなく`robot_graph`。GNGなどの学習方式と独立し、ロボットに対応する関節姿勢・辺・通行可否を使用。
-環境点群の`/topological_map`を姿勢グラフとして入力する構成ではない。
-既定longの左右独立7関節グラフは、入力に別名を付けてタスクごとに選択可能。
-
-```yaml
-inputs:
-  left_graph:
-    type: robot_graph
-    robot_id: topo_dual_arm_max_long
-    topic: /sim_topo_dual_arm_max_long/left/robot_Tmap_updates
-    joint_names: [L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7]
-    max_state_age_sec: 1.0
-    max_connect_dist_th: 0.000001
-    max_plan_sec: 0.2
-methods:
-  move:
-    left_move:
-      targets: direct
-      route: left_graph
-      trajectory: quintic
-```
-
-`tasks`の`method: left_move`で選択。`joint_names`は学習時の角度配列順に一致させること。
-グラフにない関節は実測保持、その関節への移動要求は拒否。右腕は別入力・方式として同じ形で追加。
-探索は通行可能ノード・辺上のDijkstra、コストは関節角のユークリッド距離。
-実測・目標と入口・出口の許容差は関節ごとの最大絶対差。接続外の任意姿勢へ直線で飛ばす代替経路なし。
-既定の微小許容差では、実測・目標が既存ノード姿勢にほぼ一致する必要がある。
-
-既存トピックの接続はHumble側の[robot_graph_bridge.py](../scripts/robot_graph_bridge.py)。
-`graph_topic`（`TopologicalMap`）、`feature_topic`（`TopologicalNodeFeatureArray`）、
-`robot_id`・`joint_names`・`frame_id`・`output_topic`をROSパラメータで指定。
-左右別発行元は`/<robot_name>/Tmap_<profile>`と`/<robot_name>/<profile>/topological_node_features`を指定。
-既定longの左腕は`/topo_dual_arm_max_long/Tmap_left_arm`と`/topo_dual_arm_max_long/left_arm/topological_node_features`。
-実際の`graph_topic`は起動設定の`topic_name`に合わせること。グラフ本体・特徴の購読は継続。
-発行元`topofuzzy_bridge_node`も更新版の再ビルドが必要。同一バッチの共通stampがない旧版とは接続不可。
-同一frame・stampの組だけを受理し、ノードIDで角度を結合。辺の配列添字をノードIDへ変換。
-同一時刻の内容変更・時刻巻戻りは拒否。時計巻戻り後はアダプタを再起動。
-アダプタは全体snapshotを出力。オンライン発行元は、以下の同じ入力契約へdeltaを直接送信可能。
-
-入力は`std_msgs/String`のJSON。共通項目は`kind`・`robot_id`・`graph_id`・`revision`・`stamp_sec`（受信側と同じROS時計）。
-- `snapshot`: `joint_names`、`nodes: [{id, positions, can_traverse}]`、`edges: [{nodes: [id, id], can_traverse}]`。
-- `delta`: `base_revision`と、その次の`revision`。`nodes`・`edges`は追加／更新、`remove_nodes`・`remove_edges`は削除。省略した項目は維持。
-- `heartbeat`: 共通項目だけ。現在の世代と一致する場合のみ入力期限を更新。発行元で通行可否を再確認せずに鮮度を偽装しないこと。
-
-`graph_id`は発行元セッション識別子。差分欠落・未知参照・別ロボット・関節順序不一致・不正値は拒否し、snapshot再取得待ち。
-計画は一つの世代の不変スナップショットを参照。使用ノードの角度・可否、使用辺の削除・可否変更で取消→実測停止→`paused`。
-経路外だけの更新では取消なし。入力期限切れでも中断。再開は既存の`resume`操作で、最新世代・実測姿勢から再計画。自動再開なし。
-現実装は差分受信でも辞書を複製して交換。局所更新コストの最適化・探索木の差分更新は未実施。
-
-通行可否は発行元の判定。既存アダプタはlabel=1をノード通行可、両端が通行可の辺を候補にするが、辺途中の衝突保証はない。
-動的障害物・左右腕間干渉・入口出口の連続区間検査、追従中QPは別部品での接続が必要。実機での回避性能は未検証。
-検証: 局所細分化・欠落差分・関節角更新・左右別入力と取消要求を単体／隔離ROS通信で確認。Gazebo実運動での経路更新追従は未検証。
-
-### 起動と操作
-
-普段のHumble端末（`gng_cpu_container`）でも同じ1行:
 
 ```bash
 ros2 launch gng_vlut_system dual_arm_tasks.launch.py
 ```
 
-Humbleでは専用サービス経由、Jazzyでは直接起動。既定はheadless・開始待ち。終了はCtrl+C。
-Humbleコンテナの再起動・Docker権限の追加は不要。
+Gazeboとタスク実行器を起動。設定は[task_program.yaml](../config/simulation/task_program.yaml)を参照。
+タスクenumと進行管理は[task_program.py](../scripts/task_program.py)、方式の組合せは[task_components.py](../scripts/task_components.py)。
+TAMPは上位でタスク列を生成する接続が必要。追従中QP・把持・実機出力は未接続。
 
-Gazebo GUI付き起動（同じHumble端末）:
+### 追加の経路計画（任意依存）
 
-```bash
-ros2 launch gng_vlut_system dual_arm_tasks.launch.py gui:=true
-```
-
-表示先: 起動サービスに設定したホスト画面。GUIだけの起動でも初期状態は開始待ち。
-
-自動開始:
+選択肢: BIT*、RRT系、CHOMP、STOMP。設定は[task_program.yaml](../config/simulation/task_program.yaml)を参照。
 
 ```bash
-ros2 launch gng_vlut_system dual_arm_tasks.launch.py enable_autostart:=true
+ros2 launch gng_vlut_system dual_arm_planners.launch.py planners:=bit_star
 ```
 
-タスク完了後もGazeboと状態配信は継続。同じコントローラへの別の指令元は併用不可。
+MoveIt計画サーバーと選択プラグインが必要。BIT*等の登録拡張は任意ビルド。
+依存未配置でも通常ビルドは継続、未導入方式の実行はエラー。
+軌道化は既存quinticを使用し、各経由点で停止。MoveItシーンへのGazebo・点群の自動同期は未接続。
+STOMPは端点接続の再検査あり。検証環境のMoveIt 2.12.4では終了時SIGSEGVを観測。
+追加ビルド設定は[Dockerfile](../../docker/Dockerfile.gazebo_harmonic)を参照。
 
-別のHumble端末から開始（同じ`ROS_DOMAIN_ID`）:
+### ロボット姿勢グラフの接続とオンライン更新
+
+経路部品は`robot_graph`。環境点群の`/topological_map`とは別のロボット関節姿勢グラフ。
+設定は[task_program.yaml](../config/simulation/task_program.yaml)、入力契約は[robot_graph_route.py](../scripts/robot_graph_route.py)を参照。
+既存GNGの接続は[robot_graph_bridge.py](../scripts/robot_graph_bridge.py)。
+
+入力はsnapshot／delta／heartbeat。ロボットID・関節順序・世代・鮮度を照合。
+使用中ノード・辺の変更や期限切れで停止し、明示resume時に実測から再計画。
+label=1の端点だけでは辺途中の連続衝突回避を保証しない。Gazebo実運動によるオンライン更新追従は未検証。
+
+### 起動と操作
+
+Humbleでは専用起動サービス、Jazzyでは直接実行。既定はheadless・開始待ち。
+GUIは`gui:=true`、自動開始は`enable_autostart:=true`。
 
 ```bash
 ros2 service call /sim_topo_dual_arm_max_long/task_executor/start std_srvs/srv/Trigger '{}'
 ```
 
-操作サービスの共通接頭辞: `/sim_topo_dual_arm_max_long/task_executor/`。
-`start`・`pause`・`resume`・`cancel`は`std_srvs/srv/Trigger`。
-`start`は待機・完了・取消後の先頭開始、`pause`は中断、`resume`は中断位置からの再計画、`cancel`は取消。
-状態は同接頭辞の`status`（JSON文字列）。タスク番号・経由点番号は0始まり。
-
-障害物中断の試験入力（自動検出ではない）:
-
-```bash
-ros2 service call /sim_topo_dual_arm_max_long/task_executor/obstacle std_srvs/srv/SetBool '{data: true}'
-ros2 service call /sim_topo_dual_arm_max_long/task_executor/obstacle std_srvs/srv/SetBool '{data: false}'
-ros2 service call /sim_topo_dual_arm_max_long/task_executor/resume std_srvs/srv/Trigger '{}'
-```
-
-障害物解除だけでは再開なし。`stopping`中は旧Actionの終了と実測停止を待機し、確認後に`paused`へ遷移。
-再開は実測停止姿勢から未完了の経由点へ。完了済みの経由点と保持の経過時間は維持。
-関節状態の欠損・期限切れ、時刻巻戻り、軌道失敗、タスク／停止期限切れは`failed`。再開には原因解消とノード再起動が必要。
-`software_stop`の呼出し・追加ラッチなし。中断と取消は標準`FollowJointTrajectory` Actionの取消経路へ集約。
+同じ接頭辞にpause／resume／cancel、状態はstatus。障害物試験入力はobstacle（SetBool）。
+障害物解除だけで自動再開なし。入力失効等のfailed状態は原因解消後のノード再起動が必要。
+同じコントローラへの複数指令元は併用不可。
 
 ### 起動サービスの初回準備・管理
 
-ホストの元workspaceルートで1回実行:
+ホストの元workspaceで:
 
 ```bash
 install -d -m 0700 docker/runtime/harmonic_launcher
@@ -235,622 +166,149 @@ docker build -f docker/Dockerfile.gazebo_harmonic -t uraki-gazebo-harmonic:local
 docker compose -f docker/compose.harmonic_launcher.yaml up -d
 ```
 
-- 待受: `docker/runtime/harmonic_launcher/launcher.sock`。専用ユーザー所有、権限0600。既定UID/GID: 1000。変更時は`GNG_LAUNCHER_UID`・`GNG_LAUNCHER_GID`を指定。
-- 起動受付: 1セッション。固定launchと検査済み引数のみ。Docker API・任意シェル実行の公開なし。
-- 終了連動: Ctrl+C・接続切断・5秒間のハートビート欠損。対象は当該セッションの子プロセスのみ。
-- 設定: `task_file`・`urdf`・ファイル指定の`scenario`は元workspaceの`gng_vlut_system/config/`または`urdf/`内。サービス側は読取専用。シナリオ名は組込み設定。コード・組込み設定の更新後は再ビルドと`up -d`が必要。
-- GUI: `gui:=true/false`。X11ソケットと認証ファイルの読取専用共有、Mesa描画。起動前のOpenGL接続検査あり。ホスト側`DISPLAY`・`XAUTHORITY`をサービス構築時に継承。ログインし直して認証が変わった場合は`up -d --force-recreate`で受付を更新（実行中のタスクは先に終了）。
-- 描画デバイス: `GNG_RENDER_DEVICE`（既定`/dev/dri/renderD128`）、`GNG_RENDER_GID`（既定110）。別PCではデバイスと所有グループIDに合わせて指定。CPU描画は`GNG_GUI_SOFTWARE=1`で受付を更新。X11以外の画面接続は未検証。
-- 制限: Humble経由は`output_dir`未指定。Jazzy直接起動は従来どおり。ソケット位置の変更は`launcher_socket`または`GNG_HARMONIC_SOCKET`。
-- ROS通信: 起動端末の`ROS_DOMAIN_ID`を継承、サービス側はUDP。別のシミュレータとの同一domain・`/clock`併用不可。
-- 互換性: Humble/Jazzy混在時に`sequence size exceeds remaining buffer`警告あり。実環境の`Gid`は24／16バイト（[変更履歴](https://github.com/ros2/rmw_dds_common/blob/rolling/rmw_dds_common/CHANGELOG.rst)）。関節状態・タスク状態・操作サービスは検証済み。ディストリビューション間のノード一覧・全メッセージの互換性保証なし。
-
-サービス自体の停止（起動中のシミュレーションも終了）:
-
-```bash
-docker compose -f docker/compose.harmonic_launcher.yaml down
-```
+設定は[Compose](../../docker/compose.harmonic_launcher.yaml)を参照。コード・同梱設定の変更後は再ビルド。
+同時1セッション。クライアント切断・ハートビート失効で所有プロセスを終了。
+Humble/Jazzy間の基本操作は検証済み、ノード一覧・全メッセージの互換性保証なし。
+別シミュレータとの同一domain・clock併用は禁止。GUIはX11のみ検証済み。
+停止は同じComposeへの`down`。
 
 ### 差替え境界と検証範囲
 
-- [task_program.py](../scripts/task_program.py): `task_kind`・`run_state`のenum、設定検証、方式登録表`task_methods`、ROS非依存の進行管理。
-- [task_components.py](../scripts/task_components.py): 部品登録表`planning_components`と名前付き方式の組立て。`default_components()`へ実装関数を登録し、YAMLで組合せを選択。動作enum・進行管理の変更は不要。
-- 追加経路部品: `route_factories`へ設定工場を登録し、`route_options`から生成。`task_method.enable_async`で待ち時間のある計画を別スレッドへ接続。従来の同期部品は同じ実行順。
-- 部品契約: `route(request) -> 関節位置列`、`refiner(request, route) -> 関節位置列`、`trajectory(request, route) -> motion_point列`、`validator(request, route, points) -> bool`。検査は`True`だけを受理。
-- `planning_request`: 関節名順序、実測始点、目標、URDF制限、読取専用の設定制限。中断後の再計画でも、その時点の実測始点から全選択部品を再実行。
-- 独自環境の注入: `load_program(..., components=登録表)`。点群やグラフを持つアダプタの関数を登録可能。ROS購読・入力期限の監視はアダプタ側の責務。YAMLから任意のPython関数名やモジュールをimportする機構なし。
-- 姿勢グラフの状態: 読取専用の`snapshot`に内容・世代・受信時刻を保持。更新は`accept()`、不正入力時の無効化は`invalidate()`、計画解放は`release()`。状態フラグの直接変更なし。
-- 従来の`task_method(resolve_targets, plan)`による一括差替えも維持。`refiners`は実行前の経路補正用であり、追従中のQPフィードバック制御ではない。TAMPはこの上位でタスク列を生成する接続が必要。
-- 部品共通検査: 経路の始終点・寸法・有限値・関節位置制限。軌道化後は既存の共通検査へ接続。組込み`quintic`は各経由点で停止し、連結後の時間・点数上限も確認。
-- 共通検査: 始終点、時刻、配列寸法、有限値、各指令点の位置・速度・加速度。独自方式の連続区間の干渉検査は計画側の責務。
-- [task_executor.py](../scripts/task_executor.py): 関節状態・サービス・状態配信と標準Actionへの接続。取消受理前の再送禁止。別の軌道トピック発行元も開始前・実行中に検出。ただし別Actionクライアントとの排他保証は対象外。
-- 設定例の指令上限: 0.2 rad/s、0.5 rad/s²。到達誤差: 0.05 rad。停止確認: 0.03 rad/s、継続時間0.25秒。関節状態期限: ROS時刻・実時間とも0.5秒。
-- 重力補償なしの既存effort制御では、保持中の肩関節に約0.043 radの静的偏差。0.05 radはこの例の到達条件であり、位置精度の保証ではない。
-- 取消はコントローラの保持処理。指令生成時の速度・加速度制限は、実測値や取消過渡の制限ではない。max_long試験では取消直後の状態サンプルで全関節最大角速度約0.81 rad/sを観測。停止過渡の補償・減速設計は未完了。
-- 未接続: 追従中QP、自動障害物検出、既定の直線経路の自己・環境衝突検査、把持・開放、Isaac、実機出力。追加計画器の干渉検査はMoveItのシーン上。姿勢グラフ接続は上記`robot_graph`。`gng`／`local_qp`という別名への自動変換なし。高速回避・人との近接試験への使用不可。
-
-単体検証: `python3 -m pytest gng_vlut_system/test/test_task_program.py gng_vlut_system/test/test_task_components.py -q`（Action試験はJazzy環境）。
-部品組替え・補正順序・不正出力拒否・再計画始点・従来互換を含む59テスト合格。Harmonic用インストール後の部品importも確認。
-Harmonicの空環境・max_longで移動中断、停止確認、明示再開、保持、経由点復帰、取消を確認。
-インストール済みパッケージだけの構成でも同試験に合格。ソースworkspaceやURDFの外部マウントなしでの起動を確認。
-Humble入口でも移動・中断・再開・保持・復帰・取消、引数なし起動、Ctrl+C終了、多重起動拒否を確認。
-GUI: Humble入口からmax_longのメッシュ描画、Intel GPU・Mesa経由のOpenGL描画を確認。Ctrl+C・GUIプロセス終了の両経路で、サーバー・タスク・接続launchの終了を確認。
-再現コマンド（専用コンテナ、出力先は未使用ディレクトリ）:
-
-```bash
-docker run --rm -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 \
-  -e GZ_PARTITION=task_check_manual -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/workspace \
-  uraki-gazebo-harmonic:local \
-  python3 gng_vlut_system/test/check_task_program.py --output /workspace/log/artifacts/task_check_manual
-```
-
-試験結果と所有プロセスの終了確認は出力先の`report.json`。点群回避性能・停止距離・実機安全性の検証ではない。
+共通入力・方式登録・Action接続は[planning_components.md](planning_components.md)を参照。
+関節制限・始終点・時刻等の検査と、連続区間の衝突保証は別。
+Harmonicの移動・中断・再開・取消は確認済み。取消直後の速度過渡は未解決で、指令制限を実測上限として扱わないこと。
+再現入口は[check_task_program.py](../test/check_task_program.py)。
 
 ## 環境シナリオの管理
 
-環境の正本は[config/simulation](../config/simulation)。
-[objects.yaml](../config/simulation/objects.yaml)で物体の形状・寸法・色・固定/可動・質量・摩擦を定義し、
-[scenarios](../config/simulation/scenarios)の各YAMLで物体名・参照する定義・位置・姿勢を指定。
-制御ゲイン・トルク上限・機体URDFは従来の制御設定側。環境の変更と機体制御の変更を分離。
+設定は[objects.yaml](../config/simulation/objects.yaml)と[scenarios](../config/simulation/scenarios/)を参照。
+HarmonicとIsaacで共用。座標world、長さm、質量kg、RPYはrad。
 
-| シナリオ | 環境 | 用途 |
-| --- | --- | --- |
-| `empty`（既定） | 環境物体なし | 既存の駆動・接続検証 |
-| `tabletop` | 床・固定天板・可動の箱と円柱 | 接触・把持試験の環境準備 |
-| `dual_obstacles` | 床・左右の固定円柱 | 腕ごとの障害物回避試験の環境準備 |
-| `narrow_workspace` | 床・左右の固定壁 | 作業領域を制限した試験の環境準備 |
-| `rolling_ball` | 向かい合わせの斜面と1個の球 | 重力による往復運動 |
-| `rolling_balls` | 同じ斜面と開始位置の異なる3個の球 | 異なるタイミングで動く障害物 |
-
-[simulation_scenario.py](../launch/simulation_scenario.py)が検証・参照解決・両形式への変換を担当。
-Harmonicは標準SDFの衝突・剛体、Isaacは標準USDの`CollisionAPI`・`RigidBodyAPI`・`MassAPI`を使用。
-可動物体の慣性は中心原点・一様密度の基本形状から共通計算。
-静的構造物は固定衝突体、箱・円柱・球は重力と接触で動く剛体。
-時刻指定の移動障害物・人物動作・把持成功判定・タスク指令はこのシナリオ層の対象外。
-
-座標は`world`、ロボットの固定基台は原点。寸法・位置はm、質量はkg、`rpy`はrad、色はRGBの0〜1。
-組込み環境の床上面はz=-0.05 m。max／longの基部下端との初期重複を避ける配置。
-`tabletop`の台は脚を省略した固定天板で、上面はz=0.22 m。箱・円柱の初期位置は天板から0.01 mの落下を伴う高さ。
-これは試験用配置であり、別機体への配置適合や把持動作の成立を保証する設定ではない。
+| シナリオ | 環境 |
+| --- | --- |
+| empty | 物体なし |
+| tabletop | 天板・箱・円柱 |
+| dual_obstacles | 左右の円柱 |
+| narrow_workspace | 左右の壁 |
+| rolling_ball／rolling_balls | 斜面と球 |
 
 ### 転がる球
-
-[rolling_ball.yaml](../config/simulation/scenarios/rolling_ball.yaml)と
-[rolling_balls.yaml](../config/simulation/scenarios/rolling_balls.yaml)は、静止状態から重力で動き始める環境。
-半径0.04 m・質量0.10 kgの球と、傾斜0.1 radの向かい合わせの板を配置。
-板の上面はy=0、z=0.20 mで接続。球が中央を通過して反対側の斜面へ上り、折り返す構成。
-3球の例はx位置と開始高さを分けた別々の経路。往復の振幅・周期は物理挙動に従い、接触で減衰する構成。
-
-球の移動・回転は標準物理エンジンによる計算。速度・姿勢の継続指令、追加ROSノード、移動用プラグインは不要。
-シミュレーション開始時から運動が進行。再実行はシナリオを再起動して初期状態から開始。
 
 ```bash
 ros2 launch gng_vlut_system dual_arm_gz.launch.py scenario:=rolling_ball
 ```
 
-3球は`scenario:=rolling_balls`へ変更。Isaac側も`--scenario rolling_balls`、Composeは`SIM_SCENARIO=rolling_balls`で選択。
-球の半径・質量・摩擦は`objects.yaml`の`rolling_ball`、斜面寸法は`rolling_ramp`、配置は各シナリオで管理。
-球の半径・斜面の傾きを変えた場合は、初期接触位置の高さと中央の接続位置も調整が必要。
-初期位置の設定式は、球中心z = 0.20 + |y| tan(0.1) + 半径/cos(0.1) + 0.002 m。
-末尾の0.002 mは鉛直方向の初期間隔。
+重力・接触による運動。球の寸法・斜面の変更は各YAMLを参照。
 
 ### 選択と追加
 
-Jazzy環境をsource済みのHarmonicコンテナ内:
-
-```bash
-ros2 launch gng_vlut_system dual_arm_gz.launch.py scenario:=tabletop
-```
-
-Isaac本体は同じ名前を`--scenario`へ指定:
-
-```bash
-./python.sh /workspace/gng_vlut_system/launch/dual_arm_isaac.py --scenario tabletop
-```
-
-Composeでは起動前に`export SIM_SCENARIO=tabletop`を設定。
-既定は両方とも`empty`。`scenario:=/path/to/case.yaml`、`--scenario /path/to/case.yaml`による外部ファイルの選択も可能。
-相対的な`objects_file`は、シナリオYAMLの置き場所を基準に解決。
-
-シナリオ追加は`scenarios/<名前>.yaml`の追加のみ。launchの分岐や名前一覧の登録は不要。
-例として、既存の物体定義を使った片側障害物:
-
-```yaml
-description: 左腕前方の障害物
-objects_file: ../objects.yaml
-objects:
-  - name: left_post
-    asset: obstacle_post
-    position: [0.38, 0.32, 0.20]
-    rpy: [0.0, 0.0, 0.0]
-```
-
-物体の追加・寸法変更は物体定義へ集約。対応形状は`box`（`size`）、`sphere`（`radius`）、
-`cylinder`（`radius`・`length`、ローカルZ軸）。`is_static`は必須。可動物体には正の`mass`が必須。
-`color`の既定は灰色、`friction`の既定は0.8。位置・姿勢だけはシナリオの各配置で指定。
-名前はlower_snake_case。未知キー・未対応形状・未知の参照先・配置名重複・非有限値・不正寸法は起動前に拒否。
-
-生成先には`scenario.yaml`と`scenario_objects.yaml`を保存。参照解決済みの物体定義を含み、
-元設定を変更した後でも保存済み`scenario.yaml`を再指定して同じ初期環境を生成可能。
-実行途中の物体状態を保存するチェックポイントではない。物理エンジン間の数値軌道の一致も対象外。
-`world.sdf` / `scene.usda`は生成結果として管理し、環境変更の正本として手編集しない構成。
+scenariosへYAMLを追加し、`scenario:=名前`で選択。Isaacは`--scenario 名前`。
+生成SDF／USDを直接編集しないこと。保存済みscenarioは初期環境であり、実行途中のチェックポイントではない。
 
 ### 検証範囲
 
-`test_dual_arm_launch.py`で全シナリオのSDF・USD形状、質量・慣性・摩擦、姿勢、保存後の再読込、
-入力拒否、max／longの初期姿勢との非干渉を検証。
-USD構造試験の依存: `usd-core==25.5.1`（Dockerfileに同梱）。旧コンテナでは`python3 -m pip install usd-core==25.5.1`で追加。
-USD未導入時はUSD専用試験のみ省略、SDF試験は独立して実行。
-Harmonicでは全6環境の起動、箱・円柱の落下と台上接触、球の往復と回転を確認。
-作業台環境のmaxで、既存の速度追従・トルク上限・停止試験に合格。
-環境を付けた駆動検証は次のコマンドで再実行可能（専用ROS_DOMAIN_ID=96、未使用の出力先）。
-
-```bash
-python3 gng_vlut_system/test/check_sim_motor.py --model max --scenario tabletop \
-  --output /workspace/log/artifacts/scenario_motor_check
-```
-
-球の物理試験は同じテストファイルの`test_rolling_environment_physics`。
-通常の単体試験では省略し、専用GZ_PARTITIONを指定した隔離環境だけでGazeboを起動。
-観測した位置・姿勢から往復と回転を検査し、斜面との接触点速度で転がりを確認。
-試験自身が起動したGazebo・観測プロセスだけを終了。
-
-```bash
-GZ_PARTITION=uraki_rolling_check ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 \
-  python3 -m pytest gng_vlut_system/test/test_dual_arm_launch.py \
-  -k rolling_environment_physics -q
-```
-
-Isaacは実USD APIによる構造検証まで。本体での物理実行は下記のGPUコンテナ制約により未検証。
-環境のセンサ点群・GNG/VLUT回避への入力・ToPoFuzzy-Viewerでの環境物体表示は、この配置生成には未接続。
+Harmonicの6環境・接触・落下・球の運動を確認。IsaacはUSD構造検証まで。
+シナリオ層からのセンサ点群・GNG/VLUT・Viewer環境表示は未接続。
+検証は[test_dual_arm_launch.py](../test/test_dual_arm_launch.py)を参照。
 
 ## 標準ROS 2トピックとViewerの接続
 
-Harmonicの物理処理とViewer表示の間は標準ROS 2メッセージ。専用の関節状態リレーは不要。
-既定の機体はLong、名前空間は`/sim_topo_dual_arm_max_long`。相対トピック名はこの名前空間内、絶対名は指定した接続先。
+名前空間は`/sim_topo_dual_arm_max_long`。標準JointState・JointTrajectory・URDF・TF・clockを使用。
+関節角rad、角速度rad/s。HarmonicのTF名はURDFリンク名のままのため複数機体はframe分離が必要。
 
-| 用途 | 既定トピック | 型 | Harmonicのlaunch引数 |
-| --- | --- | --- | --- |
-| 実測位置・角速度・effort | `joint_states` | `sensor_msgs/msg/JointState` | `state_topic` |
-| 目標軌道 | `dual_arm_controller/joint_trajectory` | `trajectory_msgs/msg/JointTrajectory` | `trajectory_topic` |
-| ロボット形状 | `robot_description` | `std_msgs/msg/String` | `description_topic` |
-| リンク姿勢 | `/tf`、`/tf_static` | `tf2_msgs/msg/TFMessage` | 標準TF |
-| 物理時刻 | `/clock` | `rosgraph_msgs/msg/Clock` | 標準時刻 |
-
-`robot_description`はtransient-localで後からの購読にも対応。Viewerの関節入力はSensorDataQoSでreliable／best-effort双方に接続。
-Viewer内の描画用JSONへの変換は既存`robot_viewer_bridge_node`の責務。Gazebo固有処理や新しいWebSocket形式の追加なし。
-位置・速度の単位はrad、rad/s。関節対応は`JointState.name`、姿勢更新時刻は実測の`header.stamp`。
-固定基台は`world`。このlaunchのTFはURDFリンク名のままなので、複数機体の同一TF空間への同時投入には別途フレーム名の分離が必要。
-
-既存ViewerコンテナとHarmonicコンテナを接続する場合、同じROS_DOMAIN_IDとDDS通信可能なネットワークが必要。
-上の隔離駆動試験のDockerコマンドはそのままでは外部Viewerへの接続例ではない。
-既存`gng_cpu_container`と接続する開発環境の例:
+Viewerは外部実測として接続:
 
 ```bash
-docker run --rm -it --network host --ipc container:gng_cpu_container \
-  -e ROS_DOMAIN_ID=0 -e ROS_LOCALHOST_ONLY=1 -e GZ_PARTITION=uraki_harmonic \
-  uraki-gazebo-harmonic:local \
-  ros2 launch gng_vlut_system dual_arm_gz.launch.py
-```
-
-Viewer側は更新済みの`gng_vlut_system`をビルド・source後、既存コンテナ内で以下を起動。
-`params_file:=`はロボット表示だけの構成。既存の仮想姿勢・同じ機体のViewer bridgeと重複起動しない。
-
-```bash
-ros2 launch /ros2_ws/src/gng_vlut_system/launch/gng_viewer_bridge.launch.py \
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:= robot_name:=sim_topo_dual_arm_max_long \
   urdf_path:=/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf \
-  joint_control_backend:=external \
-  state_topic:=/sim_topo_dual_arm_max_long/joint_states \
+  joint_control_backend:=external state_topic:=/sim_topo_dual_arm_max_long/joint_states \
   enable_robot_state_publisher:=false use_sim_time:=true robot_base_frame:=world
 ```
 
-`state_topic`直接指定時は初期姿勢の配信を無効化し、外部実測への仮想値混入を防止。
-`enable_robot_state_publisher:=false`でHarmonic側のTF配信を利用。Viewerからの制御ノード起動は`external`で無効化。
-未指定の既存Viewer接続は従来の`viewer_joint_states`を維持。
-Viewerの操作入力、回避・停止ラッチの統合はこの表示接続に含まれない。
-目標軌道の発行者は指令管理部に一元化し、Viewerや複数の計画器からコントローラへ直接競合送信しない。
-
-接続検証は`test/check_sim_motor.py --enable-topic-remap`で標準トピックを`/robot_io/`へ変更して実施可能。
-`--viewer-stream-topic /viewer_test/robot/pose`の追加で、別起動したViewer bridgeの配信を同時刻の実測関節角と照合。
-検証時のノード起動コマンド（双方とも`ROS_DOMAIN_ID=96`、`ROS_LOCALHOST_ONLY=1`。ViewerはHumbleコンテナ内、検証器はhost network／共有IPCのJazzyコンテナ内）:
-
-```bash
-# 現行ビルドのViewer配信。有限起動と専用ストリーム
-timeout --signal=INT --kill-after=10s 120s /ros2_ws/build/gng_vlut_system/src/robot_viewer_bridge_node --ros-args \
-  -r __node:=harmonic_viewer_connection_check_final -p robot_name:=sim_motor_check \
-  -p urdf_path:=/ros2_ws/src/urdf/topo_dual_arm_max/topo_dual_arm_max.urdf \
-  -p joint_state_topic:=/robot_io/joint_states -p stream_topic:=/viewer_test/robot \
-  -p frame_id:=world -p use_sim_time:=true --disable-rosout-logs
-
-# Gazebo・標準制御の起動から表示照合、所有プロセスの停止まで
-python3 gng_vlut_system/test/check_sim_motor.py --model max --enable-topic-remap \
-  --viewer-stream-topic /viewer_test/robot/pose \
-  --output /workspace/log/artifacts/gz_topics_check/max
-```
-
-max接続試験: Viewer配信307件の実測角との差0 rad、別名トピックでの速度誤差RMS 0.02425 rad/s（目標ピーク0.5 rad/s）、保持指令後0.300秒で停止。best-effort入力の表示反映も確認。結果は`log/artifacts/gz_topics_20261004/max_complete/report.json`。
-ブラウザ操作・点群入力・全ROS型のHumble/Jazzy間互換性はこの試験の対象外。
+ROS domain・DDSネットワークを統一。初期姿勢・TFの二重配信は避けること。
+接続試験は[check_sim_motor.py](../test/check_sim_motor.py)。表示接続に回避・停止機能は含まない。
 
 ## Isaac Simの接続
 
-対象: Isaac Sim 6.1.0、ROS 2 Jazzy。`isaacsim.ros2.control`の標準Controller Managerと`JointTrajectoryController`を使用。
-Isaac本体の入口は`launch/dual_arm_isaac.py`、ROS側のTF・controller起動は`launch/dual_arm_isaac.launch.py`。
-従来の`construction_isaac_sim`の建設シーン用設定とは独立した機体接続。
-
-- 共通設定: `config/dual_arm_effort.yaml`。旧`dual_arm_gz.yaml`から移動。`launch/dual_arm_effort_config.py`が独立関節・PID・トルク上限を両バックエンドへ反映。
-- 変換: 元URDFから一時領域へUSDを生成。固定基台、1 ms物理周期、URDFとUSDの関節名一致を起動時に検査。
-- 駆動: USDのforce drive、stiffness／dampingゼロ。位置・速度誤差からのトルク計算は標準effortコントローラ。mimicへの独立したdriveを除外。
-- 上限: URDFの`limit effort`をUSDの`maxForce`とPIDの`u_clamp_min/max`へ反映。
-- 状態: Isaacのjoint_state_broadcasterが`/<namespace>/joint_states`を配信。目標軌道は`/<namespace>/dual_arm_controller/joint_trajectory`、アクションは同controllerの`follow_joint_trajectory`。
-- 形状・時刻: Isaacの標準拡張が`robot_description`、時計graphが`/clock`を配信。ROS側のrobot_state_publisherがIsaacの合成URDFを購読しTFを配信。
-- Viewer: 上記の`joint_control_backend:=external`と`state_topic`をそのまま使用。Viewerへ渡す元URDFはIsaacの起動対象と一致させる。
-- ゲイン: Harmonicの調整値を共用。Isaac物理上での安定性・速度追従・停止時間は未検証。回避・停止ラッチの統合も別途。
-
-公式API: [Isaac ROS 2 Control](https://docs.isaacsim.omniverse.nvidia.com/latest/py/source/extensions/isaacsim.ros2.control/docs/index.html)。6.1.0の取得済みイメージ内で同拡張・URDFImporterConfig・PID出力上限パラメータの同梱を確認。
+Isaac Sim 6.1.0・ROS 2 Jazzy。Harmonicと同じ[effort設定](../config/dual_arm_effort.yaml)を使用。
 
 ### 起動
 
-GPUコンテナ利用とIsaac Sim利用規約への同意が前提。ROS_DOMAIN_IDはViewerと一致させる。以下は独立ドメイン96。
-Harmonicと同じ名前空間・`/clock`を同時使用しない。
+利用規約への同意とGPUコンテナ環境が前提。設定は[Compose](../../docker/compose.dual_arm_isaac.yaml)を参照。
 
 ```bash
-# ワークスペースルート。ACCEPT_EULAは利用規約への同意後に設定
 export ACCEPT_EULA=Y
 export ROS_DOMAIN_ID=96
 docker compose -f docker/compose.dual_arm_isaac.yaml up --build
 ```
 
-既定の機体はLong。標準Maxへの変更は起動前に次を設定:
-
-```bash
-export ROBOT_URDF=urdf/topo_dual_arm_max/topo_dual_arm_max.urdf
-export ROBOT_NAMESPACE=sim_topo_dual_arm_max
-```
-
-終了:
-
-```bash
-docker compose -f docker/compose.dual_arm_isaac.yaml down
-```
-
-生成USD・controller設定はIsaacコンテナの一時ディレクトリ。元URDFやメッシュの書換えなし。
-ROS側のイメージはHarmonic検証環境を再利用するが、この構成が起動するシミュレータはIsaacのみ。
-独立したIsaac環境では`python.sh gng_vlut_system/launch/dual_arm_isaac.py`でも起動可能。
-`--urdf`、`--namespace`、`--control-config`で機体と設定を選択。`--output-dir`は未使用の生成先、`--max-run-sec`は起動完了後の有限実行時間。
+終了は同じComposeへの`down`。Harmonicとの同一domain・clock併用は禁止。
 
 ### 検証と現在の制限
 
-検証済み: max／longの共通制御設定一致、実USD APIによるdrive設定・兄弟配置の関節探索・mimic独立駆動の除外、launch回帰を含む45テスト。
-設定共通化後のHarmonic実物理試験も合格。トルク上限0.5 N mに対し慣性×実測角加速度0.500 N m。
-Isaac 6.1.0イメージ内で起動CLIの読込と使用APIの同梱を確認。
-
-未検証: Isaac本体上のURDFインポート完走、標準controllerのactivation、動的TF、Viewer表示、追従・停止の実物理動作。
-このホストではGPUコンテナ試験が`failed to discover GPU vendor from CDI: no known GPU vendor found`で起動失敗。
-NVIDIA Container Toolkit/CDIの設定には管理者権限が必要。sudo認証が必要なため自動設定は未実施。
-管理者側で[公式セットアップ](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)のaptリポジトリを登録し、CDI用の`nvidia-container-toolkit-base`を導入。
-このホストのDocker 29ではnative CDIを利用可能。[CDI公式手順](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/cdi-support.html)に従い`nvidia-ctk cdi list`でデバイスを確認。
-既存コンテナを維持するため、本作業ではDocker daemonの設定変更・再起動を行わない。
-GPU利用確認:
-
-```bash
-docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
-```
-
-GPU利用が成功した後、以下の共通試験で検証する。
-
-1. Isaac本体のみを`--namespace sim_motor_check`、検証対象のmaxまたはlong URDFで起動。
-2. 同じROS_DOMAIN_ID=96のJazzy環境から以下を実行。試験自身がROS側接続launchを起動するため、Composeの`ros`サービスとの重複起動は不要。
-
-```bash
-python3 gng_vlut_system/test/check_sim_motor.py --backend isaac --model max \
-  --output /workspace/log/artifacts/isaac_motor_check/max
-```
-
-共通試験の対象: 実測・TF・後発購読URDF・時刻、左右joint4の0.2／0.5 rad/s軌道、全関節のトルク出力制限、運動中の保持指令による停止。
-試験が終了するのは自身のROS側launchのみ。別起動したIsaac本体は起動元で停止が必要。
-
-以下は旧Classic構成の記録。Harmonicの駆動検証には使用しない構成。
-
-
-機体設定を切り替えてGazebo点群・自己除去・GNG/VLUT回避を起動する構成は[共通点群回避](pointcloud_avoidance.md)を参照。ToPoDualArmの保存済み左腕データにも対応。
+共通設定・USD drive構造は検証済み。GPUコンテナ未準備のため、Isaac本体のインポート完走・controller activation・物理追従・停止・Viewerは未検証。
+再現入口は[check_sim_motor.py](../test/check_sim_motor.py)の`--backend isaac`。
 
 ## ToPoDualArmの統合回避デモ
 
-対象: `urdf/dual_arm_urdf/dual_arm_robot.urdf`の既存ToPoDualArm。選択引数: `robot:=topodualarm`。名前空間: `/sim_ToPoDualArm`。
+以下は旧Gazebo Classic構成。Harmonicの入口とは別。
 
 ```bash
-docker exec -it gng_cpu_container bash
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/local_setup.bash
 ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=topodualarm
 ```
 
-操作: 起動後はホールド。Aで回避開始／ホールド復帰、Spaceでソフト停止、停止後のLで解除後ホールド、Ctrl+Cで終了。Lのリーダー追従開始には新鮮な`/leader/joint_states`が必要。USBドライバの自動起動なし。
-
-- 回避方式: URDF外接球と左右の模擬前腕カプセルによる幾何探索。Gazebo状態による入力で、実センサ点群・GNG/VLUT回避とは別方式。
-- 既定設定: `ToPoDualArm.yaml`、`topodualarm_gazebo_demo.yaml`、`topodualarm_avoidance_demo.yaml`。ToPoDualArmの寸法・直動グリッパーに対応。max系の既定GNG/VLUTデモは維持。
-- 保存済みGNG: `ToPoDualArm10000`は左腕用。14関節角を必要とする双腕GNGデモへの流用なし。
-- 物理設定: ODE quick、有限力／有限トルクの位置追従。直動関節の`effort`は軸方向力 [N]、回転関節はトルク [N m]。
-- 計画時の余裕: `min_planning_clearance_th: 0.01` [m]。自己・床・台への物理追従誤差の吸収用。実測監視の停止判定は既存の0.005 mを維持。
-- 停止確認: 回転速度0.01 rad/s、直動速度0.001 m/sを各判定値とする0.25秒の継続静止。`safety/status`の`max_velocity_rad_sec`と`max_linear_velocity_m_sec`に分離。
-- Viewer表示名: `sim_ToPoDualArm`。既存Viewerサーバーへの配信。実機実測表示とは別系統。
-- 実機UDP: 未対応。`robot:=topodualarm`での`udp_config`指定は拒否。Dynamixelへの駆動指令なし。
-- ToPoDualArmの別起動: [Dynamixel小動作・Gazebo指令転送](dynamixel_sim_control.md)。左腕ID41〜47、実機出力は既定OFF。既存UDP経路への変更なし。
-- 起動依存: Dockerfile記載の`gazebo_ros2_control`、`controller_manager`、`joint_state_broadcaster`、`joint_trajectory_controller`。古いコンテナでは追加導入と`gng_vlut_system`の再ビルドが必要。
-
-通し試験コマンド（コンテナ内、未使用の出力先を指定）:
-
-```bash
-ROS_DOMAIN_ID=96 ROS_LOCALHOST_ONLY=1 ROS2CLI_NO_DAEMON=1 \
-  python3 /ros2_ws/src/gng_vlut_system/test/check_topodualarm_avoidance.py \
-  --output /ros2_ws/src/log/artifacts/topodualarm_trial
-```
+姿勢GNGではなく模擬前腕に対する幾何回避。UDP実機出力は非対応。
+設定は[topodualarm_avoidance_demo.yaml](../config/topodualarm_avoidance_demo.yaml)、制限・検証は[既存記録](releases/2026-10-01_topodualarm_demo.md)を参照。
+点群による旧Classic回避は[pointcloud_avoidance.md](pointcloud_avoidance.md)を参照。
 
 ## 2026-10-01: max実機追従・Viewer・回避の作業計画
 
-- 対象: `topo_dual_arm_max`、別実機のリーダー、UDP接続のフォロワー
-- 到達点: リーダー実測値による直接描画、実機追従＋フォロワー実測姿勢による描画、Gazebo追従・回避試験
-- 操作窓口: `dual_arm_control.launch.py`へ集約。回避と追従は排他、開始元はホールドのみ
-- 状態: 計画・手順の文書化。今回の実機送信・Gazebo追加試験なし
-- 実装順: [当日タスク](TASK_LIST.md#max-operation-20261001)。以下の未実装項目は現在の起動だけでは利用不可
-
-### 現在の接続と不足部分
-
-| 機能 | 現状 | 追加・確認対象 |
-| --- | --- | --- |
-| リーダー → Gazebo | `/leader/joint_states`の購読あり | maxの実機入力元・関節校正。USBドライバの自動起動なし |
-| リーダー → Viewer | 統合launchの直接表示経路なし | リーダー実測による描画。フォロワー・Gazebo物理実行への依存なし |
-| Gazebo → 実機 | 補間済み目標のUDP送信あり、既定OFF | 受信機仕様、独立19関節の順序・符号・原点、停止・watchdog |
-| Gazebo → Viewer | `/sim_topo_dual_arm_max/joint_states`の表示あり | 現行URDFでの追従・更新の通し確認 |
-| 実機 → Viewer | UDP応答の内部保持のみ、ROS配信なし | 実測JointState配信、表示元の分離、未受信・失効表示 |
-| 回避 | Gazebo外置きLiDAR／[頭部深度カメラ](#頭部深度カメラ)とGNG/VLUTの接続あり | 現行URDFでの回避・停止試験。実センサによる実機回避は未統合 |
-
-### 必須の描画経路
-
-- リーダー直接表示: リーダー実測 → Viewer。表示だけの利用では追従・実機送信OFF、フォロワー未接続でも利用可能な構成
-- 実機追従表示: リーダー実測 → 統合制御・Gazebo補間目標 → UDP → フォロワー駆動 → フォロワー実測 → Viewer
-
-表示元の選択: `リーダー実測` / `フォロワー実測` / 既存の`Gazebo実測`。選択機能は新設予定、現在のlaunch引数ではない。
-表示元と制御モードは独立。表示切替によるLの追従開始、Hの送信許可、停止解除はなし。既存のホールド経由条件を維持。
-画面には選択元と受信状態を明示。フォロワー実測表示へのリーダー値・指令値の代入、失効時の別ソースへの自動切替なし。
-追従OFF・ホールド・停止中も、選択元の新鮮な実測受信が続く間は描画更新を継続。
-
-Viewerの主対象: 統合launchの`robot_viewer_bridge_node`から配信する[ToPoFuzzy-Viewer](../../ToPoFuzzy-Viewer/README.md)。
-HTMLシミュレータの[ROS軌道再生](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md)は別経路。
-HTML側への実測追従表示も未接続で、指令軌道の再生を実機姿勢の代用としない方針。
-
-### 実装方針
-
-1. 入出力の確定: リーダーの機種・デバイス・実測topic、フォロワーの受信firmware・IP/port・関節対応表の確認。旧14関節設定・模擬`ENABLE`/`STOP`の流用なし。
-2. 実測表示の先行: `/leader/joint_states`からの直接描画と、指令送信OFFでのフォロワー受信・描画経路の追加。UDP実測を校正後のradへ変換し、独立19関節の`JointState`として配信。受信機側の送信開始に駆動許可が必要な場合は、読取り専用経路の確保が先決。
-3. 表示元の分離: リーダーは`/leader/joint_states`、Gazeboは`/sim_topo_dual_arm_max/joint_states`、フォロワーは`/follower/joint_states`を予定。フォロワーtopicと実機表示名`hw_topo_dual_arm_max`は新設予定。リーダー直接表示には別の表示名を使用。実機表示への別ソース・初期ゼロ姿勢の混入、リーダー入力への折返しを禁止。
-4. 受信健全性: 全関節・有限値・可動域・受信元の検査と、実時間による鮮度監視。実測経路は`use_sim_time=false`相当、Gazeboのpauseから独立。機器時刻なしの場合は受信時刻と明示し、失効中の姿勢を「現在の実機姿勢」として再配信しない設計。
-5. 統合起動: リーダー直接表示と実機追従表示を同じlaunchの選択肢として整備。表示だけの構成ではGazebo物理実行・実機出力を起動条件から分離。送信は引き続きHの明示許可。リーダードライバは機種別設定と起動時書込みの確認後に統合。既存Viewerサーバーの重複起動なし。
-
-実機への送信元: Gazebo JTCの`desired.positions`。フォロワー実測表示の入力: フォロワーのエンコーダ実測。
-両者の別記録が必要。Gazeboの実測角・送信した角度・受信機による目標値の返信は、実機エンコーダ値とは別物。
-
-### 現時点の起動方法（実機送信なし）
-
-前提: 元ワークスペース`/home/uraki/uraki_ws`を`/ros2_ws/src`へマウント済みの`gng_cpu_container`、ビルド済みROS環境、max用`gng.bin`・`vlut.bin`。
-GNG/VLUTと使用URDFの整合確認が必要。既存の同名Gazebo・制御ノードとの重複起動不可。
-
-```bash
-docker exec -it gng_cpu_container bash
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/local_setup.bash
-ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max \
-  leader_topic:=/leader/joint_states
-```
-
-- UDP: `udp_config`未指定、ソケット生成・実機送信なし
-- リーダー: 別途、新鮮な実測`JointState`の配信が必要。入力なしではLによる追従開始不可
-- Dynamixel変換: 必要時のみ`leader_mapping_file:=<校正済みYAML>`を追加。変換元は`leader_input_topic`、USBドライバ起動とは別
-- Viewer: 既存サーバー・ブラウザへ接続し、`sim_topo_dual_arm_max`の表示を確認。リーダー直接表示・フォロワー実測表示の選択は上記追加実装後
-- キー入力: 起動端末を前面、Enter不要。[状態別のキー一覧](#1つのlaunchでの統合操作)を使用
-
-確認用の別端末（同じコンテナ・ROS環境・`ROS_DOMAIN_ID`）:
-
-```bash
-ros2 topic info -v /leader/joint_states
-ros2 topic echo --once /sim_topo_dual_arm_max/control/status
-ros2 topic echo --once /sim_topo_dual_arm_max/safety/status
-ros2 topic echo --once /sim_topo_dual_arm_max/avoidance/status
-```
-
-実機用起動設定: 未確定。[UDPの必須条件](#gazebo目標のudp出力)と受信機の実仕様を照合後に設定作成。
-`allow_remote_udp:=true`だけでの有効化、模擬YAMLのIPだけを変えた運用は不可。
-
-### 運用テストと完了条件
-
-1. 表示経路の独立確認:
-
-   - リーダー直接表示: フォロワー未接続・実機送信OFF・Gazebo物理実行なしで、リーダー実測と描画の全関節を照合。
-   - フォロワー実測表示: 指令送信OFFで受信データと描画を照合。駆動無効・機械支持などの確認後に、リーダー／Gazeboと独立したフォロワー姿勢変化を確認。
-   - 表示切替: 模擬入力でリーダーとフォロワーに異なる姿勢を入力し、選択元だけへの描画追従を確認。L/H/停止状態は不変、受信停止時は失効表示、自動代替なし。
-
-2. Gazebo追従: ホールド→L→追従→L→ホールド。追従中Aは拒否、切替中の連打も拒否。ViewerはGazebo実測へ追従。Space後は実測停止を確認し、Lで解除→ホールド、もう一度Lで追従。UDPの自動再開なし。
-3. 模擬UDP: [切替単体試験](#切替条件の単体試験)と[localhost通し試験](#gazebo目標のudp出力)。H前の無送信、送信目標との照合、Space・入力失効時の遮断、再許可条件の確認。出力先は未使用のディレクトリ。
-4. 実機追従: 受信側停止・watchdogと、PC/ROS/通信に依存しない停止手段の動作確認後。人のいない可動範囲・支持条件・実機に適した速度制限で小範囲から確認。ホールド・静止・初期姿勢差の確認→H→L。描画元はフォロワー実測を選択し、受信実測との一致を確認。リーダーとの追従遅れ・姿勢差を隠す補完なし。実測と指令の偏差、Lでの保持、停止後の非再開を別々に判定。
-5. Gazebo回避: 実機UDP OFF。ホールド→Aで左右の模擬前腕接近→退避、Aでホールド。回避中Lの拒否、点群更新、自己除去、GNG/VLUT入力、最小距離、探索失敗時停止を確認。見た目の移動だけでは合格判定なし。
-6. 実機回避への移行: 実センサのtopic・TF・時刻、フォロワー実測に基づく自己除去・衝突判定の接続後。最初は人腕ではなく試験物体。Gazebo内の模擬前腕への回避指令転送と、実機周辺の障害物への回避を別試験として記録。
-
-回避指令速度の既定値: 2.5 rad/s。UDP指令速度の既定上限: 0.3 rad/s。
-実機回避前に両経路の速度設定の整合が必要。監視の無効化や閾値の緩和だけによる通過判定は不可。
-人腕接近試験: 独立した停止手段・受信側停止の確認前は未実施。Spaceはソフト停止要求であり、実機の停止完了保証ではない。
-
-既知の阻害要因: 現行URDFのmaxで状態更新失効、max_longでSpace後の実測停止未確認。
-[前回のGazebo通し試験](releases/2026-10-01_gazebo_software_stop.md)は0/2回成功。最新の切替条件は単体試験のみで、実機追従前に通し再検証が必要。
-
-記録項目: 使用URDF・GNG/VLUT・設定、実行コマンド、入力/実測topic、指令角・実測角・受信時刻、姿勢偏差［rad］、表示遅延［ms、測定可能範囲のみ］、最小距離［m］、停止要求・停止確認の時刻、成功/失敗/未検証、起動プロセスの終了確認。
-合格基準未定の項目は測定結果のみ。パケット送信成功と実機停止成功の混同なし。
+旧UDP構成の未完了計画は[TASK_LIST](TASK_LIST.md#max-operation-20261001)を参照。
+実機実測表示・リーダー／フォロワーの現行入口は[dynamixel_sim_control.md](dynamixel_sim_control.md)。
+実測値と指令値は別系統、旧14関節UDP設定の19関節機体への流用は禁止。実機回避の通し検証は未完了。
 
 ## 胸部LiDARの取り付け形状
 
-対象: [max_long URDF](../../urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf)。既定: 45 deg。
-元形状: `urdf/ToPoDualArm-Max (long)45d.step` / `ToPoDualArm-Max (long)60d.step`。
-固定リンク: `torso_link` → `chest_lidar_mount_link` → `chest_lidar_link`。腰Yawに追従、首の関節運動から独立。
-
-| 取り付け角度 [deg] | 本体原点X [mm] | 本体原点Y [mm] | 本体原点Z [mm] |
-| ---: | ---: | ---: | ---: |
-| 45 | 69.326 | 0 | 120.847 |
-| 60 | 66.695 | 0 | 110.316 |
-
-座標基準: `torso_link`。位置・ブラケット形状は角度別。単純なPitch変更による代用は不可。
-`chest_lidar_link`は機械取付フレームで、実機の計測原点・IMU原点とは未校正。
-STEPの座標変換・変換精度・入力/出力ハッシュ: [chest_lidar.json](../../urdf/topo_dual_arm_max_long/meshes/chest_lidar.json)。
-
-60度版の生成（ワークスペース直下、出力先は未使用のファイル名）:
+Longの既定は45°。取付情報は[chest_lidar.json](../../urdf/topo_dual_arm_max_long/meshes/chest_lidar.json)を参照。
+60°版は位置・ブラケット形状も異なるため、Pitch変更だけでは代用不可。
 
 ```bash
 python3 scripts/chest_lidar_urdf.py --angle 60 --output /tmp/topo_dual_arm_max_long_60.urdf
 ```
 
-45度版は`--angle 45`。元URDF・既存出力の上書きなし。生成物のメッシュ参照は絶対URIのため、ROSを実行するホスト／Docker内での生成が必要。
-Gazebo Harmonicの指定例: `ros2 launch gng_vlut_system dual_arm_gz.launch.py urdf:=/tmp/topo_dual_arm_max_long_60.urdf`。
-
-表示形状: STEP由来STL。本体は元CADの面色4種類（銀・灰・青・淡青）、URDF材質値はlinear RGB。実機の光学材質・透過・反射特性とは別。
-青色カバー: 元球面の半径・中心・上下境界を保持した軸合わせ後の三角形化。再生成は`python3 scripts/rebuild_chest_lidar_cover.py --output-dir <未作成の出力ディレクトリ>`（OCP・NumPyが必要、既存ファイルの上書きなし）。生成後はROS側とSimulator同梱STLを更新し、Simulatorの`tools/rebuild_meshes.py --model long`で描画キャッシュを再生成。
-形状検証: `python3 -B -m unittest discover -s scripts -p test_chest_lidar_urdf.py -v`。球面の全周108方向・面間接合・同梱キャッシュの一致を含む確認。
-Viewerへの反映: launch再起動後にモデルを再読み込み。色設定は`URDF COLOR`、`chest_lidar_link`の色上書きは解除。既存の60度版は再生成が必要。
-衝突形状: ブラケットSTL、本体・コネクタの包含直方体。色分割による形状・取り付け座標の変更なし。
-質量・慣性: 既存値を維持、追加部品の動力学は未反映。
-HTML Simulator: 同梱Longモデルへ45度版と4色材質を反映。ページ再読み込みで更新、取得無効時も本体を表示。旧配置の復帰は「センサ → LiDAR → ロボットの既定取付位置に戻す」。[配置・制限](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/docs/SENSOR_FIDELITY.md#腰上の近接取付)。HTML側の60度切替・通常maxのURDF・LiDARの点群配信／入力設定は変更なし。
-保存済みGNG/VLUT・自己形状キャッシュは未再生成。回避検証前に新しい取り付け形状との整合確認が必要。
+実行先のROSホスト／Docker内で生成。計測原点・追加部品の質量慣性は未校正。
+保存済みGNG/VLUT・自己形状キャッシュは取付変更後の整合確認が必要。
 
 ## 頭部深度カメラ
 
-対象: max / max_longのURDF上のRealSense取付位置。`camera_link`配下に仮想深度センサを追加し、首・腰の関節運動に追従。元URDFの変更なし。
-入力選択: `point_cloud_source:=head_depth`。未指定時は従来の`external_lidar`、両センサの同時起動なし。
-
-既存のROS環境を読み込んだ対話端末で起動:
+旧Classicのmax／max_long用:
 
 ```bash
-ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max \
-  point_cloud_source:=head_depth
+ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max_long point_cloud_source:=head_depth
 ```
 
-max_longは`robot:=max_long`。既存のA/L/Space/H操作は変更なし、UDP設定未指定時の実機送信なし。
-`dual_arm_gng_lidar_demo.launch.py`でも同じ引数を使用可能。自動開始を避ける場合は`enable_auto_start:=false`。
-深度描画にはOpenGL描画環境が必要。`gui:=false`でもレンダリングは必要で、確認環境の`DISPLAY`は`:0`。
+設定は[dual_arm_depth_camera.yaml](../config/dual_arm_depth_camera.yaml)を参照。
+headlessでもOpenGL環境が必要。点群は名前空間内camera/depth/points、光学座標系。
+取得時刻のTFが必須。実機RealSenseの校正・ノイズ・欠損再現、回避完遂は未検証。
 
-| 名前空間内の出力 | 型・内容 |
-| --- | --- |
-| `camera/color/image_raw` / `camera/color/camera_info` | RGB画像 / 内部パラメータ |
-| `camera/depth/image_raw` / `camera/depth/camera_info` | 32FC1深度［m］ / 内部パラメータ |
-| `camera/depth/points` | `PointCloud2`、光学座標系のXYZ・RGB |
+## Classicの制御・物理設定
 
-名前空間: `/sim_topo_dual_arm_max`または`/sim_topo_dual_arm_max_long`。光学座標系: `<名前空間>/head_depth_optical_frame`（X右・Y下・Z前方、先頭の`/`なし）。
-Viewerの点群入力も上表の`camera/depth/points`を選択。深度モードに`lidar_points`配信なし。
-回避入力: 深度点群 → 取得時刻のTF → ROIボクセル → 自己除去 → VLUT/GNG。頭部モードは`allow_latest_transform=false`で、時刻不明・取得時刻のTF欠落時の最新TF代替なし。入力失効の停止条件は維持。
-
-設定: [dual_arm_depth_camera.yaml](../config/dual_arm_depth_camera.yaml)。差替えは`depth_camera_config:=<YAMLの絶対パス>`。
-
-- 画像サイズ: 320 × 240 px
-- 取得頻度: 10 Hz（シミュレーション時間基準）
-- 水平画角: 87 deg（YAMLはrad）
-- 有効深度: 0.1–3.0 m
-- 光学中心・向きの補正: `xyz`［m］ / `rpy`［rad］、`camera_link`基準。既定値は両方0
-
-上記は仮設定で、実機RealSenseの機種別校正値ではない。実機固有の深度ノイズ・欠損・RGB/深度間の視差は未再現。視野外・腕の遮蔽による未観測領域を、安全領域として保証する機能なし。
-確認済み: 両機種の画像・点群の時刻／深度値一致、光学軸、既知物体の座標照合、首運動への追従、自己除去・GNGへの入力。回避運動の完遂・実機・Viewer目視は本試験の対象外。既知の統合停止確認の制限も継続。
-
-再現試験（各機種1回、実機接続なし、出力先は未使用のパス）:
-
-```bash
-docker exec gng_cpu_container bash -lc '
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/local_setup.bash
-cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_depth_camera_cases.json --output log/artifacts/dual_arm_depth_camera_20261002/first --repeats 1 --timeout-sec 215 --max-total-sec 460 --estimate-sec 90 --continue-on-error
-'
-```
-
-試験launch・引数・終了確認: 各試行の`command.json` / `report.json`。専用ROS domain 96・Gazebo port 11369、所有プロセスのみの終了処理。今回の試験プロセスは全終了済み。
-
-## 1. 要約
-
-2026-09-28更新：`JointTrajectoryController → 位置目標 → 有限トルクODEモータ`へ変更。
-[専用hardware](../src/simulation/bounded_gazebo_system.cpp)が位置誤差×`motor_position_gain`から目標速度を生成し、
-URDF上限×`motor_limit_scale`（既定0.95）で速度を制限。ODEの`fmax`にも同率のトルク上限を設定し、追従遅れを許容。
-位置・速度の直接書き換えなし。Gazeboを一時停止で生成し、hardwareの準備後に物理計算を開始。
-点群回避YAMLの`physics_solver: world`が直接解法を選択。通常デモと未指定の回避はquick。
-
-モータ内部はODEの拘束計算で、実機モータのトルクPID・減速機・通信遅延を同定したモデルではない。
-実測`effort`は子リンクの関節反力を軸へ射影した値で、ストッパ・接触反力も含む。駆動上限と反力を区別。
-根拠：[ODEのモータパラメータ・関節反力実装](https://github.com/gazebosim/gazebo-classic/blob/gazebo11/gazebo/physics/ode/ODEJoint.cc)。
-
-## 2. 条件・検証
-
-| 項目 | 現在値・扱い | 設定場所 |
-| --- | --- | --- |
-| エンジン | Gazebo Classic 11 / ODE。通常quick（200反復、SOR=1）、点群回避world。CFM=1e-8 | [world](../worlds/dual_arm_demo.world) |
-| 重力 | `(0, 0, -9.81)` m/s² | 同上 |
-| 物理刻み / 更新目標 | 0.001 s / 1000 Hz。実時間速度は計算負荷に依存 | 同上 |
-| 制御周期 | controller_manager 1000 Hz | [Gazebo launch](../launch/dual_arm_gazebo_demo.launch.py) |
-| controller状態 / action監視 | 50 Hz（統合操作100 Hz） / 20 Hz。JointStateは物理周期 | 同上 |
-| 制御関節 | 腕14 + 腰1 + 首2 + グリッパー2 = 19、指2関節はmimic | 同上 |
-| 指令 / 状態 | position目標 / position, velocity, effort。指mimicも独立した有限トルク駆動 | 同上 |
-| 固定基部 | worldへ固定。浮遊・転倒の評価対象外 | [URDF生成](../launch/robot_gazebo_spawn.launch.py) |
-| 質量・慣性・重心 | URDFの`inertial`、単位kg・kg m²・m | [max URDF](../../urdf/topo_dual_arm_max/topo_dual_arm_max.urdf)、[long URDF](../../urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf) |
-| 元URDFの合計質量 | max / longとも6.042 kg、25リンクにinertial。実測値の確認なし | 同上 |
-| 生成時の補完 | 慣性のない固定接続のうち可動関節の親に0.001 kg、対角慣性1e-6 kg m²を追加 | URDF生成。元URDFは変更なし |
-| 衝突 / 表示メッシュ | 各URDFのcollision / visual、STLのscaleは0.001 | 各URDF |
-| 関節摩擦・粘性 | `dynamics`指定なし。実機に合わせた同定なし | 各URDF |
-| 接触摩擦・反発・剛性 | 接触補正速度0.1 m/s、接触層1 mm。モータのストッパ離脱係数fudge_factor=0 | world / 生成URDF |
-| 自己接触の物理設定 | self_collideの明示設定なし。回避デモの幾何監視とは別 | 生成URDF |
-| 作業台 | 中心(0.70, 0, 0.20)m、寸法(0.35, 0.8, 0.4)m、static | world |
-| 通常デモ速度 | 補間指令0.15 rad/s。実測速度の厳密な上限ではない | [通常デモYAML](../config/dual_arm_gazebo_demo.yaml) |
-| 人腕の物理扱い | staticなカプセルの位置を更新。人体の関節・トルク・接触力モデルは未導入 | Gazebo launch / 回避ノード |
-| 回避デモ | 前腕半径0.045m・長さ0.35m、目標余裕0.12m、停止距離0.035m | [回避YAML](../config/dual_arm_avoidance_demo.yaml) |
-
-URDFの関節上限は腕6 N m・3 rad/s、腰10 N m・2 rad/s、首3 N m・3 rad/s、
-グリッパー20 N m・1 rad/s。角度上下限は左右・max/longで異なるため各URDFを正本とする。
-これらはURDF宣言値。駆動には95%を使用（腕5.7 N m・2.85 rad/s）し、数値積分・反力測定のずれに余裕を確保。
-実機の定格・瞬時最大値との対応は未確認。
-longもmaxと同じ質量・慣性値を持つため、寸法変更に応じた慣性の妥当性は未検証。
-
-コントローラYAMLとGazebo用URDFはlaunchが`/tmp/dual_arm_gazebo_demo_*`へ生成し、終了時に削除。
-変更する正本は上表のlaunch・world・元URDF。生成ファイルの直接編集は不要。
-幾何回避の指令速度は0.45 rad/s、点群・GNG回避は2.5 rad/s。指令周期0.15 s、モータ位置ゲイン60 /s。
-回避ノードは実測速度・反力のURDF上限超過または欠落で停止。監視・試験の丸め許容差は各単位1e-6。
-元の位置直接設定で観測した4.555 rad/sは旧方式の記録。現行方式の結果・失敗試行は下記へ統合。
-目標余裕は軟らかい評価項で、厳密な下限ではない。[3秒試験の条件・結果](releases/2026-09-28_dual_arm_gng_lidar.md)。
+設定は[world](../worlds/dual_arm_demo.world)・[機体URDF](../../urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf)・[Gazebo launch](../launch/dual_arm_gazebo_demo.launch.py)を参照。
+ODE有限トルク駆動。effort実測には接触・ストッパ反力も含むため、駆動トルク上限とは区別。
+元URDF質量はmax／longとも6.042 kg。実測質量・Longの慣性妥当性は未検証。
 
 ## Gazeboのソフト停止
 
-回避実行中の障害物接近: `obstacle_wait`で接近時の姿勢保持。距離不足だけでは`safety/stop`・`software_stop`への移行なし。
-自動再開: ライブ点群入力かつ`enable_obstacle_auto_resume: true`の場合のみ、目標余裕・GNG安全条件の継続確認後に再開。それ以外はAでホールド→障害物を離す→Aで回避再開。人カプセルの自動接近デモは障害物移動も停止。
-Space・入力失効・自己干渉・関節異常: 停止ラッチの維持。以下は接近待機とは別の手動・異常停止API。
-
-対象: `bounded_gazebo_system`を使用するmax / max_longのシミュレーション。実機ドライバへの接続なし。
-検証状態: maxの保持中速度逸脱と通常回避デモの入力失効が未解決。[検証結果・制限](releases/2026-10-01_gazebo_software_stop.md)。
-
-| 名前空間内のAPI | 型 | 用途 |
-| --- | --- | --- |
-| `safety/stop` | `std_srvs/srv/Trigger` | 停止要求のラッチ |
-| `safety/reset` | `std_srvs/srv/Trigger` | 条件付きの停止ラッチ解除 |
-| `safety/is_stop_latched` | `std_msgs/msg/Bool` | ラッチ状態。実停止確認とは別 |
-| `safety/status` | `std_msgs/msg/String` | 実測停止確認を含むJSON診断 |
-
-停止例（起動済みmaxのシミュレーションのみ）:
+旧Classicのbounded_gazebo_system専用。実機非常停止の代替ではない。
 
 ```bash
 ros2 service call /sim_topo_dual_arm_max/safety/stop std_srvs/srv/Trigger '{}'
 ```
 
-停止中は全可動関節・mimicの停止要求適用時の姿勢を有限トルクで保持し、controllerの位置指令を遮断。
-Gazeboのpause・位置の直接固定・トルクOFFは不使用。`success=true`は要求受付であり、停止完了の保証ではない。
-確認先は`safety/status`の`is_stop_applied`と`is_stopped`。`stopped`の判定条件は全関節の速度0.01 rad/s以下が
-シミュレーション時刻で0.25 s継続、物理更新の実時間経過0.5 s以内、位置・速度の有限値。
-物理停止・実測失効時は`stop_unconfirmed`。物理更新前の要求は`stop_requested`。
-`demo/status`・`avoidance/status`の`state=stopped`はデモ側の指令停止であり、実測停止完了とは別。
-
-解除順序: 全位置controllerのdeactivate → 新鮮な`stopped`確認 → `safety/reset` → controllerのactivate → 新規指令。
-active中のresetと、ラッチ中のactivateは拒否。既存の軌道を捨てた再activationと、デモの明示開始が必要。
-通常・回避デモはラッチ受信で自動開始を無効化。回避デモの人カプセル移動も停止するため、人が接近し続ける試験とは別。
-外部制御モードでは外部指令元も停止・旧目標解除したうえで再開。ソフト停止はPC/ROS/Gazeboが応答する条件の機能であり、実機非常停止の代替ではない。
+要求受付と実測停止は別。safety/statusのis_stop_applied・is_stoppedを確認。
+解除はcontroller停止→実測停止確認→reset→再activation。解除だけで動作再開なし。
+maxの保持速度逸脱・入力失効、Longの停止未確認が残存。[検証結果](releases/2026-10-01_gazebo_software_stop.md)を参照。
 
 ### 1つのlaunchでの統合操作
 
@@ -858,190 +316,31 @@ active中のresetと、ラッチ中のactivateは拒否。既存の軌道を捨�
 ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max_long
 ```
 
-maxは`robot:=max`。起動した端末を前面にして操作、Enter不要。Docker内は`docker exec -it`の対話端末が必要。
-
-| 現在の状態 | A | L |
-| --- | --- | --- |
-| ホールド | 回避開始 | リーダー追従開始 |
-| 回避 | ホールドへ | 拒否、回避継続 |
-| リーダー追従 | 拒否、追従継続 | ホールドへ |
-| ソフト停止 | 拒否 | 停止解除→ホールド |
-| 切替・解除処理中 | 拒否 | 拒否 |
-
-共通: Spaceでソフト停止・追従/UDP OFF、Ctrl-Cで停止要求後のlaunch全体終了。HはUDP出力ON/OFF（ONは設定指定・保持・静止確認後のみ）。
-初期状態: ホールド。回避と追従の直接切替・同時実行なし。現在のモードを同じキーでOFF→ホールド確認→別の開始キー。拒否した操作の後追い実行なし。
-停止後のL: 新鮮な実測停止・端末接続・未完了要求なしを確認後、controller停止→ラッチ解除→再activation・実測静止確認→ホールド。
-解除中のSpace・実測/端末失効で解除取消。解除だけではリーダー入力不要、追従開始には新鮮な入力と再度のLが必要。
-UDP出力の自動再開なし。旧R・Q・Sキーは無効、終了はCtrl-C。ROSサービスからの直接切替も同条件で拒否。
-`control/reset` APIは解除後保持の互換用途として維持。実測・操作端末・追従入力の更新失効時は停止要求。要求受付と実測停止は別表示。
-現行URDFでの通し確認: 未完了。max_longはSpace後の実測停止未確認、maxは起動中の状態更新失効。[条件・記録](releases/2026-10-01_gazebo_software_stop.md)。
-
-リーダー入力: `leader_topic:=/leader/joint_states`、関節名・rad単位の`JointState`、進行する実測時刻が必要。
-追従指令速度上限: 0.3 rad/s。実機からの既存入力を使用し、このlaunchからUSBドライバの起動なし。
-必要時のみ`leader_mapping_file:=<校正済みYAML>`でDynamixel状態→JointStateの変換を追加。
-入力元: `leader_input_topic:=/leader/dynamixel/state/present`。旧機種の対応表の無条件流用は不可。
-
-UDP出力: 既定OFF。`udp_config`未指定時はソケット生成なし、HのON要求を拒否。
-既存Dynamixelドライバは読取り目的でも設定書込みがあり、送信停止だけでは既存の位置目標を取り消せないため統合起動対象外。
-人の腕を接近させる実機試験の準備完了を意味しない。Gazebo側の未解決点は上記のまま。
-
-再現試験: [2機種の試験一覧](../test/dual_arm_control_cases.json)、同一疑似端末からのキー入力と模擬リーダー。
-GUI・Viewer・実機入力は無効。Aの回避結果は追従・停止の合否と分離。
-
-```bash
-docker exec -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -c '
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/local_setup.bash
-cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_control_cases.json --output log/artifacts/dual_arm_control_20261001/first --repeats 1 --timeout-sec 210 --max-total-sec 450 --estimate-sec 90 --continue-on-error
-'
-```
-
-再実行時は未使用の出力先が必要。`command.json`はlaunch引数、`report.json`は実測判定・終了確認。
+A=回避、L=リーダー追従、Space=停止、H=UDP許可、Ctrl+C=終了。
+回避と追従はホールド経由で切替。停止後のLは解除→ホールドで、追従再開には再度Lが必要。
+USBドライバは別起動。UDPは設定と明示許可が揃うまでOFF。
 
 ### Gazebo目標のUDP出力
 
-入力: `dual_arm_controller/controller_state`の`reference.positions`。Gazeboコントローラの補間済み目標であり、実測角や軌道終点の直接転送ではない。
-指定順の独立19関節をCSV化し、各値は`round((rad × 180 / π × scale + offset_deg) × 10)`の整数、末尾カンマ付き。
-旧UDP実装の整数切捨てとは最大1カウントの差。関節不足・未知名・mimic・非有限値・URDF範囲外は拒否、ゼロ補完なし。
-
-模擬宛先の設定例: [dual_arm_udp_loopback.yaml](../config/dual_arm_udp_loopback.yaml)。次の起動だけでは送信なし。
-模擬受信機からの実測受信後、保持状態でHによる明示ONが必要。
-
-```bash
-ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max_long \
-  udp_config:=/ros2_ws/src/gng_vlut_system/config/dual_arm_udp_loopback.yaml
-```
-
-- 実測形式: `agl,整数,...`の19角度。設定したIP・送信元portとの一致が必要
-- 指令更新上限: 50 Hz、指令・実測の受信有効期間: 各0.5 s
-- 指令速度上限: 0.3 rad/sとURDF値の小さい方。量子化許容差: 0.001 rad
-- 開始時姿勢差: 0.05 rad、追従偏差: 0.2 rad。超過時の自動姿勢合わせなし
-- OFF・Space・異常・終了: 設定済み停止パケットの送信と、角度送信の遮断。Lで追従再開後もUDPはOFF
-
-統合操作時の`/clock`・controller状態配信: 各100 Hz（シミュレーション時間基準）。低速実行時の時刻粒度対策で、UDPの0.5 s監視期限は維持。
-
-実機宛先には`allow_remote_udp:=true`に加え、確認済みの19関節順・符号・offset、`enable_packet`・`stop_packet`、
-`is_mapping_verified`・`is_receiver_stop_verified`・`is_receiver_watchdog_verified`と`receiver_watchdog_sec`の明示が必要。
-フラグは利用者による確認宣言であり、実装による安全認証ではない。停止仕様は受信側の旧目標破棄・再許可前の指令拒否を含む確認が必要。
-設定例の`ENABLE`・`STOP`は模擬受信機専用。旧14項目の`slave/master`設定や実機firmwareへの流用は不可。
-
-受信CSVには機器時刻・連番・停止ACKがないため、受信時刻による鮮度のみの確認。UDP到達・順序・物理停止の保証なし。
-`control/status.udp.is_physical_stop_confirmed`は常にfalse、端末の実測停止表示はGazeboのみ。
-実機送信・機種別校正・受信側停止は未検証。旧`topoarm_hardware.launch.py`の無条件ゼロ送信・再送実装は不使用、既存ファイルの変更なし。
-
-UDP再現試験: 上記バッチ実行の一覧を`gng_vlut_system/test/dual_arm_udp_cases.json`、出力先を`log/artifacts/dual_arm_udp_20261001/clock_retry`へ変更。
-localhost模擬受信機を試験内で起動・終了。H前の無送信、補間目標との全CSV照合、Space遮断、L再開後のUDP OFF、実測途絶を対象とする有限試験。
-
-キー削減後の試験コマンド（再実行時は未使用の出力先へ変更）:
-
-```bash
-docker exec -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -lc '
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/local_setup.bash
-cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_udp_cases.json --output log/artifacts/dual_arm_keys_20261001/udp_box_retry --repeats 1 --timeout-sec 210 --max-total-sec 450 --estimate-sec 90 --continue-on-error
-'
-```
+設定は[dual_arm_udp_loopback.yaml](../config/dual_arm_udp_loopback.yaml)を参照。
+入力はcontrollerの補間目標で、実測角ではない。19関節の対応と受信側停止・watchdog確認が必要。
+設定例のENABLE／STOPは模擬用。実機への流用禁止。到達・順序・実機停止の保証なし、実機送信は未検証。
 
 ### 切替条件の単体試験
 
-ROS通信・Gazebo・実機接続なし。停止解除・ホールド経由・相互切替拒否・UDP許可条件の回帰。
-
-```bash
-docker exec gng_cpu_container bash -lc '
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/local_setup.bash
-cd /ros2_ws/src/gng_vlut_system
-PYTHONDONTWRITEBYTECODE=1 timeout 120s python3 -B -m pytest -q -p no:cacheprovider \
-  test/test_dual_arm_udp_output.py test/test_dual_arm_control_udp.py \
-  test/test_dual_arm_control.py test/test_dual_arm_control_keyboard.py \
-  test/test_dual_arm_mode_model.py test/test_joint_command_model.py \
-  test/test_gazebo_stop_keyboard.py test/test_dual_arm_limits.py
-'
-```
+[test_dual_arm_control.py](../test/test_dual_arm_control.py)・[test_dual_arm_control_udp.py](../test/test_dual_arm_control_udp.py)を参照。
+モード切替・出力許可の試験で、実機停止の検証ではない。
 
 ### キーボード停止
-
-既存launchを使用する場合は、Gazeboと同じROS環境の別端末で起動:
 
 ```bash
 ros2 run gng_vlut_system gazebo_stop_keyboard.py --namespace sim_topo_dual_arm_max
 ```
 
-max_longは`--namespace sim_topo_dual_arm_max_long`。この端末を前面にしてSpace / Sで停止要求、Enter不要。
-Q / Ctrl-Cは停止要求後に入力監視を終了。解除・再開キーなし。Gazebo画面のグローバルショートカットではない。
-要求の待機上限は2 s。終了コード0は受付成功のみ、2は未確認・失敗。実測停止表示は新しい`safety/status`に基づく別判定。
-PC停止・端末未選択・通信断への停止保証なし。ソフト停止本体の未解決点は上記のまま。
-
-Docker内の既定ROS環境を使用する場合:
-
-```bash
-docker exec -it gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash; source /ros2_ws/install/local_setup.bash; ros2 run gng_vlut_system gazebo_stop_keyboard.py --namespace sim_topo_dual_arm_max'
-```
-
-`ROS_DOMAIN_ID`・`ROS_LOCALHOST_ONLY`の独自設定時はGazeboと同じ値の指定が必要。
-入力層の再現試験（模擬サービス、Gazebo駆動なし）:
-
-```bash
-python3 -B gng_vlut_system/test/test_gazebo_stop_keyboard.py
-docker exec -e ROS_DOMAIN_ID=97 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash; source /ros2_ws/install/local_setup.bash; cd /ros2_ws/src; timeout --signal=TERM --kill-after=5 90 python3 -B gng_vlut_system/test/check_gazebo_stop_keyboard.py --output log/artifacts/gazebo_stop_keyboard_20261001/pty'
-```
-
-再実行時は`--output`を未使用パスへ変更。試験用domain97の既存ノード検出時は実行中止。
+起動端末を前面にしてSpace／S。Q／Ctrl+Cは停止要求後に監視終了。解除機能なし。
 
 ### ソフト停止の再現試験
 
-実行先: 既存`gng_cpu_container`。試験用domain 96・localhost・Gazeboポート11369、GUIと実機入力は無効。
-初期姿勢から左肩へ0.04 radの指令後、停止・保持・不正な解除の拒否・明示解除・新規指令を検証。
-判定対象は全21関節（mimic込み）、軌道入力はtopic。action経路と実機は未検証。
-
-```bash
-docker exec -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -c '
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/local_setup.bash
-cd /ros2_ws/src
-python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/gazebo_software_stop_direct_cases.json --output log/artifacts/gazebo_software_stop_20261001/direct_diagnostics --repeats 2 --timeout-sec 600 --max-total-sec 2450 --estimate-sec 85 --continue-on-error
-'
-```
-
-保存済み出力への上書き不可。再実行時は`--output`を未使用パスへ変更。
-通常回避デモの試験一覧は`gazebo_software_stop_cases.json`、直接指令の一覧は`gazebo_software_stop_direct_cases.json`。
-通常デモ試行の出力は`demo_retry`、各1回、各600 s・全体1250 s上限。初回直接指令の出力は`direct`、同じ回数・上限。
-各`command.json`は起動したlaunchの全引数、`ownership.json`は試験プロセスの所有情報、`report.json`は物理判定と終了確認。
-
-**有限トルク駆動への移行前の補間・把持経路調査（2026-09-28）**
-
-同日の共通化後の管理場所・互換性・検証は[動作スムージング](motion_smoothing.md)を参照。
-
-| 経路 | 実装済みの処理 | 調整箇所 |
-| --- | --- | --- |
-| 通常Gazeboデモ | 始終点の速度・加速度ゼロを指定した5次補間。最大関節変位に応じた区間時間の延長 | [動作送信](../scripts/dual_arm_gazebo_demo.py)の`tick`、通常デモYAMLの`segment_duration_sec`・`max_joint_velocity` |
-| 回避Gazeboデモ | 初期姿勢への復帰候補と各腕関節の正負ステップを比較する局所探索、自己・床・台の外接形状確認 | [幾何探索](../scripts/dual_arm_avoidance_geometry.py)の`choose_step` |
-| 回避の指令生成 | 実測位置から短区間の5次補間、始終点の速度・加速度ゼロ。直近確認時は区間時間と更新間隔に`control_period_sec`を使用、更新可否はROS時刻で判定 | [指令生成](../scripts/dual_arm_avoidance_demo.py)の`publish_target`・`tick`、回避YAML |
-| ROS上面把持候補 | TCP位置のEMA、姿勢のSLERP、グリッパーyaw反転の整合、連続確認・短期欠測保持 | [候補追跡](../../grasping_system/src/top_grasp_surface_estimator_node.cpp)の`updateTrackSnapshot`。`candidate_position_ema_alpha`・`candidate_orientation_ema_alpha`は既定0.35 |
-| 単体HTMLのURDF動作 | `u²(3−2u)`の3次補間。汎用IKは位置・方向誤差とゼロ姿勢からの関節角二乗による探索 | [単体HTML](../../ToPo-FUZZY_Manipulation_v1.html)の`v322InterpolateJointValues`・`evaluateRobotIkCandidate`・`solveGenericRobotIk` |
-
-通常デモの区間時間は`max(segment_duration_sec, 1.875 × 最大関節変位 / max_joint_velocity)`。
-5次補間の最大速度係数1.875を考慮した時間設定であり、加速度・ジャークの個別上限設定はなし。
-導入済み`joint_trajectory_controller 2.54.0`のヘッダーで既定`splines`と5次補間の条件を確認。
-[Humbleの補間仕様](https://control.ros.org/humble/doc/ros2_controllers/joint_trajectory_controller/doc/trajectory.html)とも整合。
-
-回避探索の評価は`200 × max(0, target_clearance − 距離)² + 0.003 × Σ(関節角 − 初期角)²`。
-初期姿勢からの移動抑制はあるが、前回指令との差・速度変化・切替頻度の罰則はなし。
-各区間の補間が滑らかでも、更新時に実測速度・直前指令速度を引き継ぐ構成ではない。
-区間ごとの停止・再加速や関節選択の切替が揺れへ寄与する可能性はあるが、実測による原因確定は未実施。
-変更候補は速度・加速度を引き継ぐ指令生成と、探索の時間方向の連続性。採用・実装は未決定。
-
-通常デモは固定8姿勢と指の開閉、回避デモは前腕カプセルからの退避であり、自動把持の完結経路ではない。
-`grasp_joint_candidates.launch.py`は候補経路・最終関節姿勢の出力専用で、Gazeboコントローラへの指令なし。
-`gazebo_pick_and_place.launch.py`は物体・センサを含む環境起動で、渡すロボット設定が`ToPoDualArm.yaml`固定。
-max/long対応には同launchの`params_file`引数化・受け渡しと、把持段階から制御への接続が別途必要。
-モデル切替の正本は`config/topo_dual_arm_max.yaml`・`config/topo_dual_arm_max_long.yaml`。
-両設定の回転式グリッパー専用把持体積は未定義。旧モデルの把持体積の無条件流用は不可。
-HTMLの汎用IKには前回解を優先する項がなく、回転関節の探索範囲はURDF値によらず±π。
-HTML側を修正する場合は、補間だけでなく関節制限・前回解からの連続性も確認対象。
-
-調査範囲は作業ツリーのソース・設定・既存プロセス一覧・導入パッケージ版の読取り。
-調査中に回避スクリプトの並行更新を確認。記述は最終読取り時点であり、稼働中プロセスとの一致は未確認。
-本調査で制御コード・設定の変更、シミュレーション起動、既存プロセスの停止は未実施。
+設定は[gazebo_software_stop_direct_cases.json](../test/gazebo_software_stop_direct_cases.json)・[dual_arm_control_cases.json](../test/dual_arm_control_cases.json)を参照。
+実機と異なるdomain・Gazeboポートを使用。補間・把持経路の調査は[motion_smoothing.md](motion_smoothing.md)を参照。
+max／longの回転式グリッパー用把持体積は未定義、自動把持の完結経路は未接続。

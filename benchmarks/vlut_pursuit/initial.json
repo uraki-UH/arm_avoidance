@@ -1,0 +1,5 @@
+{"cases":[
+ {"name":"vlut_l4","argv":["python3","/ros2_ws/src/log/artifacts/vlut_pursuit/measure.py","--case","gng_l4_401","--output","@case_dir@"],"metrics":"comparison.json"},
+ {"name":"vlut_free","argv":["python3","/ros2_ws/src/log/artifacts/vlut_pursuit/measure.py","--case","gng_free","--output","@case_dir@"],"metrics":"comparison.json"},
+ {"name":"vlut_linked","argv":["python3","/ros2_ws/src/log/artifacts/vlut_pursuit/measure.py","--case","gng_linked_l6","--output","@case_dir@"],"metrics":"comparison.json"}
+]}

@@ -24,10 +24,10 @@ ViewerとはThree.jsの版が異なるため、共有部品を変更した場合
 ## ブラウザの処理コスト計測
 
 ```bash
-npm run test:performance -- --output /tmp/topo-perf-before
-npm run test:performance -- --output /tmp/topo-perf-after --baseline /tmp/topo-perf-before/report.json
+npm run test:performance -- --output ../../log/artifacts/browser_performance/before
+npm run test:performance -- --output ../../log/artifacts/browser_performance/after --baseline ../../log/artifacts/browser_performance/before/report.json
 # CPUプロファイルを伴う原因調査。通常計測とは別の実行。
-npm run test:performance -- --output /tmp/topo-perf-profile --profile
+npm run test:performance -- --output ../../log/artifacts/browser_performance/profile --profile
 ```
 
 Node.js 22以上、ビルド済みUI、Chromeが必要。`CHROME_BIN`で実行ファイルを指定可能。
@@ -52,40 +52,20 @@ LiDARは同じ走査開始位置を使用。センサ出力配列のSHA-256も�
 RGB-Dの`render_ms`は描画・非同期読出し完了までの経過時間。CPU画像処理は`compute_ms - render_ms`。
 CPUプロファイルは`*.cpuprofile`としてChrome DevToolsへ読込可能。
 
-RGB-Dの非同期読出しは`--readback-mode batch`が既定。画像群を1つの転送バッファへまとめ、完了待ちとCPUコピーを各1回に集約。
-`--readback-mode separate`で従来の画像別読出しと比較可能。
-`--show-preview`でRGB-Dタブを表示して計測。既定は非表示で、プレビュー描画を保留。
-`--verify-profile`でRGB-D解像度変更後のプレビュー・取得配列・GPU描画サイズ・画角の維持を検査。停止中・取得中・連続取得中・非表示からの復帰・カスタム校正・公称値への復帰が対象。`--cases rgbd --duration-ms 500 --captures 2 --verify-profile`で実行可能。
-`--depth-preview gpu`でGPU色付け、`--depth-preview cpu`で従来のCPU色付けを比較。既定はGPU。
-`--depth-layout direct`で深度読出し配列の直接参照、`--depth-layout flipped`で従来の中間反転コピーを比較。既定は直接参照。
-`--points-backend wasm`でC++/WebAssembly版、`--points-backend javascript`で従来の点群生成を比較。既定はWebAssemblyで、実際に使用した方式も検査。
-`--view-scheduling priority`でRGB-D回収待ち中の描画投入を抑制、`continuous`で毎フレーム描画。既定は`priority`。視点・ギズモ操作やデモ・姿勢再生・IKは通常描画を優先。
-`view_frame`は実際の3D描画間隔、`frame`は描画を省略した回も含むブラウザのコールバック間隔。取得時間だけでなく両方を比較。
-`--suppress-main-view`はGPU競合の切分け専用。通常の3D表示を停止した測定であり、使用中の改善値とは区別。
-点群生成と描画調整の比較は旧条件`--points-backend javascript --view-scheduling continuous`と新条件`--points-backend wasm --view-scheduling priority`で実施。
-取得・描画のGPU待ちやCPUコピーも含むため、方式を交互に3回以上測定。センサ出力は完全一致、表示用の色だけはRGB8の1段階差を許容。
-`--verify-profile`ではプレビューの上下方向・欠損色・境界値・狭い深度範囲・GPU利用不可時のCPU代替も検査。画像回収の遅延時の3D表示継続・視点変更時の描画優先も検査。
-表示条件が異なる結果同士の`--baseline`比較は拒否。
-`methods.webgl.getBufferSubData`にCPUコピーの回数・時間、`methods.webgl.getParameter`にGPU状態照会の回数・時間を記録。
-`--verify-depth`では1280×720までの出力一致、外部回転、同時取得、RGBA float代替、バッファ再利用、失敗後の復旧・破棄時の中断、再表示時のプレビュー一致も検査。
+方式の比較オプションは[性能試験の引数定義](../tests/performance.browser.mjs)を参照。
+比較軸は画像読出し方式、プレビュー表示、深度色付け、点群生成、通常ビューの描画抑制、Graph形状品質。
 
-描画品質の比較は`--graph-quality standard` / `--graph-quality compact`。
-軽量表示はノード・辺の件数を維持し、球・円柱の分割数だけを変更。
-標準への復帰・位置・色・選択対象はViewerの`node tests/graph_geometry_browser.test.mjs`で検証。
-差分更新の姿勢・色・並替え・属性交換・辺再接続の検査はSimulatorの`npm run test:graph`。
+- 基準比較: 旧条件`--points-backend javascript --view-scheduling continuous`と新条件`--points-backend wasm --view-scheduling priority`。
+- 同等性: センサ出力は完全一致、プレビュー色だけRGB8で1段階差を許容。表示条件の異なる`--baseline`比較は拒否。
+- 検証: `--verify-depth --verify-profile`で最大1280×720、遮蔽・外部回転・同期／非同期取得・代替形式・資源再利用・異常後復旧・プレビューを確認。
+- 指標: `view_frame`は実描画間隔、`frame`は描画省略を含むコールバック間隔。`--suppress-main-view`はGPU競合の切分け専用。
+- 軽量Graph: 球・円柱の分割数だけ変更。件数・位置・色・選択の検証はViewerの`tests/graph_geometry_browser.test.mjs`、差分更新はSimulatorの`npm run test:graph`。
+- 深度形式: 対応GPUはR32F、非対応GPUはRGBA8のfloat32ビット保持。両者とも1画素4バイトで転送量削減とは別。
 
-深度読出し方式の比較は`--depth-readback float` / `--depth-readback packed`。既定の`auto`は単一成分float対応GPUでR32F、非対応GPUでRGBA8を選択。
-`--verify-depth`を加えると、複数解像度・同期／非同期・ステレオ・遮蔽・対象抽出の出力一致と幾何精度も検査。
-低水準APIの`depth_readback: 'float'`はfloat形式を指定。従来の画像別読出しとの比較には、さらに`enable_batched_readback: false`を指定。
-RGBA8格納には[GLSLのfloatBitsToUint](https://registry.khronos.org/OpenGL/specs/es/3.2/GLSL_ES_Specification_3.20.html)を使用。float32のビット表現を保持し、CPUで行反転と復元を実施。
-単一成分float読出しに対応するGPUでは従来方式も1画素4バイトのため、転送量の削減なし。
-`report.json`には方式・描画品質・実際の描画ターゲット形式も保存。異なる方式・品質の性能比較は可能で、センサ出力の一致検査は維持。
-
-
-性能はGPU負荷や温度により変動するため、同条件で3回以上の反復を推奨。
-`--baseline`は計測条件・描画環境とセンサ出力を照合し、各条件の増減率を保存。
-`--max-regression-percent 20`を併記すると、フレームp95またはセンサ平均取得時間の悪化が許容率を超えた場合に終了コード1。
-既定では機種依存の時間上限なし。入力・描画の成立と例外の有無だけを合否判定。
+GPU負荷・温度を考慮して方式を交互に3回以上比較。
+時間上限は既定の合否条件に含まれず、入力・描画成立と例外の有無で判定。
+`--max-regression-percent`指定時はフレームp95・センサ平均取得時間の悪化も判定。
+設定・形式・品質・実行環境・センサ出力のハッシュは`report.json`に保持。
 
 ## RGB-D点群カーネルの再生成
 
@@ -143,10 +123,19 @@ python tools/extract_mid360_reference.py path/to/Indoor_sampledata.lvx2
 
 ## D435i実機校正の読み込み
 
-`tools/export_d435i_calibration.py` はSDK `pyrealsense2` と接続された実機がある場合の補助ツールです。通常起動時には実行しません。シミュレータの「RGB-D → 校正と精度検証」でJSONを読み込みます。実機個体の校正値がない標準状態では公称値を使う近似です。
+`tools/export_d435i_calibration.py` はSDK `pyrealsense2` と接続された実機がある場合の補助ツールです。通常起動時には実行しません。出力JSONをRGB-D校正に使用。実機個体の校正値がない標準状態では公称値を使う近似です。
 
 ## 別サーバー / VMへの配置
 
 `app/` をHTTP配信ルートにしてください。ES Modules、Worker、WASM、GLB、URDF、バイナリキャッシュを配信できる必要があります。JavaScriptはJavaScript MIME、WASMは `application/wasm` を設定します。同梱Nodeサーバーでは設定済みです。
 
-Nodeサーバー自体はWindows固有APIを使用しません。Linux / macOS上での実機実行は本送付時には行っていないため、移植先で `npm test` とブラウザQAを行ってください。ROS 2との結合は `integrations/ros2/README.md` を参照してください。
+Nodeサーバー自体はWindows固有APIを使用しません。送付時点ではLinux / macOS上の起動は未検証のため、移植先で `npm test` とブラウザQAを行ってください。ROS 2との結合は `integrations/ros2/README.md` を参照してください。
+
+## 汎用モータ計算
+
+```bash
+python3 -B -m libs.motor_model --config libs/motor_model.example.json
+```
+
+workspaceルートで実行。設定は[入力例](../../../libs/motor_model.example.json)、APIは[motor_model.py](../../../libs/motor_model.py)を参照。
+入力例は未校正の仮想値。シミュレータ駆動への自動適用・実機通信なし。

@@ -1166,7 +1166,7 @@ private:
             }
         }
         if (topic.empty()) {
-            ws->send(json({{"type", "stream.capabilities"}, {"marker_array_applied", true}}).dump(), uWS::OpCode::TEXT);
+            ws->send(json({{"type", "stream.capabilities"}, {"marker_array_applied", true}, {"sensor_calibration", true}}).dump(), uWS::OpCode::TEXT);
             loop_->defer([this]() { flush_pending_render_streams(); });
         } else {
             flush_pending_render_streams(ws, topic);

@@ -1,0 +1,11 @@
+{
+  "gng_l4_401": {},
+  "gng_l5_40": {"target_link":"L_link5","seed":40},
+  "gng_l2_131": {"target_link":"L_link2","seed":131,"pursuit_mode":"link_point","duration_sec":8},
+  "gng_linked_l6": {"target_link":"L_link6","seed":719,"pursuit_mode":"link_point","obstacle_shape":"linked_arm","duration_sec":8},
+  "oscbf_l6": {"policy":"oscbf","target_link":"L_link6","pursuit_mode":"link_point","duration_sec":8},
+  "oscbf_linked_l4": {"policy":"oscbf","target_link":"L_link4","seed":719,"pursuit_mode":"link_point","obstacle_shape":"linked_arm","duration_sec":8},
+  "cbf_l6": {"policy":"cbf_qp","target_link":"L_link6","seed":719,"pursuit_mode":"link_point","duration_sec":8},
+  "gng_free": {"start_dist_m":2,"radius_m":0.015,"speed_ratios":[0.05,0.05],"duration_sec":8},
+  "oscbf_free": {"policy":"oscbf","start_dist_m":2,"radius_m":0.015,"speed_ratios":[0.05,0.05],"duration_sec":8}
+}

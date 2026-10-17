@@ -1,0 +1,8 @@
+{"cases":[
+  {"name":"old_l4","argv":["python3","/ros2_ws/src/log/artifacts/avoidance_reliability/measure.py","--variant","controller_before","--case","gng_l4_401","--output","@case_dir@"],"metrics":"comparison.json"},
+  {"name":"new_l4","argv":["python3","/ros2_ws/src/log/artifacts/avoidance_reliability/measure.py","--variant","after","--case","gng_l4_401","--output","@case_dir@"],"metrics":"comparison.json"},
+  {"name":"old_l5","argv":["python3","/ros2_ws/src/log/artifacts/avoidance_reliability/measure.py","--variant","controller_before","--case","gng_l5_40","--output","@case_dir@"],"metrics":"comparison.json"},
+  {"name":"new_l5","argv":["python3","/ros2_ws/src/log/artifacts/avoidance_reliability/measure.py","--variant","after","--case","gng_l5_40","--output","@case_dir@"],"metrics":"comparison.json"},
+  {"name":"linked_gng","argv":["python3","/ros2_ws/src/log/artifacts/avoidance_reliability/measure.py","--variant","after","--case","gng_linked_l6","--output","@case_dir@"],"metrics":"comparison.json"},
+  {"name":"linked_oscbf","argv":["python3","/ros2_ws/src/log/artifacts/avoidance_reliability/measure.py","--variant","after","--case","oscbf_linked_l4","--output","@case_dir@"],"metrics":"comparison.json"}
+]}

@@ -68,6 +68,10 @@ class CollisionFilter:
         self.status = dict(mode='oscbf', min_dist=None, num_constraints=0, solve_ms=0.)
         self.update()
 
+    def set_targets(self, targets):
+        """名目目標の受付。安全速度の計算はupdate側の既存フィルタ。"""
+        self.scene.robot.set_targets(targets)
+
     def jacobian(self, point, body):
         linear = np.zeros((3, self.model.nv)); angular = np.zeros_like(linear)
         self.mj.mj_jac(self.model, self.data, linear, angular, point, body)

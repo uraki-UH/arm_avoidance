@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace {
 
@@ -21,6 +22,29 @@ public:
             std::bind(&ViewerParamNode::handleRpcRequest, this, std::placeholders::_1));
 
         rpcResponsePub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcResponse, 20);
+        parameterManager_ = std::make_unique<ros2_bridge::ROS2ParameterManager>(
+            declare_parameter<std::string>("parameter_target_node", "/ais_gng"));
+        calibration_request_pub_ = create_publisher<std_msgs::msg::String>("/sensor_calibration/request", 20);
+        calibration_response_sub_ = create_subscription<std_msgs::msg::String>(
+            "/sensor_calibration/response", 20,
+            [this](std_msgs::msg::String::ConstSharedPtr message) {
+                viewer_internal::json response;
+                if (viewer_internal::parseJson(message->data, response) &&
+                    calibration_pending_.erase(viewer_internal::getId(response))) {
+                    rpcResponsePub_->publish(*message);
+                }
+            });
+        calibration_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {
+            const auto now = std::chrono::steady_clock::now();
+            for (auto it = calibration_pending_.begin(); it != calibration_pending_.end();) {
+                if (now - it->second > std::chrono::seconds(10)) {
+                    publishError(it->first, "CALIBRATION_TIMEOUT", "校正管理ノードの応答待ちが期限を超えました");
+                    it = calibration_pending_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        });
 
         RCLCPP_INFO(get_logger(), "viewer_param_node initialized");
     }
@@ -41,6 +65,15 @@ private:
             return;
         }
 
+        if (method.rfind("calibration.", 0) == 0) {
+            if (calibration_request_pub_->get_subscription_count() == 0) {
+                publishError(id, "CALIBRATION_UNAVAILABLE", "ROS側の校正管理ノードが未起動です");
+                return;
+            }
+            calibration_pending_[id] = std::chrono::steady_clock::now();
+            calibration_request_pub_->publish(*msg);
+            return;
+        }
         if (method.rfind("params.", 0) != 0) return;
         if (method == "params.get") {
             handleGet(id);
@@ -152,6 +185,10 @@ private:
 
 private:
     std::unique_ptr<ros2_bridge::ROS2ParameterManager> parameterManager_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr calibration_request_pub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr calibration_response_sub_;
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point> calibration_pending_;
+    rclcpp::TimerBase::SharedPtr calibration_timer_;
 
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcRequestSub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rpcResponsePub_;

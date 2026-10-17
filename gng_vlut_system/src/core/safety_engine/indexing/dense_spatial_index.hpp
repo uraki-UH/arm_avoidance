@@ -369,6 +369,26 @@ public:
   double getResolution() const { return grid_.getVoxelSize(); }
   const Eigen::Vector3i &getDims() const { return dims_; }
 
+  // 既存の占有関係を持つセルだけの領域マスク。全空間の再ボクセル化なし。
+  template <class cell_predicate>
+  std::vector<long> select_voxel_ids(cell_predicate has_selected_cell) const {
+    std::vector<long> ids;
+    for (int z = 0; z < dims_.z(); ++z) {
+      for (int y = 0; y < dims_.y(); ++y) {
+        for (int x = 0; x < dims_.x(); ++x) {
+          const int flat_idx = x + dims_.x() * (y + dims_.y() * z);
+          const auto entry = header_at(flat_idx);
+          if (entry.count == 0 || node_data_[entry.offset].distance > 1e-6f) {continue;}
+          const Eigen::Vector3i cell = index_offset_ + Eigen::Vector3i(x, y, z);
+          const Eigen::Vector3d low = cell.cast<double>() * grid_.getVoxelSize();
+          const Eigen::Vector3d high = low + Eigen::Vector3d::Constant(grid_.getVoxelSize());
+          if (has_selected_cell(low, high)) {ids.push_back(grid_.getFlatVoxelId(cell));}
+        }
+      }
+    }
+    return ids;
+  }
+
   // --- Dynamic Update Implementation ---
   void clear() override {
     if (is_static_) {

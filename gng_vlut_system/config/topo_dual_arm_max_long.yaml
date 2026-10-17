@@ -8,6 +8,17 @@
       offset: 1000000
 
     robot_name: "topo_dual_arm_max_long"
+    # 基台座標[m]の固定禁止領域。机の範囲だけの箱指定による後方床下の利用。
+    workspace_mask:
+      enable_mask: false
+      frame_id: "base_link"
+      enable_min_z: false
+      min_z: 0.0
+      # 実測速度による減速余地の予測時間 [sec]。実機の制動性能は未検証。
+      braking_prediction_sec: 0.2
+      # 各箱[min_x,min_y,min_z,max_x,max_y,max_z]の一次元配列。寸法未設定。
+      # 仮寸法の机の設定例。実寸への置換が必要。
+      # forbidden_boxes: [-0.10, -0.60, -0.80, 1.20, 0.60, 0.0]
     urdf_path: "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf"
     resource_root_dir: "/ros2_ws/src/urdf/topo_dual_arm_max_long"
     mesh_root_dir: "/ros2_ws/src/urdf/topo_dual_arm_max_long/meshes"    # 実機フォロワー表示用の肩原点・左右グリッパー換算
@@ -17,6 +28,21 @@
     # 表示・シミュレーション・実機追従で共用する関節実測配信
     enable_dynamixel_joint_state_input: true
     dynamixel_joint_state_input_config: "package://gng_vlut_system/config/dynamixel_joint_state_input.yaml"
+
+    # センシング・回避計算・実行先を分離した共通ROS回避
+    avoidance:
+      state_topic: "/sim/joint_states"
+      goal_topic: "/avoidance/goal"
+      command_topic: "/avoidance/joint_command"
+      publish_hz: 50.0
+      max_state_age_sec: 0.5
+      # 制御対象の固定基台配置 [m, deg]。観測側のbag基台TFとは独立
+      base_pos: [0.0, 0.0, 0.0]
+      base_rot_deg: [0.0, 0.0, 0.0]
+      settings:
+        input_kind: "pointcloud"
+        gng_strategy: "graph"
+        enable_roi_visibility: true
 
     # GNG学習とVLUT生成
     gng:
@@ -81,11 +107,13 @@
     gripper_volume_graph:
       enabled: false
 
+    # 取付補正の共通保存先。校正管理ノードによる更新
+    sensor_calibration_file: "package://gng_vlut_system/config/sensor_calibration.yaml"
     # 実機MID-360の入力選択。trueで環境ボクセル化も有効。ドライバは専用Dockerで起動
     mid360:
       enable_input: true
       points_topic: "/livox/lidar"
-      # 取付TFの配信元はViewer。専用ドライバ側のenable_mount_tfはfalse
+      # 取付TFの配信元は共通校正管理ノード。専用ドライバ側のenable_mount_tfはfalse
       enable_mount_tf: true
       parent_frame_id: "chest_lidar_link"
       frame_id: "mid360_link"

@@ -95,10 +95,9 @@ source install/setup.bash
 ros2 launch ais_gng depth_observation.launch.py
 ```
 
-depth_observation.launch.pyはpointcloud_transformer_cppの
-config/realsense_calibration.yamlを読み、同じRx*Ry*Rz順で回転を構築。
-今回の原点は(0.434,-0.693,0.279) m、roll/pitch/yawは(-103.8,-28.9,-3.4)度。
-既に変換済みの点群を再変換する構成ではなく、optical frameのdepthからの一回の変換。
+校正は[realsense_calibration.yaml](../src/ais_gng/config/realsense_calibration.yaml)。
+Viewerコピーの`pos` [m]・`rot_deg` [deg]形式（Rx*Ry*Rz）。`scl`は1のみ。取付TFと同じ校正読込み。
+optical frameのdepthから一回だけ変換。既に変換済みの点群への再適用は不可。
 
 既定の出力は別名前空間 `/observation_depth`：
 

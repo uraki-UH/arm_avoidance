@@ -7,6 +7,9 @@
 ## 1. システム概要
 
 実装の配置と各部品の責務は[部品配置](component_layout.md)を参照。
+取付校正は機体launchの共通管理ノードがTFを単一配信し、[校正ストア](../config/sensor_calibration.yaml)へ保存。上流の時変姿勢・センサ内部TF・生の点群／IMUメッセージは保持。公称取付の変更は保存済み校正との不一致として起動を拒否。
+Viewer補正は測定フレームでの増分。内部変換をS、現在の取付をT、表示補正をDとした更新は`T'=T*S*D*S^-1`。Viewerの表示補正はTF反映確認後に初期化。
+IMU利用側の内部TF・校正対応・版の確認を必須とし、非対応推定器の自動停止・再初期化は対象外。接続契約は[校正API](../../ToPoFuzzy-Viewer/doc/BACKEND_API.md#取付校正)。
 共有計画ノードの経路探索と通常目標選択の拡張点は[差し替え仕様](planning_components.md)を参照。
 入力環境の曲面抽出は、`surface_model.enable_plane_local_search`で平面接続候補に限定可能（既定OFF、model方式）。設定・出力範囲・計測上の制限は[曲面探索の仕様](releases/2026-09-29_surface_local_search.md)を参照。
 曲面保持ONのmodel方式には、平面特徴・曲率の履歴と予算付き再評価を既定適用。[設定・適用条件・制限](releases/2026-09-30_surface_patch_history.md)を参照。
@@ -35,115 +38,16 @@ flowchart TD
     D --> N[current_ee_pose]
 ```
 
-## 3. 変数一覧
+## 3. 設定
 
-### 3.1 `grasp_joint_candidates.launch.py` の launch 引数
+機種設定は[config](../config/)、launch引数は各入口を参照。項目・既定値の正本は設定と実装。
 
-| 変数 | 型 | デフォルト | 用途 |
-|---|---:|---|---|
-| `params_file` | path | `config/ToPoDualArm2.yaml` | URDF と各種パラメータの参照元 |
-| `topological_map_topic` | topic | `/ToPoDualArm/Tmap_static` | 目標候補選定の入力マップ |
-| `output_topic` | topic | `/selected_Tmap` | 選定後マップ |
-| `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 把持候補として採択したノード ID 群 |
-| `robot_name` | string | `ToPoDualArm` | namespace と topic 接頭辞 |
-| `urdf_path` | path | 空 | ロボットモデル参照 |
-| `candidate_count` | int | `8` | 候補ノード数 |
-| `non_collision_only` | bool | `true` | 衝突ノードを候補から除外 |
-| `orientation_weight` | float | `0.0` | 向き一致度の重み |
-| `candidate_topic` | topic | `/grasp_pose_cands` | ID・姿勢・状態付き候補配列 |
-| `goal_update_hz` | float | `5.0` | TF変化時の計画目標更新周期 [Hz] |
-| `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | ノード特徴量入力 |
-| `manipulability_weight` | float | `0.25` | 可操作性ペナルティ重み |
-| `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
-| `trajectory_topic` | topic | `/ToPoDualArm/plan_Tmap` | 確定経路の出力 |
-| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_Tmap` | 候補経路の出力 |
-| `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 候補評価指標の出力 |
-| `publish_candidate_robot_preview` | bool | `true` | Viewer候補ロボットinstanceの召喚 |
-| `publish_hz` | float | `20.0` | 入力変化確認と候補計画更新の上限周波数。未変更時の再探索・再配信なし |
-| `avoid_collisions` | bool | `true` | 衝突ノードを避ける |
-| `avoid_danger` | bool | `true` | danger ノードを避ける |
-| `allow_danger_goal` | bool | `true` | 最終ゴールとして danger を許可 |
-| `goal_rot_manip_weight` | float | `1.0` | ゴール姿勢の回転可操作性重み |
-| `goal_joint_limit_weight` | float | `0.5` | ゴール姿勢の関節限界余裕重み |
-| `strict_goal_collision_check` | bool | `false` | 目的地の衝突判定を厳格化 |
-| `allow_zero_initial_joint_state` | bool | `true` | 初期 joint_state が無いときゼロ初期値を使う |
-
-### 3.2 `topological_map_goal_selector.launch.py` の引数
-
-実体はC++の`topological_map_goal_selector_node`。入力は最新1件を保持し、`goal_update_hz`の周期で選択を実行。候補の再受信がなくても最新TFを参照。TF未取得・空候補・全領域外では旧目標を空出力で失効。
-選定mapと目標IDの出力QoSはreliable・transient local・depth 1。可操作性重みが0の場合は特徴量topicの購読なし。
-
-元マップ座標系の`bsp3d::Index<entry, double>`（葉32点、bboxなし）をキャッシュし、候補が所属する到達セルを逆変換したAABBで検索。AABB内の点は従来のセル所属式で再確認するため、回転による外接箱の余分な点や上端境界は採用対象外。距離・姿勢・可操作性による順位付け、衝突ラベルの除外、同点時の元配列順は維持。単純な位置の最近傍N件への置換ではない。
-
-索引は元mapの配列添字ごとの座標を保持し、移動は`updatePosition`、有限点の追加・無効化・件数減少は`add`・`remove`で差分反映。`deque`により、件数変更時も残存要素のアドレスと木のハンドルを維持。座標変更を理由に索引全体を破棄する処理は廃止。bsp3d内部の分割・必要な部分木の再構成は継続。同じ座標の再配信、ラベル・ID・法線・headerのみの更新では空間索引を再利用し、最新メッセージで評価。TF・到達グリッドの変更にも再構築不要。ROS受信メッセージは不変スナップショットとして扱い、非有限位置を索引から除外。
-
-特徴量受信時に16bit IDから特徴量への参照表、map受信時にIDから全該当ノード添字への参照表を更新。選択周期内での特徴量hash表再構築と、出力ノード抽出の全ノード走査を廃止。重複特徴量IDは最後の値を優先し、選択IDに対応する全ノードを元配列順で出力。参照表と入力スナップショットが不一致の場合は従来処理へフォールバック。18,729ノード・64bit環境では参照表の配列は約1.14 MiB。索引・出力バッファ・ROSメッセージのメモリは別。
-
-索引再利用の導入は[2026-09-15の記録](releases/2026-09-15_static_spatial_index.md)、移行時の比較は[初回bsp3d記録](../../benchmarks/bsp3d_migration_20260924/README.md)、差分更新・全体走査削減・同一プロセス比較は[追加高速化記録](../../benchmarks/goal_selection_efficiency_20260924/README.md)を参照。
-
-| 変数 | 型 | デフォルト | 用途 |
-|---|---:|---|---|
-| `topological_map_topic` | topic | `/ToPoDualArm/Tmap_static` | 元マップ入力 |
-| `output_topic` | topic | `/selected_Tmap` | 選定後マップ |
-| `candidate_count` | int | `8` | 抽出ノード数 |
-| `non_collision_only` | bool | `true` | 衝突ノードを除外 |
-| `orientation_weight` | float | `0.25` | 姿勢整合重み |
-| `candidate_topic` | topic | `/grasp_pose_cands` | ID・姿勢・状態付き候補配列 |
-| `goal_update_hz` | float | `5.0` | TF変化時の計画目標更新周期 [Hz] |
-| `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 選定ノード ID の出力 |
-| `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | manipulability 補正用特徴量 |
-| `manipulability_weight` | float | `0.25` | 可操作性補正重み |
-
-### 3.3 `topological_map_avoidance.launch.py` の引数
-
-追従・退避を伴う実行系の独立launch。`grasp_joint_candidates.launch.py`からの起動なし。
-
-| 変数 | 型 | デフォルト | 用途 |
-|---|---:|---|---|
-| `params_file` | path | `config/ToPoDualArm.yaml` | GNG/URDF 参照 |
-| `urdf_path` | path | 空 | ロボットモデル |
-| `gng_model_path` | path | 空 | GNG モデル直接指定 |
-| `topological_map_topic` | topic | `/ToPoDualArm/Tmap_static` | 追跡対象マップ |
-| `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
-| `trajectory_topic` | topic | `/ToPoDualArm/plan_Tmap` | 確定経路 |
-| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_Tmap` | 候補経路 |
-| `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 評価指標 |
-| `trial_mode` | bool | `false` | trial 動作 |
-| `trial_goal_interval_sec` | float | `4.0` | trial の目標切替周期 |
-| `trial_safe_only` | bool | `true` | trial で safe のみ使う |
-| `trial_return_home` | bool | `false` | home へ戻る試行 |
-| `trial_auto_advance_goal` | bool | `false` | trial goal 自動進行 |
-| `trial_seed` | int | `0` | trial の乱数シード |
-| `avoid_danger` | bool | `true` | danger ノード回避 |
-| `allow_danger_goal` | bool | `true` | danger を最終目標として許可 |
-| `goal_rot_manip_weight` | float | `1.0` | ゴール評価の回転可操作性重み |
-| `goal_joint_limit_weight` | float | `0.5` | ゴール評価の関節限界重み |
-| `replan_on_path_collision` | bool | `true` | 進行中の危険経路で再計画 |
-| `allow_zero_initial_joint_state` | bool | `true` | 初期 joint_state 無しのゼロ初期化 |
-| `publish_candidate_robot_preview` | bool | `true` | Viewer候補ロボットinstanceの召喚 |
-| `publish_target_joint_states` | bool | `true` | target_joint_states 出力 |
-| `allow_safe_goal_fallback` | bool | `true` | safe ノード fallback の有無 |
-| `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 候補 ID 入力 |
-| `target_topic` | topic | 空 | target_joint_states 出力先 |
-| `robot_base_frame` | frame | 空 | FK 基準フレーム |
-| `control_claim_priority` | int | `10` | control claim 優先度 |
-| `control_claim_mode` | int | `1` | control claim モード |
-| `control_claim_enabled` | bool | `true` | claim publish 有効化 |
-| `current_ee_pose_topic` | topic | `/ToPoDualArm/current_ee_pose` | 現在 EE pose 出力 |
-
-### 3.4 `virtual_joint_state_driver.launch.py` の引数
-
-| 変数 | 型 | デフォルト | 用途 |
-|---|---:|---|---|
-| `target_topic` | topic | `target_joint_states` | 目標関節角度入力 |
-| `state_topic` | topic | `joint_states` | 現在状態入力 |
-| `output_topic` | topic | `joint_states` | 出力 joint_states |
-| `publish_hz` | float | `50.0` | 更新周期 |
-| `max_joint_velocity` | float | `0.6` | 追従速度 |
-| `position_tolerance` | float | `0.01` | 到達判定閾値 |
-| `use_wraparound` | bool | `true` | wraparound 補正 |
-| `ignore_state_after_first_target` | bool | `false` | 初回 target 後の state 上書き抑制 |
-| `initial_joint_names_csv` | csv | 空 | 初期 joint 名列 |
+| 入口 | 定義 |
+| --- | --- |
+| 把持候補・経路 | [grasp_joint_candidates.launch.py](../launch/grasp_joint_candidates.launch.py) |
+| 目標選択 | [topological_map_goal_selector.launch.py](../launch/topological_map_goal_selector.launch.py) |
+| 回避実行 | [pointcloud_avoidance.launch.py](../launch/pointcloud_avoidance.launch.py) |
+| 仮想関節駆動 | [virtual_joint_state_driver.launch.py](../launch/virtual_joint_state_driver.launch.py) |
 
 ## 4. 主要トピック
 
@@ -666,28 +570,7 @@ coord layerは選択したGNG profileのEEF順に分離して学習・配信し�
 
 ### 13.2 学習変数
 
-| 変数 | 既定値 | 意味 |
-|---|---:|---|
-| `target_nodes` | 500 | 可視化GNGの目標ノード数。元ノード数以下へ制限 |
-| `iterations` | 200000 | 空間集約の学習反復数 |
-| `insertion_interval` | 200 | 誤差最大ノード間へ新ノードを追加する間隔 |
-| `max_edge_age` | 200 | 使用されないエッジを削除する年齢上限 |
-| `winner_learning_rate` | 0.05 | 最近傍ノードの学習率 |
-| `neighbor_learning_rate` | 0.005 | 最近傍ノードに接続する隣接ノードの学習率 |
-| `split_error_scale` | 0.5 | ノード追加時の誤差縮小率 |
-| `error_decay` | 0.0005 | 反復ごとの誤差減衰率 |
-| `seed` | 42 | 決定論的サンプリング用乱数seed |
-| `coord_layer` | layerごと | 使用した`weight_coords`の添字 |
-| `source_signature` | 自動計算 | 元ノードID、座標、関節角、coord/angle edgeのFNV-1a照合値 |
-| `max_joint_step` | 0.05 rad | 元angle edgeをFK補間するときの1区間あたり最大関節差 |
-| `max_samples_per_edge` | 256 | 元angle edge 1本あたりの補間サンプル上限 |
-| `attachment_knn` | 6 | 補間軌跡への接続半径を決める空間近傍数 |
-| `attachment_radius_scale` | 1.0 | 局所KNN距離中央値に掛ける接続半径倍率 |
-| `min_attachment_radius` | 0.02 m | 補間軌跡への接続半径下限 |
-| `joint_motion_weight` | 0.0 | 関節移動時間特徴量の重み。0で空間のみ、正値で関節状態も考慮 |
-| `workspace_motion_sec_per_m` | 1.0 s/m | 手先位置距離を時間相当へ換算する係数 |
-| `workspace_sample_resolution` | 0.05 m | 空間セル均等サンプリングの解像度。0で元ノード均等サンプリング |
-| `default_joint_max_velocity` | 0.6 rad/s | URDF速度上限がない関節の移動時間換算値 |
+引数・既定値は`ros2 run gng_vlut_system visualization_gng_trainer --help`を参照。
 
 既定では`weight_coords[layer]`のみで学習と所属判定を行う。
 `joint_motion_weight`が正値の場合のみ、各関節をURDF速度上限で割った特徴量も連結し、
@@ -1422,3 +1305,205 @@ ROI座標の範囲で厳密に点を選別する。直接方式でも同じ範�
 
 `joint_control.launch.py`で関節単位の仲裁とViewer・Gazebo・Dynamixel出力を統合。
 部分指令、優先度、失効、mimicと実機校正の契約は[joint_control.md](joint_control.md)を正本とする。
+
+## 18. 姿勢領域VLUT
+
+実装パスは`gng_vlut_system/`基準。
+
+選択: `vlut_backend:=region_vlut`。既存GNGを種に、占有変化に応じた姿勢領域を追加する試験バックエンド。元GNGの学習則・ノードVLUT・保存形式は変更なし。既定の構築方式は`legacy`。
+
+```bash
+ros2 launch gng_vlut_system offline_urdf_trainer.launch.py \
+  experiment_id:=my_robot_v1 vlut_only:=true vlut_backend:=region_vlut \
+  region_construction_method:=efficient
+```
+
+保存: 共通の`edge_vlut_recipe.json`から`region_vlut.npz`を追加。辺占有索引の生成・読込みは不要。既存レシピだけの構築:
+
+```bash
+ros2 run gng_vlut_system gng_region_vlut.py \
+  --input <レシピまたは保存ディレクトリ> --construction-method efficient
+```
+
+| 構築方式 | 領域制約 | 構築方策 |
+| --- | --- | --- |
+| `legacy` | 連動一次制約 | 従来の成長・細分・統合 |
+| `occupancy_cover` | 連動一次制約 | 占有変化による共鳴、包絡中心選択、被覆保持統合 |
+| `quadratic_cover` | 連動二次制約 | 楕円体の全域包含を保持した成長・統合 |
+| `efficient` | 連動一次制約 | 占有予算3候補のPareto選択、手先保護姿勢の追加 |
+
+- 制約取得: `constraints()`。一次制約は`q=q0+Gλ, λ≥0, Σλ=1`、二次制約は`q=c+Dz, ‖z‖≤1`と関節制限の共通部分。二次形式・生成部分空間も取得可能。全対象関節の連動集合で、関節ペアだけの切出しではない表現。
+- 3D包絡: 対象リンク外接球、Jacobianの一次像、全域二次剰余、局所レバー上界。高次元格子・全関節組合せの列挙なし。内部離隔の細長い領域には方向微分と全域剰余による区間下界。占有予算超過の早期棄却と不変球のセル再利用。
+- 接続被覆: 接続全体を含む側の記録、大きい区間の中間領域追加。接続情報は被覆フラグ・端点・経由列のみ。ボクセル→辺の専用掃引索引なし。統合時の既存連続領域の包含保持。
+- 環境更新: 同一の不変点群スナップショット・格子条件につき1回の登録、追加・消去セルによるカウンタ更新。粗索引の境界だけ元の点と連続包絡を照合。追加FK・入力点群の膨張・再ボクセル化なし。境界照合上限128点／領域、超過時は`unknown`。
+- 生の領域状態: `region_states()`。`clear`は領域全体の環境・内部離隔成立、`blocked`は全姿勢共通の内側セルへの接触、その他は`unknown`。代表姿勢の衝突だけで全領域を`blocked`としない定義。
+- 遷移保証用状態: `graph_states()`。生の領域状態が`clear`でも、登録済み隣接接続・元グラフの経由列に未証明の通過があれば`unknown`。この状態での安全側と隣接要確認側の通過保証。任意の非隣接ペア・外部GNG安全ラベルへの保証ではない区別。
+
+| 状態ペア・条件 | 遷移判定 |
+| --- | --- |
+| 接続全体を覆う側が`clear`、他側が`clear`／`unknown` | 通過可能 |
+| いずれかが`blocked` | 棄却 |
+| 上記以外、または被覆・照合条件の不成立 | 従来の区間検査 |
+
+姿勢の欠落対策:
+
+- 必須包含: 元GNGの全姿勢と`required_poses:=<JSONの絶対パス>`／CLIの`--required-poses`で指定した全姿勢。JSON形式は全可動関節の姿勢行列、列順は保存モデルの`joint_names`、回転rad・直動m。`legacy`での保護指定は拒否。包含できない構築予算では明示エラー。
+- 自動保護: `efficient`で既定8姿勢。有限の可行候補から手先の位置・向きの低被覆姿勢を選択し、近傍への接続候補を追加。既存`gng.bin`のノード追加や外部GNG探索グラフの差替えはなし。
+- 未登録姿勢: `locate()`の`-1`は到達不能ではない値。`residual_constraints()`で関節範囲から明示領域を除いた残余を`unknown`として保持。`constraints_for_pose(geometry, q)`でモデル上の可行姿勢の局所制約を補完。上限32領域、生成予算0.1 s／姿勢、生成失敗時は当該姿勢の点制約。通常の`query()`での局所包絡生成なし。
+- 未達範囲: 全可行姿勢の明示領域被覆、残余を含む全空間の接続証明、特殊手先位置へのIK解生成。残余の保持と局所補完だけを、これらの達成と見なさない区別。
+
+評価・選択:
+
+指標の定義・現行出力の限界・保存索引のノード別集計・今後の採否候補は[姿勢領域ノードの評価指標一覧](designs/gng_region_evaluation_catalog.md)。候補一覧への登録と、実装・最適化目的への採用は別扱い。
+
+- 必須条件: 種姿勢・保護姿勢の欠落0件、安全／棄却の参照矛盾0件、遷移保証違反0件。評価の対象は保存済み姿勢グラフと点群配置、参照は密なFKとサンプル間の連続下界。参照未確定区間は別計数。
+- 目的: 保護姿勢を含む接続対の喪失数、全接続対の喪失数、安全参照区間の要確認数、領域数、逆引き関係数。単純な重み付き和ではなく、限定候補の非支配集合からの選択。
+- 既定目標: 接続保持率98 %、保護姿勢接続保持率98 %、安全参照区間の要確認率5 %。達成候補の中で領域数・逆引き関係数を優先。達成候補なしでも最良候補を保存し、`can_meet_selection_targets=false`を出力。正常終了と目標達成の区別。
+- 資源: メモリ、制約値数、構築時間、環境更新p95、従来検査を含む実照会時間、保持経路の伸長率。候補選択用配置と独立検証用配置の乱数種の分離。選択スコアだけでは汎化性能の証明にならない評価。
+
+既定予算: 256領域、64頂点／領域、占有増分96セル／領域、構築60 s／レシピ、500,000逆引き関係。CLIの`--max-num-regions`・`--max-extra-cells-th`・`--max-build-sec`で調整。`efficient`は占有予算24／48／96セルの3候補、構築時間を3分割。評価時間は別枠。接続未被覆・索引未登録は従来検査への委任。全空間の被覆保証なし。
+
+ROS側: 上記の回避launchで`vlut_backend:=region_vlut region_vlut_file:=<絶対パス>`、または回避設定YAML内の同名項目。環境登録・領域状態・状態ペアはスナップショット内で共有。外部のGNGノード安全ラベル・入力鮮度・保持／停止の条件は維持。
+
+検証範囲: Longの19関節形状・14軸、直動を含む包絡、全関節二次領域の占有包含、未登録の可行6姿勢の補完、領域数上限での欠落拒否、旧方式回帰、構築launch・旧バイナリ一致・ROS切替・非同期探索。Python参照版の疎な実学習8姿勢＋保護8姿勢では、既定の選択目標は未達。領域構築・メモリ・環境更新に追加費用があるため構築方式の既定切替なし。
+
+比較条件: Longの14軸・中立姿勢付近±0.04 rad、7種姿勢・8接続、0.025 m格子、入力点半径0.01 m、独立96配置×5回。自動手先保護なし、全方式で同一姿勢・接続。4方式×5回の成功20／20件、参照矛盾・遷移保証違反・種姿勢欠落0件。以下2段落はPython数値部品での測定、表は5回の中央値。
+
+| 指標 | `legacy` | `efficient` |
+| --- | ---: | ---: |
+| 領域数 [個] | 6 | 6 |
+| 安全参照区間の要確認率 [%] | 15.7 | 0.0 |
+| 接続保持率 [%] | 84.1 | 100.0 |
+| 768区間照会の全体時間 [ms] | 381 | 247 |
+| 環境更新p95 [ms] | 0.20 | 0.60 |
+| 配列メモリ [KiB] | 279 | 378 |
+| 構築・候補選択時間 [s] | 3.33 | 27.26 |
+
+中央値0 %は全試行の要確認0件ではない値。`efficient`の合算要確認率0.087 %、最小接続保持率99.7 %。疎な実学習8姿勢＋保護8姿勢・独立24配置では、既定構築の接続保持率12.3 %、保護姿勢接続保持率5.4 %、姿勢欠落0件。単一候補75 s・占有増分384セルではそれぞれ93.3 %／93.5 %、184領域。後者も選択目標未達で、局所比較の改善を全可動域へ一般化しない範囲。
+
+理論の境界: [SPARS](https://people.cs.rutgers.edu/~kb572/pubs/DobsonBekris_Spanner.pdf)の被覆・接続性・経路品質の分離を評価の参考とする構成。SPARSの確率的完全性・近似最適性の定理の継承なし。[IRIS-NP](https://arxiv.org/abs/2303.14737)の領域構築と全空間被覆も別問題。[ARMTD](https://arxiv.org/abs/2002.01591)の動的到達集合・制動込み保証の実装なし。対象は理想的な球形状と静的環境。未知区間の従来サンプル検査は連続安全証明ではなく、MPC・GUI領域表示・物理を含む通し回避・実機・動的障害物予測は未接続または未検証。
+
+### C++数値部品
+
+変位上界の係数計算、点・支持平面包絡の判定、領域索引の差分カウンタ集計は`src/core/collision/region_kernel.cpp`。C ABIの共有ライブラリ`libgng_region_kernel.so`、Python／ROS SDKへのビルド依存なし。数値境界だけPython参照判定への委任。既存の起動引数・保存形式・入力点群登録回数の変更なし。
+
+差分集計: 登録済みCSRの直接走査による関係配列の展開省略。追加APIのない旧ライブラリでは当該処理だけPython経路。新APIの利用はライブラリの再ビルド後。更新処理の短縮と、未被覆区間の従来検査を含む照会全体の短縮は別評価。
+
+- 配置: 通常パッケージビルドに同梱、インストール先`lib/gng_vlut_system`。ROS非依存の単独ビルドはCMakeの`enable_region_kernel_only=ON`。現在のDocker環境にも配置済み。
+- 選択: `GNG_REGION_KERNEL=auto`が既定、配置済みならC++、未配置ならPython。`cpp`はC++必須、`python`は参照版固定。C++の明示指定・ABI不一致・計算失敗時の黙示的な代替なし。
+- 検証用パス: `GNG_REGION_NATIVE_LIBRARY=<共有ライブラリの絶対パス>`。配置・環境変更の反映はプロセス再起動後。保存metadataの`kernel_backend`は構築時の部品、照会時の部品は現在の実行環境に従う区別。
+- 比較条件: `occupancy_cover`、同一仕事量、各5回中央値。局所は上記14軸・7姿勢／8接続、広域は7軸・8種姿勢＋保護8姿勢／41接続、0.05 m格子、細分上限2。時間切れによる仕事量の差なし。
+
+| 対象 | 指標 | Python | C++ |
+| --- | --- | ---: | ---: |
+| 局所 | 構築 [s] | 5.24 | 3.08 |
+| 広域 | 構築 [s] | 42.12 | 18.33 |
+| 広域 | 環境更新p95 [ms] | 5.31 | 3.47 |
+| 広域 | 984区間照会の全体時間 [s] | 6.22 | 6.45 |
+
+C++化単独での照会全体の短縮は未確認。上界・占有・境界の2,258チェックで不一致0件、構築比較20／20件成功。対応10組・300配列で、整数／占有配列は完全一致、浮動小数配列は絶対許容誤差1e-11・相対許容誤差1e-12内。ROS自動読込み・spawn探索・指令0件・停止後ノード0件も確認。被覆・接続保持の方式改善は別課題、C++版の既定時間予算による広域目標達成は未検証。
+
+### 内部離隔証明による検査分離
+
+非`legacy`の追加索引には、元姿勢ペア間の線形関節区間に対する連続内部離隔下界も保存。全関節端点・球形状・運動連鎖・固定環境・要求離隔の一致時のみ、オンラインの自己干渉・床・机の再検査を省略。外部点群検査は継続、未証明・不一致は従来検査。事前証明予算は構築予算内の10 %、上限5 s。証明情報のない旧索引は従来動作のまま、追加索引の再構築後に有効。
+
+構築方策は`coupled`が既定。占有領域の成長を内部離隔と分離する試験方策は、launchの`region_internal_policy:=separate`、または以下のCLI指定。`legacy`との組合せは拒否。
+
+```bash
+ros2 run gng_vlut_system gng_region_vlut.py \
+  --input <レシピまたは保存ディレクトリ> \
+  --construction-method occupancy_cover --internal-policy separate
+```
+
+- 検査API: `query_checks()`の`can_pass`と`can_skip_internal`。外部索引の未被覆区間でも、内部証明だけの再利用が可能。中間自己衝突・床接触の実姿勢証拠は棄却、未証明は従来検査。
+- 領域API: 外部点群だけの`external_region_states()`と、従来互換の`region_states()`・`graph_states()`。分離領域には内部不可行な姿勢が含まれ得るため、外部`clear`だけで全姿勢の通過許可は不可。`constraints()`に内部離隔下界`min_internal`を併記。
+
+比較条件: Longの19関節形状・7対象軸、8種姿勢＋保護8姿勢、41区間、0.05 m格子、独立24配置×5回、各配置1〜5点。C++部品を全条件で使用、索引の読込み・環境更新・未被覆区間の従来検査を含む984区間照会。参照は同一の結合構築索引で内部証明の再利用だけ無効。表は5回の中央値。
+
+| 指標 | 参照 | 結合構築＋証明 | 分離構築＋証明 |
+| --- | ---: | ---: | ---: |
+| 984区間照会の全体時間 [s] | 6.01 | 2.21 | 2.22 |
+| 区間照会p95 [ms] | 14.86 | 5.11 | 5.12 |
+| オンライン内部検査姿勢数 [個] | 18,665 | 0 | 0 |
+| 領域数 [個] | 105 | 105 | 104 |
+
+成功15／15試行、9,840回答の比較不一致0件、参照矛盾・遷移保証違反・種姿勢／保護姿勢欠落0件。区間証明41／41件、事前計算0.42／0.43 sは各1回の測定。短縮の主因は内部再検査の省略、分離自体の領域削減は小幅で接続保持の改善なし。安全参照区間の要確認率は約56 %、索引の接続保持率は約35 %のまま。全可行姿勢の明示被覆・実機の連続安全保証は未達。多数点群・実機誤差・動的障害物への性能一般化は対象外。
+
+### 実URDFからの角度箱構築
+
+既存GNGとは別の追加方式。CLI既定の`hierarchical_cover`は親領域と内部葉を持つ`urdf_vrm_hierarchy_v1`、旧単層方式は`--construction-method urdf_boxes`で維持。内部葉は各対象関節の一次制約`q_min ≤ q ≤ q_max`。URDFのFK・外接球・一次像＋二次剰余による3D占有包絡、球表面積×Jacobianによる分割順位。配布版の親・葉構造の移植であり、ボクセル重み付きL∞被覆の逐語移植ではない区別。
+
+ワークスペース直下での構築・表示。既定対象はLongの左腕7軸、全19関節の形状とmimicを保持、他の独立関節は制限内の0位置で固定。
+
+```bash
+python3 gng_vlut_system/scripts/urdf_vrm.py
+python3 gng_vlut_system/tools/gng_region_viewer/viewer.py gng_results/topo_dual_arm_max_long/urdf_hierarchy_left_arm.npz
+```
+
+右腕は`--group right_arm`、標準Maxは`--params-file topo_dual_arm_max.yaml`。別の実URDFと対象関節の指定:
+
+```bash
+python3 gng_vlut_system/scripts/urdf_vrm.py \
+  --urdf /path/to/robot.urdf --joint-names joint1 joint2 joint3 \
+  --output /path/to/new_model.npz
+python3 gng_vlut_system/tools/gng_region_viewer/viewer.py /path/to/new_model.npz
+```
+
+- 入力: 展開済みURDF。固定・回転・連続回転・直動関節、独立関節を参照するmimic、STL／box／sphere／cylinder。相対／絶対パス・`file://`・`package://`のローカルメッシュ。未対応形状・関節・資源の欠落は明示エラー、黙示的な省略なし。
+- 単独構築の自己干渉: 同一剛体・隣接剛体・設定での明示除外だけを除くペア。初期姿勢の重複による自動除外なし。床・机の暗黙追加なし、床は`--floor-z`指定時だけ。
+- 構築予算: 既定128親・親内16葉・30 s・葉展開換算500,000関係。`--max-num-regions`・`--max-num-leaves-per-parent`・`--max-build-sec`・`--max-num-relations`で変更。親×内部葉の上限2,048葉、内部葉上限の指定範囲2〜16個。床境界・予算超過の葉も分割木に保持、空環境だけによる安全への昇格なし。保存先の既存ファイルは拒否、明示上書きは`--allow-replace`。
+- 入力登録: 既存`update_cloud()`の1回。ボクセル→親ID・葉ビットの圧縮CSR、C++差分カウンタ、親の粗交差→必要な葉の連続区間交差。C++共有部品の更新はパッケージ再ビルド後に有効、旧共有ライブラリ時はPython互換経路。
+- 被覆の範囲: 対象関節の有限可動域の分割保持と、全域の索引化・可行姿勢の安全証明は別。連続関節の窓は`[-π, π]`、固定関節値の変更・窓外は要詳細検査。全可動域の効率的な索引化は未達。
+- 判定: 外接球の重複だけによる実メッシュ衝突の確定なし。内側索引は空集合、未知は詳細検査へ委任。線形関節区間と箱の連続交差で照会、隣接面の接続候補と通過保証は別。自己干渉の無視による高速化なし。
+- 状態・制約API: `parent_states()`・`parent_constraints(parent_idx)`、選択葉の`linear_constraints(leaf_idx)`。後者はQP向けの行列・上下限・三値状態。親が要確認でも安全な内部葉は保持。安全葉の和集合を単一の凸包へ置換しない条件。
+- 接続状況: 回避launchの専用選択肢`hierarchy_vlut`と、`region_vlut.load()`による旧形式・階層形式の自動識別。保存条件に対応したViewerの親別内部葉表示。既存GNG・二次方式・回避launchの既定動作は維持。MPC制御器・Gazebo全体・実機の動作は未検証、速度・制動・実機安全の保証なし。
+
+#### 回避バックエンドの差し替え
+
+選択: `vlut_backend:=hierarchy_vlut hierarchy_vlut_file:=<npz絶対パス>`。差し替え対象は区間衝突照会。姿勢グラフ・ノード安全ラベル・経路探索・入力鮮度・保持／停止条件は既存基盤の継続。`node_vlut`・`edge_vlut`・`region_vlut`も維持、既定は`node_vlut`。
+
+パッケージ再ビルド・setup読込み後のLong左腕の例。構築launchの既定機種はLong、回避launchへの機種指定も同一設定。
+
+```bash
+gng_share="$(ros2 pkg prefix --share gng_vlut_system)"
+ros2 launch gng_vlut_system offline_urdf_trainer.launch.py \
+  vlut_backend:=hierarchy_vlut hierarchy_vlut_file:=/tmp/long_hierarchy.npz
+
+ros2 launch gng_vlut_system dual_arm_gng_lidar_demo.launch.py \
+  params_file:="$gng_share/config/topo_dual_arm_max_long.yaml" \
+  vlut_backend:=hierarchy_vlut hierarchy_vlut_file:=/tmp/long_hierarchy.npz
+```
+
+- 構築launch: GNG再学習なしの独立索引生成。既存`gng.bin`・`vlut.bin`の変更なし。回避実行には対象機種の既存グラフ・ノードVLUTが別途必要。保存先の既存ファイルは拒否。
+- 構築条件: `avoidance_config`は既定で`dual_arm_gng_lidar_demo.yaml`。CLI直接構築では`--avoidance-config`で指定。実行系と同じURDF・監視リンク・床／机・既存自己干渉規則の使用。単独構築の厳格ペアとの区別、`--floor-z`との併用不可。標準Maxは構築・実行の双方に同じ`params_file`の指定。
+- 起動時検査: 専用選択では未指定・欠落・形式違い・形状署名不一致をエラー。索引葉0件は警告。従来の`region_vlut`経由の自動識別・不一致時の詳細検査への委任は維持。
+- 対象範囲: 既定は左腕7軸、他の関節は構築時の固定値。`hierarchy_group:=right_arm`で右腕用構築。対象外姿勢・未索引葉・離隔証明不足は従来の詳細検査。両腕同時運動の全域証明なし。
+- 代表候補の棄却: `gng_path_search.can_bridge(..., target_node_id=ID)`で、衝突ラベル`2`かつ終点がその代表姿勢に完全一致する場合は詳細照会前に棄却。別姿勢・危険ラベル`3`・ID未指定時は既存照会の継続。代表姿勢の衝突から領域全体の衝突への伝播なし。
+- 検証: 切替・旧形式互換・詳細検査への委任・ROS launch引数の12／12試行、600区間照会の比較不一致0件。Max／Longの標準予算構築・再読込み・Viewer出力も各1回成功。[再現設定・結果](../../benchmarks/hierarchy_backend/results.json)。実URDFの索引化範囲は限定的、性能優越・Gazebo全体・実機安全の検証とは別。
+
+単層方式の既存検証: Long左右7軸・標準Max左7軸・汎用4軸の各2回、5,592チェック不一致0件。固定変換／mimicのFK照合、有限標本での包絡・占有セル・内部下界、全対象窓内の領域所属、未索引の要確認、保存再読込み、旧索引読込み。階層方式の検証は[評価正本](designs/gng_region_evaluation_catalog.md#配布更新版vrm_cpp-1の階層検証)。有限標本の一致と全姿勢の実機安全保証は別。
+
+改善判定: [固定基準・三方式の同条件比較](designs/gng_region_evaluation_catalog.md#0-改善の判定基準と同条件比較)は旧単層箱の結果。階層方式の優越性へ読み替えない条件。一次を基本方針、二次は比較・選択肢として維持。現状は既存GNG-VLUTの改善版としての既定採用なし。既存方式も広域姿勢被覆の目標は未達。
+
+自己干渉の制限: CLI既定の厳格ペアでは、右腕固定時にグリッパーと手首カバーの外接球が重なり、当該固定条件の内部可行域を得られない状態。実メッシュの干渉・球の過大近似・隣接機構の除外不足の切分けは未完了。上記の方式比較は既存自己干渉規則へ揃えた別条件、既定の厳格規則での回避成功を示す結果ではない区別。
+
+### 保存領域の3D Viewer
+
+ワークスペース直下で、保存済み`region_vlut.npz`を指定した読取り専用の起動:
+
+```bash
+python3 gng_vlut_system/tools/gng_region_viewer/viewer.py <region_vlut.npz>
+```
+
+URL: `http://127.0.0.1:8785`。終了: 実行端末で`Ctrl+C`。別ポートは`--port`。既存のNumPy・SciPyと同梱Three.jsを使用、npmビルド・ROS・実機接続は不要。このworkspaceの比較用索引は`log/artifacts/gng_internal_certificate/separate.npz`。
+
+- 選択: 領域ノード、隣接／その他ノードとの比較。橙は選択側だけ、灰は共通、緑は比較側だけ。元GNGの点ノードIDとは別の領域ID。
+- ボクセル: 全域占有包絡、全ノードに対する独自占有、照会用の余裕込み、基準姿勢、全姿勢共通の内側。保存セルをそのまま使用、表示切替・姿勢例再生での再ボクセル化なし。セル体積和は格子幅の3乗による集計。
+- 関節領域: 選択2軸への投影、関節ごとの周辺範囲、元の制約。一次域は全頂点の凸包投影、二次域は関節制限で切る前の楕円体の投影外包。URDF箱方式は上下限による矩形投影・索引状態も表示。いずれも他関節の固定断面とは別。
+- 姿勢例: 基準姿勢と領域内の有限例を球近似で表示・再生。既定最大12例／領域、`--max-num-pose-samples`で2〜32例。例だけのFKは起動時、ブラウザでは保存済み中心座標の切替。全領域の占有は例の和集合ではなく保存包絡。
+- 条件: 従来形式の既定URDFはLong。別モデルは`--urdf`、構築時の計画リンク設定は`--avoidance-config`。URDF箱方式は保存済みURDF・計画リンク・固定環境を使用、URDF移設時は`--urdf`。形状署名の不一致は拒否。`gng.bin`・`vlut.bin`単体の表示は対象外。
+- JSON保存: `--export-json <保存先.json>`で配信せず終了。既存ファイルの上書きは`--allow-replace`指定時のみ。ViewerのJSON読込みボタンで別データへ切替可能、元索引の書換えなし。
+
+描画は操作時だけ、姿勢例再生中もボクセル再生成なし。内側セル0と索引未登録は別表示。データ上限32 MiB、単一表示上限50,000セル、超過時は明示エラー。localhostの固定配信先だけを公開、URDF・ワークスペースの任意ファイル配信や操作APIはなし。実機・衝突許可・動的安全保証には未接続。
+
+検証: 一次104領域・二次20領域、計756姿勢例の領域所属・保存占有一致・元索引非破壊。実Chromeの表示・比較・入力検証・再生・描画休止23項目、例外0件。検証用HTTPサーバ・Chromeは終了済み。

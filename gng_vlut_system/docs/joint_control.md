@@ -154,17 +154,7 @@ Pythonの共通部品に速度・加速度・ジャークを直接渡す場合�
 観測ノイズを除くフィルタ、加速度・ジャーク制限、制御へのフィードバックは未実装。
 特に高階微分は入力ノイズを増幅するため、制御用途への採用時は別途評価が必要。
 
-| 設定 | 既定値 | 用途 |
-| --- | --- | --- |
-| `enable_joint_motion_state` | `false` | 専用launchの起動切替。無効時はノード・購読・計算・配信なし |
-| `namespace` | 空 | 専用launchのロボット名前空間 |
-| `state_topic` | `joint_states` | `JointState`入力 |
-| `motion_state_topic` | `joint_motion_states` | `DynamicJointState`出力 |
-| `max_derivative_order` | `3` | 追加推定の次数。0: 計算なし、1: 速度まで、2: 加速度まで、3: ジャークまで |
-| `min_sample_period_sec` | `0.0001` | 微分用サンプルの時刻間隔、s |
-| `max_sample_gap_sec` | `0.5` | 関節ごとの連続観測期間の判定、s |
-| `use_sim_time` | `false` | ROS時刻の選択。微分時刻は常に入力の`header.stamp` |
-| `continuous_joint_names` | 空 | ノードの連続回転関節指定。指定関節の微分履歴だけをアンラップ |
+設定・既定値は[joint_motion_state.launch.py](../launch/joint_motion_state.launch.py)。
 
 重複時刻・短すぎる間隔は関節ごとに入力を無視。時刻の巻き戻り・長い観測欠落は関節ごとに履歴を初期化。
 非有限値は該当関節・項目の履歴を破棄。名前重複・配列長不一致はメッセージ全体を拒否。

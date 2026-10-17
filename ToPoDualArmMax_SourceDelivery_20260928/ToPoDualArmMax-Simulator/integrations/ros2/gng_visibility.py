@@ -147,7 +147,7 @@ class roi_visibility:
         self.num_projection_builds += 1
         return pixels, depths
 
-    def build(self, roi, supported, cloud, transform, received_sec, *, self_mask=None, control=None):
+    def build(self, roi, supported, cloud, transform, received_sec, *, self_mask=None, control=None, points=None):
         """既存IDの再利用と、視野推定／実光線の選択。フレームごとの状態更新。"""
         begin = time.perf_counter()
         transform = np.ascontiguousarray(transform, dtype=np.float64)
@@ -167,7 +167,7 @@ class roi_visibility:
                 or np.any(low+roi.offset < 0) or np.any(high+roi.offset > (1 << 21))):
             raise ValueError('観測ROIのセル数上限超過')
         layout = np.array([*low, *shape, roi.x_shift, roi.y_shift, roi.z_shift, roi.offset], dtype=np.int64)
-        points = cloud_points(cloud)
+        points = cloud_points(cloud) if points is None else points
         if not len(points):
             self.invalidate('有効な測距なし')
             return

@@ -14,4 +14,4 @@
 - 到達セルは代表姿勢の存在を示し、セル全域・無衝突軌道・未登録セルの到達不能を保証しない。
 - 元のGNG・VLUTは保持。計画入力への自動接続なし。
 - 初期検証失敗と既存依存警告を含む条件、数値、表示方法は[現行仕様](../reachability_maps.md)。
-- [生成・解析・配信検査の起動コマンド](../../../artifacts/max_reachability_generation_20260928/README.md)。全処理終了、試験配信ノード停止済み。
+- [生成・解析・配信検査の起動コマンド](../../../log/artifacts/max_reachability_generation_20260928/README.md)。全処理終了、試験配信ノード停止済み。

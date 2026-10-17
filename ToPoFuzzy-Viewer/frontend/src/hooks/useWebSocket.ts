@@ -1,3 +1,4 @@
+import type { sensor_calibration_state } from '../types';
 import type { register_vehicle, vehicle_registration_result } from '../features/vehicleRegistration/types';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { deserializePointCloud } from '../utils/protocol';
@@ -537,6 +538,8 @@ export interface UseWebSocketReturn {
     getGngStatus: () => Promise<GngStatus>;
     listGngConfigs: () => Promise<GngConfigInfo[]>;
 
+    get_calibration: (source_frame: string) => Promise<sensor_calibration_state>;
+    apply_calibration: (mount_id: string, revision: number, source_frame: string, delta: { pos: number[]; rot_deg: number[]; scl: number[] }, operation_id: string) => Promise<sensor_calibration_state>;
     getParameters: () => Promise<NodeParameters>;
     setParameter: (paramName: string, value: number | string | boolean) => Promise<SetParameterResult>;
     getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
@@ -637,6 +640,9 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
                 return [];
             }
         },
+        get_calibration: (source_frame: string): Promise<sensor_calibration_state> => sendRpc('calibration.list', { source_frame }),
+        apply_calibration: (mount_id: string, revision: number, source_frame: string, delta: { pos: number[]; rot_deg: number[]; scl: number[] }, operation_id: string): Promise<sensor_calibration_state> =>
+            sendRpc('calibration.apply', { mount_id, revision, source_frame, delta, operation_id }),
         getParameters: (): Promise<NodeParameters> => sendRpc('params.get'),
         setParameter: (
             paramName: string,
@@ -729,6 +735,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
     const pendingGraphUpdatesRef = useRef<Map<string, QueuedGraphUpdate>>(new Map());
     const pending_marker_updates_ref = useRef<Map<string, MarkerArrayData>>(new Map());
     const enable_marker_ack_ref = useRef(false);
+    const enable_calibration_ref = useRef(false);
     const pendingTopologicalMapAppliedRef = useRef<Set<string>>(new Set());
     const topologicalMapReceivedAtRef = useRef<Map<string, number>>(new Map());
     const pendingVoxelUpdatesRef = useRef<Map<string, QueuedVoxelUpdate>>(new Map());
@@ -1002,6 +1009,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
             pendingGraphUpdatesRef.current.clear();
             pending_marker_updates_ref.current.clear();
             enable_marker_ack_ref.current = false;
+            enable_calibration_ref.current = false;
             pendingTopologicalMapAppliedRef.current.clear();
             topologicalMapReceivedAtRef.current.clear();
             pendingVoxelUpdatesRef.current.clear();
@@ -1124,6 +1132,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                             }
                         },
                         'stream.capabilities': (p) => {
+                            enable_calibration_ref.current = p.sensor_calibration === true;
                             if (p.marker_array_applied === true && !enable_marker_ack_ref.current) {
                                 enable_marker_ack_ref.current = true;
                                 socket.send(JSON.stringify({ type: 'stream.marker_array.ready' }));
@@ -1325,6 +1334,7 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
                 pendingGraphUpdatesRef.current.clear();
                 pending_marker_updates_ref.current.clear();
                 enable_marker_ack_ref.current = false;
+                enable_calibration_ref.current = false;
                 pendingTopologicalMapAppliedRef.current.clear();
                 topologicalMapReceivedAtRef.current.clear();
                 pendingVoxelUpdatesRef.current.clear();
@@ -1475,6 +1485,14 @@ export function useWebSocket(url: string, { is_read_only = false, on_transforms,
             }
         };
         return { ...api,
+            get_calibration: async (...args: Parameters<typeof api.get_calibration>) => {
+                if (!enable_calibration_ref.current) throw new Error('ROS側のViewerを再起動すると校正機能が有効になります');
+                return api.get_calibration(...args);
+            },
+            apply_calibration: async (...args: Parameters<typeof api.apply_calibration>) => {
+                if (!enable_calibration_ref.current) throw new Error('ROS側の校正機能が未接続です');
+                return api.apply_calibration(...args);
+            },
             getSources: async () => { await api.getSources(); return source_registry.current.list(); },
             subscribeSource: (source_id: string) => set_active(source_id, true),
             unsubscribeSource: (source_id: string, remove_layer = true) => set_active(source_id, false, remove_layer),

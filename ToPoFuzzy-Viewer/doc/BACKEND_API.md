@@ -1,79 +1,18 @@
-# ToPoFuzzyViewer Backend API (WebSocket Protocol v2)
-
-This document describes the **v2** WebSocket API exposed by `viewer_ws_gateway_node`.
+# ToPoFuzzyViewer Backend API
 
 ## Endpoint
-- URL: `ws://127.0.0.1:9001`（localhost待受）。Simulatorの表示専用入口は `/observe`。Origin・要求制限・対応操作は [WS v2仕様](../common/ws_protocol_v2.md#transport)。
-- Transport:
-  - Binary: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
-  - Text: JSON request/response + async events
 
-## Request/Response Format
+`ws://127.0.0.1:9001`。WS v2の要求・応答・イベント、Origin制限、表示専用`/observe`の許可操作は[通信仕様](../common/ws_protocol_v2.md)。
+バイナリ点群は[PCDX](../common/protocol.md)、Graphは`TMG1`。
 
-### Request
-```json
-{ "id": "uuid", "method": "xxx.yyy", "params": { } }
-```
+## Sources / Stream Control
 
-### Success Response
-```json
-{ "id": "uuid", "ok": true, "result": { } }
-```
+- `sources.list`
+- `sources.setActive({ sourceId, active, removeLayer? })`
+- `request.state`: RPCではなく`{ type: "request.state", topic?: "/対象トピック" }`。
 
-### Error Response
-```json
-{
-  "id": "uuid",
-  "ok": false,
-  "error": {
-    "code": "ERR_CODE",
-    "message": "description",
-    "details": {}
-  }
-}
-```
-
-## Stream/Event Messages
-
-### `stream.robot.delete`
-
-ロボットdescription配信元の消失時に、対象`tag`のキャッシュ削除と描画終了を通知。他のロボットは保持。再起動後は新しいdescriptionで入力一覧へ再登録し、選択済みの場合に再表示。[判定・メッセージ形式](../common/ws_protocol_v2.md#robot-lifecycle)。
-
-### `stream.pointcloud.meta`
-Published before each binary cloud frame.
-```json
-{ "type": "stream.pointcloud.meta", "topic": "/points", "tag": "/points", "frameId": "lidar_link" }
-```
-
-`frameId`は入力`PointCloud2.header.frame_id`。後続のbinary cloud frameの座標系。
-
-点数制限はバックエンドで有効XYZ点へ適用。上限超過時のみ領域分けなしの全有効点シャッフルと先頭抽出、受信ごとの選択更新。上限以下・無制限設定では元順序のまま全有効点を配信。RGB・intensityの対応維持。配信形式の変更なし。
-
-### `stream.graph`
-
-現行配信は `TMG1` バイナリversion 2（96バイト/node）。外側のWSプロトコルはv2のまま。
-Viewerは旧version 1（84バイト/node）も読込可能。以下は互換JSON表現。
-
-環境GNGの`/topological_map`に限り、配信時の`clusters[].nodeIds`はノード配列添字。
-Frontend受信時にIDへ正規化し、描画・検査用スナップショットではノードIDとして利用。
-他のGraphの既存ID方式は維持。トピック別名の自動推定や配信形式の変更なし。
-確定クラスタのHuman/Car分類は所属ノード色・レイヤー内件数へ反映。`Clusters`操作で既存の円柱・ボックス表示を切替。
-入力ノードの幾何ラベルは変更せず、追加ROSトピック・追加パラメータもなし。
-詳細は[Graph Stream](../common/ws_protocol_v2.md#graph-stream)を参照。
-
-```json
-{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true, "num_safe_states": 0, "num_danger_states": 0, "num_collision_states": 0 }], "edges": [], "clusters": [] } }
-```
-
-`is_boundary_candidate` はGNGからの境界候補フラグ。専用トピック・Viewer側での次数再集計は不要。
-`boundary_evidence` はGNG実行側からの観測証拠ビット（遮蔽1・自由空間2・視野端4、0は不明）。併存可能。
-実測レイと局所面延長の比較結果であり、真の物体境界の確定情報ではない。Viewerは受信属性の表示のみ。
-バイナリでは候補フラグがノードレコード内オフセット5、証拠がオフセット6の各1バイト。詳細は `common/ws_protocol_v2.md` を参照。
-
-`num_safe_states`・`num_danger_states`・`num_collision_states`はL0の集約元姿勢件数。
-各`uint32`でnode内offset 84・88・92。`label`とは独立した色の混合とノード詳細表示用。
-合計0は未収録扱い。旧version 1にはこの属性なし。ROS側で集計し、Viewer側で安全判定の再計算なし。
-ROSメッセージの拡張に伴い送受信ノードの再ビルド・再起動とFrontendの更新が必要。
+`active=false, removeLayer=true`は購読停止とレイヤー削除。
+配信元の停止・復帰、トピック限定再取得、点数制限、Graphの所属ID、MarkerのACK・QoS・矢印スタイルは[WS v2](../common/ws_protocol_v2.md)を参照。
 
 ### 非平面成分のGraph表示
 
@@ -87,71 +26,6 @@ CPUの`/nonplane_components`はROSでは`std_msgs/msg/UInt32MultiArray`のまま
 - 空成分は空Graphで旧表示を消去。送信制御は通常Graphと共通の描画完了通知方式。全クライアント切断後の再接続では再購読が必要。
 - `/nonplane_components`のBounding Box設定は未指定、GUI・独立ビュー選択は対象外。Graph表示・法線・共分散は維持。旧設定が残る場合はページ再読み込みが適用手順。
 
-### `job.progress`
-```json
-{ "type": "job.progress", "jobId": "job-...", "sessionId": "edit-...", "progress": 42, "stage": "processing" }
-```
-
-### `job.completed`
-```json
-{
-  "type": "job.completed",
-  "jobId": "job-...",
-  "sessionId": "edit-...",
-  "publishedTopic": "/points/edited",
-  "pointCount": 12345,
-  "durationMs": 1200,
-  "message": "Edit commit finished"
-}
-```
-
-### `job.failed`
-```json
-{
-  "type": "job.failed",
-  "jobId": "job-...",
-  "sessionId": "edit-...",
-  "error": { "code": "TF_UNAVAILABLE", "message": "..." }
-}
-```
-
-## Methods
-
-## Sources / Stream Control
-
-把持ラベル付き点群はHTMLの`/semantic_points`を使用。`/handle_points`専用配信は廃止し、把持部位の生成機能は維持。
-GNGの数値ラベル1はViewerで「把持部位」と表示し、到達性2〜4と共通の「把持ラベル」グループへ統合。
-ROSメッセージ形式の変更なし。[ラベル値と設定移管](../common/ws_protocol_v2.md#graph-stream)を参照。
-
-- `sources.list`
-- `sources.setActive` (`{ sourceId, active, removeLayer? }`)
-  - `active=false, removeLayer=true` stops the subscription and emits stream deletion events for the corresponding scene layer.
-
-Topics選択後の完全状態取得は`{"type":"request.state","topic":"/対象トピック"}`で対象を限定。
-ボクセル差分欠落時も同じ方式。選択変更時の一覧はサーバー通知を利用し、追加の`sources.list`呼出しなし。
-`topic`省略時は従来の全状態取得。詳細は[トピック限定の状態再取得](../common/ws_protocol_v2.md#トピック限定の状態再取得)を参照。
-
-配信元の停止時は旧Scene Layersと送信待ちを削除し、Streamsの選択を維持。
-可視化設定は削除せず、同じブラウザセッション内の同名トピック復帰時に再適用。
-点群の表示ON/OFF・透明度・手動変換も保持し、旧点群バッファだけを破棄。
-停止中も選択済み項目は`sources.list`に残り、同名配信元の復帰時に自動再購読。
-グラフの描画完了待ちも初期化。ROS discovery反映後、1秒周期で確認。
-詳細は[ストリームの停止・復帰](../common/ws_protocol_v2.md#stream-reset)を参照。
-
-`PoseArray`と`gng_control_msgs/msg/GraspCandidateArray`も表示対象。`sources.list`の型は`marker`で、元のROSトピック名をsource IDとして使用。
-例: `/grasp_pose_cands`を有効化すると`source_type: "pose_array"`付きの`stream.marker_array`を配信。
-外部のMarker変換ノード・把持計画launchへの依存なし。空候補、再接続キャッシュ、購読解除も既存ストリーム契約に準拠。
-他のMarkerとの自動照合・色統合なし。詳細は`common/ws_protocol_v2.md`を参照。
-候補配列はID・位置・完全な姿勢・状態を配信。別のreachability購読なし。
-色・寸法・基準位置・補助軸はブラウザの共通矢印設定。把持候補は共有スタイルで矢先位置基準・補助軸OFFを指定。
-標準Markerの矢印は`arrow_style_id`で共有`arrow_styles`辞書を参照。現行サーバーは各スナップショットに完全な辞書を付与し、旧配信の辞書省略も受信可能。
-候補状態色も同じ辞書の`candidate_state.state_colors`で配信し、ROSとViewerで共通のsRGB定義を使用。
-Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再起動時も必要に応じて再購読。
-Markerは対応能力の確認後、クライアント・トピックごとに反映待ち1件と最新入力1件だけを保持。大容量の平面ノードMarkerも同じ制御で配信し、ノード・エッジ数は維持。旧クライアント・旧サーバーとの接続も維持。[通知と再接続の規約](../common/ws_protocol_v2.md#markerの反映完了に合わせた配信)。
-標準`TEXT_VIEW_FACING`の文字は`type: "text"`・`text`として配信し、カメラへ正対する文字として描画。
-`/grasp_pose_refined/markers`の棄却理由も同じ経路を使用。高さ・色・改行・削除は[文字Marker仕様](../common/ws_protocol_v2.md#text-marker)を参照。
-詳細は[WS v2](../common/ws_protocol_v2.md)と[矢印共通仕様](../common/arrow_visual_spec.md)を参照。
-
 ## File
 
 ローカルメッシュの `Mesh Models` はFrontend内だけの表示機能。
@@ -162,30 +36,46 @@ Markerは対応能力の確認後、クライアント・トピックごとに�
 - `files.load` (`{ path }`)
 
 ## Rosbag
+
 - `rosbag.list`
 - `rosbag.play` (`{ path, remaps, loop }`)
 - `rosbag.stop`
 - `rosbag.status`
 
 ## GNG
+
 - `gng.listConfigs`
 - `gng.start` (`{ inputTopic, configFile?, maxNodes?, learningNum?, voxelGridUnit? }`)
 - `gng.stop`
 - `gng.status`
 
 ## Parameters
+
 - `params.get`
 - `params.set` (`{ paramName, value }`)
 
+## 取付校正
+
+`viewer_param_node`からROS側の`/sensor_calibration/request`・`/sensor_calibration/response`へ委譲。同じv2要求形式でCLIからも利用可能。
+
+- `calibration.list` (`{ source_frame? }`): 対象・校正版・TF反映状態・更新可否。
+- `calibration.apply` (`{ mount_id, revision, source_frame, delta:{pos,rot_deg,scl}, operation_id }`): Viewerの増分補正。角度はEuler XYZ [deg]、スケールは1。操作IDによる再送の二重適用防止。
+- `calibration.consumer` (`{ mount_id, node_name, revision, mode:"tf"|"restart" }`): 利用側の反映確認。node_nameは完全修飾名。tfは各測定で最新TFを使用する契約、restartは再初期化必須。5秒以内の継続通知が必要。
+
+`source_frame`は取付child自身または固定内部TFで接続された測定フレーム。world等へ変換済みの点群は対象外。
+`is_tf_applied`はTF配信、`status=ready`は利用側を含む更新可能状態。IMU反映待ちはpending、未対応・未接続はblocked、配信元の重複はconflict。
+選択点群の表示補正はTF反映確認後に0へ初期化。拒否時は保持。`stream.capabilities.sensor_calibration`非対応の旧バックエンドへの要求送信なし。
+
 ## Edit Session (AABB / map frame)
+
 - `edit.openSession` (`{ sourceTopic, targetFrame="map" }`)
 - `edit.addRegion` (`{ sessionId, min:[x,y,z], max:[x,y,z], frameId="map" }`)
 - `edit.removeRegion` (`{ sessionId, regionId }`)
 - `edit.clearRegions` (`{ sessionId }`)
 - `edit.getSession` (`{ sessionId }`)
 - `edit.commit` (`{ sessionId, transform:{position,rotation,scale}, outputTopic? }`)
-  - returns immediately with `{ jobId }`
-  - execution result arrives through `job.*` events
+  - 即時応答は`{ jobId }`。結果は`job.*`イベント。
+  - `rotation`はThree.js Euler XYZ [rad]（Rx*Ry*Rz）。描画と同じ`TF × 手動変換`の合成。削除領域はmap座標。
 - `edit.cancelSession` (`{ sessionId }`)
 
 ## 候補の独立表示
@@ -204,19 +94,14 @@ Markerは対応能力の確認後、クライアント・トピックごとに�
 - Markerの表示色・直径は選択した部品から取得。一般グラフでは`node_color=null`、`node_diameter=0`。
 - 入力グラフ上限は20万ノード・100万エッジ。空候補、消失したID、曖昧な所属、不正座標・エッジ等は`INSPECTION_FAILED`。
 
-独立ビューは取得時点の固定表示。「最新を取得」で同じsource・所属IDの最新受信フレームを再要求。
-取得失敗時は直前の表示を保持しエラーを表示。主画面のカメラ、TF、ROSデータへの変更なし。
-独立ビューのXYZ軸は既定OFF。操作欄の「XYZ軸」で表示切替。ビューを閉じて開き直すとOFF、XYZ寸法の数値表示は常時維持。
-「Bbox」も既定OFFで独立した表示切替。受信済みの`min_position`・`max_position`を黄色の線枠で表示。「最新を取得」で範囲を更新、閉じて開き直すとOFF。主画面のBounding Box設定・当たり判定とは非連動、追加RPC・ROS購読なし。
-フッターはノード数・エッジ数・XYZ寸法の1行、座標系の説明行なし。独立ビュー内の`nonplane_components`は`nonplane_`へ表示のみ短縮（見出し例: `nonplane_7`）。元source ID・RPC・ROSトピック名は維持、元名はsource表示のツールチップで確認可能。
-`map`必須の編集RPCとは別用途であり、独立表示にはTFへの変換不要。
+独立ビューは取得時点の固定表示。「最新を取得」で同じsource・所属IDを再要求し、失敗時は直前の表示を保持。TF変換不要、元ROSデータの変更なし。
 
-ホバー枠・枠内クリック・一括範囲取得と、ノード・クラスタ・Markerの直接クリックによる独立表示は、Viewerのトピック別Graph設定`enable_bounding_box=true`だけが対象。真偽値の明示指定があるGraphだけGUIの`Bounding Box`を表示し、falseでも再ON可能。`/grasp_pose_cands/Tmap`だけ既定でtrueを指定。`/topological_map`はBBox対象外で、過去のON設定が残っていてもGUI・枠・選択を無効化。`/nonplane_components`など他グラフは未指定のためGUI・選択機能なし。明示的なOFFは受信更新でも保持。法線などGraph設定を持たないMarkerからの独立表示なし。全OFF時は判定タイマーも停止。これはViewer内の表示設定であり、ROSメッセージやRPCフィールドの追加なし。
-ONのトピックは初回から物体全体のAABBで判定し、ホバーでの点・球メッシュのraycastなし。主画面と同じTF・手動表示変換・線枠の余白を適用。OFFで枠・当たり判定・直接選択・詳細取得RPCを停止し、取得中のOFFによる遅延表示・エラー表示も抑止。既に開いた独立ビューの固定表示は維持するが、「最新を取得」には元トピックのONが必要。可操作性楕円体の詳細選択は別機能として維持。
-判定は10 Hz、範囲取得は可視ソース全体で同時1件・最大4 Hz。ソースの受信フレームが同じなら再取得なし。重なりはカメラから近い枠を優先。
-枠内の点のない場所からも独立ビューの選択が可能。5pxを超えたドラッグ後のクリックは除外。
-境界の判定外れは350msの猶予。キャンバス退出・ドラッグ・編集モード・購読解除時は即時非表示。古い要求の遅延応答による枠の再表示なし。
-更新中と一過性の取得失敗は直前の範囲を維持し、600ms以上の連続失敗で解除。推定値への代替なし。点群全体・ロボットメッシュはホバー対象外。
+主画面の候補選択はトピック別`enable_bounding_box=true`だけが対象。`/grasp_pose_cands/Tmap`は既定ON、`/topological_map`と`/nonplane_components`は対象外。
+OFF時は枠・当たり判定・選択・詳細要求を停止し、遅延応答も抑止。既存の独立ビューは保持するが再取得には元トピックのONが必要。
+範囲取得は全可視ソースで同時1件・最大4 Hz、判定10 Hz。同一フレームは再取得せず、重なりは近い枠を優先。
+TF・手動変換を適用した物体全体のAABBを使用。5 px超のドラッグ後はクリック除外、判定外れの猶予350 ms、連続取得失敗600 msで解除。
+キャンバス退出・ドラッグ・編集・購読解除時は即時非表示。点群全体・ロボットメッシュは対象外。
+独立ビューのXYZ軸・Bboxは初期OFF、主画面の設定と非連動。
 
 ## 車両モデル照合
 
@@ -232,7 +117,5 @@ ONのトピックは初回から物体全体のAABBで判定し、ホバーで�
 完了イベントには`durationMs, message`、結果本体はRPC応答。編集点群の`publishedTopic`なし。
 
 ## Notes
-- Legacy RPC method names are intentionally unsupported in v2.
-- Edit regions must be sent in `map` frame.
-- If TF to `map` is unavailable, commit fails with `job.failed`.
-- Default output topic is `<sourceTopic>/edited`.
+
+旧RPC名は非対応。編集領域は`map`座標系、TF欠落時は`job.failed`。既定出力は`<sourceTopic>/edited`。

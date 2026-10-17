@@ -1,0 +1,24 @@
+{
+  "workspace": "/home/uraki/uraki_ws",
+  "container_prefix": "docker exec -w /ros2_ws/src -e PYTHONDONTWRITEBYTECODE=1 -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 -e ROS_DOMAIN_ID=222 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -c",
+  "container_setup": "source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash",
+  "batch_inner_commands": [
+    "timeout --signal=INT --kill-after=5 180 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vlut_pursuit/distance.json --output log/artifacts/vlut_pursuit/distance_run --repeats 1 --timeout-sec 50 --max-total-sec 165 --estimate-sec 24 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 385 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vlut_pursuit/consistent.json --output log/artifacts/vlut_pursuit/consistent_run --repeats 1 --timeout-sec 50 --max-total-sec 365 --estimate-sec 20 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 305 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vlut_pursuit/repair_validation.json --output log/artifacts/vlut_pursuit/repair_validation_run --repeats 1 --timeout-sec 50 --max-total-sec 290 --estimate-sec 22 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 385 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vlut_pursuit/consistent.json --output log/artifacts/vlut_pursuit/direct_velocity_run --repeats 1 --timeout-sec 50 --max-total-sec 365 --estimate-sec 20 --continue-on-error",
+    "timeout --signal=INT --kill-after=5 225 python3 skills/run-benchmark-batch/scripts/run_batch.py benchmarks/vlut_pursuit/certified_distance.json --output log/artifacts/vlut_pursuit/certified_distance_run --repeats 1 --timeout-sec 50 --max-total-sec 210 --estimate-sec 26 --continue-on-error"
+  ],
+  "regression_inner_command": "timeout --signal=INT --kill-after=5 180 python3 -m unittest log.artifacts.avoidance_reliability.check_reliability log.artifacts.internal_clearance_fix.check_internal log.artifacts.coordinated_avoidance.check_coordinated log.artifacts.left_front_shuttle.check_candidates log.artifacts.cartesian_shuttle.check_task log.artifacts.pursuit_v2.check_pursuit log.artifacts.pursuit_fixes.check_fixes log.artifacts.pursuit_target.check_target log.artifacts.pursuit_smooth.check_qp log.artifacts.random_walk.check_walk log.artifacts.vlut_pursuit.check_vlut log.artifacts.vlut_pursuit.check_solver log.artifacts.vlut_pursuit.check_distance log.artifacts.vlut_pursuit.check_dynamics",
+  "node_regression_command": "node --test log/artifacts/pursuit_smooth/check_clock.mjs log/artifacts/pursuit_smooth/check_client.mjs log/artifacts/pursuit_fixes/check_api.mjs log/artifacts/pursuit_continuous/check_window.mjs log/artifacts/vlut_pursuit/check_api.mjs",
+  "diagnostic_inner_commands": [
+    "timeout --signal=INT --kill-after=5 35 python3 log/artifacts/vlut_pursuit/diagnose_distance.py",
+    "timeout --signal=INT --kill-after=5 55 python3 log/artifacts/vlut_pursuit/diagnose_stall.py",
+    "timeout --signal=INT --kill-after=5 40 python3 log/artifacts/vlut_pursuit/diagnose_contact.py",
+    "timeout --signal=INT --kill-after=5 55 python3 log/artifacts/vlut_pursuit/diagnose_lp.py",
+    "timeout --signal=INT --kill-after=5 55 python3 log/artifacts/vlut_pursuit/diagnose_zero.py"
+  ],
+  "live_inner_command": "timeout --signal=INT --kill-after=5 45 python3 log/artifacts/vlut_pursuit/check_live.py",
+  "served_live_command": "timeout --signal=INT --kill-after=5 50 node log/artifacts/vlut_pursuit/check_served.mjs",
+  "verification_collection_command": "node log/artifacts/vlut_pursuit/collect_repairs.mjs"
+}

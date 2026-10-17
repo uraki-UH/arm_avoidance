@@ -5,31 +5,13 @@
 軽自動車、普通自動車、トラック、バイク、自転車、船の3D meshから、内部点を含まない完全表面点群を
 生成し、`ais_gng` CPU backendでGNGテンプレートを学習する手順。
 
-実LiDAR点群はテンプレート生成には不要である。環境側との照合時だけ、単視点depth点群の欠損を持つ
-観測GNGと、ここで作成した完全表面テンプレートGNGを照合する。
-
-## 事前準備
-
-対応するmesh形式は`OBJ`、`STL`、binary little-endian `PLY`。`--mesh`は複数回指定でき、同じ座標系の
-複数部品を1つの完全表面テンプレートへ結合する。配布元のライセンスを確認したmeshだけを用意する。mesh本体は
-workspaceへ同梱しない。カテゴリごとのID、想定寸法、mesh指定欄は
-[`mesh_surface_template_catalog.yaml`](../config/mesh_surface_template_catalog.yaml)にまとめてある。
-
-`unit_scale`はmesh座標をmへ換算する倍率である。mm単位のmeshは`0.001`、cm単位のmeshは`0.01`を指定する。
-既定ではmeshのXY中心を原点、最下部をZ=0へ正規化する。元の座標系を維持する場合だけ`--keep-mesh-pose`を付ける。
+完全表面はテンプレート生成用。照合時は欠損を含む観測GNGと比較。
+対応形式・引数は[mesh_surface_template.py](../tools/mesh_surface_template.py)の`--help`を参照。利用条件を確認済みのmeshを別途用意。
+meshの単位をmへ換算し、既定でXY中心・最下部Z=0へ正規化。元座標を保持する場合は`--keep-mesh-pose`。
 
 ## Docker手順
 
-以下の`<container>`は`ais_gng`をビルド済みのDockerコンテナ名へ置き換える。初回だけ設定ファイルを
-install領域へ反映するため、コンテナ内で再ビルドする。
-
-```bash
-docker exec -it <container> bash
-source /opt/ros/humble/setup.bash
-cd /ros2_ws
-colcon build --packages-select ais_gng
-source install/setup.bash
-```
+`ais_gng` CPU backendをビルド・source済みのコンテナで実行。
 
 ### 1. 完全表面点群の生成
 
@@ -102,10 +84,10 @@ source /opt/ros/humble/setup.bash
 source /ros2_ws/install/setup.bash
 ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
   dataset_dir:=/datasets \
-  dataset_id:=car_surface
+  dataset_file:=car_surface_object_surface_dataset_v1.json
 ```
 
-配信topicは`/car_surface/topological_map_static`。`frame_id`は既定で`object_template`。
+配信topicは`/car_surface/Tmap_static`。`frame_id`は既定で`object_template`。
 
 ## カテゴリID
 
@@ -118,19 +100,8 @@ ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
 | 自転車 | `bicycle_surface` |
 | 船 | `boat_surface` |
 
-## 生成仕様
+## 生成仕様・制限
 
-- 三角形選択: 面積比例の乱数選択
-- 面内サンプル: 一様な重心座標サンプル
-- 生成点: 表面のみ。voxel充填や内部点生成なし
-- 既定点数: 50,000点
-- 既定frame: `object_template`
-- GNG入力topic: `/mesh_template_surface`
-- GNG設定: `ais_gng/config/gng_cpu/mesh_surface.yaml`
-- 共分散: `node.covariance_enabled: true`
-
-`mesh_surface.yaml`の入力範囲はX/Y `-15..15 m`、Z `-2..8 m`。この範囲を超えるmeshでは、
-設定ファイルの範囲と`input.voxel_grid_unit`をセットで見直す。CPU GNGは範囲とvoxel単位から内部indexを
-確保するため、必要以上に大きな範囲を指定しない。
-
-meshの穴、裏返り、非多様体面は補正しない。登録前にmesh viewerで表面が意図どおり閉じていることを確認する。
+三角形を面積比例で選び、面内を一様サンプル。内部点・voxel充填なし。
+GNG設定は`mesh_surface.yaml`。入力範囲・voxel幅はmesh寸法に合わせて調整。過大な範囲は内部indexの確保量に影響。
+meshの穴・裏返り・非多様体面の自動補正なし。

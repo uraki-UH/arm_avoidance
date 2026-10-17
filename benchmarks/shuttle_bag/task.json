@@ -2,7 +2,7 @@
   "model": "long",
   "active_profile": "left_arm",
   "eef_link": "L_tcp",
-  "frame": "base_footprint",
+  "frame": "base_link",
   "max_velocity": 2.0,
   "max_acceleration": 8.0,
   "max_position_error_th": 0.035,

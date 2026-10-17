@@ -45,7 +45,7 @@ ROS_DOMAIN_ID=88 ROS_LOCALHOST_ONLY=1 python3 \
   --output /tmp/joint_control_gazebo_check
 ```
 
-実際の全起動コマンド：[commands.json](../../../artifacts/joint_control_unification_20260928/commands.json)。
-ログ・最終結果：[検証成果物](../../../artifacts/joint_control_unification_20260928/)。
+実際の全起動コマンド：[commands.json](../../../log/artifacts/joint_control_unification_20260928/commands.json)。
+ログ・最終結果：[検証成果物](../../../log/artifacts/joint_control_unification_20260928)。
 全試験プロセスは停止済み。専用ROSドメインの残留0、専用ポートのLISTENなし。
-既存プロセスへの停止操作なし。[停止確認](../../../artifacts/joint_control_unification_20260928/cleanup.json)。
+既存プロセスへの停止操作なし。[停止確認](../../../log/artifacts/joint_control_unification_20260928/cleanup.json)。

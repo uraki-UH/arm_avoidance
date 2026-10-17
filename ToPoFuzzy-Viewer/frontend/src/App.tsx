@@ -235,6 +235,8 @@ function App({ host }: { host?: viewer_host } = {}) {
         getGngStatus,
         listGngConfigs,
         getParameters,
+        get_calibration,
+        apply_calibration,
         setParameter,
         getTemplateMatchConfig,
         applyTemplateMatchConfig,
@@ -691,6 +693,8 @@ function App({ host }: { host?: viewer_host } = {}) {
                             stopGng={stopGng}
                             getGngStatus={getGngStatus}
                             listGngConfigs={listGngConfigs}
+                            get_calibration={get_calibration}
+                            apply_calibration={apply_calibration}
                             getParameters={getParameters}
                             setParameter={setParameter}
                             getTemplateMatchConfig={getTemplateMatchConfig}

@@ -12,7 +12,7 @@
 
 ホールド経由への限定:
 
-- 単体成功数: 350 / 350 件。[結果](../../../artifacts/dual_arm_hold_gate_20261001/unit_final.xml)・[実行コマンド](../dual_arm_simulation.md#切替条件の単体試験)。試験プロセス終了済み、既存ROS停止なし
+- 単体成功数: 350 / 350 件。[結果](../../../log/artifacts/dual_arm_hold_gate_20261001/unit_final.xml)・[実行コマンド](../dual_arm_simulation.md#切替条件の単体試験)。試験プロセス終了済み、既存ROS停止なし
 - 開始元: ホールドのみ。追従中のA・回避中のLは拒否、現在動作の継続。各モードの同じキーでホールド復帰
 - 停止後のL: 条件付き解除→ホールドのみ。実測静止・controller状態確認後、改めてA/Lで開始。UDP自動再送なし
 - 検証範囲: ROSサービス窓口の相互切替拒否・処理中の開始拒否・拒否要求の後追い実行なし・停止解除全遷移。Gazebo追加試験・実機送信なし
@@ -27,7 +27,7 @@
 - 到達範囲: max_longの起動・H許可・追従・UDP送信遮断。L再開・追従OFF保持のGazebo通し確認は未到達
 - 後始末: 全4試行で所有プロセス・ROS node・portの残存なし、端末復元済み。既存ROS・コンテナ維持、実機送信なし
 
-[単体](../../../artifacts/dual_arm_keys_20261001/unit_final.xml)・[初回](../../../artifacts/dual_arm_keys_20261001/udp_first/report.json)・[box対応後](../../../artifacts/dual_arm_keys_20261001/udp_box_retry/report.json)・[新キー・試験コマンド](../dual_arm_simulation.md#gazebo目標のudp出力)。停止・失効判定の緩和なし。物理停止未確認の原因は未確定、ODE警告も観測。
+[単体](../../../log/artifacts/dual_arm_keys_20261001/unit_final.xml)・[初回](../../../log/artifacts/dual_arm_keys_20261001/udp_first/report.json)・[box対応後](../../../log/artifacts/dual_arm_keys_20261001/udp_box_retry/report.json)・[新キー・試験コマンド](../dual_arm_simulation.md#gazebo目標のudp出力)。停止・失効判定の緩和なし。物理停止未確認の原因は未確定、ODE警告も観測。
 
 UDP追加時の検証（旧キー・当時のURDF、localhost、各1回）:
 
@@ -40,7 +40,7 @@ UDP追加時の検証（旧キー・当時のURDF、localhost、各1回）:
 
 初回: 両機種とも追従切替中のUDP目標失効。統合時の時刻・controller状態配信を100 Hzへ変更後に成功、監視期限0.5 sは維持。
 初回終了処理はDDS情報残存で確認失敗（所有PID残存なし）。Q経由の正常終了優先後は端末・ROS graph・portの復元確認済み。
-[初回記録](../../../artifacts/dual_arm_udp_20261001/first/report.json)・[再試験記録](../../../artifacts/dual_arm_udp_20261001/clock_retry/report.json)・[設定・起動コマンド](../dual_arm_simulation.md#gazebo目標のudp出力)。
+[初回記録](../../../log/artifacts/dual_arm_udp_20261001/first/report.json)・[再試験記録](../../../log/artifacts/dual_arm_udp_20261001/clock_retry/report.json)・[設定・起動コマンド](../dual_arm_simulation.md#gazebo目標のudp出力)。
 
 統合操作追加時の検証（旧キー・当時のURDF、各1回）:
 
@@ -50,7 +50,7 @@ UDP追加時の検証（旧キー・当時のURDF、localhost、各1回）:
 - AのON/OFF成功数: 2 / 2 回。接近から退避までの通し動作は未検証
 - 試験時間: 144.96 s（事前推定180 s）
 
-元workspace・Docker installへ反映。所有試験全終了、既存ROS・コンテナ維持。[操作・試験コマンド](../dual_arm_simulation.md#1つのlaunchでの統合操作)・[統合試験記録](../../../artifacts/dual_arm_control_20261001/first/report.json)。
+元workspace・Docker installへ反映。所有試験全終了、既存ROS・コンテナ維持。[操作・試験コマンド](../dual_arm_simulation.md#1つのlaunchでの統合操作)・[統合試験記録](../../../log/artifacts/dual_arm_control_20261001/first/report.json)。
 
 結果（最新の直接指令試験、各2回）:
 
@@ -61,7 +61,7 @@ UDP追加時の検証（旧キー・当時のURDF、localhost、各1回）:
 - 試験時間: 283.56 s（事前推定340 s）
 - 所有試験の終了確認: 4 / 4 回。既存ROS・コンテナ維持、専用domain空・ポート閉鎖
 
-キーボード追加検証: 単体23/23件、疑似端末・模擬ROSサービス5/5件成功。要求受付と実測表示の分離、拒否・不達・端末復元の確認。試験プロセス終了済み、Gazebo物理試験の追加なし。[操作・試験コマンド](../dual_arm_simulation.md#キーボード停止)・[入力層の試験記録](../../../artifacts/gazebo_stop_keyboard_20261001/pty/report.json)。
+キーボード追加検証: 単体23/23件、疑似端末・模擬ROSサービス5/5件成功。要求受付と実測表示の分離、拒否・不達・端末復元の確認。試験プロセス終了済み、Gazebo物理試験の追加なし。[操作・試験コマンド](../dual_arm_simulation.md#キーボード停止)・[入力層の試験記録](../../../log/artifacts/gazebo_stop_keyboard_20261001/pty/report.json)。
 
 制限:
 
@@ -72,4 +72,4 @@ UDP追加時の検証（旧キー・当時のURDF、localhost、各1回）:
 - 未検証: action軌道・実機・人が接近し続ける条件。物理非常停止の代替不可
 - 実機送信: 未実施。実機宛先は明示許可・機種別校正・受信側停止/watchdog仕様の確認が必要。設定例は模擬専用、旧14項目のUDP設定は流用不可。USBドライバの統合起動なし
 
-条件・起動コマンド: [仕様・再現手順](../dual_arm_simulation.md#ソフト停止の再現試験)。機種別結果: [最新試行](../../../artifacts/gazebo_software_stop_20261001/direct_diagnostics/report.json)、[初回直接指令](../../../artifacts/gazebo_software_stop_20261001/direct/report.json)、[通常回避デモ](../../../artifacts/gazebo_software_stop_20261001/demo_retry/report.json)、[事前検査](../../../artifacts/gazebo_software_stop_20261001/demo/report.json)。
+条件・起動コマンド: [仕様・再現手順](../dual_arm_simulation.md#ソフト停止の再現試験)。機種別結果: [最新試行](../../../log/artifacts/gazebo_software_stop_20261001/direct_diagnostics/report.json)、[初回直接指令](../../../log/artifacts/gazebo_software_stop_20261001/direct/report.json)、[通常回避デモ](../../../log/artifacts/gazebo_software_stop_20261001/demo_retry/report.json)、[事前検査](../../../log/artifacts/gazebo_software_stop_20261001/demo/report.json)。

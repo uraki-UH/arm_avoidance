@@ -43,6 +43,7 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
             self.model = None
             self.last_publish = 0.
             self.enable_fresh_input = False
+            self.is_read_only = False
             self.max_state_age_sec = .3
             self.last_stamp_sec = -math.inf
             self.timer = None
@@ -59,8 +60,11 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
                     if model not in exchange.joint_names or type(hz) not in (int, float) or not math.isfinite(hz) or not 1 <= hz <= 200:
                         raise ValueError('モデルまたはHzが不正です')
                     topic = data.get('topic', '/joint_states')
-                    if not isinstance(topic, str) or not topic.startswith('/') or topic == '/sim/joint_states':
-                        raise ValueError('入力は絶対トピック名を指定。送信先 /sim/joint_states の自己受信は禁止です')
+                    self.is_read_only = data.get('is_read_only', False)
+                    if type(self.is_read_only) is not bool:
+                        raise ValueError('受信専用設定には真偽値が必要です')
+                    if not isinstance(topic, str) or not topic.startswith('/') or (topic == '/sim/joint_states' and not self.is_read_only):
+                        raise ValueError('入力は絶対トピック名を指定。/sim/joint_states は受信専用接続のみ使用可能です')
                     self.model, self.hz = model, hz
                     self.enable_fresh_input = data.get('enable_fresh_input') is True
                     max_age = data.get('max_state_age_sec', .3)
@@ -73,6 +77,8 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
                     self.timer.start()
                     self.write_message({'type': 'ready'})
                 elif data.get('type') == 'state' and self.model is not None:
+                    if self.is_read_only:
+                        raise ValueError('受信専用接続からの状態送信は禁止です')
                     state = data.get('state')
                     if not isinstance(state, dict) or state.get('robot_model') != self.model:
                         raise ValueError('状態のモデルが一致しません')
@@ -89,6 +95,8 @@ def start_joint_stream(node, exchange, host, port, origins, follow=None):
                         self.last_publish = now
                     self.write_message({'type': 'ack'})
                 elif data.get('type') == 'joints' and self.model is not None:
+                    if self.is_read_only:
+                        raise ValueError('受信専用接続からの関節送信は禁止です')
                     pose = data.get('pose')
                     if not isinstance(pose, dict) or not pose or not set(pose) <= exchange.joint_names[self.model] or any(type(v) not in (int, float) or not math.isfinite(v) for v in pose.values()):
                         raise ValueError('関節角が不正です')

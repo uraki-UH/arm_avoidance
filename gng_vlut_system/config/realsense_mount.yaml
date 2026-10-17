@@ -2,5 +2,5 @@
 # ゼロ補正はURDFと同じ位置・向きというユーザー確認に基づく設定。測量による校正は未実施
 parent_frame: ToPoDualArm/camera_link
 child_frame: camera_link
-# 親座標系でのxyz [m]、roll・pitch・yaw [rad]
+# 親座標系でのxyz [m]、ROS標準RPY [rad]（Rz*Ry*Rx）。Viewerコピー値はpos・rot_deg形式
 camera_mount_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

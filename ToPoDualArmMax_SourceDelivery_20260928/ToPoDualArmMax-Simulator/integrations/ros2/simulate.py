@@ -35,7 +35,10 @@ def parse_arguments():
     parser.add_argument('--target-link', help='追跡対象のURDFリンク名。追跡試験のみ、既定L_tcp')
     parser.add_argument('--target-offset', type=float, nargs=3, metavar=('X','Y','Z'), help='追跡リンク内の対象点 [m]')
     parser.add_argument('--model', choices=('long', 'standard'), default='long')
-    parser.add_argument('--avoidance', choices=('gng', 'none', 'oscbf'), default='gng')
+    parser.add_argument('--avoidance', choices=('gng', 'none', 'oscbf', 'ros'), default='gng')
+    parser.add_argument('--params-file', type=Path, help='機体YAML。ROS外部制御時の基台配置と共用')
+    parser.add_argument('--state-topic', default='/sim/joint_states', help='ROS外部制御時のMuJoCo実測出力')
+    parser.add_argument('--command-topic', default='/avoidance/joint_command', help='ROS外部制御時の即時関節指令入力')
     parser.add_argument('--gng-strategy', choices=('graph', 'avoidance_first', 'vrm_predictive'), default='graph',
                         help='GNG方策。既定のノード列／回避優先／予測・不一致適応')
     parser.add_argument('--roi-visibility', choices=('fov_shadow', 'ray', 'strict', 'legacy'), default='fov_shadow',
@@ -43,6 +46,8 @@ def parse_arguments():
     parser.add_argument('--pose', choices=('forward', 'home', 'zero'), default='forward')
     parser.add_argument('--pose-file', type=Path, help='初期関節角のJSON辞書 [rad]。プリセットへの部分上書き')
     parser.add_argument('--goal-file', type=Path, help='復帰目標のJSON辞書 [rad]。初期姿勢への部分上書き')
+    parser.add_argument('--task-file', type=Path, help='往復タスクJSON。開始姿勢と二つの手先目標、実測到達による切替')
+    parser.add_argument('--min-round-trips', type=int, default=0, help='終了時の実測往復回数の検証下限')
     parser.add_argument('--duration', type=nonnegative, help='実行時間 [sec]。ROS入力の既定値30、追跡球は設定JSON。0はROS入力のみ')
     parser.add_argument('--report-sec', type=nonnegative, default=1., help='JSONL出力周期 [sec]')
     parser.add_argument('--output', type=Path, help='JSONL保存先。既存ファイルへの上書き禁止')
@@ -50,15 +55,29 @@ def parse_arguments():
     parser.add_argument('--viewer-observe-port', type=int, help='同じROSドメインのTopics・点群・Tmap表示サーバーポート')
     parser.add_argument('--domain-id', type=int, choices=range(233), metavar='0..232')
     parser.add_argument('--points-topic', default='/livox/lidar')
+    parser.add_argument('--input-kind', choices=('pointcloud', 'voxel'), default='pointcloud', help='観測入力。既定は点群・TFからの再生成')
     parser.add_argument('--roi-topic', default='/topo_dual_arm_max_long/roi_voxels')
     parser.add_argument('--recorded-self-topic', default='/topo_dual_arm_max_long/self_voxel')
     parser.add_argument('--bag', type=Path, help='CLI所有のbag再生。省略時は既存ROS入力を使用')
     parser.add_argument('--start-offset', type=nonnegative, default=0., help='bag開始位置 [sec]')
     parser.add_argument('--rate', type=nonnegative, default=1., help='bag再生速度')
     parser.add_argument('--min-motion-deg', type=nonnegative, default=0., help='終了時の腕関節変化の検証下限 [deg]')
+    parser.add_argument('--nonstop-simulation', action='store_true', help='実機非接続の非停止往復・bag回避。終了はCtrl+C')
     args = parser.parse_args()
+    if args.nonstop_simulation:
+        if args.scenario != 'live' or args.avoidance not in ('gng', 'ros'):
+            parser.error('非停止実験はROS入力のMuJoCo実行専用です')
+        if args.state_topic != '/sim/joint_states' or args.command_topic not in ('/avoidance/joint_command', '/sim/nonstop/joint_command'):
+            parser.error('非停止実験の実測・指令はMuJoCo専用トピックです')
+        args.avoidance, args.command_topic = 'ros', '/sim/nonstop/joint_command'
+        args.task_file = args.task_file or simulator_dir.parents[1]/'benchmarks/shuttle_bag/task.json'
+        args.params_file = args.params_file or simulator_dir.parents[1]/'gng_vlut_system/config/topo_dual_arm_max_long.yaml'
+        args.domain_id = 168 if args.domain_id is None else args.domain_id
+        args.viewer_bridge_port = args.viewer_bridge_port or 18879
+        args.viewer_observe_port = args.viewer_observe_port or 19001
+        args.duration = 0. if args.duration is None else args.duration
     if args.scenario == 'chasing_sphere':
-        if args.model != 'long' or args.avoidance != 'gng' or args.bag or args.viewer_bridge_port or args.viewer_observe_port or args.pose_file or args.goal_file:
+        if args.model != 'long' or args.avoidance != 'gng' or args.bag or args.viewer_bridge_port or args.viewer_observe_port or args.pose_file or args.goal_file or args.task_file:
             parser.error('追跡球はLongの独立物理試験です。bag・Viewer接続・個別姿勢入力との併用は未対応です')
         if args.duration is not None and not 1 <= args.duration <= 180:
             parser.error('追跡球の--durationは1～180 secです')
@@ -69,14 +88,20 @@ def parse_arguments():
             args.duration = 30.
     if args.report_sec == 0 or args.rate == 0:
         parser.error('--report-secと--rateには正値が必要です')
-    if args.bag and args.avoidance != 'gng':
+    if args.bag and args.avoidance != 'gng' and not args.nonstop_simulation:
         parser.error('--bagはGNG回避用です')
-    if args.gng_strategy != 'graph' and args.avoidance != 'gng':
+    if args.avoidance == 'ros' and args.goal_file:
+        parser.error('ROS外部制御の目標は回避ノードのgoalトピックへ指定してください')
+    if args.gng_strategy != 'graph' and args.avoidance != 'gng' and not args.nonstop_simulation:
         parser.error('--gng-strategyはGNG回避用です')
+    if args.task_file and (args.pose_file or args.goal_file or args.avoidance not in ('gng', 'none') and not args.nonstop_simulation):
+        parser.error('--task-fileはgng／none用です。--pose-file・--goal-fileとの併用不可')
+    if args.min_round_trips < 0 or args.min_round_trips and not args.task_file:
+        parser.error('--min-round-tripsには--task-fileと非負整数が必要です')
     if args.viewer_bridge_port is not None and not 1024 <= args.viewer_bridge_port <= 65534:
         parser.error('--viewer-bridge-portは1024～65534です')
-    if args.viewer_bridge_port and args.avoidance != 'gng':
-        parser.error('--viewer-bridge-portはGNGの実測JointState出力用です')
+    if args.viewer_bridge_port and args.avoidance not in ('gng', 'ros', 'none'):
+        parser.error('--viewer-bridge-portはGNG・ROS外部制御・回避なしの実測JointState出力用です')
     if args.viewer_observe_port is not None:
         if not args.viewer_bridge_port or not 1024 <= args.viewer_observe_port <= 65535:
             parser.error('--viewer-observe-portには有効なポートと--viewer-bridge-portが必要です')
@@ -91,6 +116,99 @@ def read_pose(path):
                                          or not math.isfinite(angle) for name, angle in value.items()):
         raise ValueError('姿勢JSONには関節名と有限の角度 [rad] が必要です')
     return value
+
+
+class shuttle_task:
+    """実測手先の位置・姿勢・速度による二点往復。微小関節変位による往復数の代用なし。"""
+    def __init__(self, path, model, params_file=None):
+        import numpy as np
+        import yaml
+        sys.path.insert(0, str(simulator_dir.parents[1]/'gng_vlut_system/scripts'))
+        from dual_arm_avoidance_geometry import robot_geometry
+        from gng_sphere_avoidance import cartesian_task
+        config = json.loads(path.read_text())
+        if config.get('model') != model or set(config.get('poses_deg', {})) != {'a', 'b'}:
+            raise ValueError('往復タスクの機体または二姿勢の指定不正')
+        config_path = params_file or simulator_dir.parents[1]/('gng_vlut_system/config/topo_dual_arm_max'+('_long' if model == 'long' else '')+'.yaml')
+        params = yaml.safe_load(config_path.read_text())['/**']['ros__parameters']
+        self.geometry = robot_geometry(params['urdf_path'], environment_shapes=())
+        if config.get('frame') != self.geometry.root_link:
+            raise ValueError('往復タスクの目標座標系がURDF基準と異なります')
+        names = self.geometry.joint_names
+        self.poses = {}
+        for key in ('a', 'b'):
+            values = config['poses_deg'][key]
+            if (not isinstance(values, dict) or set(values)-set(names)
+                    or any(type(value) not in (int, float) or not math.isfinite(value) for value in values.values())):
+                raise ValueError('往復タスクの関節名または角度の指定不正')
+            positions = np.radians([values.get(name, 0.) for name in names])
+            if np.any(positions < self.geometry.limits[:, 0]) or np.any(positions > self.geometry.limits[:, 1]):
+                raise ValueError('往復タスクの関節角度がURDF可動域外です')
+            self.poses[key] = positions
+        profile = config.get('active_profile')
+        self.active_profile = profile
+        profiles = params.get('gng', {}).get('profiles', {})
+        if profile not in profiles:
+            raise ValueError('往復タスクの操作グループの指定不正')
+        # URDFの操作チェーンからの抽出。回避なしの対照試験に学習済みGNG/VLUTは不要。
+        group = profiles[profile]
+        chain = {entry[2]: entry for entry in self.geometry.joints}
+        active, link = [], group['eef']
+        while link != group['root']:
+            if link not in chain:
+                raise ValueError('往復タスクの操作チェーンがURDFにありません')
+            name, parent = chain[link][:2]
+            if name in names and name not in group.get('dof_exclude', []):
+                active.append(names.index(name))
+            link = parent
+        if any(self.poses['a'][idx] != self.poses['b'][idx] for idx in range(len(names)) if idx not in active):
+            raise ValueError('往復タスクの非操作関節に姿勢差あり')
+        self.task = cartesian_task(self.geometry, active, self.poses, config.get('eef_link', 'L_tcp'),
+            config.get('max_eef_position_error_th', .015), math.radians(config.get('max_eef_orientation_error_deg_th', 3.)))
+        first, second = (self.task.goals[key] for key in ('a', 'b'))
+        from gng_sphere_avoidance import rotation_error
+        if (np.linalg.norm(first[:3,3]-second[:3,3]) <= 2*self.task.max_position_error_th
+                and np.linalg.norm(rotation_error(first[:3,:3], second[:3,:3])) <= 2*self.task.max_orientation_error_rad_th):
+            raise ValueError('往復目標の到達許容領域に重複あり')
+        self.task.goal = 'a'
+        self.num_arrivals = 0
+        self.has_started = False
+        self.last_frame = self.last_sec = None
+        self.max_eef_motion_m = 0.
+        self.status = {}
+
+    @property
+    def initial_pose(self):
+        return dict(zip(self.geometry.joint_names, map(float, self.poses['a'])))
+
+    def attach(self, scene):
+        """制御基台の配置に基づく目標座標系の確定。観測bagの基台姿勢の転用なし。"""
+        world_base = scene.link_transform(self.geometry.root_link)
+        self.task.goals = {key: world_base@value for key, value in self.task.goals.items()}
+        self.reference = self.task.metadata('joint')
+
+    def update(self, scene):
+        import numpy as np
+        from gng_sphere_avoidance import rotation_error
+        frame, now = scene.link_transform(self.task.eef_link), float(scene.data.time)
+        elapsed = 0. if self.last_sec is None else now-self.last_sec
+        linear = np.zeros(3) if elapsed <= 0 else (frame[:3,3]-self.last_frame[:3,3])/elapsed
+        angular = np.zeros(3) if elapsed <= 0 else rotation_error(frame[:3,:3], self.last_frame[:3,:3])/elapsed
+        position_error, orientation_error, can_arrive = self.task.measure(frame, linear, angular)
+        self.last_frame, self.last_sec = frame.copy(), now
+        dist_m = float(np.linalg.norm(frame[:3,3]-self.task.goals['a'][:3,3]))
+        self.max_eef_motion_m = max(self.max_eef_motion_m, dist_m)
+        if elapsed > 0 and can_arrive:
+            if self.has_started:
+                self.num_arrivals += 1
+            self.has_started = True
+            self.task.goal = 'b' if self.task.goal == 'a' else 'a'
+            position_error, orientation_error, _ = self.task.measure(frame, linear, angular)
+        self.status = dict(self.reference, goal=self.task.goal, num_arrivals=self.num_arrivals,
+            num_round_trips=self.num_arrivals//2, has_started=self.has_started,
+            position_error_m=position_error, orientation_error_rad=orientation_error,
+            eef_m=frame[:3,3].tolist(), max_eef_motion_m=self.max_eef_motion_m)
+        return dict(zip(self.geometry.joint_names, map(float, self.poses[self.task.goal])))
 
 
 def stop_process(process):
@@ -190,7 +308,13 @@ def run(args, emit, chase_config=None):
     from physics_scene import PhysicsScene
 
     presets = json.loads((simulator_dir/'app/robot-poses.json').read_text())
+    if args.nonstop_simulation and args.bag is None:
+        import yaml
+        args.bag = Path(yaml.safe_load((simulator_dir.parents[1]/'scripts/arm_avoidance_bag.yaml').read_text())['bag_path'])
+    task = shuttle_task(args.task_file, args.model, args.params_file) if args.task_file else None
     pose = {name: math.radians(angle) for name, angle in presets[args.pose].items()}
+    if task is not None:
+        pose.update(task.initial_pose)
     if args.pose_file:
         pose.update(read_pose(args.pose_file))
     goal = read_pose(args.goal_file) if args.goal_file else None
@@ -215,7 +339,11 @@ def run(args, emit, chase_config=None):
     thread = threading.Thread(target=spin, name='simulation-ros')
     thread.start()
     handlers = {sig: signal.signal(sig, lambda *_: stop_event.set()) for sig in (signal.SIGINT, signal.SIGTERM)}
-    scene, bag, bridge, observer = None, None, None, None
+    scene, bag, bridge, observer, controller = None, None, None, None, None
+    session, state_pub, goal_pub = None, None, None
+    latest_avoidance = {}
+    last_task_goal = None
+    last_task_goal_sec = 0.
     phases = collections.Counter()
     max_motion_deg = 0.
     num_frames = 0
@@ -228,7 +356,7 @@ def run(args, emit, chase_config=None):
                 if args.bag:
                     # 重複再生の禁止。既存publisherの検出用の有限待機。
                     stop_event.wait(.5)
-                    topics = (args.points_topic, args.roi_topic, args.recorded_self_topic)
+                    topics = (args.points_topic,) if args.input_kind == 'pointcloud' else (args.points_topic, args.roi_topic, args.recorded_self_topic)
                     if any(node.count_publishers(topic) for topic in topics):
                         raise ValueError('入力publisherが既に存在します。--bagを省略して既存入力を使用してください')
                     command = ['bash', str(simulator_dir.parents[1]/'scripts/play_bag.sh'), str(args.bag),
@@ -241,16 +369,55 @@ def run(args, emit, chase_config=None):
                                     '/tf:='+prefix+'/tf', '/tf_static:='+prefix+'/tf_static'))
                     command.extend(('--loop', '--start-offset', str(args.start_offset), '--rate', str(args.rate)))
                     bag = subprocess.Popen(command, stdout=bag_log, stderr=bag_log, start_new_session=True)
-                settings = dict(mode=args.avoidance)
+                settings = dict(mode='none' if args.avoidance == 'ros' else args.avoidance)
+                if args.params_file and args.avoidance == 'gng':
+                    settings['params_file'] = str(args.params_file)
                 if args.avoidance == 'gng':
-                    settings.update(gng_strategy=args.gng_strategy, enable_roi_visibility=args.roi_visibility != 'legacy',
+                    settings.update(input_kind=args.input_kind, gng_strategy=args.gng_strategy, enable_roi_visibility=args.roi_visibility != 'legacy',
                                     visibility_model='ray' if args.roi_visibility in ('ray', 'strict') else 'fov_shadow',
                                     points_topic=args.points_topic,
                                     roi_topic=args.roi_topic, recorded_self_topic=args.recorded_self_topic)
                 if args.bag:
                     settings.update(recorded_tf_topic=prefix+'/tf', recorded_static_tf_topic=prefix+'/tf_static')
-                scene = PhysicsScene([], dict(model=args.model, pose=pose, position=[0, 0, 0], quaternion=[0, 0, 0, 1]),
-                                     settings, node)
+                robot_config = dict(model=args.model, pose=pose, position=[0, 0, 0], quaternion=[0, 0, 0, 1])
+                if args.avoidance == 'ros':
+                    from physics_stream import physics_session
+                    from sensor_msgs.msg import JointState
+                    from scipy.spatial.transform import Rotation
+                    from rclpy.qos import qos_profile_sensor_data
+                    if args.params_file:
+                        import yaml
+                        config = yaml.safe_load(args.params_file.read_text())['/**']['ros__parameters'].get('avoidance', {})
+                        robot_config.update(position=config.get('base_pos', [0., 0., 0.]),
+                            quaternion=Rotation.from_euler('xyz', config.get('base_rot_deg', [0., 0., 0.]), degrees=True).as_quat().tolist())
+                    robot_config.update(command_source='ros', command_topic=args.command_topic)
+                    if args.nonstop_simulation:
+                        robot_config['enable_nonstop_simulation'] = True
+                    session = physics_session(lambda bodies, robot, avoidance: PhysicsScene(bodies, robot, avoidance, node), node)
+                    session.start(dict(bodies=[], robot=robot_config, avoidance=settings))
+                    scene = session.scene
+                    state_pub = node.create_publisher(JointState, args.state_topic, qos_profile_sensor_data)
+                    if args.nonstop_simulation:
+                        from std_msgs.msg import String
+                        goal_pub = node.create_publisher(JointState, '/sim/nonstop/goal', 1)
+                        def receive_avoidance(message):
+                            nonlocal latest_avoidance
+                            latest_avoidance = json.loads(message.data)
+                        node.create_subscription(String, '/avoidance/status', receive_avoidance, 10)
+                        controller = subprocess.Popen([sys.executable, '-B', str(Path(__file__).with_name('gng_ros.py')),
+                            '--params-file', str(args.params_file), '--model', args.model, '--nonstop-simulation',
+                            '--active-profile', task.active_profile,
+                            '--gng-strategy', args.gng_strategy, '--source-tf-topic', prefix+'/tf',
+                            '--source-static-tf-topic', prefix+'/tf_static'], stdout=sys.stderr, stderr=sys.stderr,
+                            start_new_session=True)
+                else:
+                    scene = PhysicsScene([], robot_config, settings, node)
+                if task is not None:
+                    task.attach(scene)
+                if args.viewer_bridge_port and state_pub is None and args.avoidance == 'none':
+                    from sensor_msgs.msg import JointState
+                    from rclpy.qos import qos_profile_sensor_data
+                    state_pub = node.create_publisher(JointState, args.state_topic, qos_profile_sensor_data)
                 if args.viewer_bridge_port:
                     bridge = subprocess.Popen(['bash', str(simulator_dir/'start_ros.sh'), '--bridge',
                         '--port', str(args.viewer_bridge_port), '--allow-origin', 'http://127.0.0.1:8877',
@@ -271,7 +438,7 @@ def run(args, emit, chase_config=None):
                 emit(dict(type='start', model=args.model, avoidance=args.avoidance, initial_joints=initial,
                           goal_joints=target, bag=str(args.bag) if args.bag else None,
                           viewer_url=('http://127.0.0.1:8877/?model='+args.model+'&bridge=http://127.0.0.1:'
-                                      +str(args.viewer_bridge_port)+'&state_source=simulation&joint_topic='+scene.avoidance.runtime.status()['joint_state_topic']
+                                      +str(args.viewer_bridge_port)+'&state_source=simulation&joint_topic='+(scene.avoidance.runtime.status()['joint_state_topic'] if args.avoidance == 'gng' else args.state_topic)
                                       +('&observe=ws://127.0.0.1:'+str(args.viewer_observe_port)+'/observe' if observer is not None else ''))
                                       if bridge is not None else None))
                 started = time.monotonic()
@@ -287,13 +454,32 @@ def run(args, emit, chase_config=None):
                         raise RuntimeError('Viewer受信用ROSブリッジが終了しました。ポート競合・依存ライブラリを確認してください')
                     if observer is not None and observer.poll() is not None:
                         raise RuntimeError('Topics表示サーバーが終了しました。ポート競合・依存ライブラリを確認してください')
+                    if controller is not None and controller.poll() is not None:
+                        raise RuntimeError('非停止実験の回避ノードが終了しました')
                     if goal is not None and not has_goal:
-                        if scene.avoidance and hasattr(scene.avoidance, 'set_targets'):
-                            scene.avoidance.set_targets(target)
-                        else:
-                            scene.robot.set_targets(target)
+                        scene.set_goal(target)
                         has_goal = True
-                    result = scene.step()
+                    if task is not None:
+                        task_goal = task.update(scene)
+                        if goal_pub is None:
+                            scene.set_goal(task_goal)
+                        elif task_goal != last_task_goal or now-last_task_goal_sec >= .2:
+                            goal_pub.publish(JointState(name=list(task_goal), position=list(task_goal.values())))
+                            last_task_goal = task_goal
+                            last_task_goal_sec = now
+                    result = session.step() if session is not None else scene.step()
+                    if controller is not None:
+                        result['avoidance'] = dict(latest_avoidance)
+                    if task is not None:
+                        result['task'] = task.status
+                    if state_pub is not None:
+                        message = JointState()
+                        message.header.stamp = node.get_clock().now().to_msg()
+                        message.name = list(result['joints'])
+                        message.position = [result['joints'][name] for name in message.name]
+                        message.velocity = [result['motion']['velocity'][name] for name in message.name]
+                        message.effort = [result['motion']['effort'][name] for name in message.name]
+                        state_pub.publish(message)
                     num_frames += 1
                     is_ready = is_ready or bool(getattr(scene.avoidance, 'is_ready', False))
                     phase = (result.get('avoidance') or {}).get('phase', 'none')
@@ -311,8 +497,10 @@ def run(args, emit, chase_config=None):
                 emit(dict(type='summary', is_ready=is_ready, num_frames=num_frames, elapsed_sec=time.monotonic()-started,
                           simulation_sec=float(scene.data.time), max_joint_motion_deg=max_motion_deg,
                           phases=dict(phases), joints=scene.robot.state(),
-                          avoidance=scene.avoidance.status if scene.avoidance else None))
-                return 0 if is_ready and max_motion_deg >= args.min_motion_deg else 3
+                          task=task.status if task is not None else None,
+                          avoidance=dict(latest_avoidance) if controller is not None else scene.avoidance.status if scene.avoidance else None))
+                has_round_trips = task is None or task.num_arrivals//2 >= args.min_round_trips
+                return 0 if is_ready and max_motion_deg >= args.min_motion_deg and has_round_trips else 3
     finally:
         try:
             if scene is not None and scene.avoidance is not None and hasattr(scene.avoidance, 'close'):
@@ -320,7 +508,10 @@ def run(args, emit, chase_config=None):
         finally:
             stop_process(bridge)
             stop_process(observer)
+            stop_process(controller)
             stop_process(bag)
+            if session is not None:
+                session.close().result(10)
             executor.shutdown()
             thread.join()
             node.destroy_node()

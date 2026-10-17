@@ -7,7 +7,7 @@
 - 過去の検証: 試作のReleaseビルド・単体8件・比較4回・通常ライブラリ起動成功。初回CTestのROS環境未読込による失敗は環境読込後に解消。
 - 過去の試験終了: 全5回の試験launchと所有補助プロセス停止済み。既存bag・TF・Viewer維持。
 - 撤去後検証: Docker Release再ビルド成功、稼働ソース・installライブラリ・設定・CTest登録の残留なし。新規ROS起動なし。
-- ビルド: `CMAKE_BUILD_PARALLEL_LEVEL=2 timeout -s INT -k 20 600 colcon build --packages-select ais_gng --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON`、終了済み。[実行結果](../../../artifacts/gng_affinity_20260930/removal/build.log)。
+- ビルド: `CMAKE_BUILD_PARALLEL_LEVEL=2 timeout -s INT -k 20 600 colcon build --packages-select ais_gng --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON`、終了済み。[実行結果](../../../log/artifacts/gng_affinity_20260930/removal/build.log)。
 - 保存資料: 比較ログ・集計・撤去前の対象ソース。現行仕様と独立した実験記録。
 
 数値・比較条件・当時の全起動コマンド: [比較記録](../../../benchmarks/gng_affinity_20260930/README.md)。

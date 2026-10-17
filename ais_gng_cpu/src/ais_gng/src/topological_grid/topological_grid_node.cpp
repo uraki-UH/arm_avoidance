@@ -604,11 +604,12 @@ GridVisibilityStates TopologicalGridNode::buildVisibilityStates(
     map_header.frame_id == depth_visibility_fallback_map_frame_)
   {
     constexpr double kDegToRad = 0.01745329251994329577;
-    tf2::Quaternion camera_to_map_rotation;
-    camera_to_map_rotation.setRPY(
-      camera_to_map_roll_deg_ * kDegToRad,
-      camera_to_map_pitch_deg_ * kDegToRad,
-      camera_to_map_yaw_deg_ * kDegToRad);
+    // Viewer校正と共通のEuler XYZ（Rx*Ry*Rz）。ROS標準RPYとの区別
+    tf2::Quaternion rot_x, rot_y, rot_z;
+    rot_x.setRotation(tf2::Vector3(1, 0, 0), camera_to_map_roll_deg_ * kDegToRad);
+    rot_y.setRotation(tf2::Vector3(0, 1, 0), camera_to_map_pitch_deg_ * kDegToRad);
+    rot_z.setRotation(tf2::Vector3(0, 0, 1), camera_to_map_yaw_deg_ * kDegToRad);
+    const auto camera_to_map_rotation = rot_x * rot_y * rot_z;
     const tf2::Transform camera_to_map(
       camera_to_map_rotation,
       tf2::Vector3(camera_to_map_x_, camera_to_map_y_, camera_to_map_z_));

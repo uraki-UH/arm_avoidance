@@ -22,7 +22,8 @@
 | 把持補正 | [core/grasping](../src/core/grasping)：点群に基づく幅・姿勢補正 | [nodes/grasping](../src/nodes/grasping)：補正入力、IK連携、結果配信 |
 | 把持候補・把持物体 | [grasping_system/include](../../grasping_system/include)：candidate・rigid・graph・voxel | [grasping_system/src](../../grasping_system/src)：候補生成等 |
 | 衝突判定 | [core/collision](../src/core/collision)：形状・自己・環境の干渉検査 | 利用元の計画・安全監視ノード |
-| 点群・ボクセル索引 | [core/indexing](../src/core/indexing)：深度履歴索引・到達領域集計。[共有点群ストア](../../voxel_idx/include/point_cloud_store.hpp)はvoxel_idx | 点群入力・把持補正・ベンチマークの各ノード |
+| 点群・ボクセル索引 | [core/indexing](../src/core/indexing)：深度履歴索引・到達領域集計。[共有点群ストア](../../libs/voxel_idx/include/point_cloud_store.hpp)はvoxel_idx | 点群入力・把持補正・ベンチマークの各ノード |
+| センサ取付校正 | [sensor_calibration.py](../scripts/sensor_calibration.py)：公称取付と増分補正の分離・保存・反映管理 | [TF配信元観測](../src/nodes/bridge/sensor_calibration_tf_observer.cpp)。機体launchから一括起動 |
 | 占有と安全状態 | [core/safety_engine](../src/core/safety_engine)：VLUT・認識・状態更新 | 安全監視・環境入力の各ノード |
 | ロボットモデル | [core/robot_model](../src/core/robot_model)、[core/kinematics](../src/core/kinematics) | モデル配信・各利用ノード |
 

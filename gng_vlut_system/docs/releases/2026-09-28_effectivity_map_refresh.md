@@ -35,4 +35,4 @@
 - 生成・試験・Gazebo・配信ノード・探索子プロセスは終了済み。既存プロセスの停止なし。
 
 生成・検証・Gazeboの起動コマンド、各ハッシュ、失敗を含むログは
-[再生成資料](../../../artifacts/effectivity_refresh_20260928/README.md)を参照。
+[再生成資料](../../../log/artifacts/effectivity_refresh_20260928/README.md)を参照。

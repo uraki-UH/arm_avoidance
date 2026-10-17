@@ -1,0 +1,1011 @@
+{
+  "robot": "topo_dual_arm_max_long",
+  "task": "左側・前方の手先位置・姿勢往復",
+  "environment": "既存gng_cpu_container内の独立MuJoCo、ROS・実機出力なし",
+  "obstacle_reference_eef_speed_mps": 1.1536653422847134,
+  "obstacle_speed_ratios": [
+    0.4,
+    1.0
+  ],
+  "free_control_speed_ratios": [
+    0.05,
+    0.05
+  ],
+  "obstacle_radius_m": 0.06,
+  "control_period_sec": 0.05,
+  "guard_rules": "実接触・5 mm内部離隔・有限関節範囲・既存速度加速度制限の維持",
+  "python_unit_tests": {
+    "num_passed": 112,
+    "num_failed": 0
+  },
+  "node_unit_tests": {
+    "num_passed": 26,
+    "num_failed": 0
+  },
+  "continuous_check": {
+    "num_frames": 6,
+    "evaluated_sec": 0.26,
+    "has_recording": false,
+    "failure_reason": ""
+  },
+  "runtime_check": {
+    "has_owned_processes": false,
+    "has_started_ros_nodes": false,
+    "has_hardware_output": false,
+    "containers": "gng_cpu_container・gng-harmonic-launcher-launcher-1・rosbridge_containerのrunning維持",
+    "existing_ros": "既存launch・ViewerノードのPID維持",
+    "server": "既存516440・516511の維持",
+    "pointcloud_bridge": "既存管理プロセス配下で稼働、PID変更の観測あり。エージェントからの停止・再起動なし"
+  },
+  "vlut_pursuit_integration": "未実装。追跡実験の総時間は通常VLUT照会時間ではない値",
+  "limitations": [
+    "回避成績は条件依存、球の接触が残存",
+    "二節腕seed2197で手首停滞5.09 sec、8 secの計算に27.13 sec",
+    "OSCBF・CBFの保持周期が残存",
+    "二節腕で95百分位50 ms超過の条件が残存",
+    "実機可動域・配線との照合と実機試験は未実施",
+    "単一seedの改善や接触なし完走のみで一般的性能改善の断定なし"
+  ],
+  "final_source_sha256": {
+    "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+    "pursuit_obstacle.py": "e4dd96eb98243bb2c44c7b4a3e4d7d43fdef22a858adaa834d3a04860e164f02",
+    "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+    "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b"
+  },
+  "before_snapshot_sha256": {
+    "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+    "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+    "dual_arm_avoidance_geometry.py": "610b378cc91613eb94ae4a6ede1bb860c2924199b9039106d551fe52f702a83c",
+    "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+    "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa"
+  },
+  "reports": [
+    {
+      "name": "before_run",
+      "revision": "開始時snapshot",
+      "status": "completed",
+      "num_completed": 9,
+      "num_total": 9,
+      "cleanup_ok": true,
+      "cases": [
+        {
+          "name": "gng_l4_401",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 9.869425624987343,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_gng_l4_401",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 7.28,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 25.51441604717258,
+            "propose_p95_ms": 37.43624873459339,
+            "wall_sec": 9.550324165989878
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "gng_l5_40",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 7.7173991430026945,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_gng_l5_40",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 6.34,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 24.8648445752145,
+            "propose_p95_ms": 33.49256589135618,
+            "wall_sec": 7.409315072000027
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "gng_l2_131",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 10.869900081976084,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_gng_l2_131",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "obstacle_blocked_sec": 7.049999999999894,
+            "max_tip_stall_sec": 7.04,
+            "propose_mean_ms": 17.658902028597367,
+            "propose_p95_ms": 21.490054202149622,
+            "wall_sec": 10.534768192999763
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "gng_linked_l6",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 14.418347665021429,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_gng_linked_l6",
+          "failure_reason": "attacker_off_target_contact",
+          "outcome": "attacker_loss",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 2.71,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 185.794550947718,
+            "propose_p95_ms": 789.0103396843188,
+            "wall_sec": 14.091038672020659
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "oscbf_l6",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 10.818617860000813,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_oscbf_l6",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 143,
+            "obstacle_blocked_sec": 6.489999999999906,
+            "max_tip_stall_sec": 6.489999999999999,
+            "propose_mean_ms": 6.064250823328621,
+            "propose_p95_ms": 6.315005033684429,
+            "wall_sec": 10.327352615975542
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "oscbf_linked_l4",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 10.768605396006024,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_oscbf_linked_l4",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 143,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 6.69,
+            "propose_mean_ms": 6.46539678255067,
+            "propose_p95_ms": 6.748932290065568,
+            "wall_sec": 10.294727691012667
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "cbf_l6",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 10.066645292012254,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_cbf_l6",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 137,
+            "obstacle_blocked_sec": 6.379999999999908,
+            "max_tip_stall_sec": 6.39,
+            "propose_mean_ms": 12.417155244838796,
+            "propose_p95_ms": 14.683160946879065,
+            "wall_sec": 9.743874270003289
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "gng_free",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 8.469646851008292,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_gng_free",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 3,
+            "num_qp_no_solution": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 21.003338281116157,
+            "propose_p95_ms": 22.832982496765908,
+            "wall_sec": 8.098205668997252
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        },
+        {
+          "name": "oscbf_free",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 7.116271784994751,
+          "artifacts": "log/artifacts/avoidance_reliability/before_run/001_oscbf_free",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 7,
+            "num_qp_no_solution": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 4.3998429686325835,
+            "propose_p95_ms": 4.6040403976803645,
+            "wall_sec": 6.598156018997543
+          },
+          "source_sha256": {
+            "sphere_chase.py": "7f42ce13eef6d65d463463d7243e992e8e31d0d8e7b2f5bfa1272ba4777d2715",
+            "pursuit_obstacle.py": "03c2c7b0ead450128c4c4ed62d6d5913aaeb4565b23dc2eaed9ac5fad8d21cfa",
+            "pursuit_cbf.py": "375cea06d94cf3cbe7753472ffffccd91e970d0d422132b94b3c6176d112dbc4",
+            "gng_sphere_avoidance.py": "3266cc03e44f7e92e648a53f7b010ef7c2134f4b0a3ba0b775cba4b50b0fd3eb",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "1c166f485bda8dc8f1ce4bb63a3a5045b4cb772325adfe26d7e1d00a79189c48",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "7d256cbfd018edae4fa71651b50a5cf954d0046219e58ac2c39af30217843ea5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "corner_run",
+      "revision": "近傍限定・縮小一括化の前",
+      "status": "completed",
+      "num_completed": 6,
+      "num_total": 6,
+      "cleanup_ok": true,
+      "cases": [
+        {
+          "name": "old_l4",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 10.617838346981443,
+          "artifacts": "log/artifacts/avoidance_reliability/corner_run/001_old_l4",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 7.83,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 26.191751109317515,
+            "propose_p95_ms": 46.71505781006998,
+            "representative_query_mean_ms": 2.085828300562515,
+            "wall_sec": 10.291602356999647
+          },
+          "source_sha256": {
+            "sphere_chase.py": "638ff9d71de7dac9ade153b93e5afe9402eb3697a445f3d08621bc19cc65afb5",
+            "pursuit_obstacle.py": "15cc533a68808748e3ec7d3845b63ed976a9dac89d91d6de4be0dfdf10905548",
+            "pursuit_cbf.py": "64d9aff7cbb811074a81df5197ac2ab782c52da0825f85d2dbcb7a3eb57ea11a",
+            "gng_sphere_avoidance.py": "7bf42ea7db2acf49e5b000c6091826cfab6721b9d9d1153f2b9268b5d9fb8e33",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "new_l4",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 6.516886246012291,
+          "artifacts": "log/artifacts/avoidance_reliability/corner_run/001_new_l4",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 4.66,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 14.710685830226446,
+            "propose_p95_ms": 15.306420743581839,
+            "representative_query_mean_ms": 2.119614352271496,
+            "candidate_generation_mean_ms": 2.4657977136233424,
+            "rollout_fk_mean_ms": 6.842043542766329,
+            "external_check_mean_ms": 2.6529147658135463,
+            "internal_selection_mean_ms": 0.4475563092707121,
+            "wall_sec": 6.196858634997625
+          },
+          "source_sha256": {
+            "sphere_chase.py": "638ff9d71de7dac9ade153b93e5afe9402eb3697a445f3d08621bc19cc65afb5",
+            "pursuit_obstacle.py": "15cc533a68808748e3ec7d3845b63ed976a9dac89d91d6de4be0dfdf10905548",
+            "pursuit_cbf.py": "64d9aff7cbb811074a81df5197ac2ab782c52da0825f85d2dbcb7a3eb57ea11a",
+            "gng_sphere_avoidance.py": "7bf42ea7db2acf49e5b000c6091826cfab6721b9d9d1153f2b9268b5d9fb8e33",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "old_l5",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 6.820047014014563,
+          "artifacts": "log/artifacts/avoidance_reliability/corner_run/001_old_l5",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 4.55,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 23.169299747198718,
+            "propose_p95_ms": 24.481371001456864,
+            "representative_query_mean_ms": 1.9886320860478208,
+            "wall_sec": 6.503282639023382
+          },
+          "source_sha256": {
+            "sphere_chase.py": "638ff9d71de7dac9ade153b93e5afe9402eb3697a445f3d08621bc19cc65afb5",
+            "pursuit_obstacle.py": "15cc533a68808748e3ec7d3845b63ed976a9dac89d91d6de4be0dfdf10905548",
+            "pursuit_cbf.py": "64d9aff7cbb811074a81df5197ac2ab782c52da0825f85d2dbcb7a3eb57ea11a",
+            "gng_sphere_avoidance.py": "7bf42ea7db2acf49e5b000c6091826cfab6721b9d9d1153f2b9268b5d9fb8e33",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "new_l5",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 9.968307301984169,
+          "artifacts": "log/artifacts/avoidance_reliability/corner_run/001_new_l5",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 9.04,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 14.646281537282132,
+            "propose_p95_ms": 14.84606001758948,
+            "representative_query_mean_ms": 2.0238509337682773,
+            "candidate_generation_mean_ms": 2.39323055273879,
+            "rollout_fk_mean_ms": 6.80403150386532,
+            "external_check_mean_ms": 2.615807739244671,
+            "internal_selection_mean_ms": 0.6296671090843105,
+            "wall_sec": 9.635870072001126
+          },
+          "source_sha256": {
+            "sphere_chase.py": "638ff9d71de7dac9ade153b93e5afe9402eb3697a445f3d08621bc19cc65afb5",
+            "pursuit_obstacle.py": "15cc533a68808748e3ec7d3845b63ed976a9dac89d91d6de4be0dfdf10905548",
+            "pursuit_cbf.py": "64d9aff7cbb811074a81df5197ac2ab782c52da0825f85d2dbcb7a3eb57ea11a",
+            "gng_sphere_avoidance.py": "7bf42ea7db2acf49e5b000c6091826cfab6721b9d9d1153f2b9268b5d9fb8e33",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "linked_gng",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 22.118907182011753,
+          "artifacts": "log/artifacts/avoidance_reliability/corner_run/001_linked_gng",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.07,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 48.097738662363554,
+            "propose_p95_ms": 65.54850246611748,
+            "representative_query_mean_ms": 13.028874073461338,
+            "candidate_generation_mean_ms": 2.7710948193998775,
+            "rollout_fk_mean_ms": 6.091592081065755,
+            "external_check_mean_ms": 12.147637168345682,
+            "internal_selection_mean_ms": 13.850036250914854,
+            "wall_sec": 21.77222119999351
+          },
+          "source_sha256": {
+            "sphere_chase.py": "638ff9d71de7dac9ade153b93e5afe9402eb3697a445f3d08621bc19cc65afb5",
+            "pursuit_obstacle.py": "15cc533a68808748e3ec7d3845b63ed976a9dac89d91d6de4be0dfdf10905548",
+            "pursuit_cbf.py": "64d9aff7cbb811074a81df5197ac2ab782c52da0825f85d2dbcb7a3eb57ea11a",
+            "gng_sphere_avoidance.py": "7bf42ea7db2acf49e5b000c6091826cfab6721b9d9d1153f2b9268b5d9fb8e33",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "linked_oscbf",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 25.87195946299471,
+          "artifacts": "log/artifacts/avoidance_reliability/corner_run/001_linked_oscbf",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 70,
+            "num_qp_relaxed_solutions": 77,
+            "obstacle_blocked_sec": 0.47000000000000025,
+            "max_tip_stall_sec": 0.08999999999999986,
+            "propose_mean_ms": 25.812479518572218,
+            "propose_p95_ms": 31.45799123303732,
+            "wall_sec": 25.527393488999223
+          },
+          "source_sha256": {
+            "sphere_chase.py": "638ff9d71de7dac9ade153b93e5afe9402eb3697a445f3d08621bc19cc65afb5",
+            "pursuit_obstacle.py": "15cc533a68808748e3ec7d3845b63ed976a9dac89d91d6de4be0dfdf10905548",
+            "pursuit_cbf.py": "64d9aff7cbb811074a81df5197ac2ab782c52da0825f85d2dbcb7a3eb57ea11a",
+            "gng_sphere_avoidance.py": "7bf42ea7db2acf49e5b000c6091826cfab6721b9d9d1153f2b9268b5d9fb8e33",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        }
+      ]
+    },
+    {
+      "name": "verified_run",
+      "revision": "縮小一括化の前",
+      "status": "completed",
+      "num_completed": 9,
+      "num_total": 9,
+      "cleanup_ok": true,
+      "cases": [
+        {
+          "name": "gng_l4_401",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 7.567271728999913,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_gng_l4_401",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 4.66,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 12.748531799050088,
+            "propose_p95_ms": 13.505954112042671,
+            "representative_query_mean_ms": 0.2925525319717943,
+            "candidate_generation_mean_ms": 2.3352862103530105,
+            "rollout_fk_mean_ms": 6.8455430539077184,
+            "external_check_mean_ms": 2.647771884593122,
+            "internal_selection_mean_ms": 0.450857637259376,
+            "wall_sec": 7.258782442018855
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "gng_l5_40",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 9.768852550012525,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_gng_l5_40",
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 9.04,
+            "num_arrivals": 1,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 12.91395939220237,
+            "propose_p95_ms": 13.242585002444685,
+            "representative_query_mean_ms": 0.28299913212312233,
+            "candidate_generation_mean_ms": 2.321809733984992,
+            "rollout_fk_mean_ms": 6.8607299395023915,
+            "external_check_mean_ms": 2.6251673264279756,
+            "internal_selection_mean_ms": 0.6409580553997596,
+            "wall_sec": 9.45747650199337
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "gng_l2_131",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 10.669357132981531,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_gng_l2_131",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 3,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 10.143045856784738,
+            "propose_p95_ms": 11.799949487613048,
+            "representative_query_mean_ms": 0.2825060990289785,
+            "candidate_generation_mean_ms": 2.179955849715043,
+            "rollout_fk_mean_ms": 4.980679424079426,
+            "external_check_mean_ms": 2.1014486828789813,
+            "internal_selection_mean_ms": 0.4196325984594296,
+            "wall_sec": 10.360763828997733
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "gng_linked_l6",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 20.26905314900796,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_gng_linked_l6",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.07,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 35.54185427547054,
+            "propose_p95_ms": 52.38195460260613,
+            "representative_query_mean_ms": 0.7965484126543743,
+            "candidate_generation_mean_ms": 2.57559770525404,
+            "rollout_fk_mean_ms": 6.1452845115127275,
+            "external_check_mean_ms": 11.957855656692118,
+            "internal_selection_mean_ms": 13.86039148146665,
+            "wall_sec": 19.934909822011832
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "oscbf_l6",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 15.469628419989021,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_oscbf_l6",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 64,
+            "num_qp_relaxed_solutions": 32,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 22.093479206887423,
+            "propose_p95_ms": 28.32006911485223,
+            "wall_sec": 15.167529636004474
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "oscbf_linked_l4",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 26.470462669007247,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_oscbf_linked_l4",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 70,
+            "num_qp_relaxed_solutions": 77,
+            "obstacle_blocked_sec": 0.47000000000000025,
+            "max_tip_stall_sec": 0.08999999999999986,
+            "propose_mean_ms": 25.885019625457062,
+            "propose_p95_ms": 31.511094798042905,
+            "wall_sec": 26.167095377022633
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "cbf_l6",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 18.16843882901594,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_cbf_l6",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 53,
+            "num_qp_relaxed_solutions": 51,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 35.700185199857515,
+            "propose_p95_ms": 51.57135028857737,
+            "wall_sec": 17.84882382399519
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "gng_free",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 8.216747743019368,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_gng_free",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 3,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 11.78582075099257,
+            "propose_p95_ms": 12.271403410704805,
+            "representative_query_mean_ms": 0.2827845621141023,
+            "candidate_generation_mean_ms": 2.2063593813072657,
+            "rollout_fk_mean_ms": 6.243690405608504,
+            "external_check_mean_ms": 2.448954775718448,
+            "internal_selection_mean_ms": 0.42342149954492925,
+            "wall_sec": 7.869491012999788
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "oscbf_free",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 8.91835700601223,
+          "artifacts": "log/artifacts/avoidance_reliability/verified_run/001_oscbf_free",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 5,
+            "num_qp_no_solution": 18,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 17.883413606068643,
+            "propose_p95_ms": 19.5001767919166,
+            "wall_sec": 8.580722117010737
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "d5fc480123a2f8e99889928ca85031ae5872f700e59530c5873a721dc065d462",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        }
+      ]
+    },
+    {
+      "name": "validation_batch_run",
+      "revision": "最終コード",
+      "status": "completed",
+      "num_completed": 3,
+      "num_total": 3,
+      "cleanup_ok": true,
+      "cases": [
+        {
+          "name": "l2_2077",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 10.617494606005494,
+          "artifacts": "log/artifacts/avoidance_reliability/validation_batch_run/001_l2_2077",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 3,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 0.0,
+            "max_tip_stall_sec": 0.0,
+            "propose_mean_ms": 10.157218649146671,
+            "propose_p95_ms": 11.084591243707102,
+            "representative_query_mean_ms": 0.2828927550581284,
+            "candidate_generation_mean_ms": 2.173302538540156,
+            "rollout_fk_mean_ms": 4.9864599568536505,
+            "external_check_mean_ms": 2.108209705511399,
+            "internal_selection_mean_ms": 0.4271256313586491,
+            "wall_sec": 10.311415456002578
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "e4dd96eb98243bb2c44c7b4a3e4d7d43fdef22a858adaa834d3a04860e164f02",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "linked_2197",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 27.471287619991926,
+          "artifacts": "log/artifacts/avoidance_reliability/validation_batch_run/001_linked_2197",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "representative_geometry",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 0,
+            "num_qp_relaxed_solutions": 0,
+            "obstacle_blocked_sec": 5.069999999999936,
+            "max_tip_stall_sec": 5.09,
+            "propose_mean_ms": 21.480503468956158,
+            "propose_p95_ms": 24.4899997356697,
+            "representative_query_mean_ms": 0.8054375257415813,
+            "candidate_generation_mean_ms": 2.582224130310351,
+            "rollout_fk_mean_ms": 5.936867887430708,
+            "external_check_mean_ms": 11.501107738331484,
+            "internal_selection_mean_ms": 0.4490856357733719,
+            "wall_sec": 27.13099228698411
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "e4dd96eb98243bb2c44c7b4a3e4d7d43fdef22a858adaa834d3a04860e164f02",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        },
+        {
+          "name": "oscbf_linked_2203",
+          "status": "completed",
+          "cleanup_ok": true,
+          "elapsed_sec": 31.872469322988763,
+          "artifacts": "log/artifacts/avoidance_reliability/validation_batch_run/001_oscbf_linked_2203",
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "has_hardware_output": false,
+          "collision_backend": "continuous_cbf",
+          "metrics": {
+            "evaluated_sec": 8.0,
+            "num_arrivals": 0,
+            "num_qp_no_solution": 35,
+            "num_qp_relaxed_solutions": 113,
+            "obstacle_blocked_sec": 1.0600000000000007,
+            "max_tip_stall_sec": 0.34999999999999964,
+            "propose_mean_ms": 24.683524374449917,
+            "propose_p95_ms": 29.869442597555462,
+            "wall_sec": 31.553481480979826
+          },
+          "source_sha256": {
+            "sphere_chase.py": "ab2024fd8c1e8543d6ccaa77b5f8c83cfbf5ccd452844b4364cc8f408829d57b",
+            "pursuit_obstacle.py": "e4dd96eb98243bb2c44c7b4a3e4d7d43fdef22a858adaa834d3a04860e164f02",
+            "pursuit_cbf.py": "3a2e3cfae5f67af091bab789b3cf1515e757c8e7526d7c463ebe4c1a4f2a0100",
+            "gng_sphere_avoidance.py": "e7d33b8907b09e746a9032a53becaff21282c1467d98b1680e13cffb5803b632",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          }
+        }
+      ]
+    }
+  ]
+}

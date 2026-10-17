@@ -49,4 +49,4 @@ surface_model.max_patch_refresh_frames: 5
 - 制限: 全点・エッジ走査とモデル探索は残存。平面枚数による候補・表示条件は変更なし。実bagライブの表示・新規曲面検出精度の向上は未検証。
 - 実行状態: 自身のビルド・試験プロセスは全終了、既存bag・TF・Viewer・コンテナ状態を維持。ROS setupの `set -u` 不整合による試験前エラー1回は修正後に再実行。
 - 再現条件・起動コマンド: [比較ベンチと通常ビルド・試験](../../../benchmarks/surface_priority_20260929/README.md)。
-- 数値・品質の正本: [最終集計](../../../artifacts/surface_priority_20260929/batch_final/summary.csv)、[所属比較](../../../artifacts/surface_priority_20260929/batch_final/quality_comparison.json)、[試行結果](../../../artifacts/surface_priority_20260929/batch_final/report.json)。
+- 数値・品質の正本: [最終集計](../../../log/artifacts/surface_priority_20260929/batch_final/summary.csv)、[所属比較](../../../log/artifacts/surface_priority_20260929/batch_final/quality_comparison.json)、[試行結果](../../../log/artifacts/surface_priority_20260929/batch_final/report.json)。

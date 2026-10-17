@@ -6,6 +6,7 @@ import {createInterface} from 'node:readline';
 import {isDeepStrictEqual} from 'node:util';
 
 const allowed_keys=['policy','obstacle_shape','pursuit_mode','target_link','target_offset_m','duration_sec','seed','radius_m','speed_ratios','max_ball_acceleration','max_ball_deceleration','max_ball_turn_acceleration','execution_mode','speed_ramp_sec','enable_proximal_guard','random_walk_extent_m','random_walk_change_sec'];
+const policies=['vlut_graph','rollout_cv','rollout_reactive','cbf_qp','oscbf'];
 
 export function validate_experiment(value,link_names){
  if(!value||Array.isArray(value)||typeof value!=='object'||Object.keys(value).some(key=>!allowed_keys.includes(key)))throw Error('未対応の実験設定');
@@ -16,7 +17,7 @@ export function validate_experiment(value,link_names){
   config.duration_sec=0;
  }
  if(!Object.hasOwn(value,'speed_ramp_sec'))config.speed_ramp_sec=config.execution_mode==='continuous'?18:config.duration_sec;
- if(!['rollout_cv','rollout_reactive','cbf_qp','oscbf'].includes(config.policy)||!['sphere','linked_arm'].includes(config.obstacle_shape)||!link_names.includes(config.target_link))throw Error('方式・形状・リンク名の不正');
+ if(!policies.includes(config.policy)||!['sphere','linked_arm'].includes(config.obstacle_shape)||!link_names.includes(config.target_link))throw Error('方式・形状・リンク名の不正');
  const bounded=(number,min,max)=>typeof number==='number'&&Number.isFinite(number)&&number>=min&&number<=max;
  for(const [key,min,max] of [['duration_sec',config.execution_mode==='continuous'?0:1,60],['speed_ramp_sec',1,60],['seed',0,2147483647],['radius_m',.015,.15],['max_ball_acceleration',.1,30],['max_ball_deceleration',.1,30],['max_ball_turn_acceleration',.1,30]])if(!bounded(config[key],min,max))throw Error('設定の範囲外: '+key);
  if(!Number.isInteger(config.seed)||!Array.isArray(config.speed_ratios)||config.speed_ratios.length!==2||!config.speed_ratios.every(v=>bounded(v,.05,3))||config.speed_ratios[0]>config.speed_ratios[1])throw Error('seed・速度比の不正');
@@ -121,7 +122,7 @@ export function create_experiment_service(root,port){
  const reply=(res,code,value)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
  const snapshot=(after=null)=>{
   const live=after===null?null:live_window.read(after);
-  return {is_available,live_protocol_version:1,archive_protocol_version:2,continuous_protocol_version:1,pursuit_modes:['link_point','distal_sweep','random_walk'],job:job?{...job,output:job.state==='failed'?job.output.slice(-1800):undefined,
+  return {is_available,policies,live_protocol_version:1,archive_protocol_version:2,continuous_protocol_version:1,pursuit_modes:['link_point','distal_sweep','random_walk'],job:job?{...job,output:job.state==='failed'?job.output.slice(-1800):undefined,
    live:live?{...live,metadata:after===0||live.has_gap||!['running','stopping'].includes(job.state)?live_metadata:undefined}:undefined}:null};
  };
  const stop=reason=>{

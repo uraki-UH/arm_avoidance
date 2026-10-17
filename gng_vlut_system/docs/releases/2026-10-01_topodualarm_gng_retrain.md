@@ -1,5 +1,7 @@
 # 2026-10-01 - ToPoDualArmの再学習と保存辺の修正
 
+検証ログ: 旧artifacts参照先の一部は未同梱。本文の数値は当時の記録。
+
 変更:
 - 新モデル: `gng_results/ToPoDualArm10000_selfchecked_20261001/`。旧モデルとYAMLの既定IDは保持、利用時は`id:=ToPoDualArm10000_selfchecked_20261001`。
 - 衝突形状: 開いたカメラSTLによる初期読込失敗を解消。全頂点を囲む衝突BOXへ変更、表示メッシュ・色は保持。
@@ -21,4 +23,4 @@
 - 非学習関節の別姿勢・連続時間の無衝突・実環境障害物・実機動作は保証対象外。ブラウザ画面の実描画は未検証。
 - 終了状態: 所有プロセス全終了、専用domain空、3コンテナ・配信試験前の既存PID維持。終了時SIGINTによる子3件の`exit -2`はログ保持。
 
-詳細: [起動方法・全実行コマンド・資料](../../../benchmarks/topodualarm_retrain_20261001/README.md)、[最終監査](../../../artifacts/topodualarm_retrain_20261001/final_audit.json)、[ROS照合](../../../artifacts/topodualarm_retrain_20261001/viewer_result.json)。
+詳細: [起動方法・全実行コマンド・資料](../../../benchmarks/topodualarm_retrain_20261001/README.md)、最終監査、ROS照合。

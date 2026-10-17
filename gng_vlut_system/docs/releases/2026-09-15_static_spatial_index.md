@@ -6,7 +6,7 @@
 
 - `topological_map_goal_selector_node`で、map座標系の3D索引を保持。同じ座標の再配信、ラベル・ID・法線・headerの更新、TF移動での再構築なし。
 - 到達セルをmap座標系へ逆変換した外接箱で検索し、従来のセル所属式による厳密な絞り込みを実施。
-- [現行仕様](../TECHNICAL_SPEC.md#32-topological_map_goal_selectorlaunchpy-の引数)を更新。
+- [現行仕様](../TECHNICAL_SPEC.md#3-設定)を更新。
 
 - 通常版`SpatialTree`に静止点の閉区間`query_aabb`を追加。有限値・上下限検査と空部分木の省略。
 - 比較用の有限Tmap購読、同一ソースによる両版・両精度ベンチマーク、旧選択結果との回帰検証。

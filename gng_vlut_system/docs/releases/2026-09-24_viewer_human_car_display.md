@@ -23,7 +23,7 @@
 
 追加・削除なし。ROSメッセージ、WSバージョン、配信バイト列の変更なし。受信後の`GraphData.clusters[].nodeIds`と検査用スナップショットはノードID方式。
 
-[Graph Stream仕様](../../../ToPoFuzzy-Viewer/common/ws_protocol_v2.md#graph-stream)と[Backend API](../../../ToPoFuzzy-Viewer/doc/BACKEND_API.md#streamgraph)を参照。
+[Graph Stream仕様](../../../ToPoFuzzy-Viewer/common/ws_protocol_v2.md#graph-stream)と[Backend API](../../../ToPoFuzzy-Viewer/common/ws_protocol_v2.md#graph-stream)を参照。
 
 Frontendディレクトリで実行:
 

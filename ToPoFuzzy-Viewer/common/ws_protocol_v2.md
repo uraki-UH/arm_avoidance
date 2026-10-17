@@ -11,6 +11,7 @@ RPC・stream・ROS topicの追加なし。[操作と範囲](../doc/MESH_MODELS.m
 - `/`: 既存Viewerの操作入口。ログイン認証・遠隔公開は未対応。
 - 入力上限: 1メッセージ1 MiB、1秒区間あたり2,000メッセージ・100 RPC要求。超過は切断。
 - `stream.tf.is_static`: 静的TFでtrue。従来クライアントは追加属性を無視可能。
+- `stream.capabilities.sensor_calibration`: ROS側の取付校正APIへの対応。要求・反映契約は[校正API](../doc/BACKEND_API.md#取付校正)。`/observe`では操作不可。
 - `sources.list`の`plane_cluster`: `PlaneClusterArray`。同一frame_number/frame_idの `/topological_map` から所属ノードと実内部エッジを`TMG1`へ変換。所属IDは元ノードID。
 - Binary frames: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
 - Text frames: JSON request/response and asynchronous events

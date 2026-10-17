@@ -1,24 +1,26 @@
 # 2026-10-01 - 前方伸展時の回避速度と点群ROI
 
+検証ログ: 旧artifacts参照先の一部は未同梱。本文の数値は当時の記録。
+
 変更:
 
 - 前方伸展用Gazebo設定: 速度上限0.45 → 1.2 rad/s、制御周期0.15 → 0.05 s。旧ゼロ姿勢設定の速度は保持。
 - 実点群ROI: ToPoDualArmの`environment_voxelization.reachability_margin_x`を0.1 → 0.4 mへ変更。保存済みTmapでの前方端0.528 → 0.828 m。左右・上下の余白は従来値。
 - 合成障害物: 前方伸展設定の`hand_far_x`を0.65 → 0.85 mへ変更。離れたときの復帰条件を満たす初期配置。実点群の配置には非適用。
 - 計画元: 既存`topological_map_avoidance_node`のC++計画。Gazebo関節状態と実環境Tmapから退避目標を生成し、Python側で速度・区間余裕・失効・停止ラッチを検査。危険時の安全候補を関節距離順32個へ限定し、`enable_safety_penalty: false`で候補間の探索結果を共有。衝突・危険ノードへの進入禁止は有効。既存ノード単独起動の既定動作は保持。
-- 状態更新: 初回Tmap取得後、時刻・トポロジー照合値付き`TopologicalNodeStates`で安全ラベルを受信。毎回のPython完全Tmap復元を回避。10,801ノード・1,296,948 byteの復元時間は3標本で147.5〜161.9 ms。[測定](../../../artifacts/gazebo_avoidance_speed_20261001/graph_decode.json)。
+- 状態更新: 初回Tmap取得後、時刻・トポロジー照合値付き`TopologicalNodeStates`で安全ラベルを受信。毎回のPython完全Tmap復元を回避。10,801ノード・1,296,948 byteの復元時間は3標本で147.5〜161.9 ms。測定。
 - 反映: 通常Viewerの環境入力launchとGazebo launchの再起動が必要。速度上限は常時速度の指定ではなく、停止距離・入力失効・実機側制限の緩和なし。[操作仕様](../dynamixel_sim_control.md)。
 
 調査・試験:
 
-- 既存実入力の10秒読取り: Gazebo実時間比0.945、停止理由「デモ停止距離に到達」、記録済み最小余裕0.025722 m、実機出力OFF。[読取り結果](../../../artifacts/gazebo_avoidance_speed_20261001/live_before.json)。読取りノード終了済み。
-- 高速設定の開始・停止試験: 前方伸展から左腕0.100499 rad変位、Space実測停止・B解除成功。ゆっくりした合成接近のため、この試験だけでは速度改善の根拠なし。[結果](../../../artifacts/gazebo_avoidance_speed_20261001/fast_start/report.json)。所有試験停止済み。
-- 初回比較: 障害物がROI外で環境点群が空となり、両設定とも開始待ちで期限超過。予測180 s、実測185.71 s。[比較記録](../../../artifacts/gazebo_avoidance_speed_20261001/comparison/report.json)。
-- 床点群追加後: 旧ROIの前方端から障害物が現れた時点で近接し、両設定とも停止距離に到達。予測140 s、実測30.14 s。速度設定だけでは解消せず、ROI拡大を追加。[比較記録](../../../artifacts/gazebo_avoidance_speed_20261001/comparison_with_floor/report.json)。両比較の全試験プロセス終了・既存ノード維持。
-- ROI拡大のみ: 旧速度・新速度とも停止距離に到達。[結果](../../../artifacts/gazebo_avoidance_speed_20261001/comparison_expanded_roi/report.json)。
-- C++接続時の失敗: 空の目標トピックによる全ノード探索、退避時の候補別探索による目標失効。目標トピック分離・候補数制限・共有探索へ修正。初期失敗時はlaunchのSIGKILLで所有ノード終了、直後のROS探索情報残留により復元未確認の記録あり。[起動失敗](../../../artifacts/gazebo_avoidance_speed_20261001/comparison_native/report.json)、[目標失効](../../../artifacts/gazebo_avoidance_speed_20261001/native_without_qp/report.json)。
-- QP併用試験: `solved inaccurate`で停止。[結果](../../../artifacts/gazebo_avoidance_speed_20261001/native_bounded/report.json)。QPは別セッションでYAML有効化・既定OFFへ変更とのユーザー確認。最終通し試験はQP無効、QP実装への変更なし。
-- 最終通し試験: 成功、69.16 s。同じ0.53 m / 8 s接近条件で最大関節変位0.6293 rad、最大実測関節速度0.2111 rad/s、最小点群余裕0.07772 m。C++計画7回、局所退避41回。Viewer実測一致1,124件、Gazebo自己ボクセル差分1,029セル、実機マスク差分0セル。実機関節入力欠測・点群欠測の停止と復帰操作成功。[結果](../../../artifacts/gazebo_avoidance_speed_20261001/native_shared_retry/report.json)。合成点群による検証、実RealSense接近速度への保証なし。上限1.2 rad/s到達の確認なし。
+- 既存実入力の10秒読取り: Gazebo実時間比0.945、停止理由「デモ停止距離に到達」、記録済み最小余裕0.025722 m、実機出力OFF。読取り結果。読取りノード終了済み。
+- 高速設定の開始・停止試験: 前方伸展から左腕0.100499 rad変位、Space実測停止・B解除成功。ゆっくりした合成接近のため、この試験だけでは速度改善の根拠なし。結果。所有試験停止済み。
+- 初回比較: 障害物がROI外で環境点群が空となり、両設定とも開始待ちで期限超過。予測180 s、実測185.71 s。比較記録。
+- 床点群追加後: 旧ROIの前方端から障害物が現れた時点で近接し、両設定とも停止距離に到達。予測140 s、実測30.14 s。速度設定だけでは解消せず、ROI拡大を追加。比較記録。両比較の全試験プロセス終了・既存ノード維持。
+- ROI拡大のみ: 旧速度・新速度とも停止距離に到達。結果。
+- C++接続時の失敗: 空の目標トピックによる全ノード探索、退避時の候補別探索による目標失効。目標トピック分離・候補数制限・共有探索へ修正。初期失敗時はlaunchのSIGKILLで所有ノード終了、直後のROS探索情報残留により復元未確認の記録あり。起動失敗、目標失効。
+- QP併用試験: `solved inaccurate`で停止。結果。QPは別セッションでYAML有効化・既定OFFへ変更とのユーザー確認。最終通し試験はQP無効、QP実装への変更なし。
+- 最終通し試験: 成功、69.16 s。同じ0.53 m / 8 s接近条件で最大関節変位0.6293 rad、最大実測関節速度0.2111 rad/s、最小点群余裕0.07772 m。C++計画7回、局所退避41回。Viewer実測一致1,124件、Gazebo自己ボクセル差分1,029セル、実機マスク差分0セル。実機関節入力欠測・点群欠測の停止と復帰操作成功。結果。合成点群による検証、実RealSense接近速度への保証なし。上限1.2 rad/s到達の確認なし。
 - 検証: active側`ais_gng_msgs`と`gng_vlut_system`のReleaseビルド成功。初回はCOLCON_IGNORE対象の`MSG/ais_gng_msgs`へ追加したため失敗し、active側へ修正。関連単体123件成功、最終診断追加後の入力検証・QP既存試験29件成功。全所有試験停止済み、実機指令なし。
 
 比較コマンド（コンテナ内、source済み）:
@@ -58,9 +60,9 @@ python3 /ros2_ws/src/gng_vlut_system/test/check_viewer_environment_gazebo.py \
 | 50 ms再発行の90%到達時間 [s] | 1.2 s以内に未到達 | 0.483 |
 
 - 評価: 同一トルク設定で追従改善。今回の大きな遅れの主要因は`quick`方式での物理追従。再発行時の静止間補間・退避量による速度低下は別要因。実機トルク不足の判定、実RealSense入力の回避速度保証は対象外。
-- 根拠: [quick](../../../artifacts/avoidance_motor_tracking_20261001/comparison_quick/report.json)、[world](../../../artifacts/avoidance_motor_tracking_20261001/comparison_world/report.json)。各`result: passed`は測定・後片付けの完了であり、追従合格の意味ではない。`world`単関節ログにもLCP内部エラー77件、数値安定性の合格根拠なし。所有プロセス・ROSノード残留なし。
-- 実入力読取り: 18秒間は`monitoring`、左肩指令最大0.02813 rad/sに対して実測0.02817 rad/s。小さい指令だけでは回避時の追従評価ができないため上記隔離試験を追加。[記録](../../../artifacts/avoidance_motor_tracking_20261001/report.json)。
-- 統合試験: `world`で水平姿勢−90°から点群保持・自動再開を試験。点群待機への移行前にODE `LCP internal error, s <= 0`と関節速度超過が発生し、停止ラッチ。最大関節速度22.84 rad/s、`obstacle_wait`待機で期限超過。単関節試験の成功だけでは採用不可。[失敗記録](../../../artifacts/avoidance_motor_tracking_20261001/world_auto_resume/report.json)。所有試験停止・ROSノード残留なし、既存launchと実機への操作なし。
+- 根拠: quick、world。各`result: passed`は測定・後片付けの完了であり、追従合格の意味ではない。`world`単関節ログにもLCP内部エラー77件、数値安定性の合格根拠なし。所有プロセス・ROSノード残留なし。
+- 実入力読取り: 18秒間は`monitoring`、左肩指令最大0.02813 rad/sに対して実測0.02817 rad/s。小さい指令だけでは回避時の追従評価ができないため上記隔離試験を追加。記録。
+- 統合試験: `world`で水平姿勢−90°から点群保持・自動再開を試験。点群待機への移行前にODE `LCP internal error, s <= 0`と関節速度超過が発生し、停止ラッチ。最大関節速度22.84 rad/s、`obstacle_wait`待機で期限超過。単関節試験の成功だけでは採用不可。失敗記録。所有試験停止・ROSノード残留なし、既存launchと実機への操作なし。
 
 起動コマンド（コンテナ内、ROS環境source済み、いずれも終了済み）:
 

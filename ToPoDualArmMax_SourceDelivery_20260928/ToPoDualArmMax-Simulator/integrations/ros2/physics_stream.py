@@ -61,6 +61,10 @@ class physics_session:
             raise ValueError('リーダー姿勢の追従は位置制御専用です')
         self.command_received_sec = time.monotonic()
         self.is_command_stopped = False
+        self.enable_command_timeout_hold = robot.get('enable_nonstop_simulation') is not True
+        if not self.enable_command_timeout_hold and (self.command_source != command_source.ros
+                or robot.get('command_topic') != '/sim/nonstop/joint_command'):
+            raise ValueError('非停止実験は専用MuJoCo指令トピックのみの対応です')
         self.enable_leader_follow = robot.get('enable_leader_follow') is True
         self.max_leader_age_sec = robot.get('max_leader_age_sec', 1.)
         if (type(self.max_leader_age_sec) not in (int, float) or
@@ -123,11 +127,7 @@ class physics_session:
                     not math.isfinite(stamp) or not 0 <= time.time()-stamp < self.max_leader_age_sec or
                     (self.leader_stamp_sec is not None and stamp < self.leader_stamp_sec)):
                 return
-        avoidance = self.scene.avoidance
-        if avoidance is not None and hasattr(avoidance, 'set_targets'):
-            avoidance.set_targets(value['joints'])
-        else:
-            self.scene.robot.set_targets(value['joints'])
+        self.scene.set_goal(value['joints'])
         if self.enable_leader_follow:
             self.leader_stamp_sec = stamp
 
@@ -160,7 +160,8 @@ class physics_session:
             self.command_received_sec = command[1]
             self.command_id = command[2]
             self.is_command_stopped = False
-        if self.command_source == command_source.ros and not self.is_command_stopped and time.monotonic()-self.command_received_sec >= self.max_leader_age_sec:
+        if (self.enable_command_timeout_hold and self.command_source == command_source.ros
+                and not self.is_command_stopped and time.monotonic()-self.command_received_sec >= self.max_leader_age_sec):
             self.scene.robot.hold_position()
             self.is_command_stopped = True
         # ブラウザ描画・入力再送に非依存の、worker内の実測失効判定

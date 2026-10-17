@@ -1,0 +1,1970 @@
+{
+  "model": "topo_dual_arm_max_long",
+  "num_active_joints": 7,
+  "num_saved_nodes": 9988,
+  "has_hardware_output": false,
+  "description": "保存済みVLUTのC++差分照会、共通短区間形状照合、4変数障害物候補、同一QP数値回復の検証",
+  "units": {
+    "propose_mean_ms": "ms/control cycle",
+    "vlut_query_mean_ms": "ms/field update",
+    "max_tip_stall_sec": "sec",
+    "num_qp_no_solution": "control cycles"
+  },
+  "comparison_contract": "各段階内のみ同一コード・同一絶対障害物速度で比較。段階間は障害物候補・ソルバ変更に伴う閉ループ軌道変化あり。制御周期20 Hz、シミュレーション刻み100 Hz。学習なし。",
+  "reports": {
+    "comparison": {
+      "status": "completed",
+      "num_cases": 18,
+      "elapsed_sec": 238.93157193699153,
+      "has_cleaned_all_children": true,
+      "cases": [
+        {
+          "name": "rollout_cv_l4",
+          "policy": "rollout_cv",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "rollout_cv",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 401,
+            "duration_sec": 12,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39"
+          },
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "metrics": {
+            "evaluated_sec": 4.66,
+            "num_arrivals": 1,
+            "has_failure": 1,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 12.497027924759909,
+            "propose_p95_ms": 12.98924747534329,
+            "num_qp_no_solution": 0,
+            "wall_sec": 6.805208726000274,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_rollout_cv_l4/details.json"
+        },
+        {
+          "name": "vlut_graph_l4",
+          "policy": "vlut_graph",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 401,
+            "duration_sec": 12,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "metrics": {
+            "evaluated_sec": 7.08,
+            "num_arrivals": 1,
+            "has_failure": 1,
+            "max_tip_stall_sec": 0.15000000000000036,
+            "propose_mean_ms": 5.729066717936854,
+            "propose_p95_ms": 5.946041956485715,
+            "vlut_query_mean_ms": 0.6084574940270076,
+            "num_qp_no_solution": 0,
+            "wall_sec": 6.7632512119889725,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_vlut_graph_l4/details.json"
+        },
+        {
+          "name": "rollout_cv_l5",
+          "policy": "rollout_cv",
+          "target_link": "L_link5",
+          "obstacle_shape": "sphere",
+          "seed": 40,
+          "conditions": {
+            "policy": "rollout_cv",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link5",
+            "seed": 40,
+            "duration_sec": 12,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39"
+          },
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "metrics": {
+            "evaluated_sec": 9.04,
+            "num_arrivals": 1,
+            "has_failure": 1,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 12.854904883627352,
+            "propose_p95_ms": 12.997559999348596,
+            "num_qp_no_solution": 0,
+            "wall_sec": 8.592724877002183,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_rollout_cv_l5/details.json"
+        },
+        {
+          "name": "vlut_graph_l5",
+          "policy": "vlut_graph",
+          "target_link": "L_link5",
+          "obstacle_shape": "sphere",
+          "seed": 40,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link5",
+            "seed": 40,
+            "duration_sec": 12,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "target_touch",
+          "outcome": "attacker_win",
+          "metrics": {
+            "evaluated_sec": 10.5,
+            "num_arrivals": 1,
+            "has_failure": 1,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 5.7881811431365175,
+            "propose_p95_ms": 6.045519807958044,
+            "vlut_query_mean_ms": 0.6102550625135856,
+            "num_qp_no_solution": 0,
+            "wall_sec": 8.264271027990617,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_vlut_graph_l5/details.json"
+        },
+        {
+          "name": "rollout_cv_free",
+          "policy": "rollout_cv",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "rollout_cv",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 401,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.05,
+              0.05
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.015,
+            "start_dist_m": 2,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 3,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 11.794021862988302,
+            "propose_p95_ms": 12.114443816244602,
+            "num_qp_no_solution": 0,
+            "wall_sec": 7.157706547994167,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_rollout_cv_free/details.json"
+        },
+        {
+          "name": "vlut_graph_free",
+          "policy": "vlut_graph",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 401,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.05,
+              0.05
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.015,
+            "start_dist_m": 2,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 4,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 5.097099930935656,
+            "propose_p95_ms": 5.189151395461522,
+            "vlut_query_mean_ms": 0.17154318593384232,
+            "num_qp_no_solution": 0,
+            "wall_sec": 6.68609805800952,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_vlut_graph_free/details.json"
+        },
+        {
+          "name": "rollout_cv_linked",
+          "policy": "rollout_cv",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 719,
+          "conditions": {
+            "policy": "rollout_cv",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 719,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 35.77372636900691,
+            "propose_p95_ms": 52.913446551247034,
+            "num_qp_no_solution": 0,
+            "wall_sec": 19.68267655200907,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_rollout_cv_linked/details.json"
+        },
+        {
+          "name": "vlut_graph_linked",
+          "policy": "vlut_graph",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 719,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 719,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0.04999999999999982,
+            "propose_mean_ms": 9.475218925399531,
+            "propose_p95_ms": 10.052660510700662,
+            "vlut_query_mean_ms": 2.0548665364913177,
+            "num_qp_no_solution": 0,
+            "wall_sec": 17.779976738005644,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_vlut_graph_linked/details.json"
+        },
+        {
+          "name": "rollout_cv_2197",
+          "policy": "rollout_cv",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 2197,
+          "conditions": {
+            "policy": "rollout_cv",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 2197,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 5.09,
+            "propose_mean_ms": 21.803316155455832,
+            "propose_p95_ms": 24.66591250995407,
+            "num_qp_no_solution": 0,
+            "wall_sec": 27.246818918996723,
+            "num_obstacle_configuration_plans": 24,
+            "obstacle_configuration_plan_total_ms": 57.375525997485965
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_rollout_cv_2197/details.json"
+        },
+        {
+          "name": "vlut_graph_2197",
+          "policy": "vlut_graph",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 2197,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 2197,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 9.572222731731017,
+            "propose_p95_ms": 10.01313840970397,
+            "vlut_query_mean_ms": 2.083057738673233,
+            "num_qp_no_solution": 0,
+            "wall_sec": 19.85110181197524,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_vlut_graph_2197/details.json"
+        },
+        {
+          "name": "l2",
+          "policy": "vlut_graph",
+          "target_link": "L_link2",
+          "obstacle_shape": "sphere",
+          "seed": 131,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link2",
+            "seed": 131,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 4,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 6.028798628722143,
+            "propose_p95_ms": 6.290139399061445,
+            "vlut_query_mean_ms": 0.8889079070286243,
+            "num_qp_no_solution": 0,
+            "wall_sec": 9.918106298020575,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_l2/details.json"
+        },
+        {
+          "name": "validation_l4",
+          "policy": "vlut_graph",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 5711,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 5711,
+            "duration_sec": 12,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 12,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 5.6539476498680115,
+            "propose_p95_ms": 5.888310840236954,
+            "vlut_query_mean_ms": 0.5271380204552164,
+            "num_qp_no_solution": 0,
+            "wall_sec": 8.866509796003811,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_validation_l4/details.json"
+        },
+        {
+          "name": "validation_l5",
+          "policy": "vlut_graph",
+          "target_link": "L_link5",
+          "obstacle_shape": "sphere",
+          "seed": 6277,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link5",
+            "seed": 6277,
+            "duration_sec": 12,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 12,
+            "num_arrivals": 1,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 5.679480825468393,
+            "propose_p95_ms": 5.904205540718976,
+            "vlut_query_mean_ms": 0.5683649908557223,
+            "num_qp_no_solution": 0,
+            "wall_sec": 9.101512332010316,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_validation_l5/details.json"
+        },
+        {
+          "name": "validation_l2",
+          "policy": "vlut_graph",
+          "target_link": "L_link2",
+          "obstacle_shape": "sphere",
+          "seed": 7603,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link2",
+            "seed": 7603,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 3,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 6.039295450682403,
+            "propose_p95_ms": 6.326190642721485,
+            "vlut_query_mean_ms": 0.8802969630778534,
+            "num_qp_no_solution": 0,
+            "wall_sec": 9.997527233994333,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_validation_l2/details.json"
+        },
+        {
+          "name": "validation_linked",
+          "policy": "vlut_graph",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 8741,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 8741,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0.09999999999999964,
+            "propose_mean_ms": 9.424291455798084,
+            "propose_p95_ms": 10.202353743079582,
+            "vlut_query_mean_ms": 2.115105931989092,
+            "num_qp_no_solution": 0,
+            "wall_sec": 16.988461471977644,
+            "num_obstacle_configuration_plans": 1,
+            "obstacle_configuration_plan_total_ms": 24.43057799246162
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_validation_linked/details.json"
+        },
+        {
+          "name": "oscbf_free",
+          "policy": "oscbf",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 401,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.05,
+              0.05
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.015,
+            "start_dist_m": 2,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 5,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 18.126756393940013,
+            "propose_p95_ms": 19.69085705350153,
+            "num_qp_no_solution": 18,
+            "wall_sec": 9.226158397999825,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 18,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "external_slack_mps": 0,
+            "solver_status": "solved",
+            "strict_solver_status": "solved",
+            "min_residual": 0.0000029001116972349195,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_oscbf_free/details.json"
+        },
+        {
+          "name": "oscbf_l6",
+          "policy": "oscbf",
+          "target_link": "L_link6",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link6",
+            "seed": 401,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 21.978018510708353,
+            "propose_p95_ms": 28.203564637806263,
+            "num_qp_no_solution": 64,
+            "wall_sec": 14.626273425994441,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 64,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "external_slack_mps": 0,
+            "solver_status": "solved",
+            "strict_solver_status": "solved",
+            "min_residual": -0.0000013647321766008247,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_oscbf_l6/details.json"
+        },
+        {
+          "name": "oscbf_linked",
+          "policy": "oscbf",
+          "target_link": "L_link4",
+          "obstacle_shape": "linked_arm",
+          "seed": 719,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link4",
+            "seed": 719,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "c08d2ba9636f429a7e50a9111fc68ec0b87b4da513c8514c206f786e09dfce79",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0.08999999999999986,
+            "propose_mean_ms": 25.831105874749483,
+            "propose_p95_ms": 31.472664861939844,
+            "num_qp_no_solution": 70,
+            "wall_sec": 25.468485351011623,
+            "num_obstacle_configuration_plans": 1,
+            "obstacle_configuration_plan_total_ms": 24.210514005972072
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 70,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "external_slack_mps": 0,
+            "solver_status": "primal infeasible inaccurate",
+            "strict_solver_status": "primal infeasible",
+            "min_residual": -0.11548491863349199,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/comparison_run/001_oscbf_linked/details.json"
+        }
+      ]
+    },
+    "coupled": {
+      "status": "completed",
+      "num_cases": 7,
+      "elapsed_sec": 137.14297095200163,
+      "has_cleaned_all_children": true,
+      "cases": [
+        {
+          "name": "rollout_cv_linked",
+          "policy": "rollout_cv",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 719,
+          "conditions": {
+            "policy": "rollout_cv",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 719,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0.04999999999999982,
+            "propose_mean_ms": 27.242896075222234,
+            "propose_p95_ms": 41.13026099221315,
+            "num_qp_no_solution": 0,
+            "wall_sec": 18.33907340298174,
+            "num_obstacle_configuration_plans": 132,
+            "obstacle_configuration_plan_total_ms": 165.04758686642163
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/coupled_run/001_rollout_cv_linked/details.json"
+        },
+        {
+          "name": "vlut_graph_linked",
+          "policy": "vlut_graph",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 719,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 719,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 9.501342963449133,
+            "propose_p95_ms": 10.311096598161384,
+            "vlut_query_mean_ms": 2.1684976758479024,
+            "num_qp_no_solution": 0,
+            "wall_sec": 16.765136622998398,
+            "num_obstacle_configuration_plans": 138,
+            "obstacle_configuration_plan_total_ms": 165.13213110738434
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/coupled_run/001_vlut_graph_linked/details.json"
+        },
+        {
+          "name": "rollout_cv_2197",
+          "policy": "rollout_cv",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 2197,
+          "conditions": {
+            "policy": "rollout_cv",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 2197,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 22.167450836604985,
+            "propose_p95_ms": 24.745095858816057,
+            "num_qp_no_solution": 0,
+            "wall_sec": 20.326720156008378,
+            "num_obstacle_configuration_plans": 154,
+            "obstacle_configuration_plan_total_ms": 210.7539171120152
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/coupled_run/001_rollout_cv_2197/details.json"
+        },
+        {
+          "name": "vlut_graph_2197",
+          "policy": "vlut_graph",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 2197,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 2197,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0.10000000000000009,
+            "propose_mean_ms": 9.424508006486576,
+            "propose_p95_ms": 10.37233260285575,
+            "vlut_query_mean_ms": 2.1092229937494267,
+            "num_qp_no_solution": 0,
+            "wall_sec": 19.4235764539917,
+            "num_obstacle_configuration_plans": 154,
+            "obstacle_configuration_plan_total_ms": 205.82076083519496
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/coupled_run/001_vlut_graph_2197/details.json"
+        },
+        {
+          "name": "validation_linked",
+          "policy": "vlut_graph",
+          "target_link": "L_link6",
+          "obstacle_shape": "linked_arm",
+          "seed": 8741,
+          "conditions": {
+            "policy": "vlut_graph",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link6",
+            "seed": 8741,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/gng.bin": "f68a4f5557242b8466309fc12105ba2974cddd30570d930402711d08004e61a4",
+            "/ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/libgng_dynamic_kernel.so": "61b220d67f1f8a26ae96578991d17d690ab1538c8bf6ea137bb5b00759c1bf39",
+            "/ros2_ws/src/gng_vlut_system/gng_results/topo_dual_arm_max_long_independent/left_arm/vlut.bin": "b3e73f6ca6ccfc7b99f25f06c127451fc9b4de7020a92231b173c4b47502a75b"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 1.8899999999999997,
+            "propose_mean_ms": 9.384941763164534,
+            "propose_p95_ms": 10.132272505143192,
+            "vlut_query_mean_ms": 2.0513392066277447,
+            "num_qp_no_solution": 0,
+            "wall_sec": 19.854675593000138,
+            "num_obstacle_configuration_plans": 139,
+            "obstacle_configuration_plan_total_ms": 181.68915298883803
+          },
+          "cbf_diagnostics": null,
+          "source_result": "log/artifacts/vlut_pursuit/coupled_run/001_validation_linked/details.json"
+        },
+        {
+          "name": "oscbf_free",
+          "policy": "oscbf",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 401,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.05,
+              0.05
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.015,
+            "start_dist_m": 2,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 5,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 17.954038360039704,
+            "propose_p95_ms": 19.56414434389444,
+            "num_qp_no_solution": 18,
+            "wall_sec": 7.837830345000839,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 18,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "external_slack_mps": 0,
+            "solver_status": "solved",
+            "strict_solver_status": "solved",
+            "min_residual": 0.0000029001116972349195,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/coupled_run/001_oscbf_free/details.json"
+        },
+        {
+          "name": "oscbf_linked_l4",
+          "policy": "oscbf",
+          "target_link": "L_link4",
+          "obstacle_shape": "linked_arm",
+          "seed": 719,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link4",
+            "seed": 719,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "bc93b3ce878db75421b20722ea639b9717efca698807de0c018c597a6ac58928",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 2.6500000000000004,
+            "propose_mean_ms": 25.20157581257081,
+            "propose_p95_ms": 26.77373008336872,
+            "num_qp_no_solution": 140,
+            "wall_sec": 32.35576735198265,
+            "num_obstacle_configuration_plans": 159,
+            "obstacle_configuration_plan_total_ms": 230.94412207137793
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 140,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "external_slack_mps": 0,
+            "solver_status": "maximum iterations reached",
+            "strict_solver_status": "primal infeasible",
+            "min_residual": -0.031189175605620623,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/coupled_run/001_oscbf_linked_l4/details.json"
+        }
+      ]
+    },
+    "solver": {
+      "status": "completed",
+      "num_cases": 3,
+      "elapsed_sec": 71.11693622800522,
+      "has_cleaned_all_children": true,
+      "cases": [
+        {
+          "name": "oscbf_free",
+          "policy": "oscbf",
+          "target_link": "L_link4",
+          "obstacle_shape": "sphere",
+          "seed": 401,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "sphere",
+            "target_link": "L_link4",
+            "seed": 401,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.05,
+              0.05
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.015,
+            "start_dist_m": 2,
+            "pursuit_mode": "distal_sweep",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "1dfd989a9e9c80458e4ae2bf616eddb7dac7cf8d7174d5aab6f58d517f4371c1",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 5,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0,
+            "propose_mean_ms": 17.945651678383,
+            "propose_p95_ms": 19.529089410207234,
+            "num_qp_no_solution": 18,
+            "wall_sec": 7.866890481003793,
+            "num_obstacle_configuration_plans": 0,
+            "obstacle_configuration_plan_total_ms": 0
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 18,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "num_numerical_recoveries": 0,
+            "external_slack_mps": 0,
+            "solver_status": "solved",
+            "strict_solver_status": "solved",
+            "min_residual": 0.0000029001116972349195,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/solver_run/001_oscbf_free/details.json"
+        },
+        {
+          "name": "oscbf_linked",
+          "policy": "oscbf",
+          "target_link": "L_link4",
+          "obstacle_shape": "linked_arm",
+          "seed": 719,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link4",
+            "seed": 719,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "1dfd989a9e9c80458e4ae2bf616eddb7dac7cf8d7174d5aab6f58d517f4371c1",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0.09999999999999964,
+            "propose_mean_ms": 27.904006869357545,
+            "propose_p95_ms": 41.43190223549027,
+            "num_qp_no_solution": 54,
+            "wall_sec": 31.530111034982838,
+            "num_obstacle_configuration_plans": 159,
+            "obstacle_configuration_plan_total_ms": 228.59574793255888
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 54,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "num_numerical_recoveries": 16,
+            "external_slack_mps": 0,
+            "solver_status": "primal infeasible",
+            "strict_solver_status": "primal infeasible",
+            "min_residual": -0.042390312691951565,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/solver_run/001_oscbf_linked/details.json"
+        },
+        {
+          "name": "oscbf_validation",
+          "policy": "oscbf",
+          "target_link": "L_link4",
+          "obstacle_shape": "linked_arm",
+          "seed": 8741,
+          "conditions": {
+            "policy": "oscbf",
+            "obstacle_shape": "linked_arm",
+            "target_link": "L_link4",
+            "seed": 8741,
+            "duration_sec": 8,
+            "speed_ratios": [
+              0.4,
+              1
+            ],
+            "speed_ramp_sec": 18,
+            "radius_m": 0.06,
+            "start_dist_m": 0.45,
+            "pursuit_mode": "link_point",
+            "max_ball_acceleration": 3,
+            "max_ball_deceleration": 8,
+            "max_ball_turn_acceleration": 10,
+            "enable_learning": false,
+            "enable_proximal_guard": true,
+            "enable_fixed_guard": true,
+            "reference_eef_speed_mps": 1.1536653422847134
+          },
+          "source_sha256": {
+            "sphere_chase.py": "f8b872e058edcbad9118a2987b60b9f3cff73393e6d413abf0b6891e464bd3fe",
+            "pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+            "pursuit_cbf.py": "1dfd989a9e9c80458e4ae2bf616eddb7dac7cf8d7174d5aab6f58d517f4371c1",
+            "gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+            "gng_prediction.py": "c1297d22483c106f9e834ed96279e024a7f6001cbab6e9f75171b212d4f901bc",
+            "physics_scene.py": "cd0c4d36b4b535c7d9b6aa330c17d7fcea0cb3f58dfe51040a5df8ecd7fe5f0b",
+            "physics_robot.py": "968733bd11be71fd285211d67ceacd4826e2aa987122f70a2ae892c7799d77b0",
+            "gng_avoidance.py": "8acbe2d7d1d04f5b16ad646b627dad52accc47abebefb7241123da31ac595d80"
+          },
+          "input_sha256": {
+            "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "a98991fb45d5f8d00332ae02a9664d40debf430fae0c13b5ab47baae2530f3a3"
+          },
+          "failure_reason": "",
+          "outcome": "unfinished",
+          "metrics": {
+            "evaluated_sec": 8,
+            "num_arrivals": 0,
+            "has_failure": 0,
+            "max_tip_stall_sec": 0.10000000000000009,
+            "propose_mean_ms": 30.8180398940749,
+            "propose_p95_ms": 54.77055746596306,
+            "num_qp_no_solution": 61,
+            "wall_sec": 30.53731979301665,
+            "num_obstacle_configuration_plans": 159,
+            "obstacle_configuration_plan_total_ms": 225.85776521009393
+          },
+          "cbf_diagnostics": {
+            "solver_backend": "osqp",
+            "num_no_solution_by_reason": {
+              "solver": 61,
+              "residual": 0,
+              "internal_guard": 0
+            },
+            "num_numerical_recoveries": 24,
+            "external_slack_mps": 0,
+            "solver_status": "primal infeasible",
+            "strict_solver_status": "primal infeasible",
+            "min_residual": -0.2780734404592644,
+            "last_failure_reason": "solver"
+          },
+          "source_result": "log/artifacts/vlut_pursuit/solver_run/001_oscbf_validation/details.json"
+        }
+      ]
+    }
+  },
+  "checks": {
+    "python_regression": {
+      "passed": 122,
+      "failed": 0
+    },
+    "node_regression": {
+      "passed": 66,
+      "failed": 0
+    },
+    "final_metrics_regression": {
+      "passed": 12,
+      "failed": 0
+    },
+    "native_vlut_build": "passed",
+    "native_numeric_only_build": "passed",
+    "saved_world_alignment_samples": 500
+  },
+  "live_cli": {
+    "command": [
+      "bash",
+      "scripts/run_dual_arm_simulation.sh",
+      "--scenario",
+      "chasing_sphere",
+      "--scenario-file",
+      "-",
+      "--stream-frames"
+    ],
+    "num_frames": 6,
+    "evaluated_sec": 0.26,
+    "wall_sec": 3.9247863210039213,
+    "vlut_query_mean_ms": 0.19628533239786825,
+    "has_recording": false,
+    "returncode": 0
+  },
+  "served_live": {
+    "job_id": "20c36374-33e4-4288-93ee-a1080e0e6175",
+    "state": "stopped",
+    "wall_sec": 5.238,
+    "policy": "vlut_graph",
+    "metrics": {
+      "num_arrivals": 0,
+      "num_round_trips": 0,
+      "contact_sec": 0,
+      "safe_sec": 0.36000000000000004,
+      "evaluated_sec": 0.36000000000000004,
+      "failure_penalty_sec": 0,
+      "is_failure": 0,
+      "is_attacker_loss": 0,
+      "first_failure_speed_ratio": 0.05,
+      "proxy_contact_sec": 0,
+      "internal_failure_sec": 0,
+      "stopped_sec": 0,
+      "min_proxy_gap_m": 0.3654595543616426,
+      "first_contact_sec": null,
+      "reference_eef_speed_mps": 1.1536653422847134,
+      "max_ball_speed_mps": 0.05652960177194641,
+      "max_eef_speed_mps": 0.9433903009050858,
+      "max_joint_speed_radps": 2.166221198436768,
+      "propose_mean_ms": 5.28061337172403,
+      "propose_p95_ms": 5.359889860847034,
+      "num_proposals": 8,
+      "num_memory_contexts": 0,
+      "num_memory_learning": 0,
+      "learned_pursuit_gain": 0,
+      "num_gng_nodes": 9988,
+      "obstacle_blocked_sec": 0,
+      "min_fixed_gap_m": 0.4365540747386416,
+      "num_obstacle_route_plans": 2,
+      "obstacle_route_total_ms": 68.00302400370128,
+      "min_protected_gap_m": 0.3654595543616426,
+      "num_protected_contacts": 0,
+      "max_obstacle_acceleration_m_per_sec2": 3.000000000000208,
+      "cbf_warmup_ms": 0,
+      "num_qp_no_solution": 0,
+      "qp_no_solution_sec": 0,
+      "first_qp_no_solution_sec": null,
+      "max_num_consecutive_qp_no_solution": 0,
+      "num_qp_recoveries": 0,
+      "num_qp_relaxed_solutions": 0,
+      "qp_constraint_recovery_sec": 0,
+      "num_coordinated_selections": 0,
+      "startup_ms": 4118.752531998325,
+      "num_internal_refined_poses": 0,
+      "num_internal_shape_checks": 0,
+      "calibrated_reference_eef_speed_mps": 1.1536653422847134,
+      "num_obstacle_route_recoveries": 0,
+      "obstacle_tip_blocked_sec": 0,
+      "num_obstacle_configuration_plans": 0,
+      "obstacle_configuration_plan_total_ms": 0,
+      "vlut_query_mean_ms": 0.20081236652913503,
+      "candidate_generation_mean_ms": 2.1427769934234675,
+      "rollout_fk_mean_ms": 1.323368000157643,
+      "external_check_mean_ms": 1.139627376687713,
+      "internal_selection_mean_ms": 0.3004000063810963,
+      "num_vlut_obstacle_voxels": 16,
+      "num_vlut_danger_voxels": 1212,
+      "num_vlut_obstacle_changes": 2,
+      "num_vlut_danger_changes": 33,
+      "num_arrivals_with_posture_dev": 0,
+      "task_position_rms_error_m": 0.3497103253231284,
+      "task_orientation_rms_error_deg": 3.6188762689953466,
+      "max_task_position_error_m": 0.36366281175860515,
+      "max_task_orientation_error_deg": 5.975415816229059
+    },
+    "has_recording": false,
+    "has_catalog_changed": false
+  },
+  "current_source_sha256": {
+    "gng_vlut_system/CMakeLists.txt": "e0a94b48f62d4271f5bf0028181714de3e0b47799d3a49421f121b0eb85c4f73",
+    "gng_vlut_system/src/core/planning/dynamic_avoidance_kernel.cpp": "88395aa4fc1bbd5c40ca4cb261e0057b68ac1108cf70f4af4dbb6282bd879edb",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/gng_sphere_avoidance.py": "8f44f9288126d2c8da98f162152371c30f422f992a36455870e995fd20dc8e88",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/pursuit_obstacle.py": "1e9af781beb4b6057ab8b212b0d521727f5525235b0f0528a9046a8d7436ba29",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/pursuit_cbf.py": "1dfd989a9e9c80458e4ae2bf616eddb7dac7cf8d7174d5aab6f58d517f4371c1",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/sphere_chase.py": "ad7979180a61ab954780a051926f83af51d664b330975b560725c5e6083de6b9",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/app/avoidance-experiments.mjs": "8c6bfe1d03dab42fd4a00e3f09d5e0aff6f23bcf66c6cf6751131707bb882ffb",
+    "ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/app/avoidance-replay.js": "6753c6a278ebdcdcff3f1a219209b4dc5bcd1bcecf4fec0712feebbe0db90769"
+  },
+  "remaining_limitations": [
+    "球障害物に接触する条件の残存",
+    "別seedの2リンク障害物で1.89 secの先端停滞",
+    "OSCBFの真の制約実行不能と保持の残存",
+    "OSCBF数値回復時の計算時間増加",
+    "シミュレーション全体の実時間動作の未保証",
+    "実機の関節可動域・速度・停止性能との未照合"
+  ],
+  "runtime": {
+    "has_stopped_all_test_processes": true,
+    "has_restored_container_states": true,
+    "has_kept_existing_ros_node_pids": true,
+    "intentional_replacement": {
+      "ports": [
+        8877,
+        8879,
+        8880
+      ],
+      "manager_host_pid": 1457887,
+      "server_host_pid": 1457975,
+      "bridge_host_pid": 1457986
+    }
+  },
+  "commands": "benchmarks/vlut_pursuit/commands.json"
+}

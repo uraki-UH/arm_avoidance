@@ -1,5 +1,6 @@
 """球観測に対する有限時間の回避。疎な時系列記憶・候補ロールアウト・現観測ガード。"""
 from collections import OrderedDict
+from collections.abc import Mapping
 import ctypes
 import os
 from pathlib import Path
@@ -16,7 +17,7 @@ def unit_vector(value):
     return value/max(float(np.linalg.norm(value)), 1e-9)
 
 
-def clearance_velocity(gradients, gaps, link_ids, clearance_th, max_velocity, max_num_links=3):
+def clearance_velocity(gradients, gaps, link_ids, clearance_th, max_velocity, max_num_links=3, closing_rates=None):
     """近接する可動剛体の代表点による全関節の連動退避。固定点・無効軸の除外。"""
     gradients,gaps,link_ids = map(np.asarray,(gradients,gaps,link_ids))
     velocity = np.zeros(gradients.shape[-1])
@@ -32,6 +33,8 @@ def clearance_velocity(gradients, gaps, link_ids, clearance_th, max_velocity, ma
         return velocity
     matrix = gradients[selected]
     rates = 3.*(clearance_th-gaps[selected])
+    if closing_rates is not None:
+        rates += np.maximum(0.,np.asarray(closing_rates)[selected])
     velocity = matrix.T@np.linalg.solve(matrix@matrix.T+.002*np.eye(len(selected)),rates)
     return velocity*min(1.,max_velocity/max(float(np.max(np.abs(velocity))),1e-9))
 
@@ -353,35 +356,105 @@ class representative_index:
         return is_clear
 
     def update(self, center, radius, margin=.10, enable_graph_labels=True):
-        code = self.library.gng_dynamic_node_gaps(len(self.ids), len(self.radii), self.centers, self.radii,
-            self.lower, self.upper, np.ascontiguousarray(center,dtype=float), radius, margin, self.gaps, self.labels)
-        if code:
-            raise ValueError('動的代表姿勢照会の入力不正')
+        self.query_sphere(center,radius,margin,(self.centers,self.lower,self.upper,self.gaps,self.labels))
         if enable_graph_labels:
             self.graph['labels'] = dict(zip(self.ids,map(int,self.labels)))
 
-    def update_field(self, field, margin=.10):
-        if not hasattr(field, 'covering_spheres'):
-            self.update(field.center, field.radius, margin)
-            return
+    def query_sphere(self,center,radius,margin,buffers):
+        """全ノード・候補ノード共通のC++照合。選択済み配列の再利用。"""
+        centers,lower,upper,gaps,labels = buffers
+        code = self.library.gng_dynamic_node_gaps(len(gaps), len(self.radii), centers, self.radii,
+            lower, upper, np.ascontiguousarray(center,dtype=float), radius, margin, gaps, labels)
+        if code:
+            raise ValueError('動的代表姿勢照会の入力不正')
+
+    def update_field(self, field, margin=.10, node_indices=None):
+        selected = np.arange(len(self.ids)) if node_indices is None else np.asarray(node_indices,dtype=int)
+        buffers = ((self.centers,self.lower,self.upper,self.gaps,self.labels) if node_indices is None else
+                   (self.centers[selected],self.lower[selected],self.upper[selected],np.empty(len(selected)),np.empty(len(selected),dtype=np.uint8)))
         # カプセル被覆球のC++照合。索引は保守的な候補除外、採用検査は元カプセル。
-        gaps = np.full(len(self.ids), np.inf)
-        has_collision = np.zeros(len(self.ids), dtype=bool)
-        has_danger = np.zeros(len(self.ids), dtype=bool)
-        for center, radius in field.covering_spheres():
-            self.update(center, radius, margin, enable_graph_labels=False)
-            np.minimum(gaps, self.gaps, out=gaps)
-            has_collision |= self.labels == 2
-            has_danger |= self.labels == 3
-        self.gaps[:] = gaps
-        self.labels[:] = np.where(has_collision, 2, np.where(has_danger, 3, 1))
-        self.graph['labels'] = dict(zip(self.ids, map(int, self.labels)))
+        gaps = np.full(len(selected), np.inf)
+        has_collision = np.zeros(len(selected), dtype=bool)
+        has_danger = np.zeros(len(selected), dtype=bool)
+        observations = field.covering_spheres() if hasattr(field,'covering_spheres') else [(field.center,field.radius)]
+        for center, radius in observations:
+            self.query_sphere(center,radius,margin,buffers)
+            np.minimum(gaps,buffers[3],out=gaps)
+            has_collision |= buffers[4] == 2
+            has_danger |= buffers[4] == 3
+        self.gaps[selected] = gaps
+        self.labels[selected] = np.where(has_collision, 2, np.where(has_danger, 3, 1))
+        self.graph['labels'] = {self.ids[idx]:int(self.labels[idx]) for idx in selected}
+
+
+class node_label_view(Mapping):
+    """C++更新配列の読取り専用ビュー。毎周期の全ノード辞書生成なし。"""
+    def __init__(self,values,ids):
+        self.values,self.ids = values,frozenset(ids)
+
+    def __getitem__(self,key):
+        if key not in self.ids:
+            raise KeyError(key)
+        return int(self.values[key])
+
+    def __iter__(self):
+        return iter(self.ids)
+
+    def __len__(self):
+        return len(self.ids)
+
+
+class vlut_index(representative_index):
+    """保存済みVLUTの共通C++索引とボクセル差分更新。未配置時の幾何方式への暗黙切替なし。"""
+    def __init__(self,geometry,active,positions,graph,filename):
+        super().__init__(geometry,active,positions,graph)
+        self.handle = None
+        if not hasattr(self.library,'gng_vlut_open'):
+            raise RuntimeError('VLUT対応gng_dynamic_kernelの再ビルドが必要')
+        self.library.gng_vlut_open.argtypes = [ctypes.c_char_p,ctypes.c_size_t]
+        self.library.gng_vlut_open.restype = ctypes.c_void_p
+        self.library.gng_vlut_close.argtypes = [ctypes.c_void_p]
+        self.library.gng_vlut_close.restype = None
+        floats = np.ctypeslib.ndpointer(dtype=np.float64,flags='C_CONTIGUOUS')
+        flags = np.ctypeslib.ndpointer(dtype=np.uint8,flags='C_CONTIGUOUS')
+        stats = np.ctypeslib.ndpointer(dtype=np.uint64,flags='C_CONTIGUOUS')
+        self.library.gng_vlut_update.argtypes = [ctypes.c_void_p,ctypes.c_size_t,floats,ctypes.c_double,ctypes.c_double,flags,stats]
+        self.library.gng_vlut_update.restype = ctypes.c_int
+        self.library.gng_vlut_error.restype = ctypes.c_char_p
+        self.vlut_path = Path(filename)
+        self.raw_labels = np.zeros(max(self.ids)+1,dtype=np.uint8)
+        self.node_ids = np.asarray(self.ids,dtype=np.intp)
+        self.graph['labels'] = node_label_view(self.raw_labels,self.ids)
+        self.stats = np.zeros(4,dtype=np.uint64)
+        self.handle = self.library.gng_vlut_open(os.fsencode(filename),len(self.raw_labels))
+        if not self.handle:
+            raise RuntimeError(self.library.gng_vlut_error().decode())
+
+    def update_field(self,field,margin=.10,node_indices=None):
+        if not self.handle:
+            raise RuntimeError('終了済みVLUT照会')
+        segments = (np.asarray(field.segments) if hasattr(field,'segments') else
+                    np.repeat(np.asarray(field.center)[None,None],2,axis=1))
+        code = self.library.gng_vlut_update(self.handle,len(segments),np.ascontiguousarray(segments,dtype=float),
+            field.radius,margin,self.raw_labels,self.stats)
+        if code:
+            raise RuntimeError(self.library.gng_vlut_error().decode())
+        self.labels[:] = self.raw_labels[self.node_ids]
+
+    def close(self):
+        if getattr(self,'handle',None):
+            self.library.gng_vlut_close(self.handle)
+            self.handle = None
+
+    def __del__(self):
+        self.close()
 
 
 def joint_velocity_command(positions, velocity, desired, limits, period=.05, max_velocity=2., max_acceleration=8.):
     """予測・指令共通の速度制限。加速度制限後の可動域優先と制動余裕 [rad]。"""
     desired = np.clip(desired, -max_velocity, max_velocity)
     desired = np.clip(desired, velocity-max_acceleration*period, velocity+max_acceleration*period)
+    desired = np.clip(desired, -max_velocity, max_velocity)
     lower = np.maximum(positions-limits[:,0]-.05, 0.)
     upper = np.maximum(limits[:,1]-positions-.05, 0.)
     return np.clip(desired, -np.minimum(3*lower, np.sqrt(2*max_acceleration*lower)),
@@ -407,6 +480,7 @@ class sphere_rollout_policy:
         self.mode, self.candidate_metric = mode, candidate_metric
         self.horizon_sec, self.max_velocity, self.max_acceleration, self.margin = horizon_sec,max_velocity,max_acceleration,margin
         self.task_weight = task_weight
+        self.smooth_weight = .002
         self.task = task
         self.internal_checker = internal_checker
         self.predictor = memory or motion_sequence_predictor()
@@ -415,10 +489,23 @@ class sphere_rollout_policy:
         self.num_proposals = self.num_candidates = self.num_guard_rejections = self.num_node_rejections = 0
         self.num_coordinated_selections = 0
         self.samples_ms = []
+        self.timing_totals_ms = dict(candidate_generation=0.,rollout_fk=0.,external_check=0.,internal_selection=0.)
         self.phase = 'waiting'
+        self.reference_frames = None
+        active_links = {0:False}
+        self.active_operations = []
+        for operation in geometry.operations:
+            parent,child,_,_,_,idx = operation[:6]
+            active_links[child] = active_links[parent] or idx in self.active
+            if active_links[child]:
+                self.active_operations.append(operation)
 
     def kinematics(self, poses, enable_task_frames=False, enable_link_frames=False):
-        transforms = self.geometry.link_transforms(poses)
+        if self.reference_frames is None:
+            transforms = self.geometry.link_transforms(poses)
+        else:
+            from dual_arm_avoidance_geometry import calculate_link_transforms
+            transforms = calculate_link_transforms(poses,self.active_operations,self.reference_frames)
         selected = transforms[...,self.geometry.sphere_links,:,:]
         centers = np.einsum('...nij,nj->...ni',selected[...,:3,:3],self.geometry.sphere_points)+selected[...,:3,3]
         target = transforms[...,self.eef_idx,:3,3]+np.einsum('...ij,j->...i',transforms[...,self.eef_idx,:3,:3],self.target_offset)
@@ -432,6 +519,22 @@ class sphere_rollout_policy:
     def angle_delta(self, goal, positions):
         delta = np.asarray(goal)-np.asarray(positions)
         return np.where(self.is_periodic[self.active],(delta+np.pi)%(2*np.pi)-np.pi,delta)
+
+    def clearance_direction(self, centers, field):
+        """観測接近速度を含む共通の連動退避候補。既存差分FKの共用。"""
+        gaps = field.query(centers[0])[0]-self.geometry.radii
+        clearance_th = max(.12,3.*self.margin)
+        near = np.flatnonzero(self.geometry.is_arm&(gaps<clearance_th))
+        gradients = ((field.query(centers[1:,near])[0]-self.geometry.radii[near]-gaps[near])/.002).T
+        if hasattr(field,'trajectory_gaps'):
+            future = field.trajectory_gaps(centers[0,near][None,None],[.05])[0,0]-self.geometry.radii[near]
+            closing_rates = (gaps[near]-future)/.05
+        else:
+            directions = centers[0,near]-field.center
+            directions /= np.maximum(np.linalg.norm(directions,axis=1,keepdims=True),1e-9)
+            closing_rates = directions@self.predictor.velocity if self.predictor.velocity is not None else np.zeros(len(near))
+        return clearance_velocity(gradients,gaps[near],self.geometry.center_links[near],clearance_th,self.max_velocity,
+                                  closing_rates=closing_rates)
 
     def proposals(self, positions, velocity, goal, field):
         num_active = len(self.active)
@@ -458,22 +561,18 @@ class sphere_rollout_policy:
         for direction in basis:
             candidates.extend(nominal+sign*.5*self.max_velocity*direction for sign in (-1.,1.))
         gaps = field.query(centers[0])[0]-self.geometry.radii
-        selected = int(np.argmin(gaps))
+        selected = int(np.argmin(np.where(self.geometry.is_arm,gaps,np.inf)))
         gradient = (field.query(centers[1:,selected])[0]-field.query(centers[0,selected])[0])/.002
         escape = gradient/max(float(np.max(np.abs(gradient))),1e-8)*self.max_velocity
         candidates.extend((escape, nominal+.6*escape, nominal+escape))
-        clearance_th = max(.12,3.*self.margin)
-        near = np.flatnonzero((gaps<clearance_th)&self.geometry.is_arm)
-        # 既存の一括FKから近接点だけの距離差分。可動剛体ごとの最大3代表点。
-        gradients = ((field.query(centers[1:,near])[0]-self.geometry.radii[near]-gaps[near])/.002).T
-        coupled = clearance_velocity(gradients,gaps[near],self.geometry.center_links[near],clearance_th,self.max_velocity)
+        coupled = self.clearance_direction(centers,field)
         coordinated = []
         if self.task is not None and np.any(coupled):
             # 手先位置を保つ方向の退避。手先の向きは既存の軟らかいコストで評価。
             linear = task_jacobian[:3]
             projected = coupled-linear.T@np.linalg.solve(linear@linear.T+.002*np.eye(3),linear@coupled)
             projected *= min(1.,self.max_velocity/max(float(np.max(np.abs(projected))),1e-9))
-            coordinated.extend((nominal+coupled,nominal+projected))
+            coordinated.extend((coupled,projected,nominal+coupled,nominal+projected))
         eef_jacobian = (eef[1:]-eef[0]).T/.002
         inverse = eef_jacobian.T@np.linalg.inv(eef_jacobian@eef_jacobian.T+.002*np.eye(3))
         bearing = unit_vector(eef[0]-field.center)
@@ -517,19 +616,25 @@ class sphere_rollout_policy:
         self.is_coordinated_candidate = first>=num_original
         return values
 
-    def propose(self, positions, velocity, goal, field, stamp_sec):
+    def propose_velocity(self, positions, velocity, goal, field, stamp_sec):
+        """制御対象軸の速度提案 [rad/s]。姿勢積分は内部予測のみ。"""
         begin = time.perf_counter()
         positions,velocity,goal = map(np.asarray,(positions,velocity,goal))
-        eef = self.geometry.link_transforms(positions)[self.eef_idx,:3,3]
+        self.reference_frames = self.geometry.link_transforms(positions)
+        eef = self.reference_frames[self.eef_idx,:3,3]
         self.predictor.update(field.center,getattr(field,'eef_position',eef),stamp_sec)
         candidates = self.proposals(positions,velocity,goal,field)
+        candidate_end = time.perf_counter()
         times = np.linspace(.05,self.horizon_sec,max(2,int(round(self.horizon_sec/.05))))
         poses = np.repeat(positions[None],len(candidates),axis=0)
         speeds = np.repeat(velocity[self.active][None],len(candidates),axis=0)
         trajectory = []
+        first_velocity = None
         for period in np.diff(np.r_[0.,times]):
             speeds = joint_velocity_command(poses[:,self.active], speeds, candidates,
                 self.geometry.limits[self.active], period, self.max_velocity, self.max_acceleration)
+            if first_velocity is None:
+                first_velocity = speeds.copy()
             poses[:,self.active] += speeds*period
             trajectory.append(poses.copy())
         trajectory = np.stack(trajectory,axis=1)
@@ -538,12 +643,13 @@ class sphere_rollout_policy:
             options['enable_link_frames'] = True
         result = self.kinematics(trajectory,**options)
         shape,eef_poses = result[:2]
+        fk_end = time.perf_counter()
         if hasattr(field,'trajectory_gaps'):
             gaps = (field.query(shape)[0] if self.mode=='reactive' else field.trajectory_gaps(shape,times))-self.geometry.radii
         else:
             obstacle = self.predictor.forecast(eef_poses,times,self.mode)
             gaps = np.linalg.norm(shape-obstacle[:,:,None,:],axis=-1)-self.geometry.radii-field.radius
-        min_gaps = np.min(gaps,axis=-1)
+        min_gaps = np.min(gaps[:,:,self.geometry.is_arm],axis=-1)
         deficits = np.maximum(0.,self.margin-min_gaps)
         task_error = np.mean(self.angle_delta(goal[self.active],trajectory[:,-1,self.active])**2,axis=1)
         posture_cost = np.zeros(len(candidates))
@@ -551,37 +657,117 @@ class sphere_rollout_policy:
             posture_cost = .0002*task_error
             task_error = self.task.pose_cost(result[2][:,-1])
         smooth = np.mean((candidates-self.previous_velocity)**2,axis=1)
-        costs = 150.*np.mean(deficits**2,axis=1)+self.task_weight*task_error+posture_cost+.002*smooth-.03*np.minimum(np.min(min_gaps,axis=1),.2)
+        costs = 150.*np.mean(deficits**2,axis=1)+self.task_weight*task_error+posture_cost+self.smooth_weight*smooth-.03*np.minimum(np.min(min_gaps,axis=1),.2)
         # 現観測での短区間検査。衝突開始時も障害物の消去なし、離隔の単調回復だけを許容。
         current_centers = self.geometry.centers(positions)
-        current_gap = float(np.min(field.query(current_centers)[0]-self.geometry.radii))
+        current_gap = float(np.min((field.query(current_centers)[0]-self.geometry.radii)[self.geometry.is_arm]))
         min_gap = min(.01,current_gap-.0002)
         target_idx = min(1,len(times)-1)
         guard_gaps = field.query(shape[:,:target_idx+1])[0]-self.geometry.radii
-        can_pass = np.min(guard_gaps,axis=(1,2)) >= min_gap
+        can_pass = np.min(guard_gaps[:,:,self.geometry.is_arm],axis=(1,2)) >= min_gap
         active_poses = trajectory[:,:,self.active]
         can_pass &= np.all((active_poses>=self.geometry.limits[self.active,0]) &
                            (active_poses<=self.geometry.limits[self.active,1]),axis=(1,2))
-        # 将来自己干渉姿勢への誘引も抑制。外部予測の安全保証とは別の内部形状検査。
-        is_internal_clear = (self.internal_checker.check(trajectory,shape,result[-1]) if self.internal_checker is not None else
-                             self.node_index.internal_clear(self.geometry,shape) if self.node_index is not None else
-                             self.geometry.has_internal_clearance(shape,.005))
-        can_pass &= np.all(is_internal_clear,axis=1)
         self.num_guard_rejections += int(np.count_nonzero(~can_pass))
         costs[~can_pass] = np.inf
-        # 従来の最良候補に対する離隔改善を、追加連動候補だけの採用条件へ適用。
-        best = select_clearance_candidate(costs,min_gaps,self.is_coordinated_candidate)
+        # 予測非接触候補の優先。姿勢復帰の選好による予測接触候補の採用なし。
+        predicted_gaps = np.min(min_gaps,axis=1)
+        if np.any(np.isfinite(costs)&(predicted_gaps>=.01)):
+            costs[predicted_gaps<.01] = np.inf
+        external_end = time.perf_counter()
+        if self.internal_checker is not None:
+            best = self.select_internal_candidate(costs,min_gaps,trajectory,shape,result[-1])
+        else:
+            is_clear = (self.node_index.internal_clear(self.geometry,shape) if self.node_index is not None else
+                        self.geometry.has_internal_clearance(shape,.005))
+            costs[~np.all(is_clear,axis=1)] = np.inf
+            best = select_clearance_candidate(costs,min_gaps,self.is_coordinated_candidate)
         if not np.isfinite(costs[best]):
             self.phase = 'holding'
             self.previous_velocity[:] = 0.
-            target = positions.copy()
+            command_velocity = joint_velocity_command(positions[self.active],velocity[self.active],
+                np.zeros(len(self.active)),self.geometry.limits[self.active],
+                max_velocity=self.max_velocity,max_acceleration=self.max_acceleration)
         else:
-            target = trajectory[best,target_idx].copy()
+            command_velocity = first_velocity[best].copy()
             self.num_coordinated_selections += int(self.is_coordinated_candidate[best])
             self.previous_velocity = candidates[best].copy()
             self.phase = 'task' if np.max(np.abs(candidates[best]-self.nominal_velocity)) < .01 else 'avoiding'
         self.num_candidates += len(candidates)
         self.num_proposals += 1
-        self.samples_ms.append((time.perf_counter()-begin)*1000)
-        return target
+        end = time.perf_counter()
+        self.samples_ms.append((end-begin)*1000)
+        for name,elapsed in zip(self.timing_totals_ms,(candidate_end-begin,fk_end-candidate_end,external_end-fk_end,end-external_end)):
+            self.timing_totals_ms[name] += elapsed*1000
+        return command_velocity
+
+    def select_internal_candidate(self, costs, gaps, trajectory, centers, frames):
+        """コスト順の内部照合。全候補の詳細照合を避けた従来候補・連動候補の比較。"""
+        best_original = None
+        for idx in np.argsort(costs,kind='stable'):
+            if not np.isfinite(costs[idx]):
+                break
+            if self.is_coordinated_candidate[idx]:
+                continue
+            if np.all(self.internal_checker.check(trajectory[idx],centers[idx],frames[idx])):
+                best_original = idx
+                break
+            self.num_guard_rejections += 1
+            costs[idx] = np.inf
+        original_cost = np.inf if best_original is None else costs[best_original]
+        costs[~self.is_coordinated_candidate] = np.inf
+        if best_original is not None:
+            costs[best_original] = original_cost
+        while np.any(np.isfinite(costs)):
+            idx = select_clearance_candidate(costs,gaps,self.is_coordinated_candidate)
+            if idx==best_original or np.all(self.internal_checker.check(trajectory[idx],centers[idx],frames[idx])):
+                return idx
+            self.num_guard_rejections += 1
+            costs[idx] = np.inf
+        return int(np.argmin(costs))
+
+
+class vlut_graph_policy(sphere_rollout_policy):
+    """VLUT状態に基づく近傍姿勢候補と、指令側の短区間照合。全候補の長時間ロールアウトなし。"""
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,horizon_sec=.15,**kwargs)
+        # 評価時間幅に応じた速度変化コスト。短区間化だけによる静止候補への偏りの抑制。
+        self.smooth_weight *= self.horizon_sec/.4
+
+    def proposals(self,positions,velocity,goal,field):
+        num = len(self.active)
+        probes = np.repeat(positions[None],num+1,axis=0)
+        probes[1:,self.active] += np.eye(num)*.002
+        result = self.kinematics(probes,enable_task_frames=self.task is not None)
+        centers = result[0]
+        nominal = np.clip(3.*self.angle_delta(goal[self.active],positions[self.active]),-self.max_velocity,self.max_velocity)
+        if self.task is not None:
+            nominal,_ = self.task.control(positions,result[2][0],self.task.jacobian(result[2]))
+        self.nominal_velocity = nominal
+        candidates = [nominal,.25*nominal,.5*nominal,np.zeros(num),self.previous_velocity]
+        coupled = self.clearance_direction(centers,field)
+        candidates.extend((coupled,nominal+coupled))
+        _,nearest = self.graph['angle_tree'].query(positions[self.active],k=min(64,len(self.graph['angle_node_ids'])))
+        ids = [self.graph['angle_node_ids'][int(idx)] for idx in np.atleast_1d(nearest)]
+        safe = [idx for idx in ids if self.graph['labels'].get(idx)==1]
+        if not safe:
+            safe = [idx for idx in ids if self.graph['labels'].get(idx)==3]
+        # 保存済み接続の安全な一次近傍を優先候補へ追加。連続姿勢からの接続は短区間照合の対象。
+        neighbors = [idx for idx in self.graph['adjacency'].get(ids[0],()) if self.graph['labels'].get(idx)==1]
+        if neighbors:
+            best = min(neighbors,key=lambda idx:float(np.mean(self.angle_delta(goal[self.active],self.graph['angles'][idx])**2)))
+            delta = self.angle_delta(self.graph['angles'][best],positions[self.active])
+            candidates.append(delta/max(float(np.max(np.abs(delta))),1e-9)*self.max_velocity)
+        self.num_node_rejections += len(ids)-len(safe)
+        targets = np.asarray([self.graph['angles'][idx] for idx in safe])
+        if len(targets):
+            costs = np.mean(self.angle_delta(goal[self.active],targets)**2,axis=1)
+            for target in targets[np.argsort(costs,kind='stable')[:8]]:
+                delta = self.angle_delta(target,positions[self.active])
+                candidates.append(delta/max(float(np.max(np.abs(delta))),1e-9)*self.max_velocity)
+        values = np.asarray(candidates)
+        values *= np.minimum(1.,self.max_velocity/np.maximum(np.max(np.abs(values),axis=1,keepdims=True),1e-9))
+        values = np.unique(np.round(values,7),axis=0)
+        self.is_coordinated_candidate = np.zeros(len(values),dtype=bool)
+        return values
 
