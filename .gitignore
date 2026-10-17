@@ -35,6 +35,9 @@ ToPoDualArm/
 # Dockerサービスのソケット・ロックなどの実行時生成物
 /docker/runtime/
 
+# CAD原本のローカル保管。実行用メッシュとの分離
+/local_cad/
+
 # ビルド・実行ログとTypeScriptの増分ビルド生成物
 *.log
 *.tsbuildinfo

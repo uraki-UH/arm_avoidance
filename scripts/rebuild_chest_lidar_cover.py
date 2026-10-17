@@ -169,12 +169,13 @@ def repair_cover(faces, metadata, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--metadata', type=Path, default=default_metadata)
+    parser.add_argument('--step-file', type=Path, help='別保管のSTEP原本')
     parser.add_argument('--output-dir', type=Path, required=True)
     args = parser.parse_args()
     metadata = json.loads(args.metadata.read_text())
     package = args.metadata.resolve().parents[1]
     preset = metadata['variants']['45']
-    source = package.parent / preset['source']
+    source = args.step_file if args.step_file is not None else package.parent / preset['source']
     if hashlib.sha256(source.read_bytes()).hexdigest() != preset['source_sha256']:
         parser.error('STEP原本のハッシュ不一致')
     # 入出力の分離。既存ファイルの上書きなし

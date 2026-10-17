@@ -6,9 +6,9 @@
 
 Longの胸部モデル:
 
-- 入力: ユーザー提供`urdf/ToPoDualArm-Max (long)45d.step`。
+- 入力: ユーザー提供`ToPoDualArm-Max (long)45d.step`。原本はGit外で別保管、通常実行には不要。
 - 同梱形状: `app/meshes/chest_lidar_mount_45.stl`、`chest_lidar_color_0.stl`〜`chest_lidar_color_3.stl`。ROS用`urdf/topo_dual_arm_max_long/meshes/`と同一のSTL。
-- 青色カバー: STEP球面の軸合わせ・隣接面の接合後に三角形化。元の半径・中心・上下境界を維持、面の欠損を回避。再生成処理は元ワークスペースの`scripts/rebuild_chest_lidar_cover.py`。
+- 青色カバー: STEP球面の軸合わせ・隣接面の接合後に三角形化。元の半径・中心・上下境界を維持、面の欠損を回避。再生成処理は元ワークスペースの`scripts/rebuild_chest_lidar_cover.py`、原本指定は`--step-file`。
 - 原点・姿勢: 同梱`app/source.urdf`の固定リンク。mm→mのみ、追加の軸回転なし。
 - 材質: STEPの面色4種類をlinear RGBで保持。ブラケットはロボットのgreen材質。実機の反射率・透過率の再現は対象外。
 - 描画原本: workspaceの`urdf/topo_dual_arm_max_long/`。ROS・ブラウザのvisual・色・STLの共通ソース。ブラウザ同梱分は生成物で、直接の形状修正は原本側。
