@@ -1,6 +1,6 @@
 # ROS 2連携
 
-別PCの準備は[RUN_GUIDE](../../../../RUN_GUIDE.md)。通常のブラウザ単体起動にROSは不要。
+別PCの準備は[RUN_GUIDE](../../../../MD/RUN_GUIDE.md)。通常のブラウザ単体起動にROSは不要。
 
 ## サーバーとROSブリッジの一括起動
 

@@ -1,6 +1,6 @@
 # ToPoDualArm-Max Simulator
 
-標準・LongのURDF/STLを使ったブラウザシミュレータ。別PCの構築は[RUN_GUIDE](../../RUN_GUIDE.md)を参照。
+標準・LongのURDF/STLを使ったブラウザシミュレータ。別PCの構築は[RUN_GUIDE](../../MD/RUN_GUIDE.md)を参照。
 
 ## 最初に起動する
 

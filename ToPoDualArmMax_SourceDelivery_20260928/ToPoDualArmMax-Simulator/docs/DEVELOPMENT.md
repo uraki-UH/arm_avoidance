@@ -2,24 +2,24 @@
 
 ## ソース変更
 
-1. `npm ci` でlockfile通りに依存を導入し、`npm run build` で型検査とUI生成を実行。
-2. READMEの手順でHTTPサーバーを起動。
-3. 新しいROS UIは `src/` のTypeScript/React、既存シーン・センサは `app/` のJavaScript。
-4. `npm run dev` はUIの監視ビルド。更新後はブラウザ再読み込み。`server.mjs` 自体の変更はサーバー再起動が必要。
-5. `npm run typecheck`・`npm run test:ros`・`npm test` と、変更に応じたブラウザ検証。
+Simulatorルートで実行:
 
-Viewerの操作UI・各Renderer・WS通信は `ToPoFuzzy-Viewer/frontend/src/`、共通型・WS v2復号・GNG描画補助は `libs/ros_visualization_web/`。
-Simulatorはこれらのソースを直接参照します。npm依存はSimulator側へ固定し、Viewerのnode_modulesは不要です。
-`src/ros-results.tsx` は遅延起動、`viewer-integration.tsx` は画面の接続、`graph-scene.ts` はFiberと既存描画の接続、`frame-tree.ts` はTF合成を担当します。
-Viewerの `embedding.tsx` がScene・レイアウト・TF・メッシュURLの差し替え口です。Simulator固有のRendererを複製しないでください。
-生成先 `app/generated/` はGit管理対象外であり、配布時にはビルド済みファイルも同梱してください。
-単体ZIPでの起動には生成済みファイルを使用し、ソースの再ビルドにはワークスペースの共有ソース配置も必要です。
-ビルド成果物にはReact・Fiber・Viewer UIを含み、ブラウザ実行時のnpm・CDN参照はありません。UIのCSSはShadow DOM内へ限定しています。
-依存更新時は `THIRD_PARTY_NOTICES.md` と `licenses/ROS-VIEWER-LICENSES.txt` の同梱版・本文も更新してください。
+```bash
+npm ci
+npm run build
+npm run typecheck
+npm run test:ros
+npm test
+```
 
-Three.jsは `app/index.html` のimport mapによる固定版を共用し、UIバンドルへの二重収録を防いでいます。
-ViewerとはThree.jsの版が異なるため、共有部品を変更した場合は両方の型検査・ビルド・描画テストが必要です。
-依存追加・更新時は `npm audit` を確認してください。脆弱性検出0件は安全性全体の保証ではありません。
+起動は[README](../README.md)、監視ビルドは`npm run dev`。
+更新後はブラウザ再読込、`server.mjs`変更後はサーバー再起動。
+責務・接続構成は[ARCHITECTURE](ARCHITECTURE.md)を参照。
+
+共有ソースはワークスペースのViewer・`libs/ros_visualization_web/`を直接参照。
+依存導入はSimulator側のみ。配布時はGit管理外の`app/generated/`も同梱。
+共有部品の変更時はThree.jsの版が異なるViewer側も型検査・ビルド・描画確認が必要。
+依存更新時は`npm audit`を確認し、`THIRD_PARTY_NOTICES.md`・`licenses/ROS-VIEWER-LICENSES.txt`も更新。
 
 ## ブラウザの処理コスト計測
 
@@ -30,42 +30,18 @@ npm run test:performance -- --output ../../log/artifacts/browser_performance/aft
 npm run test:performance -- --output ../../log/artifacts/browser_performance/profile --profile
 ```
 
-Node.js 22以上、ビルド済みUI、Chromeが必要。`CHROME_BIN`で実行ファイルを指定可能。
-専用HTTPサーバーと一時プロファイルのChromeを起動し、終了・失敗時に両方を停止。
+Node.js 22以上・ビルド済みUI・Chromeが必要。専用サーバーと一時プロファイルのChromeを使用し、終了・失敗時に停止。
 既存ブラウザ・ROSノードへの接続なし。出力先は毎回別のディレクトリを指定。
-既定GPUはMesa。NVIDIAは`--gpu nvidia`、描画環境なしでの動作確認は`--gpu software`。
-実GPU指定時のソフトウェア描画への代替は失敗扱い。GPU名・ブラウザ版・画面寸法・モデル・ソースのSHA-256を`report.json`へ保存。
+GPU・試験条件・検証オプションは[性能試験の引数定義](../tests/performance.browser.mjs)を参照。
+実GPU指定時のソフトウェア描画への代替は失敗扱い。
 
-既定の試験は通常描画、画角表示、LiDAR、RGB-D、GNG静止表示、GNGの10 Hz更新。
-`graph_stream`は1ノードだけの更新、`graph_stream_all`は全ノードの更新。両方の条件で差分更新の効果と上限を確認可能。
-`--cases idle,lidar,rgbd,graph_static,graph_stream`で選択可能。
-各条件は新しいページから開始。Longモデル、1440×1000のウィンドウ、既定校正、センサの既定品質を使用。
-GNGは`--nodes 10000`が既定で、1万ノード・3万辺の固定入力。
-WS v2バイナリを受信ハンドラへ渡し、実際の復号・React更新・共有Rendererを測定。
-ネットワーク転送・DDS・ROS側の計算時間は含まない。
+`render_submit`はCPUの描画送信と待機、RGB-Dの`render_ms`は読出し完了までの時間。
+GPU単体時間・ネットワーク・DDS・ROS計算とは別。
+`view_frame`は実描画間隔、`frame`は描画省略を含むコールバック間隔。
+条件と出力ハッシュは`report.json`、CPUプロファイルは`*.cpuprofile`へ保存。
 
-`--duration-ms 3000`で各条件の計測期間、`--captures 10`でセンサの取得回数を指定。
-センサは両方を満たすまで逐次取得。初回のBVH・シェーダー構築は`warmup`へ別記。
-LiDARは同じ走査開始位置を使用。センサ出力配列のSHA-256も保存し、基準結果との比較時に完全一致を確認。
-フレーム間隔のp50/p95/max、50 ms超の回数、メインスレッドのタスク時間、描画呼出し時間、センサ処理時間、GC後のヒープ差分を記録。
-`render_submit`はCPUからの描画送信とそこで生じた待機の時間であり、GPU単体の実行時間ではない。
-RGB-Dの`render_ms`は描画・非同期読出し完了までの経過時間。CPU画像処理は`compute_ms - render_ms`。
-CPUプロファイルは`*.cpuprofile`としてChrome DevToolsへ読込可能。
-
-方式の比較オプションは[性能試験の引数定義](../tests/performance.browser.mjs)を参照。
-比較軸は画像読出し方式、プレビュー表示、深度色付け、点群生成、通常ビューの描画抑制、Graph形状品質。
-
-- 基準比較: 旧条件`--points-backend javascript --view-scheduling continuous`と新条件`--points-backend wasm --view-scheduling priority`。
-- 同等性: センサ出力は完全一致、プレビュー色だけRGB8で1段階差を許容。表示条件の異なる`--baseline`比較は拒否。
-- 検証: `--verify-depth --verify-profile`で最大1280×720、遮蔽・外部回転・同期／非同期取得・代替形式・資源再利用・異常後復旧・プレビューを確認。
-- 指標: `view_frame`は実描画間隔、`frame`は描画省略を含むコールバック間隔。`--suppress-main-view`はGPU競合の切分け専用。
-- 軽量Graph: 球・円柱の分割数だけ変更。件数・位置・色・選択の検証はViewerの`tests/graph_geometry_browser.test.mjs`、差分更新はSimulatorの`npm run test:graph`。
-- 深度形式: 対応GPUはR32F、非対応GPUはRGBA8のfloat32ビット保持。両者とも1画素4バイトで転送量削減とは別。
-
-GPU負荷・温度を考慮して方式を交互に3回以上比較。
-時間上限は既定の合否条件に含まれず、入力・描画成立と例外の有無で判定。
-`--max-regression-percent`指定時はフレームp95・センサ平均取得時間の悪化も判定。
-設定・形式・品質・実行環境・センサ出力のハッシュは`report.json`に保持。
+比較は条件を揃えて交互に3回以上。センサ出力は完全一致、プレビュー色のみRGB8で1段階差を許容。
+時間上限は既定の合否条件に含まれず、性能劣化の判定には`--max-regression-percent`を指定。
 
 ## RGB-D点群カーネルの再生成
 
@@ -77,15 +53,8 @@ bash tools/build_rgbd_points.sh /path/to/clang++
 npm run test:rgbd
 ```
 
-ワークスペースの既存Docker環境では次のコマンドを使用可能。
-
-```bash
-docker exec gng_cpu_container bash /ros2_ws/src/ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/tools/build_rgbd_points.sh /opt/emsdk/upstream/bin/clang++
-```
-
-コンパイラオプションは倍精度の演算順を保持し、fast-math・積和融合を無効化。生成したwasmもソースと合わせて更新。
-`test:rgbd`で参照版とのバイト一致、欠損・丸め境界・バッファ再利用・読込失敗時の代替を検査。
-`--verify-depth --verify-profile`による実GPUでの検査も実施。
+生成したwasmもソースと合わせて更新。倍精度の演算順を保持し、fast-math・積和融合は無効。
+参照版とのバイト一致は`test:rgbd`、実GPUは性能試験の`--verify-depth --verify-profile`で確認。
 
 ## URDF / STLの変更とキャッシュ再生成
 
@@ -123,13 +92,13 @@ python tools/extract_mid360_reference.py path/to/Indoor_sampledata.lvx2
 
 ## D435i実機校正の読み込み
 
-`tools/export_d435i_calibration.py` はSDK `pyrealsense2` と接続された実機がある場合の補助ツールです。通常起動時には実行しません。出力JSONをRGB-D校正に使用。実機個体の校正値がない標準状態では公称値を使う近似です。
+SDK・実機がある環境で任意に実行。取得コマンド・校正JSONの単位と制約は[RGB-D校正](RGBD_README.md#公称値と実機校正)を参照。
 
 ## 別サーバー / VMへの配置
 
 `app/` をHTTP配信ルートにしてください。ES Modules、Worker、WASM、GLB、URDF、バイナリキャッシュを配信できる必要があります。JavaScriptはJavaScript MIME、WASMは `application/wasm` を設定します。同梱Nodeサーバーでは設定済みです。
 
-Nodeサーバー自体はWindows固有APIを使用しません。送付時点ではLinux / macOS上の起動は未検証のため、移植先で `npm test` とブラウザQAを行ってください。ROS 2との結合は `integrations/ros2/README.md` を参照してください。
+Nodeサーバー自体はWindows固有APIを使用しません。送付時点ではLinux / macOS上の起動は未検証のため、移植先で `npm test` とブラウザQAを行ってください。ROS 2との結合は[ROS連携](../integrations/ros2/README.md)を参照。
 
 ## 汎用モータ計算
 

@@ -13,7 +13,7 @@ npm run dev
 ```
 
 表示: `http://localhost:5173`。接続先: `ws://127.0.0.1:9001`。
-Docker・GPU起動は[ワークスペース手順](../RUN_GUIDE.md)。
+Docker・GPU起動は[ワークスペース手順](../MD/RUN_GUIDE.md)。
 
 表示ON/OFFとROS処理の開始・停止は独立。
 点群の削除・変換はバックエンド担当。編集領域は`map`座標系、TF欠落時は失敗。

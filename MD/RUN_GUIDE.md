@@ -51,7 +51,7 @@ Longの学習バイナリはGitに未収録。機体URDF・設定に対応する
 | 学習データ不足 | YAMLのGNG有効設定とcheck |
 | UIソース更新が未反映 | shell内のSimulatorルートでnpm ci && npm run build |
 
-CPUアーキテクチャ差・実機回避は未検証。機能別依存は[ROS連携](ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md)を参照。
+CPUアーキテクチャ差・実機回避は未検証。機能別依存は[ROS連携](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md)を参照。
 
 ## 開発用gng_cpuとViewer
 
@@ -68,22 +68,22 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=topo_dual_a
 ```
 
 Frontendはホストから`docker compose --profile manual up -d frontend`。
-GPUブラウザは`bash scripts/open_viewer_nvidia.sh`。[Viewer単体の構築](ToPoFuzzy-Viewer/doc/ROS2_BRIDGE.md)。
+GPUブラウザは`bash scripts/open_viewer_nvidia.sh`。[Viewer単体の構築](../ToPoFuzzy-Viewer/doc/ROS2_BRIDGE.md)。
 
 ## 機能別の入口
 
 | 用途 | 手順・設定 |
 | --- | --- |
-| ブラウザ・MuJoCo・ROS送受信 | [Simulator](ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md)・[ROS連携](ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md) |
-| 建設現場の独立シミュレーション | [MuJoCo](simulation/mujoco_ws/README.md)・[Gazebo](simulation/gazebo_ws/README.md)・[Isaac Sim](simulation/construction_isaac_sim/README.md) |
-| センシング→ROS回避→実行先 | [双腕シミュレーション](gng_vlut_system/docs/dual_arm_simulation.md) |
-| bag・データセット | [データ入力](DATASET_GUIDE.md) |
-| MID-360実機 | [接続・取付TF](hardware/mid360/README.md) |
+| ブラウザ・MuJoCo・ROS送受信 | [Simulator](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md)・[ROS連携](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md) |
+| 建設現場の独立シミュレーション | [MuJoCo](../simulation/mujoco_ws/README.md)・[Gazebo](../simulation/gazebo_ws/README.md)・[Isaac Sim](../simulation/construction_isaac_sim/README.md) |
+| センシング→ROS回避→実行先 | [双腕シミュレーション](../gng_vlut_system/docs/dual_arm_simulation.md) |
+| bag・データセット | [bag再生](../scripts/play_bag.sh)・[点群確認](../docker/rosbag_pointcloud_validation.md) |
+| MID-360実機 | [接続・取付TF](../hardware/mid360/README.md) |
 | RealSense・Dynamixel入力 | [実機入力](hardware_guide.md) |
-| リーダー・フォロワー／重力補償 | [制御手順](gng_vlut_system/docs/dynamixel_sim_control.md)。実機駆動・重力支持は未検証、校正・腕の支持が必要 |
-| GNG学習・VLUT・ロボット表示 | [GNG-VLUT](gng_vlut_system/README.md) |
-| 上面／ボクセル把持候補 | [把持機能](grasping_system/README.md)。同じ出力先の候補生成を重複起動しないこと |
-| メッシュから完全表面テンプレート | [テンプレート生成](gng_vlut_system/docs/MESH_SURFACE_TEMPLATE.md) |
+| リーダー・フォロワー／重力補償 | [制御手順](../gng_vlut_system/docs/dynamixel_sim_control.md)。実機駆動・重力支持は未検証、校正・腕の支持が必要 |
+| GNG学習・VLUT・ロボット表示 | [GNG-VLUT](../gng_vlut_system/README.md) |
+| 上面／ボクセル把持候補 | [把持機能](../grasping_system/README.md)。同じ出力先の候補生成を重複起動しないこと |
+| メッシュから完全表面テンプレート | [テンプレート生成](../gng_vlut_system/docs/MESH_SURFACE_TEMPLATE.md) |
 
 ## FuzzBotの表示専用起動
 
@@ -95,7 +95,7 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=fuzzbot.yam
 ```
 
 親の`COLCON_IGNORE`は維持。走行指令・実機接続・学習・自己認識ボクセルは未起動。
-設定: [fuzzbot.yaml](gng_vlut_system/config/fuzzbot.yaml)。表示にGNG・VLUTは不要。
+設定: [fuzzbot.yaml](../gng_vlut_system/config/fuzzbot.yaml)。表示にGNG・VLUTは不要。
 
 ### FuzzBotの移動状態グラフ
 
@@ -103,7 +103,7 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=fuzzbot.yam
 ros2 launch gng_vlut_system mobile_state_graph.launch.py
 ```
 
-Viewer表示: `/fuzzbot/state_graph/markers`。設定: [fuzzbot.yaml](gng_vlut_system/config/fuzzbot.yaml)の`motion_graph`。
+Viewer表示: `/fuzzbot/state_graph/markers`。設定: [fuzzbot.yaml](../gng_vlut_system/config/fuzzbot.yaml)の`motion_graph`。
 状態は`(x,y,yaw,v,omega)`、有向エッジは一定加速度による遷移。生データは`/fuzzbot/state_graph/data`。
 初回生成・保存後は整合性検査付き再利用。再生成は`enable_rebuild:=true`、生成だけは`build_only:=true`。
 平坦床・横滑りなしの差動二輪モデル。全状態被覆・障害物照合・実機指令・現在状態の検索は対象外。
