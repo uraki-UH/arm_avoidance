@@ -29,7 +29,7 @@ def path_list(values):
 
 def load_layout(path=layout_path):
     layout = yaml.safe_load(path.read_text())
-    if not isinstance(layout, dict) or set(layout) != {'version', 'components', 'local_projects'} or type(layout['version']) is not int or layout['version'] != 1:
+    if not isinstance(layout, dict) or set(layout) != {'version', 'components', 'local_projects', 'external_projects'} or type(layout['version']) is not int or layout['version'] != 2:
         raise ValueError('workspace.yamlの形式不正')
     components = layout['components']
     if not isinstance(components, dict) or not components:
@@ -53,6 +53,23 @@ def load_layout(path=layout_path):
             if component['kind'] != 'optional' or not any(Path(value).is_relative_to(Path(root)) for root in paths):
                 raise ValueError('外部取得定義は任意部品内への配置が必要です')
     roots.extend(path_list(layout['local_projects']))
+    external = layout['external_projects']
+    if not isinstance(external, dict):
+        raise ValueError('外部プロジェクトの定義不正')
+    targets = []
+    for name, value in external.items():
+        if (not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', name)
+                or not isinstance(value, str) or not value or Path(value).is_absolute()
+                or any(char in value for char in ('\x00', '\n', '\r')) or str(Path(value)) != value):
+            raise ValueError('外部プロジェクトの名前・配置不正')
+        target = (workspace_dir/value).resolve()
+        if target.is_relative_to(workspace_dir) or workspace_dir.is_relative_to(target):
+            raise ValueError('外部プロジェクトは本体外への配置が必要です: '+name)
+        targets.append(target)
+    for idx, target in enumerate(targets):
+        if any(target.is_relative_to(other) or other.is_relative_to(target) for other in targets[idx+1:]):
+            raise ValueError('外部プロジェクトの配置重複')
+    roots.extend(external)
     for idx, root in enumerate(roots):
         if any(Path(root).is_relative_to(Path(other)) or Path(other).is_relative_to(Path(root)) for other in roots[idx+1:]):
             raise ValueError('構成部品・独立プロジェクトの配置重複: '+root)
@@ -97,7 +114,7 @@ def check_layout(layout=None, enable_git_check=True):
                     or not re.fullmatch(r'[0-9a-f]{40}', spec['version'])):
                 raise ValueError('外部取得定義にはGit URLと固定commitが必要です: '+name)
     if enable_git_check and (workspace_dir/'.git').exists():
-        tracked = subprocess.run(['git', '-c', 'safe.directory='+str(workspace_dir), '-C', str(workspace_dir), 'ls-files', '-z', '--', *layout['local_projects']],
+        tracked = subprocess.run(['git', '-c', 'safe.directory='+str(workspace_dir), '-C', str(workspace_dir), 'ls-files', '-z', '--', *layout['local_projects'], *layout['external_projects']],
                                  capture_output=True, check=True).stdout
         if tracked:
             raise ValueError('独立プロジェクトに本リポジトリの追跡対象が存在します')
@@ -125,6 +142,8 @@ def main():
                     if component['kind'] == kind:
                         print('  '+name+': '+', '.join(component['paths']))
             print('独立プロジェクト（共有対象外）: '+', '.join(layout['local_projects']))
+            for name, value in layout['external_projects'].items():
+                print('外部プロジェクト: '+name+' → '+value)
     except (ValueError, TypeError, OSError, yaml.YAMLError, subprocess.SubprocessError) as error:
         parser.exit(1, 'ワークスペース構成の不正: '+str(error)+'\n')
 

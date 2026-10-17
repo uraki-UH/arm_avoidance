@@ -9,8 +9,6 @@
 
     robot_name: "ToPoDualArm"
     urdf_path: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
-    resource_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description"
-    mesh_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description/meshes"
 
     # --- GNG & Safety Settings ---
     gng:

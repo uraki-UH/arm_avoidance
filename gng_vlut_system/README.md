@@ -133,6 +133,9 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
 
 ### FuzzBotの移動状態GNG
 
+機体パッケージは`robots/fuzzbot/`、状態学習・遷移グラフは本パッケージへ分離。
+旧構想の[effectivity_map_gng](experimental/effectivity_map_gng/)はコメントのみで未実装、通常ビルド対象外。
+
 初期位置・前方を基準とする状態`(x, y, 相対yaw, v, omega)`の学習とViewer表示。設定は[fuzzbot.yaml](config/fuzzbot.yaml)の`mobile_gng`・`motion_graph`。
 平坦床・横滑りなしの差動二輪モデル。
 
@@ -233,7 +236,7 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
 
 roi_voxelsは自己除去前、self_filter_roi_voxelsは除去後。VLUTへは除去後を入力。
 自己マスクは回転・並進後の境界セル不足が残るため、厳密な形状保証とは区別。
-ROI範囲は[仕様](docs/TECHNICAL_SPEC.md#17-roi範囲の静的マップbbox追従)、実センサ接続は[MID-360](../hardware/mid360/README.md)を参照。
+ROI範囲は[仕様](docs/TECHNICAL_SPEC.md#17-roi範囲の静的マップbbox追従)、実センサ接続は[MID-360](../hardware_drivers/mid360/README.md)を参照。
 
 ### ROI登録とAiS-GNGの自己判定共有
 

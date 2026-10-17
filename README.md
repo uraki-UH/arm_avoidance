@@ -25,6 +25,7 @@ GNG/VLUT方式には別途学習データが必要。最小デモの成功は回
 arm_avoidance/
 ├── MSG/                         ROSメッセージ・サービス定義
 ├── ais_gng_cpu/                 センサ点群のAiS-GNG学習
+│   └── gng_web_tools/           任意のHTML向けWASM・bag変換
 ├── pointcloud_sampling/         点群の共通登録・サンプリング
 ├── gng_vlut_system/             ロボット姿勢GNG・VLUT・ROS計画制御
 │   ├── include/, src/           C++アルゴリズム・ROSノード
@@ -40,7 +41,9 @@ arm_avoidance/
 │       ├── app/, src/          ロボット・センサ表示、Viewer埋込み
 │       └── integrations/ros2/  MuJoCo・回避方式・ROS接続アダプタ
 ├── urdf/                       ロボット形状・関節定義
-├── extensions/registration/     任意の3D位置合わせ比較・外部取得定義
+├── robots/                     FuzzBot・ToPoDualArmの機体別ソース
+├── hardware_drivers/           共通のセンサ・モータドライバ
+├── extensions/                 任意の位置合わせ・分類・単体HTML
 ├── benchmarks/cpu_demo/        共有可能な最小実験設定
 ├── workspace.yaml              中核・任意機能・独立プロジェクトの構成
 ├── docker/                     Docker・Compose構成
@@ -51,4 +54,6 @@ arm_avoidance/
 
 中核・任意機能の範囲は[workspace.yaml](workspace.yaml)。通常構築は指定した中核部品のみ、外部ライブラリの取得なし。
 [3D位置合わせ](extensions/registration/README.md)は任意機能へ分離。独立Gitリポジトリへの切出し・公開は未実施。
-`local_projects`の独立プロジェクトと実験データは本体Gitの共有範囲外。既存のローカル配置・各Git履歴は維持。
+`dataset_pointcloud_player`・`topo_tamp`は`../projects/`配下の別Git。配置は`external_projects`を参照。
+ToPoDualArmはワークスペース内の`robots/topo_dual_arm/`で別Git管理。
+これらと`local_projects`・実験データは本体Gitの共有範囲外。

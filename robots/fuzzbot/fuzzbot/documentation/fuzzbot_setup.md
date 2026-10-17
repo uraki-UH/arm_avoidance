@@ -16,7 +16,7 @@ Jetson導入は[SDK Manager](https://developer.nvidia.com/sdk-manager)、ROS導�
 | librealsense | v2.55.1、RSUSB・CUDA有効 |
 | realsense-ros | 4.55.1。[上流](https://github.com/IntelRealSense/realsense-ros) |
 | D435i firmware | 5.16.0.1。SDKと対応する版を使用 |
-| DynamixelHandler | [上流](https://github.com/ROBOTIS-JAPAN-GIT/DynamixelHandler-ros2)・[ワークスペース版](../../../../hardware/dynamixel/dynamixel_handler/ReadMe.md) |
+| DynamixelHandler | [上流](https://github.com/ROBOTIS-JAPAN-GIT/DynamixelHandler-ros2)・[ワークスペース版](../../../../hardware_drivers/dynamixel/dynamixel_handler/ReadMe.md) |
 | MID-360 | [Livox-SDK2](https://github.com/Livox-SDK/Livox-SDK2)・[driver](https://github.com/fuzzrobo/livox_ros_driver2) |
 | GLIM | [導入元](https://koide3.github.io/glim/)、元手順はCUDA 12.6版 |
 
@@ -44,7 +44,7 @@ source install/setup.bash
 ```
 
 MID-360 driverは別の`~/livox_ws`で`./build.sh humble`後に環境を読込み。SDK導入後は共有ライブラリの解決確認が必要。
-ワークスペース共通のMID-360接続・TFは[手順](../../../../hardware/mid360/README.md)。
+ワークスペース共通のMID-360接続・TFは[手順](../../../../hardware_drivers/mid360/README.md)。
 
 ## 実機起動
 

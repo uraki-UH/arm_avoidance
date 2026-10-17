@@ -10,7 +10,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
-set(gng_cpu_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../ais_gng_cpu/src/gng_cpu")
+set(gng_cpu_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../src/gng_cpu")
 set(GNG_WASM_OUTPUT_DIR "" CACHE PATH "Optional output directory for Emscripten-generated JS/WASM artifacts")
 
 add_library(gng_wasm_core

@@ -1,6 +1,6 @@
 # 実機入力
 
-MID-360は[専用手順](../hardware/mid360/README.md)、制御元の切替は[共通関節制御](../gng_vlut_system/docs/joint_control.md)。
+MID-360は[専用手順](../hardware_drivers/mid360/README.md)、制御元の切替は[共通関節制御](../gng_vlut_system/docs/joint_control.md)。
 
 ## RealSense
 
@@ -24,6 +24,6 @@ bag再生は[play_bag.sh](../scripts/play_bag.sh)。
 
 ## Dynamixel
 
-ドライバ起動は[handler](../hardware/dynamixel/dynamixel_handler/ReadMe.md)。
+ドライバ起動は[handler](../hardware_drivers/dynamixel/dynamixel_handler/ReadMe.md)。
 実測姿勢の表示は[読取り専用接続](../gng_vlut_system/docs/releases/2026-10-01_dynamixel_ids_31_52.md#実測現在姿勢の読取り専用表示)。
-対応表は[bridge設定](../hardware/dynamixel/dynamixel_joint_state_bridge/config/)。実測の表示と目標指令を混同せず、同じ変換ノードの重複起動を避けること。
+対応表は[bridge設定](../hardware_drivers/dynamixel/dynamixel_joint_state_bridge/config/)。実測の表示と目標指令を混同せず、同じ変換ノードの重複起動を避けること。

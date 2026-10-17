@@ -30,6 +30,8 @@ ToPoDualArm/
 /dataset_pointcloud_player/
 /simulation/
 /topo_tamp/
+# ワークスペース内の別Git。本体への一括追加からの除外。
+/robots/topo_dual_arm/
 
 # 実験の生成物・生ログ・生データ。再現資料と保存済み集計は benchmarks/ に分離。
 !/log/

@@ -3,6 +3,7 @@
 点群からのCPU GNG学習・平面／曲面抽出。
 前提条件はROS 2 HumbleとCPU版PyTorch。共通環境は[起動手順](../MD/RUN_GUIDE.md)を参照。
 SimulatorのCPU専用構成にはAIS-GNGライブ学習を含まない点に注意。
+HTML向けのWASM・bag変換は任意機能の[gng_web_tools](gng_web_tools/README.md)。通常構築への追加なし。
 
 ## 環境構築・ビルド
 

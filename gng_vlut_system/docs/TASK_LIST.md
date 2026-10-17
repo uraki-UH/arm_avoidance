@@ -40,7 +40,7 @@
 ### POC (〜8月 / 最大9月中旬)
 
 1. **実機ラインの再有効化**
-   `ToPoDualArm/topoarm_hardware/COLCON_IGNORE` により2026-06-19からビルド対象外。除外を解除し、実機との疎通を確認する。
+   別Gitの`robots/topo_dual_arm/topoarm_hardware`は通常構築の対象外。[実機環境](../../hardware_drivers/README.md#topoarm)のsubmodule・任意ビルドを整え、実機との疎通を確認する。
    *暫定目標: 実機に対して関節指令が通り、safety_monitorが機能する*
 
 2. **点群からの把持手先位置姿勢候補群の取得を精緻化**

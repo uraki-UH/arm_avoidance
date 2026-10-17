@@ -82,14 +82,20 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=topo_dual_a
 Frontendはホストから`docker compose --profile manual up -d frontend`。
 GPUブラウザは`bash scripts/open_viewer_nvidia.sh`。[Viewer単体の構築](../ToPoFuzzy-Viewer/doc/ROS2_BRIDGE.md)。
 
+### データセットの再生環境
+
+別Gitの`dataset_pointcloud_player`ルートで`docker compose up -d --build`。再生手順は同リポジトリのREADMEを参照。
+本体からの任意起動は`docker compose --profile dataset up -d --build dataset_player`。
+ソース配置の既定は`../projects/dataset_pointcloud_player`、変更時は`DATASET_PLAYER_DIR`を指定。同じ再生環境の重複起動は禁止。
+
 ## 機能別の入口
 
 | 用途 | 手順・設定 |
 | --- | --- |
 | ブラウザ・MuJoCo・ROS送受信 | [Simulator](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md)・[ROS連携](../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md) |
 | センシング→ROS回避→実行先 | [双腕シミュレーション](../gng_vlut_system/docs/dual_arm_simulation.md) |
-| bag・データセット | [bag再生](../scripts/play_bag.sh)・[点群確認](../docker/rosbag_pointcloud_validation.md) |
-| MID-360実機 | [接続・取付TF](../hardware/mid360/README.md) |
+| bag・データセット | [bag再生](../scripts/play_bag.sh)・[点群確認](../docker/rosbag_pointcloud_validation.md)・[別Gitの再生環境](#データセットの再生環境) |
+| MID-360実機 | [接続・取付TF](../hardware_drivers/mid360/README.md) |
 | RealSense・Dynamixel入力 | [実機入力](hardware_guide.md) |
 | リーダー・フォロワー／重力補償 | [制御手順](../gng_vlut_system/docs/dynamixel_sim_control.md)。実機駆動・重力支持は未検証、校正・腕の支持が必要 |
 | GNG学習・VLUT・ロボット表示 | [GNG-VLUT](../gng_vlut_system/README.md) |
@@ -100,12 +106,12 @@ GPUブラウザは`bash scripts/open_viewer_nvidia.sh`。[Viewer単体の構築]
 
 ```bash
 cd /ros2_ws
-colcon build --paths src/fuzzbot_gng/fuzzbot/fuzzbot_description --packages-select fuzzbot_description --symlink-install
+colcon build --paths src/robots/fuzzbot/fuzzbot_description --packages-select fuzzbot_description --symlink-install --cmake-clean-cache
 source install/setup.bash
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py params_file:=fuzzbot.yaml
 ```
 
-親の`COLCON_IGNORE`は維持。走行指令・実機接続・学習・自己認識ボクセルは未起動。
+親の`COLCON_IGNORE`は維持。移動前のビルド済み環境は上記で再構築。走行指令・実機接続・学習・自己認識ボクセルは未起動。
 設定: [fuzzbot.yaml](../gng_vlut_system/config/fuzzbot.yaml)。表示にGNG・VLUTは不要。
 
 ### FuzzBotの移動状態グラフ

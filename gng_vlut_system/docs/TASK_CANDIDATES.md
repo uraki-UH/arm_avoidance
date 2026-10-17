@@ -188,14 +188,11 @@ C空間で一様にノードを置く手法ではこの自由度がノード列�
 - 軽量化案: 同一フレームの画素／角度セル索引を共有し、境界候補の周縁へ投影される実測レイだけを参照。全点群との候補ごとの総当たりの回避。
 - 未確定事項: 利用する共分散と楕円領域の定義、表面方向の拡張量、「明らかに手前」の余裕、信頼性と検査レイ数の上限。斜面・粗い角度間隔・遠距離・曲面・角・隣接別物体・実遮蔽・欠測での誤判定率と処理時間の比較。
 
-### データセット点群実行環境の別リポジトリ化
+### 独立データセット環境と本体の接続検証
 
-- データセットの取得、変換、`PointCloud2` 再生および専用実行ガイドを、`uraki_ws` から独立したリポジトリへ分離。
-- 移動対象候補は `DATASET_GUIDE.md`、`docker/Dockerfile.dataset_player`、`docker-compose.yaml` の `dataset_player` serviceと専用volume、データセット取得・変換・再生用のscript・launch・package。
-- `uraki_ws` 側には、外部リポジトリがpublishする `/dataset/points` を AiS-GNG、`gng_vlut_system`、Viewerへ接続する統合手順とtopic契約のみを保持。
-- 既存の `/home/fuzzrobo/graspnet_dataset_ws` はGraspNet専用構成のため、新規リポジトリ作成または同リポジトリの汎用化を実施時に選定。
-- 現在の `DATASET_GUIDE.md` とComposeが参照する `dataset_pointcloud_player` package本体は、現worktree、Git履歴、stash、`/home/fuzzrobo` 配下で未確認。分離前に復元元の特定、または再実装範囲の確定が必要。
-- 完了条件は、新リポジトリ単独でのDocker build、対象データセットの再生、`PointCloud2` のtopic名・frame・QoSの検証、`uraki_ws` 側との接続確認、両リポジトリの実行ガイド更新。
+- `dataset_pointcloud_player`本体・取得／変換script・Docker構成は、`workspace.yaml`の`external_projects`で示す別Gitへ分離済み。再生手順の正本は同リポジトリのREADME。
+- 本体には外部ソースの任意Compose起動とROS入力の接続を保持。通常構築にデータセット環境は不要。
+- 残課題は、対象の実データセットでの再生、topic名・frame・QoSの照合、AiS-GNG・`gng_vlut_system`・Viewerとの接続検証。単独Docker構築・合成入力の確認とは別。
 
 ### 物体GNGテンプレート照合の特徴量拡張
 

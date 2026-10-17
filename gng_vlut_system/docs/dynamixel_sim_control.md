@@ -113,7 +113,7 @@ H=保持準備、F=追従、Space=保持停止、E=対象軸OFF、R=停止解除
 ### 実機フォロワーの手動姿勢確認
 
 実機出力OFFで /follower/joint_states をブラウザの実測表示へ入力。
-設定は[Max／Longの対応表](../../hardware/dynamixel/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_max_ids_31_52.yaml)を参照。
+設定は[Max／Longの対応表](../../hardware_drivers/dynamixel/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge_max_ids_31_52.yaml)を参照。
 present入力は描画用。制御監視はfresh入力を使用し、表示のクランプを実測値の補正として扱わないこと。
 
 ### ブラウザの物理フォロワー

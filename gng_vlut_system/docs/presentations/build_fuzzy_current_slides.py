@@ -16,7 +16,7 @@ from build_fuzzy_grasp_slides import (
 
 output_dir = Path(__file__).resolve().parent
 repo_root = output_dir.parents[2]
-html_path = repo_root / "ToPo-FUZZY_Manipulation_v1.html"
+html_path = repo_root / "extensions/topo_fuzzy_standalone/ToPo-FUZZY_Manipulation_v1.html"
 
 # DOM非依存の初期モデル関数のみを抽出する限定実行
 extract_script = r"""

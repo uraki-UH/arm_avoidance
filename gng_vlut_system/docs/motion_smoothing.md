@@ -12,7 +12,7 @@ Python・C++・単体HTMLは配布形態が異なるため、異言語をまた�
 | --- | --- | --- |
 | Gazeboの5次補間区間・ROS軌道生成 | [motion_smoothing.py](../scripts/motion_smoothing.py) | 通常双腕デモ・局所回避デモ。GNG/LiDARデモは回避デモから継承 |
 | C++の関節速度制限 | [motion_smoothing.hpp](../src/core/control/motion_smoothing.hpp) | 関節目標実行ノード・仮想関節ドライバー |
-| 単体HTMLの3次補間 | [単体HTML](../../ToPo-FUZZY_Manipulation_v1.html)の`motion_smoothing_cubic_ratio` | 旧IK補間・汎用関節補間・基部と開口の補間、計3箇所 |
+| 単体HTMLの3次補間 | [単体HTML](../../extensions/topo_fuzzy_standalone/ToPo-FUZZY_Manipulation_v1.html)の`motion_smoothing_cubic_ratio` | 旧IK補間・汎用関節補間・基部と開口の補間、計3箇所 |
 
 Pythonの`quintic_duration`は速度制限から補間時間、`quintic_max_step`は時間から変位上限を算出。
 両端の速度・加速度ゼロの5次補間に固有の最大速度係数は同モジュールで一元管理。

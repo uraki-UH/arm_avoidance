@@ -19,6 +19,7 @@ git switch -c uraki_your_topic
 | 物理・センサ・接続 | Simulatorの`integrations/ros2/`・`app/` | [開発ガイド](ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/docs/DEVELOPMENT.md) |
 | 関節・形状・起動設定 | `urdf/`・対象パッケージの`config/`・`launch/` | 対象機体のYAML・URDF |
 | 3D位置合わせの比較 | `extensions/registration/` | [任意ツール](extensions/registration/README.md) |
+| クラスタ再分類 | `extensions/fuzzy_classifier/` | [任意パッケージ](extensions/fuzzy_classifier/README.md)。標準起動には不使用 |
 
 Simulatorは`ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/`。
 方式追加は既存の登録JSONとアダプタ境界を優先。[拡張契約](ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/docs/ARCHITECTURE.md#ros連携の拡張通信契約)を参照。
@@ -26,8 +27,8 @@ Simulatorは`ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/`�
 ## 依存と境界
 
 - 中核・任意部品の配置とROS探索範囲は[workspace.yaml](workspace.yaml)。CPUの構築部品・対象パッケージは[Compose YAML](docker/compose.simulator_cpu.yaml)。開発コンテナの`cb`・`cbd`も中核だけの探索。
-- 同じ変更で整合が必要な実装・メッセージは本体で管理。単独利用・異なる依存環境・独立リリースの機能は分離候補。任意実装は`extensions/`、外部ソースは本体外へ取得し、接続アダプタだけを利用側へ配置。
-- `local_projects`は別Gitまたはローカル専用の管理対象。本体への一括追加・本体からの相対importは禁止。配置移動・履歴分割・リモート作成は別途確認。
+- 同じ変更で整合が必要な実装・メッセージは本体で管理。単独利用・異なる依存環境・独立リリースの機能は分離候補。任意実装は`extensions/`、機体別ソースは`robots/`。別Gitは`local_projects`・`external_projects`で共有範囲から分離し、接続アダプタだけを利用側へ配置。
+- `external_projects`は本体外の別Git、`local_projects`は本体内のローカル専用配置。各履歴・未コミット変更を個別管理し、本体への一括追加・本体からの相対importは禁止。接続はROS topic等の契約経由。
 - ROS依存は対象パッケージの`package.xml`、ビルド・インストールは`ament`／`colcon`。通常構築への任意環境・学習済み重みの必須化なし。
 - CPUイメージのOS・Python依存は[Dockerfile](Dockerfile)、UI依存はSimulatorの`package.json`・ロックファイル。新規依存は両方の構築経路への反映確認。
 - センサ入力・関節実測・駆動指令は別経路。ROSメッセージ契約の変更は`MSG/`と送受信側を同じPRへ包含。長さはm、角度はrad。

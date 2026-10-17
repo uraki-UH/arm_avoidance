@@ -54,4 +54,4 @@ ROSの候補生成・経路計画と、HTMLのファジィ把持評価は別系�
 - 当時のフレームは`world`、TCPは`L_tcp`、到達ボクセル幅0.05 m。frame passthroughは座標変換の正しさを保証しない。
 - 後続の[候補Tmap化](releases/2026-09-14_candidate_topological_map.md)と[付属抽出の方式統一](releases/2026-09-14_fixed_reference_attachment.md)は個別記録を参照。当時の設定を現在の既定値として流用しない。
 
-実装：[HTMLの特徴量・既定ルール・推論](../../ToPo-FUZZY_Manipulation_v1.html)、[ROS候補生成](../../grasping_system/src/top_grasp_surface_estimator_node.cpp)、[目標選択](../src/nodes/planning/topological_map_goal_selector_node.cpp)、[評価値の仕様](../../grasping_system/docs/fuzzy_evaluation_metrics.md)。改善案は[統合設計書](designs/fuzzy_grasp_design.md#open-design)。
+実装：[HTMLの特徴量・既定ルール・推論](../../extensions/topo_fuzzy_standalone/ToPo-FUZZY_Manipulation_v1.html)、[ROS候補生成](../../grasping_system/src/top_grasp_surface_estimator_node.cpp)、[目標選択](../src/nodes/planning/topological_map_goal_selector_node.cpp)、[評価値の仕様](../../grasping_system/docs/fuzzy_evaluation_metrics.md)。改善案は[統合設計書](designs/fuzzy_grasp_design.md#open-design)。

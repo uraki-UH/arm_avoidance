@@ -6,7 +6,7 @@ ROS bagを単体HTML用のJSON／gzipへ変換。
 ```bash
 ros2 run gng_bundle_exporter gng-bundle-export export \
   --bag /path/to/bag \
-  --config /ros2_ws/src/gng_web_tools/exporter/config/export_topics.example.yaml \
+  --config /ros2_ws/src/ais_gng_cpu/gng_web_tools/exporter/config/export_topics.example.yaml \
   --output /path/to/output.json.gz
 ```
 

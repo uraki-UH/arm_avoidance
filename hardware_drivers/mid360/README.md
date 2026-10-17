@@ -18,8 +18,8 @@ GNGコンテナのビルドとは独立。通常のCompose起動では対象外�
 電源・Ethernetを接続し、設定YAMLを確認後、ホストで:
 
 ```bash
-python3 hardware/mid360/start.py --check
-python3 hardware/mid360/start.py
+python3 hardware_drivers/mid360/start.py --check
+python3 hardware_drivers/mid360/start.py
 ```
 
 有線LAN選択・PC固定IP設定・ドライバ起動。IP設定時のみsudo認証。
@@ -48,7 +48,7 @@ docker compose up mid360
 終了はCtrl+Cまたは`docker compose stop mid360`。別のLivoxドライバとの同時起動不可。
 設定変更は再起動、コード・Dockerfile変更は再ビルド後に反映。
 `Cannot assign requested address`はPCへのIP未割当。`--check-config`成功はセンサ疎通の保証ではない。
-旧`hardware/mid360/compose.yaml`とルートComposeは別プロジェクトのため重複起動不可。
+単独の`hardware_drivers/mid360/compose.yaml`とルートComposeは別プロジェクトのため重複起動不可。
 
 | トピック | 型 | frame |
 | --- | --- | --- |

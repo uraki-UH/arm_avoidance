@@ -8,7 +8,7 @@ CUGNGの勝者探索・ノード／エッジ更新・年齢処理を共有。ROS
 Emscriptenの`em++`が必要。
 
 ```bash
-cd gng_web_tools/wasm
+cd ais_gng_cpu/gng_web_tools/wasm
 bash scripts/build_wasm.sh
 ```
 

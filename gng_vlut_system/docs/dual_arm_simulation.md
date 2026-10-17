@@ -1,7 +1,7 @@
 # 双腕シミュレーション
 
 既定はLong。機体設定は[topo_dual_arm_max_long.yaml](../config/topo_dual_arm_max_long.yaml)を参照。
-実機MID-360は[専用手順](../../hardware/mid360/README.md)、ブラウザ操作は[Simulator](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md)を参照。
+実機MID-360は[専用手順](../../hardware_drivers/mid360/README.md)、ブラウザ操作は[Simulator](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md)を参照。
 
 ## センシング → ROS回避 → 実行先
 

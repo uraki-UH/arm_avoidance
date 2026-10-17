@@ -1,10 +1,10 @@
 # GNG Web Tools
 
-`ToPo-FUZZY_Manipulation_v1.html` 向けのGNG実行・データ変換ツール群。
+[単体HTML](../../extensions/topo_fuzzy_standalone/ToPo-FUZZY_Manipulation_v1.html)向けのGNG実行・データ変換ツール群。
 配置のみを集約し、WASM向けC++とROS依存Pythonのビルド・依存関係は分離。
 
 ```text
-gng_web_tools/
+ais_gng_cpu/gng_web_tools/
 ├── wasm/       # ROSパッケージ名: gng_wasm_core
 ├── exporter/   # ROSパッケージ名: gng_bundle_exporter
 └── tests/      # 配置・WASM読み込みの確認
@@ -23,7 +23,7 @@ gng_web_tools/
 docker exec -w /ros2_ws gng_cpu_container bash -lc '
   source /opt/ros/humble/setup.bash
   source /ros2_ws/install/setup.bash
-  colcon build --base-paths /ros2_ws/src/gng_web_tools \
+  colcon build --base-paths /ros2_ws/src/ais_gng_cpu/gng_web_tools \
     --packages-select gng_wasm_core gng_bundle_exporter \
     --symlink-install --cmake-clean-cache
 '
@@ -33,7 +33,7 @@ docker exec -w /ros2_ws gng_cpu_container bash -lc '
 
 ```bash
 docker exec gng_cpu_container bash \
-  /ros2_ws/src/gng_web_tools/wasm/scripts/build_wasm.sh
+  /ros2_ws/src/ais_gng_cpu/gng_web_tools/wasm/scripts/build_wasm.sh
 ```
 
 ## 既存コマンド
@@ -43,19 +43,20 @@ ROSパッケージ名と実行ファイル名は変更なし。
 ```bash
 ros2 run gng_bundle_exporter gng-bundle-export export \
   --bag /path/to/bag \
-  --config /ros2_ws/src/gng_web_tools/exporter/config/export_topics.example.yaml \
+  --config /ros2_ws/src/ais_gng_cpu/gng_web_tools/exporter/config/export_topics.example.yaml \
   --output /path/to/output.json
 ```
 
 ソースツリーまたはsymlink-install使用時の既定出力先は `exporter/results/`。
 通常インストールではPythonパッケージの配置に依存するため、明示的な `--output` 指定を推奨。
-旧ルート直下の2フォルダは廃止。HTMLの読み込み先は
-`gng_web_tools/wasm/dist/gng_wasm_core.js`。
+HTMLの読み込み先は`ais_gng_cpu/gng_web_tools/wasm/dist/gng_wasm_core.js`。
 
 ## 読み込みテスト
 
+以下はGit管理外の検証コードを保持した環境だけが対象。
+
 ```bash
-node gng_web_tools/tests/wasm_load.cjs
+node ais_gng_cpu/gng_web_tools/tests/wasm_load.cjs
 ```
 
 HTMLの参照先、ABI、入力点群からの学習・JSON出力を確認。
@@ -64,7 +65,7 @@ HTMLの参照先、ABI、入力点群からの学習・JSON出力を確認。
 エクスポータの確認は、ROS環境をsourceした状態で実行。
 
 ```bash
-python3 gng_web_tools/tests/exporter_load.py
+python3 ais_gng_cpu/gng_web_tools/tests/exporter_load.py
 ```
 
 一時bagと出力ファイルはテスト終了時に削除。実トピックへの送信なし。

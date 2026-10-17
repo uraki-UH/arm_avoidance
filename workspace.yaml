@@ -1,5 +1,5 @@
 # ソースの責務・構築範囲・任意依存の正本。Gitリポジトリ分割とは独立した構成。
-version: 1
+version: 2
 components:
   interfaces:
     label: ROSメッセージ
@@ -14,7 +14,8 @@ components:
   perception:
     label: 点群学習・登録
     kind: core
-    paths: [ais_gng_cpu, pointcloud_sampling]
+    # 学習ソースと任意Webツールの責務分離。
+    paths: [ais_gng_cpu/src, pointcloud_sampling]
     ros_base_paths: [ais_gng_cpu/src, pointcloud_sampling]
   planning:
     label: 姿勢GNG・回避・把持
@@ -37,23 +38,27 @@ components:
   hardware:
     label: 実機ドライバ・入出力
     kind: optional
-    paths: [hardware]
-    ros_base_paths: [hardware]
+    paths: [hardware_drivers]
+    ros_base_paths: [hardware_drivers]
   web_tools:
     label: WASM・bag変換
     kind: optional
-    paths: [gng_web_tools]
-    ros_base_paths: [gng_web_tools]
+    paths: [ais_gng_cpu/gng_web_tools]
+    ros_base_paths: [ais_gng_cpu/gng_web_tools]
+  standalone_viewer:
+    label: 単体HTML・MCAP再生
+    kind: optional
+    paths: [extensions/topo_fuzzy_standalone]
   classification:
     label: クラスタ分類
     kind: optional
-    paths: [FuzzyClassifier]
-    ros_base_paths: [FuzzyClassifier]
+    paths: [extensions/fuzzy_classifier]
+    ros_base_paths: [extensions/fuzzy_classifier]
   mobile_robot:
     label: FuzzBot
     kind: optional
-    paths: [fuzzbot_gng]
-    ros_base_paths: [fuzzbot_gng/fuzzbot/fuzzbot_description]
+    paths: [robots/fuzzbot]
+    ros_base_paths: [robots/fuzzbot/fuzzbot_description]
   fuzzy_voxels:
     label: ファジィボクセル
     kind: optional
@@ -64,5 +69,9 @@ components:
     kind: optional
     paths: [extensions/registration]
     repositories: extensions/registration/upstream.repos
-# 独立プロジェクトのローカル配置。未配置を許容、共有ソースへの包含なし。
-local_projects: [codex-desktop-linux, dataset_pointcloud_player, simulation, topo_tamp]
+# 本体内に残る独立プロジェクトのローカル配置。共有ソースへの包含なし。
+local_projects: [codex-desktop-linux, simulation, robots/topo_dual_arm]
+# 本体外で個別管理のプロジェクト。未取得を許容、通常構築からの参照なし。
+external_projects:
+  dataset_pointcloud_player: ../projects/dataset_pointcloud_player
+  topo_tamp: ../projects/topo_tamp

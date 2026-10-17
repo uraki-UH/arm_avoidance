@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="${1:-${ROOT_DIR}/dist}"
-gng_cpu_dir="${ROOT_DIR}/../../ais_gng_cpu/src/gng_cpu"
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+output_dir="${1:-${root_dir}/dist}"
+gng_cpu_dir="${root_dir}/../../src/gng_cpu"
 
 if ! command -v em++ >/dev/null 2>&1; then
   echo "em++ not found. Install Emscripten first." >&2
   exit 1
 fi
 
-mkdir -p "${OUT_DIR}"
+mkdir -p "${output_dir}"
 
 em++ \
   -std=c++20 \
   -fexceptions \
   -O3 \
-  -I"${ROOT_DIR}/include" \
+  -I"${root_dir}/include" \
   -I"${gng_cpu_dir}/include" \
   -I"${gng_cpu_dir}/src/cpu" \
   -I"${gng_cpu_dir}/src/utils" \
-  "${ROOT_DIR}/src/gng_kernel.cpp" \
-  "${ROOT_DIR}/src/wasm_exports.cpp" \
+  "${root_dir}/src/gng_kernel.cpp" \
+  "${root_dir}/src/wasm_exports.cpp" \
   "${gng_cpu_dir}/src/cpu/cugng.cpp" \
   "${gng_cpu_dir}/src/cpu/voxel_grid.cpp" \
   "${gng_cpu_dir}/src/utils/node.cpp" \
@@ -37,6 +37,6 @@ em++ \
   -sNO_EXIT_RUNTIME=1 \
   -sEXPORTED_FUNCTIONS='["_gng_wasm_create","_gng_wasm_destroy","_gng_wasm_reset","_gng_wasm_set_points","_gng_wasm_update_points","_gng_wasm_set_point_labels","_gng_wasm_set_config","_gng_wasm_set_parameter","_gng_wasm_run","_gng_wasm_exec","_gng_wasm_update_graph","_gng_wasm_get_graph_json_size","_gng_wasm_write_graph_json","_gng_wasm_node_count","_gng_wasm_edge_count","_gng_wasm_cluster_count","_gng_wasm_iteration","_malloc","_free"]' \
   -sEXPORTED_RUNTIME_METHODS='["ccall","cwrap","stringToUTF8","lengthBytesUTF8","UTF8ToString","HEAPU8","stackSave","stackAlloc","stackRestore"]' \
-  -o "${OUT_DIR}/gng_wasm_core.js"
+  -o "${output_dir}/gng_wasm_core.js"
 
-echo "WASM artifacts were generated under: ${OUT_DIR}"
+echo "WASM生成先: ${output_dir}"

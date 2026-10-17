@@ -11,11 +11,15 @@ raw MCAPは原本確認用、bundle JSONは携帯端末への配布や繰り返�
 
 ## 使用方法
 
+配置: [`extensions/topo_fuzzy_standalone/`](../../extensions/topo_fuzzy_standalone/)。
+HTTP配信はリポジトリルートを基準とし、`/extensions/topo_fuzzy_standalone/ToPo-FUZZY_Manipulation_v1.html`を開く。
+WASM・ROS接続・ロボット形状には既存の`ais_gng_cpu/gng_web_tools/`・`libs/`・`urdf/`の相対配置が必要。
+
 1. `ToPo-FUZZY_Manipulation_v1.html`と`topo_mcap_reader.js`を同じ配布ルートへ配置
 2. HTMLの「MCAP / ROS bag JSONを読み込む」から`.mcap`を選択
 3. 対象topicを選択し、「再生」を選択
 
-`file://`直開きに加え、静的HTTPサーバーからの配信を推奨。readerの再生成コマンドは次のとおり。
+`file://`直開きに加え、静的HTTPサーバーからの配信を推奨。readerの再生成先は同じ配置先。コマンドは次のとおり。
 
 ```bash
 cd ToPoFuzzy-Viewer/frontend
@@ -47,6 +51,6 @@ TFを用いた座標変換、編集、GNG再計算にはバックエンド再生
 ## 配布時の知財確認
 
 readerの第三者依存はMIT、BSD-3-Clause、Apache-2.0、0BSD。製品配布時は
-`third_party_licenses/topo_mcap_reader`全体を`topo_mcap_reader.js`と一緒に同梱する。
+[第三者ライセンス](../third_party_licenses/topo_mcap_reader/)全体を`topo_mcap_reader.js`と一緒に同梱する。
 パッケージ更新時はesbuild metafileで実際に組み込まれた依存を再抽出し、
 `THIRD_PARTY_NOTICES.md`とライセンス本文を更新する。
